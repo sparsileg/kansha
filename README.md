@@ -1,0 +1,2 @@
+# kansha
+Personal finance app
