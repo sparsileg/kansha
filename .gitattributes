@@ -1,2 +1,8 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto detect text files; normalize to LF in the repo and working tree
+# (keeps patches applying cleanly on both Kubuntu and Windows)
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.ico binary
+*.icns binary

@@ -1,0 +1,9 @@
+# Deliberately failing: misspelled field "amout". Unknown fields are errors.
+id = "HARNESS-902"
+description = "Deliberate failure: typo in a field name"
+requirements = ["TEST-050"]
+as_of = "2026-06-30"
+
+[[actions]]
+type = "add"
+amout = "12.34"

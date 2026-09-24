@@ -1,0 +1,12 @@
+# Deliberately failing: wrong expected total. Used to check failure reports.
+id = "HARNESS-901"
+description = "Deliberate failure: expected total is wrong"
+requirements = ["TEST-050"]
+as_of = "2026-06-30"
+
+[[actions]]
+type = "add"
+amount = "12.34"
+
+[expect]
+total = "10.00"

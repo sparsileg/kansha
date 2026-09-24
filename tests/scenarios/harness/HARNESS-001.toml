@@ -1,0 +1,25 @@
+id = "HARNESS-001"
+description = "Harness smoke test: amounts sum exactly; clock is fixed to as_of"
+requirements = ["TEST-010", "TEST-020", "TEST-050", "NFR-030"]
+as_of = "2026-06-30"
+
+# 0.10 + 0.20 is 0.30000000000000004 in floating point. Here it must be exact.
+[[actions]]
+type = "add"
+amount = "0.10"
+
+[[actions]]
+type = "add"
+amount = "0.20"
+
+[[actions]]
+type = "subtract"
+amount = "1234.56"
+
+[[actions]]
+type = "add"
+amount = "1234.56"
+
+[expect]
+total = "0.30"
+today = "2026-06-30"
