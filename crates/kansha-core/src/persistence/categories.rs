@@ -1,11 +1,13 @@
 //! Category repository (CAT-010 … CAT-060).
 
-use rusqlite::{Connection, OptionalExtension, Row, named_params};
+use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
 
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::categories::{Category, CategoryFields, CategoryId, Merged, SystemCategory};
+use crate::categories::{
+    Category, CategoryFields, CategoryId, CategoryKind, Merged, SystemCategory,
+};
 use crate::error::{Error, Result};
 
 const COLUMNS: &str =
@@ -100,6 +102,46 @@ pub fn insert(tx: &Tx<'_>, f: &CategoryFields) -> Result<Category> {
         Some(&category),
     )?;
     Ok(category)
+}
+
+/// The category at a `Parent:Child` path, creating any missing level.
+/// Names match ignoring case, as sibling names are unique that way. A new
+/// level under an existing parent takes the parent's kind (a child must
+/// match it); a new top-level category takes `kind`. Only the levels that
+/// were missing are created and audited.
+pub fn create_path(tx: &Tx<'_>, path: &str, kind: CategoryKind) -> Result<Category> {
+    let mut current: Option<Category> = None;
+    for name in path.split(':').map(str::trim) {
+        if name.is_empty() {
+            return Err(Error::Invalid("category name is required".into()));
+        }
+        let parent = current.as_ref().map(|c| c.id);
+        let next = match child_named(tx.conn(), parent, name)? {
+            Some(existing) => existing,
+            None => {
+                let mut fields =
+                    CategoryFields::new(name, current.as_ref().map_or(kind, |p| p.fields.kind));
+                fields.parent = parent;
+                insert(tx, &fields)?
+            }
+        };
+        current = Some(next);
+    }
+    current.ok_or_else(|| Error::Invalid("category name is required".into()))
+}
+
+fn child_named(
+    conn: &Connection,
+    parent: Option<CategoryId>,
+    name: &str,
+) -> Result<Option<Category>> {
+    let sql = format!(
+        "SELECT {COLUMNS} FROM category WHERE parent_id IS ?1 AND name = ?2 COLLATE NOCASE"
+    );
+    Ok(conn
+        .prepare_cached(&sql)?
+        .query_row(params![parent, name], from_row)
+        .optional()?)
 }
 
 /// One category by ID.

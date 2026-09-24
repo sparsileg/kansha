@@ -63,9 +63,9 @@
     border-bottom: 1px solid rgba(128, 128, 128, 0.3);
   }
   .err {
-    color: #c0392b;
+    color: var(--bad, #a83200);
   }
   .ok {
-    color: #2e8b57;
+    color: var(--good, #005a9c);
   }
 </style>

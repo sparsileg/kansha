@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { commands, withConfirmation } from "../api";
+  import { call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import { formatMoney, splitPaymentDeposit } from "../format/money";
   import { moveSelection, rowKeyAction } from "../register/keys";
@@ -165,6 +165,15 @@
     await registerState.goToTransaction(r.counterpart.id, r.txn_id, r.date);
   }
 
+  async function scheduleThis(r: RegisterRow) {
+    try {
+      const fields = await call(commands.scheduleFromTxn(r.txn_id, account));
+      dialogState.newSchedule(null, fields);
+    } catch (e) {
+      registerState.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   function menuItems(r: RegisterRow): MenuItem[] {
     return [
       { label: "Edit", action: () => (registerState.editing = r.txn_id) },
@@ -177,6 +186,7 @@
         action: () => void otherSide(r),
         disabled: r.counterpart.kind !== "transfer",
       },
+      { label: "Schedule this…", action: () => void scheduleThis(r) },
       { label: "History…", action: () => (dialogState.history = { txn: r.txn_id, account }) },
       { label: "Void", action: () => void voidTxn(r), disabled: r.status === "void" },
       { label: "Delete", action: () => void deleteTxn(r) },
@@ -389,13 +399,13 @@
     font-variant-numeric: tabular-nums;
   }
   .neg {
-    color: #c0392b;
+    color: var(--bad, #a83200);
   }
   .clr {
     text-align: center;
   }
   .today {
-    border-top: 2px solid #c0392b;
+    border-top: 2px solid var(--bad, #a83200);
     position: relative;
     height: 0;
     margin: 2px 0;
@@ -405,7 +415,7 @@
     right: 0;
     top: -0.9em;
     font-size: 0.75em;
-    color: #c0392b;
+    color: var(--bad, #a83200);
   }
   .empty {
     padding: 1rem;
@@ -423,7 +433,7 @@
     flex: 1;
   }
   .err {
-    color: #c0392b;
+    color: var(--bad, #a83200);
     margin: 0.25rem 0;
   }
 </style>

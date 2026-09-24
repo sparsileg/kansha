@@ -84,6 +84,10 @@ class ListsState {
     }
   }
 
+  async loadCategories(): Promise<void> {
+    this.categories = await call(commands.categoryList());
+  }
+
   async loadPayees(): Promise<void> {
     this.payees = await call(commands.payeeList());
   }

@@ -45,7 +45,7 @@
   flex-wrap: wrap;
 }
 .mgr .err {
-  color: #c0392b;
+  color: var(--bad, #a83200);
   margin: 0;
 }
 .mgr .note {

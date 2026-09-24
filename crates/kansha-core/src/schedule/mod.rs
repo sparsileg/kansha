@@ -30,7 +30,7 @@ mod service;
 pub use recurrence::{Dates, Frequency, Recurrence, WeekendRule, add_days};
 pub use service::{
     AutoEnterFailure, AutoEnterReport, EnterEdits, Entered, auto_enter_due, create, delete,
-    dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between,
+    dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between, prefill_entry,
     projected_balances, review_list, set_override, skip, update,
 };
 

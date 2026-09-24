@@ -321,6 +321,59 @@ fn category_tree_lists_parents_before_children() {
 }
 
 #[test]
+fn create_path_finds_or_creates_each_level() {
+    let mut db = db();
+    let auto = write(&mut db, |tx| {
+        categories::insert(tx, &CategoryFields::new("Auto", CategoryKind::Expense))
+    })
+    .unwrap();
+
+    // A single new top-level category takes the given kind.
+    let fuel = write(&mut db, |tx| {
+        categories::create_path(tx, "Fuel", CategoryKind::Expense)
+    })
+    .unwrap();
+    assert_eq!(fuel.fields.parent, None);
+    assert_eq!(fuel.fields.kind, CategoryKind::Expense);
+
+    // A missing subcategory goes under the existing parent, ignoring case,
+    // and takes the parent's kind even when another kind is passed.
+    let gas = write(&mut db, |tx| {
+        categories::create_path(tx, " auto : Gas ", CategoryKind::Income)
+    })
+    .unwrap();
+    assert_eq!(gas.fields.parent, Some(auto.id));
+    assert_eq!(gas.fields.kind, CategoryKind::Expense);
+    assert_eq!(gas.fields.name, "Gas");
+
+    // Missing parents are created too, with the given kind.
+    let fast = write(&mut db, |tx| {
+        categories::create_path(tx, "Charity:Fast Offering", CategoryKind::Expense)
+    })
+    .unwrap();
+    let charity = categories::get(db.conn(), fast.fields.parent.unwrap()).unwrap();
+    assert_eq!(charity.fields.name, "Charity");
+    assert_eq!(charity.fields.parent, None);
+
+    // An existing path is returned as is; nothing new is created.
+    let before = categories::list(db.conn()).unwrap().len();
+    let again = write(&mut db, |tx| {
+        categories::create_path(tx, "charity:fast offering", CategoryKind::Expense)
+    })
+    .unwrap();
+    assert_eq!(again.id, fast.id);
+    assert_eq!(categories::list(db.conn()).unwrap().len(), before);
+
+    // An empty level is refused.
+    for bad in ["", "Charity:", ":Fast", "A::B"] {
+        let r = write(&mut db, |tx| {
+            categories::create_path(tx, bad, CategoryKind::Expense)
+        });
+        assert!(matches!(r, Err(Error::Invalid(_))), "{bad:?}: {r:?}");
+    }
+}
+
+#[test]
 fn category_rules() {
     let mut db = db();
     let (auto, fuel, salary) = write(&mut db, |tx| {

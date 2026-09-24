@@ -39,3 +39,25 @@ export function matchTargets(
   ranked.sort((a, b) => a.score - b.score || a.i - b.i);
   return ranked.slice(0, limit).map((r) => r.o);
 }
+
+/**
+ * The `Parent:Child` path to create when the typed text names no existing
+ * category or account, or null when there is nothing to create: empty
+ * text, a `[Account]` name, an empty path level ("Charity:"), or a path
+ * that already exists (ignoring case and spaces around colons).
+ */
+export function newCategoryPath(
+  options: TargetOption[],
+  text: string,
+): string | null {
+  const t = text.trim();
+  if (t === "" || t.startsWith("[") || t.startsWith("--")) return null;
+  const parts = t.split(":").map((x) => x.trim());
+  if (parts.some((x) => x === "")) return null;
+  const path = parts.join(":");
+  const key = path.toLowerCase();
+  if (options.some((o) => plainLabel(o.label) === key)) return null;
+  return path;
+}
+
+const plainLabel = (label: string) => label.toLowerCase().replace(/[[\]]/g, "");

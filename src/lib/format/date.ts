@@ -102,3 +102,37 @@ export function applyDateKey(
       return null;
   }
 }
+
+/** Day of week, 0 = Sunday … 6 = Saturday. Returns -1 for invalid input. */
+export function weekdayOf(iso: string): number {
+  const m = ISO.exec(iso);
+  if (!m || make(+m[1], +m[2], +m[3]) !== iso) return -1;
+  return (((toDays(+m[1], +m[2], +m[3]) + 4) % 7) + 7) % 7;
+}
+
+/** The first day of the month containing `iso`. */
+export function monthStart(iso: string): string {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+/** The first day of the month `n` months after (or before) `iso`'s month. */
+export function addMonths(iso: string, n: number): string {
+  const index = Number(iso.slice(0, 4)) * 12 + (Number(iso.slice(5, 7)) - 1) + n;
+  return `${pad(Math.floor(index / 12), 4)}-${pad((index % 12) + 1)}-01`;
+}
+
+/** "September 2026" for the month containing `iso`. */
+export function monthLabel(iso: string): string {
+  const names = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  return `${names[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+}
+
+/** Six Sunday-first weeks (42 ISO dates) covering the month of `iso`. */
+export function monthGrid(iso: string): string[] {
+  const first = monthStart(iso);
+  const start = addDays(first, -weekdayOf(first));
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}

@@ -52,6 +52,6 @@
     font-size: 1.3em;
   }
   .err {
-    color: #c0392b;
+    color: var(--bad, #a83200);
   }
 </style>

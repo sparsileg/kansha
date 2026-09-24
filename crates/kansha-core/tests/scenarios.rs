@@ -853,6 +853,7 @@ impl Ctx {
             } => {
                 let id = self.schedule_id(reference)?;
                 let edits = EnterEdits {
+                    entry: None,
                     date: date.as_deref().map(|d| parse("date", d)).transpose()?,
                     amount: amount.as_deref().map(|a| parse("amount", a)).transpose()?,
                 };

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { DECLINED, call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import { blockNonAmountChar, formatMoney, isZeroMoney, sanitizeAmountInput } from "../format/money";
@@ -19,6 +19,8 @@
   import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
+  import { scheduleState } from "../state/schedule.svelte";
+  import { selectOnFocus } from "../ui/selectOnFocus";
   import type { AccountId, Payee } from "../types/bindings";
   import TargetCombo from "./TargetCombo.svelte";
 
@@ -43,6 +45,31 @@
 
   const listId = `payees-${Math.random().toString(36).slice(2)}`;
   const isSplit = $derived(d.category === SPLIT);
+  /** Kind for a category typed here that does not exist yet. */
+  const newKind = $derived(d.deposit.trim() ? "income" : "expense");
+  /** The scheduled occurrence this new entry will record as entered. */
+  let occ = $state<{ schedule: number; due: string } | null>(null);
+
+  // A scheduled occurrence sent here to be entered: take it as the draft
+  // and put the cursor on the amount (REC-110).
+  $effect(() => {
+    const p = registerState.prefill;
+    if (txn !== null || !p || p.entry.account !== account) return;
+    registerState.prefill = null;
+    untrack(() => void applyPrefill(p));
+  });
+
+  async function applyPrefill(p: NonNullable<typeof registerState.prefill>) {
+    const name = p.entry.payee ? (listsState.payee(p.entry.payee)?.name ?? "") : "";
+    d = draftFromEntry(p.entry, name);
+    occ = { schedule: p.schedule, due: p.due };
+    error = null;
+    status = "Scheduled transaction: change anything needed (usually the amount), then Enter.";
+    await tick();
+    const amount = formEl?.querySelector<HTMLInputElement>(d.deposit.trim() ? ".c-dep" : ".c-pay");
+    amount?.focus();
+    amount?.select();
+  }
 
   onMount(async () => {
     if (txn !== null) {
@@ -240,7 +267,20 @@
     try {
       const name = built.payeeName;
       let savedId: number = txn ?? -1;
-      if (txn === null) {
+      if (txn === null && occ) {
+        const entered = await call(
+          commands.scheduleEnter(
+            occ.schedule,
+            occ.due,
+            { date: null, amount: null, entry: built.entry },
+            name,
+            false,
+          ),
+        );
+        savedId = entered.txn;
+        occ = null;
+        await scheduleState.changed();
+      } else if (txn === null) {
         savedId = await call(commands.entryCreate(built.entry, name));
       } else {
         const id = txn;
@@ -277,6 +317,8 @@
 
   function cancel() {
     error = null;
+    occ = null;
+    status = null;
     if (txn === null) {
       d = newDraft(listsState.today);
       remainder = null;
@@ -313,10 +355,10 @@
     <input class="c-num" aria-label="Num" bind:value={d.check_num} />
     <input class="c-payee" aria-label="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
-    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
+    <input class="c-pay num" aria-label="Payment" inputmode="decimal" use:selectOnFocus value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
+    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" use:selectOnFocus value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
     <div class="c-cat">
-      <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit onchange={onCategoryChange} />
+      <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit newKind={newKind} onchange={onCategoryChange} />
     </div>
     <select class="c-tag" aria-label="Tag" bind:value={d.tag}>
       <option value="">—</option>
@@ -342,8 +384,8 @@
       </div>
       {#each d.splits as s, i (i)}
         <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
-          <TargetCombo bind:value={s.target} excludeAccount={account} label={`Split ${i + 1} category`} />
-          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
+          <TargetCombo bind:value={s.target} excludeAccount={account} newKind={newKind} label={`Split ${i + 1} category`} />
+          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" use:selectOnFocus value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
           <input aria-label={`Split ${i + 1} memo`} bind:value={s.memo} onkeydown={(e) => onSplitMemoKey(e, i)} />
           <button type="button" tabindex="-1" aria-label={`Remove split ${i + 1}`} onclick={() => (d.splits = d.splits.filter((_, j) => j !== i))}>×</button>
         </div>
@@ -351,7 +393,7 @@
       <div class="split-foot">
         <button type="button" onclick={addSplit}>Add line</button>
         <span class="rem" class:ok={remainder !== null && isZeroMoney(remainder)}>
-          Remainder: {remainder === null ? "—" : formatMoney(remainder)}
+          Remainder: {remainder === null ? "—" : `${isZeroMoney(remainder) ? "✓" : "✗"} ${formatMoney(remainder)}`}
         </span>
       </div>
     </div>
@@ -421,13 +463,13 @@
     align-items: center;
   }
   .rem {
-    color: #c0392b;
+    color: var(--bad, #a83200);
   }
   .rem.ok {
-    color: #2e8b57;
+    color: var(--good, #005a9c);
   }
   .err {
-    color: #c0392b;
+    color: var(--bad, #a83200);
     padding: 0.15rem 0.25rem;
   }
   .msg {
@@ -435,7 +477,7 @@
     padding: 0.15rem 0.25rem;
   }
   .ok {
-    color: #2e8b57;
+    color: var(--good, #005a9c);
     padding: 0.15rem 0.25rem;
   }
 </style>

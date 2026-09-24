@@ -7,7 +7,7 @@ Spec: 0.3.5. Split into 4a (engine, persistence, IPC, scenarios) and 4b (Svelte 
 | Sub-phase | State |
 |---|---|
 | 4a Recurrence engine, schedules, occurrences, IPC | Built. `just check` green. Uncommitted. |
-| 4b UI: scheduled list, due-and-overdue dialog, calendar, "Schedule this" | Not started. |
+| 4b UI: scheduled list, due-and-overdue dialog, calendar, "Schedule this" | Built. `just check` green (frontend tests added). Not yet hands-on tested by Stan. Uncommitted. |
 
 **⚠ API change:** 15 new commands (below); `just bindings` run. **⚠ Schema change:** migration 0002 adds `schedule_occurrence.needs_review`.
 
@@ -53,3 +53,70 @@ Startup order for the UI: `schedule_auto_enter`, then show `schedule_review_list
 - Deleted payee/account merges: `payee_merge` already moves schedules; account and category merge paths for `schedule_line` were done in Phase 3 (not re-tested here).
 - `describe()` text is English-only, fixed strings.
 - UI (4b) not built: Scheduled list, edit form, due-and-overdue dialog, review list, calendar, "Schedule this" menu item, plus Phase 3 carry-overs (show closed accounts toggle, account panel redesign).
+
+## 4b — what was built
+
+No API or schema change in 4b (uses the 4a commands).
+
+### Files
+
+- `lib/schedule/form.ts` (+ test): form draft ↔ `ScheduleFields`. Maps "Quarterly" and "Twice a year" onto monthly intervals 3 and 6. Parses typed dates and amounts. No recurrence or money math.
+- `lib/format/date.ts`: `weekdayOf`, `monthStart`, `addMonths`, `monthLabel`, `monthGrid` (integer math, no JS `Date`). Test `calendar.test.ts`.
+- `lib/state/schedule.svelte.ts`: list, due, review, startup sequence (auto-enter, load, open the due dialog if anything needs attention), `changed()` refreshes lists, balances, and the open register.
+- `dialogState`: `due`, `schedule` (`newSchedule`, `editSchedule`).
+- Components: `ScheduleModal` (create, edit, delete), `OccurrenceRow` (Enter, Skip, Edit…: enter with edits, or change this occurrence only, or undo the change), `DueDialog` (auto-entry failures, review list, due list).
+- Views: `Scheduled` (REC-300 columns; click a row to edit), `Calendar` (month grid, account filter, show entered and skipped, projected balance per day, day panel, "New schedule on this date").
+- Register context menu: "Schedule this…" (REC-140).
+- Nav: Scheduled, Calendar, Due (n). Nav checkbox "Show closed accounts" (Phase 3 carry-over).
+- Tests: `OccurrenceRow.test.ts`, `ScheduleModal.test.ts`, smoke test for Scheduled and Calendar.
+
+### Decisions
+
+- Startup opens the Due dialog automatically when anything is due, awaiting review, or failed.
+- Enter for an estimated single-line schedule always opens the panel; the amount sent is the confirmation. Estimated splits use the standard confirmation dialog.
+- Amount edits are disabled on split schedules (engine rule); edit the split in the register after entering.
+- Payee on a schedule is chosen from existing payees (payees are only created by entering transactions).
+- "Show entered and skipped" on the calendar shows scheduled occurrences only, not every register transaction (CAL-020 gap from 4a stands).
+- Calendar cells show three chips, then "+n more"; click a day for all.
+
+### Known gaps
+
+- Not hands-on tested. Suggested checks: create monthly rent; open Due; Enter; Skip; edit one occurrence; auto schedule with a past start (startup review list); estimated amount; split schedule; calendar projection; "Schedule this" from a register row.
+- No keyboard shortcuts in the calendar grid beyond Enter/Space on a day.
+- Calendar does not open a transaction in its register.
+- A transaction entered from a schedule cannot be deleted (4a gap).
+
+## 4b revisions (Stan's first review)
+
+**⚠ API change** (`just bindings` run; no schema change):
+- `schedule_create` and `schedule_update` gain `payee_name` (found or created in the same transaction, as `entry_create`). The form types a payee name; new names are allowed.
+- `schedule_enter` gains `payee_name`; `EnterEdits` gains `entry` (the whole transaction as edited). With an entry, `date` and `amount` are ignored and an estimate counts as confirmed. Its account must be the schedule's.
+- New `schedule_prefill(schedule, due)` returns the entry an occurrence would become.
+
+**UI changes**
+- Schedule form: each line is Amount, Category, Memo, Tag on one row. "Add split line" is gone; the last line has a "Split" button with an icon that adds a line.
+- Entering an occurrence always goes through the register (Due dialog "Enter", or a click on an actionable reminder in the calendar): the account opens, the new-entry row is prefilled, focus is on the amount. Saving calls `schedule_enter` with the edited entry, so the occurrence is recorded and linked. Esc cancels; the occurrence stays pending.
+- Due dialog "Edit…" now only sets or undoes a one-time date or amount. Non-actionable (later) calendar reminders just select their day.
+- Tests: `EntryEditor.occurrence.test.ts`; new engine tests for `prefill_entry` and enter-with-entry.
+
+## 4b revisions (Stan's hands-on review)
+
+Tests 1–12 passed. Changes from that review:
+
+**⚠ API change** (`just bindings` run; no schema change): new `category_create_path(path, kind)` finds or creates a `Parent:Child` category, creating missing levels in one transaction. A new level under an existing parent takes the parent's kind; a new top-level one takes `kind`. Names match ignoring case. Test `create_path_finds_or_creates_each_level`.
+
+**UI changes**
+- **New category inline:** the category picker (`TargetCombo`, with `newKind`: expense for a payment, income for a deposit) offers "+ Create new … category" as the last row when the typed text names nothing. It asks for confirmation first, so a typo does not create a category. Works in the register entry row, split lines, and the schedule form.
+- **Split total stays fixed:** tried "total follows the lines" and reverted it (it silently changed 184.23 to 191.23 for lines 1.33 + 189.90). The amount never changes on its own; the remainder updates live and saving needs zero. Test added.
+- **Select on focus:** money fields select their whole value on focus or click (`lib/ui/selectOnFocus.ts`): Payment, Deposit, split and schedule line amounts, occurrence override, payee default amount, account rate and limit.
+- **One memo:** a single-line schedule shows only the transaction memo; the line memo shows with two or more lines. A saved single line with only a line memo shows it as the transaction memo.
+- **Calendar:** "+n more" is a button; the selected day shows all its items in its cell, and the day panel is sticky and scrolls into view. Overdue chips say "Overdue". Chip and day-panel payee/account text is smaller, one line, cut with "…" (full text in the tooltip).
+- **Calendar day panel:** one line per item (date, payee, account, amount). Clicking an item opens `OccurrenceModal` with the flags and Enter, Skip, Edit…. The Due dialog still shows full rows.
+- **Account button** in the top bar returns to the last selected account from any view.
+- **Colors (Stan is red-green colorblind):** `--bad` (vermilion) and `--good` (blue) tokens on `.app`, per theme, replace the old red and green. Split remainder shows ✓ or ✗; the invalid filter date outline is dashed.
+
+### Known gaps
+- **Placeholders:** the top-bar buttons (including "Account: …"), the layout, and the colors are all placeholders pending a real UI design and theme. Nothing here is a design decision.
+- Calendar is still a view, not a docked panel. Top-bar layout is still a set of buttons.
+- No requirement ID yet for inline category creation; add one to the spec when the spec is next revised.
+- The picker offers "Create" even for the name of the account being edited (which cannot be its own transfer target).

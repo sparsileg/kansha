@@ -36,6 +36,11 @@ export const commands = {
 	/**  All categories, parents before children. */
 	categoryList: () => typedError<Category[], IpcError>(__TAURI_INVOKE("category_list")),
 	categoryCreate: (fields: CategoryFields) => typedError<Category, IpcError>(__TAURI_INVOKE("category_create", { fields })),
+	/**
+	 *  The category at a `Parent:Child` path, created (with any missing
+	 *  parents) if it does not exist. For entering a new category inline.
+	 */
+	categoryCreatePath: (path: string, kind: CategoryKind) => typedError<Category, IpcError>(__TAURI_INVOKE("category_create_path", { path, kind })),
 	/**  Built-in categories cannot be changed (CAT-060). */
 	categoryUpdate: (id: CategoryId, fields: CategoryFields) => typedError<Category, IpcError>(__TAURI_INVOKE("category_update", { id, fields })),
 	/**  Only an unused category can be deleted (CAT-030); hide it otherwise. */
@@ -114,10 +119,10 @@ export const commands = {
 	/**  The Scheduled Transactions list, next due first (REC-300). */
 	scheduleList: () => typedError<ScheduleRow[], IpcError>(__TAURI_INVOKE("schedule_list")),
 	scheduleGet: (id: ScheduleId) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_get", { id })),
-	/**  Create a schedule (REC-100). */
-	scheduleCreate: (fields: ScheduleFields) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_create", { fields })),
+	/**  Create a schedule (REC-100). `payee_name` works as in `entry_create`. */
+	scheduleCreate: (fields: ScheduleFields, payeeName: string | null) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_create", { fields, payeeName })),
 	/**  Edit a schedule for this and all future occurrences (REC-120). */
-	scheduleUpdate: (id: ScheduleId, fields: ScheduleFields) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_update", { id, fields })),
+	scheduleUpdate: (id: ScheduleId, fields: ScheduleFields, payeeName: string | null) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_update", { id, fields, payeeName })),
 	scheduleDelete: (id: ScheduleId) => typedError<null, IpcError>(__TAURI_INVOKE("schedule_delete", { id })),
 	/**
 	 *  A schedule prefilled from a transaction, for "Schedule this" (REC-140).
@@ -126,11 +131,17 @@ export const commands = {
 	 */
 	scheduleFromTxn: (txn: TxnId, account: AccountId) => typedError<ScheduleFields, IpcError>(__TAURI_INVOKE("schedule_from_txn", { txn, account })),
 	/**
-	 *  Enter an occurrence as a transaction (REC-110). An estimated amount
-	 *  fails with `confirmation_required` until `confirmed` or an amount is
-	 *  given.
+	 *  The entry an occurrence would become, for editing in the register
+	 *  before it is entered (REC-110).
 	 */
-	scheduleEnter: (schedule: ScheduleId, due: string, edits: EnterEdits, confirmed: boolean) => typedError<Entered, IpcError>(__TAURI_INVOKE("schedule_enter", { schedule, due, edits, confirmed })),
+	schedulePrefill: (schedule: ScheduleId, due: string) => typedError<Entry, IpcError>(__TAURI_INVOKE("schedule_prefill", { schedule, due })),
+	/**
+	 *  Enter an occurrence as a transaction (REC-110). `edits.entry` is the
+	 *  transaction as the user edited it; `payee_name` replaces its payee as in
+	 *  `entry_create`. Without an entry, an estimated amount fails with
+	 *  `confirmation_required` until `confirmed` or an amount is given.
+	 */
+	scheduleEnter: (schedule: ScheduleId, due: string, edits: EnterEdits, payeeName: string | null, confirmed: boolean) => typedError<Entered, IpcError>(__TAURI_INVOKE("schedule_enter", { schedule, due, edits, payeeName, confirmed })),
 	scheduleSkip: (schedule: ScheduleId, due: string) => typedError<null, IpcError>(__TAURI_INVOKE("schedule_skip", { schedule, due })),
 	/**
 	 *  "Edit this occurrence only" (REC-110): a one-time date and/or amount;
@@ -375,6 +386,13 @@ export type EnterEdits = {
 	 *  schedules are edited in the register after entering.
 	 */
 	amount: string | null,
+	/**
+	 *  The whole transaction as the user edited it in the register (any
+	 *  field, splits included). When given, `date` and `amount` are
+	 *  ignored, and an estimated amount counts as confirmed. Its account
+	 *  must be the schedule's.
+	 */
+	entry: Entry | null,
 };
 
 /**  An occurrence that became a transaction. */

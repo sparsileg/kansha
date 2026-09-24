@@ -1,8 +1,8 @@
 //! Categories, payees, and tags for pickers and QuickFill (CAT, PAY, TAG).
 
 use kansha_core::categories::{
-    Category, CategoryFields, CategoryId, Merged, Payee, PayeeFields, PayeeId, Tag, TagFields,
-    TagId,
+    Category, CategoryFields, CategoryId, CategoryKind, Merged, Payee, PayeeFields, PayeeId, Tag,
+    TagFields, TagId,
 };
 use kansha_core::persistence::{categories, payees, tags};
 use tauri::State;
@@ -20,6 +20,18 @@ pub fn category_list(state: State<'_, AppState>) -> CmdResult<Vec<Category>> {
 #[specta::specta]
 pub fn category_create(state: State<'_, AppState>, fields: CategoryFields) -> CmdResult<Category> {
     state.write(|tx| categories::insert(tx, &fields))
+}
+
+/// The category at a `Parent:Child` path, created (with any missing
+/// parents) if it does not exist. For entering a new category inline.
+#[tauri::command]
+#[specta::specta]
+pub fn category_create_path(
+    state: State<'_, AppState>,
+    path: String,
+    kind: CategoryKind,
+) -> CmdResult<Category> {
+    state.write(|tx| categories::create_path(tx, &path, kind))
 }
 
 /// Built-in categories cannot be changed (CAT-060).

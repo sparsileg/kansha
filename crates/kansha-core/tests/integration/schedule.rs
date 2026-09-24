@@ -258,6 +258,7 @@ fn estimated_amount_needs_confirmation_or_an_amount() {
 
     // An actual amount is the confirmation.
     let edits = EnterEdits {
+        entry: None,
         date: None,
         amount: Some(m("-1012.34")),
     };
@@ -278,6 +279,7 @@ fn enter_with_edited_date_and_amount() {
     let mut fx = fx();
     let id = create_rent(&mut fx, "2026-07-01");
     let edits = EnterEdits {
+        entry: None,
         date: Some(date("2026-07-03")),
         amount: Some(m("-950.00")),
     };
@@ -544,6 +546,7 @@ fn transfers_and_splits_enter_correctly() {
 
     // A split's amount can't be edited at entry.
     let edits = EnterEdits {
+        entry: None,
         date: None,
         amount: Some(m("-900.00")),
     };
@@ -875,4 +878,73 @@ fn from_entry_prefills_a_monthly_schedule() {
     assert_eq!(f.payee, entry.payee);
     let id = create(&mut fx, &f);
     assert_eq!(get(&fx, id).next_due, Some(date("2026-07-15")));
+}
+
+#[test]
+fn prefill_gives_the_entry_with_one_time_edits_applied() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    fx.book
+        .write(|tx| {
+            schedule::set_override(
+                tx,
+                id,
+                date("2026-07-01"),
+                Some(date("2026-07-05")),
+                Some(m("-1100.00")),
+            )
+        })
+        .unwrap();
+    let e = schedule::prefill_entry(fx.book.conn(), id, date("2026-07-01")).unwrap();
+    assert_eq!(e.account, fx.chk);
+    assert_eq!(e.date, date("2026-07-05"));
+    assert_eq!(e.amount, m("-1100.00"));
+    assert_eq!(e.memo, "rent");
+    assert_eq!(e.lines.len(), 1);
+    assert!(schedule::prefill_entry(fx.book.conn(), id, date("2026-08-01")).is_err());
+}
+
+#[test]
+fn enter_with_an_edited_entry_uses_it_whole() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.amount_type = AmountType::Estimated;
+    let id = create(&mut fx, &f);
+    let groceries = fx.book.category("Food", CategoryKind::Expense).unwrap();
+    let mut entry = schedule::prefill_entry(fx.book.conn(), id, date("2026-07-01")).unwrap();
+    entry.amount = m("-60.00");
+    entry.memo = "changed".into();
+    entry.date = date("2026-07-02");
+    entry.lines = vec![ledger::EntryLine::new(
+        Target::Category(groceries),
+        m("-60.00"),
+    )];
+    let edits = EnterEdits {
+        entry: Some(entry.clone()),
+        ..EnterEdits::default()
+    };
+    // No confirmation needed: the entry states the amount.
+    let e = fx
+        .book
+        .write(|tx| schedule::enter(tx, id, date("2026-07-01"), &edits, false))
+        .unwrap();
+    let txn = fx.book.txn(e.txn).unwrap();
+    assert_eq!(txn.memo, "changed");
+    assert_eq!(txn.date, date("2026-07-02"));
+    assert_eq!(txn.source, TxnSource::Schedule { schedule: id.0 });
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("4940.00"));
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-08-01")));
+
+    // Wrong account is refused.
+    let mut wrong = entry;
+    wrong.account = fx.sav;
+    let edits = EnterEdits {
+        entry: Some(wrong),
+        ..EnterEdits::default()
+    };
+    assert!(
+        fx.book
+            .write(|tx| schedule::enter(tx, id, date("2026-08-01"), &edits, false))
+            .is_err()
+    );
 }

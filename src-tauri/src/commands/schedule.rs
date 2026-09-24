@@ -2,12 +2,12 @@
 
 use kansha_core::accounts::AccountId;
 use kansha_core::ledger::{self, Entry, TxnId};
-use kansha_core::persistence::schedules;
+use kansha_core::persistence::{payees, schedules};
 use kansha_core::schedule::{
     self, AutoEnterReport, DayBalance, EnterEdits, Entered, Occurrence, OccurrenceView, Schedule,
     ScheduleFields, ScheduleId, ScheduleRow,
 };
-use kansha_core::{Date, Money};
+use kansha_core::{Date, Money, Tx};
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -25,11 +25,36 @@ pub fn schedule_get(state: State<'_, AppState>, id: ScheduleId) -> CmdResult<Sch
     state.read(|db, _| schedules::get(db.conn(), id))
 }
 
-/// Create a schedule (REC-100).
+/// `payee_name`, when given, is looked up (or created) in the same
+/// transaction and replaces `fields.payee`; an empty name clears it, as in
+/// `entry_create`.
+fn resolve_payee(
+    tx: &Tx<'_>,
+    payee: &mut Option<kansha_core::categories::PayeeId>,
+    name: Option<&str>,
+) -> kansha_core::Result<()> {
+    if let Some(name) = name {
+        *payee = if name.trim().is_empty() {
+            None
+        } else {
+            Some(payees::find_or_insert(tx, name)?.id)
+        };
+    }
+    Ok(())
+}
+
+/// Create a schedule (REC-100). `payee_name` works as in `entry_create`.
 #[tauri::command]
 #[specta::specta]
-pub fn schedule_create(state: State<'_, AppState>, fields: ScheduleFields) -> CmdResult<Schedule> {
-    state.write(|tx| schedule::create(tx, &fields))
+pub fn schedule_create(
+    state: State<'_, AppState>,
+    mut fields: ScheduleFields,
+    payee_name: Option<String>,
+) -> CmdResult<Schedule> {
+    state.write(|tx| {
+        resolve_payee(tx, &mut fields.payee, payee_name.as_deref())?;
+        schedule::create(tx, &fields)
+    })
 }
 
 /// Edit a schedule for this and all future occurrences (REC-120).
@@ -38,9 +63,13 @@ pub fn schedule_create(state: State<'_, AppState>, fields: ScheduleFields) -> Cm
 pub fn schedule_update(
     state: State<'_, AppState>,
     id: ScheduleId,
-    fields: ScheduleFields,
+    mut fields: ScheduleFields,
+    payee_name: Option<String>,
 ) -> CmdResult<Schedule> {
-    state.write(|tx| schedule::update(tx, id, &fields))
+    state.write(|tx| {
+        resolve_payee(tx, &mut fields.payee, payee_name.as_deref())?;
+        schedule::update(tx, id, &fields)
+    })
 }
 
 #[tauri::command]
@@ -65,19 +94,38 @@ pub fn schedule_from_txn(
     })
 }
 
-/// Enter an occurrence as a transaction (REC-110). An estimated amount
-/// fails with `confirmation_required` until `confirmed` or an amount is
-/// given.
+/// The entry an occurrence would become, for editing in the register
+/// before it is entered (REC-110).
+#[tauri::command]
+#[specta::specta]
+pub fn schedule_prefill(
+    state: State<'_, AppState>,
+    schedule: ScheduleId,
+    due: Date,
+) -> CmdResult<Entry> {
+    state.read(|db, _| schedule::prefill_entry(db.conn(), schedule, due))
+}
+
+/// Enter an occurrence as a transaction (REC-110). `edits.entry` is the
+/// transaction as the user edited it; `payee_name` replaces its payee as in
+/// `entry_create`. Without an entry, an estimated amount fails with
+/// `confirmation_required` until `confirmed` or an amount is given.
 #[tauri::command]
 #[specta::specta]
 pub fn schedule_enter(
     state: State<'_, AppState>,
     schedule: ScheduleId,
     due: Date,
-    edits: EnterEdits,
+    mut edits: EnterEdits,
+    payee_name: Option<String>,
     confirmed: bool,
 ) -> CmdResult<Entered> {
-    state.write(|tx| schedule::enter(tx, schedule, due, &edits, confirmed))
+    state.write(|tx| {
+        if let Some(entry) = edits.entry.as_mut() {
+            resolve_payee(tx, &mut entry.payee, payee_name.as_deref())?;
+        }
+        schedule::enter(tx, schedule, due, &edits, confirmed)
+    })
 }
 
 #[tauri::command]

@@ -233,6 +233,11 @@ pub struct EnterEdits {
     /// The main account's amount, for a schedule with a single line. Split
     /// schedules are edited in the register after entering.
     pub amount: Option<Money>,
+    /// The whole transaction as the user edited it in the register (any
+    /// field, splits included). When given, `date` and `amount` are
+    /// ignored, and an estimated amount counts as confirmed. Its account
+    /// must be the schedule's.
+    pub entry: Option<Entry>,
 }
 
 /// An occurrence that became a transaction.
@@ -349,7 +354,15 @@ pub fn enter(
     let s = repo::get(tx.conn(), id)?;
     require_next(&s, due)?;
     let row = repo::occurrence(tx.conn(), id, due)?;
-    let entry = build_entry(&s, due, row.as_ref(), edits, confirmed)?;
+    let entry = match &edits.entry {
+        Some(e) if e.account != s.fields.account => {
+            return Err(Error::Invalid(
+                "the entry is for a different account than the schedule".into(),
+            ));
+        }
+        Some(e) => e.clone(),
+        None => build_entry(&s, due, row.as_ref(), edits, confirmed)?,
+    };
     let txn = ledger::create_with_source(
         tx,
         TxnSource::Schedule { schedule: id.0 },
@@ -375,6 +388,16 @@ pub fn enter(
         txn: txn.id,
         date: entry.date,
     })
+}
+
+/// The entry an occurrence would become, one-time date and amount
+/// applied, for the user to edit in the register before entering it. Only
+/// the schedule's next occurrence can be entered.
+pub fn prefill_entry(conn: &Connection, id: ScheduleId, due: Date) -> Result<Entry> {
+    let s = repo::get(conn, id)?;
+    require_next(&s, due)?;
+    let row = repo::occurrence(conn, id, due)?;
+    build_entry(&s, due, row.as_ref(), &EnterEdits::default(), true)
 }
 
 /// Skip an occurrence: no transaction, and "# left" still counts it

@@ -91,7 +91,8 @@
     width: 7.5rem;
   }
   .bad {
-    outline: 2px solid #c0392b;
+    /* Dashed as well as colored: not a hue-only cue. */
+    outline: 3px dashed var(--bad, #a83200);
   }
   select {
     max-width: 11rem;

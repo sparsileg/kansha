@@ -18,6 +18,7 @@
     MmfMode,
     TaxTreatment,
   } from "../types/bindings";
+  import { selectOnFocus } from "../ui/selectOnFocus";
   import Modal from "./Modal.svelte";
 
   let { account }: { account: Account | null } = $props();
@@ -214,10 +215,10 @@
       <label>Description <input bind:value={f.description} /></label>
 
       {#if rateType}
-        <label>Interest rate (%) <input bind:value={interest} inputmode="decimal" /></label>
+        <label>Interest rate (%) <input bind:value={interest} inputmode="decimal" use:selectOnFocus /></label>
       {/if}
       {#if f.account_type === "credit_card"}
-        <label>Credit limit <input bind:value={limit} inputmode="decimal" /></label>
+        <label>Credit limit <input bind:value={limit} inputmode="decimal" use:selectOnFocus /></label>
       {/if}
 
       {#if f.investment}
@@ -340,7 +341,7 @@
     flex: 1;
   }
   .err {
-    color: #c0392b;
+    color: var(--bad, #a83200);
     margin: 0;
   }
 </style>

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { call, commands } from "../api";
   import { SPLIT, type TargetValue } from "../register/draft";
-  import { matchTargets, type TargetOption } from "../register/match";
+  import { matchTargets, newCategoryPath, type TargetOption } from "../register/match";
+  import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import type { AccountId } from "../types/bindings";
 
@@ -10,6 +12,11 @@
    * Typing filters categories and accounts together; Up/Down move; Tab or
    * Enter (while the list is open) take the highlighted one; Esc closes
    * the list. With the list closed, Enter belongs to the form (save).
+   *
+   * With `newKind` set, text that names no category or account can be
+   * created (after a confirmation): "Fuel", or "Charity:Fast Offering"
+   * for a subcategory. A new top-level category gets `newKind`; a new
+   * subcategory takes its parent's kind.
    */
   let {
     value = $bindable(),
@@ -17,12 +24,14 @@
     allowSplit = false,
     onchange,
     label = "Category",
+    newKind,
   }: {
     value: TargetValue;
     excludeAccount?: AccountId;
     allowSplit?: boolean;
     onchange?: () => void;
     label?: string;
+    newKind?: "income" | "expense";
   } = $props();
 
   const options = $derived.by((): TargetOption[] => {
@@ -55,6 +64,12 @@
   const listId = `tc-${Math.random().toString(36).slice(2)}`;
 
   const matches = $derived(matchTargets(options, typing ? text : ""));
+  /** The path a "Create" row would make, while typing text that is new. */
+  const toCreate = $derived(newKind && typing ? newCategoryPath(options, text) : null);
+  const rowCount = $derived(matches.length + (toCreate ? 1 : 0));
+  const onCreateRow = $derived(toCreate !== null && active === matches.length);
+  let creating = $state(false);
+  let createError = $state<string | null>(null);
 
   // Show the chosen label unless the user is typing.
   $effect(() => {
@@ -89,6 +104,7 @@
   function oninput() {
     typing = true;
     active = 0;
+    createError = null;
     if (text.trim() === "") {
       // An emptied box clears the choice.
       if (value !== "") {
@@ -99,6 +115,41 @@
     show();
   }
 
+  /** Confirm, create the category (and any missing parents), and pick it. */
+  async function createCategory() {
+    const path = toCreate;
+    if (path === null || !newKind || creating) return;
+    creating = true;
+    open = false;
+    createError = null;
+    try {
+      const ok = await confirmState.ask(`Create new ${newKind} category "${path}"?`);
+      if (ok) {
+        const made = await call(commands.categoryCreatePath(path, newKind));
+        await listsState.loadCategories();
+        typing = false;
+        value = `c:${made.id}`;
+        text = labelOf(value);
+        void tick().then(() => onchange?.());
+      } else {
+        typing = false;
+        text = labelOf(value);
+      }
+    } catch (e) {
+      createError = e instanceof Error ? e.message : String(e);
+      open = true;
+    } finally {
+      creating = false;
+      input?.focus();
+    }
+  }
+
+  /** Enter or Tab on the highlighted row. */
+  function commit() {
+    if (onCreateRow) void createCategory();
+    else choose(matches[active]);
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -106,24 +157,27 @@
         show();
         return;
       }
-      const n = matches.length;
+      const n = rowCount;
       if (n > 0) active = (active + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
       document.getElementById(`${listId}-${active}`)?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter" && open) {
       e.preventDefault();
       e.stopPropagation();
-      choose(matches[active]);
+      commit();
     } else if (e.key === "Escape" && open) {
       e.preventDefault();
       e.stopPropagation();
       choose(undefined);
     } else if (e.key === "Tab" && open && typing) {
-      choose(matches[active]);
+      // Creating asks first, so keep the focus here until it is answered.
+      if (onCreateRow) e.preventDefault();
+      commit();
     }
   }
 
   function onblur() {
-    if (open && typing) choose(matches[active]);
+    if (creating) return;
+    if (open && typing && !onCreateRow) choose(matches[active]);
     else choose(undefined);
   }
 </script>
@@ -166,9 +220,27 @@
       >
         {m.label}
       </li>
-    {:else}
-      <li class="none" role="option" aria-selected="false" aria-disabled="true">No match</li>
     {/each}
+    {#if toCreate}
+      <li
+        id="{listId}-{matches.length}"
+        role="option"
+        aria-selected={onCreateRow}
+        class="create"
+        class:active={onCreateRow}
+        onmousedown={(e) => {
+          e.preventDefault();
+          void createCategory();
+        }}
+      >
+        + Create new {newKind} category “{toCreate}”
+      </li>
+    {:else if matches.length === 0}
+      <li class="none" role="option" aria-selected="false" aria-disabled="true">No match</li>
+    {/if}
+    {#if createError}
+      <li class="none" role="alert">Could not create it: {createError}</li>
+    {/if}
   </ul>
 {/if}
 
@@ -201,6 +273,10 @@
   li.active {
     background: #1f6feb;
     color: #fff;
+  }
+  li.create {
+    border-top: 1px solid #555;
+    font-weight: 600;
   }
   li.none {
     opacity: 0.6;

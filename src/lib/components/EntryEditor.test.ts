@@ -265,7 +265,8 @@ describe("Category type-ahead (REG-030)", () => {
     await fireEvent.input(box, { target: { value: "f" } });
     expect(listed()).toEqual(expect.arrayContaining(["Food", "Fuel"]));
     await fireEvent.input(box, { target: { value: "savings" } });
-    expect(listed()).toEqual(["No match"]);
+    // Nothing matches, so the only row offers to create it.
+    expect(listed()).toEqual(["+ Create new expense category “savings”"]);
   });
 
   it("Tab takes the highlighted match; Esc closes the list without cancelling the entry", async () => {
@@ -303,14 +304,15 @@ describe("amount fields accept only numeric characters", () => {
   });
 });
 
+// A stand-in for Rust: total minus parts, in cents (test-only arithmetic).
+const cents = (m: string) => Math.round(parseFloat(m) * 100);
+const fmt = (n: number) => `${n < 0 ? "-" : ""}${Math.floor(Math.abs(n) / 100)}.${String(Math.abs(n) % 100).padStart(2, "0")}`;
+const rustRemainder = (total: string, parts: string[]) =>
+  ok(fmt(cents(total) - parts.reduce((a, p) => a + cents(p), 0)));
+
 describe("split amounts offer what is left", () => {
-  // A stand-in for Rust: total minus parts, in cents (test-only arithmetic).
-  const cents = (m: string) => Math.round(parseFloat(m) * 100);
-  const fmt = (n: number) => `${n < 0 ? "-" : ""}${Math.floor(Math.abs(n) / 100)}.${String(Math.abs(n) % 100).padStart(2, "0")}`;
   beforeEach(() => {
-    c.splitRemainder.mockImplementation((total: string, parts: string[]) =>
-      ok(fmt(cents(total) - parts.reduce((a, p) => a + cents(p), 0))),
-    );
+    c.splitRemainder.mockImplementation(rustRemainder);
   });
 
   it("entering Split mode puts the whole amount on line 1 and focuses it", async () => {
@@ -349,7 +351,7 @@ describe("split amounts offer what is left", () => {
     await waitFor(() => expect(field("Split 1 amount").value).toBe("100.00"));
     await fireEvent.input(field("Split 1 amount"), { target: { value: "60" } });
     await fireEvent.input(field("Split 2 amount"), { target: { value: "10" } });
-    await screen.findByText(/Remainder: -?30\.00/);
+    await screen.findByText(/Remainder: ✗ -?30\.00/);
     await fireEvent.keyDown(field("Split 2 memo"), { key: "Tab" });
     await waitFor(() => expect(field("Split 3 amount").value).toBe("30.00"));
   });
@@ -404,13 +406,31 @@ describe("split remainder validation (TXN-020)", () => {
     await fireEvent.input(field("Split 2 amount"), { target: { value: "30" } });
   }
 
+  beforeEach(() => {
+    c.splitRemainder.mockImplementation(rustRemainder);
+  });
+
   it("asks Rust for the remainder with signed amounts and blocks a non-zero one", async () => {
-    c.splitRemainder.mockImplementation(() => ok("-10.00"));
     await toSplit();
     await waitFor(() =>
       expect(c.splitRemainder).toHaveBeenLastCalledWith("-100.00", ["-60.00", "-30.00"]),
     );
-    await screen.findByText(/Remainder: -10\.00/);
+    await screen.findByText(/Remainder: ✗ -10\.00/);
+    await fireEvent.submit(field("Date").closest("form")!);
+    expect((await screen.findByRole("alert")).textContent).toContain("add up");
+    expect(c.entryCreate).not.toHaveBeenCalled();
+  });
+
+  it("lines that add up to more than the amount are refused, and the amount stays", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "184.23" } });
+    await pick("Category", "split");
+    await pick("Split 1 category", "food");
+    await pick("Split 2 category", "fuel");
+    await fireEvent.input(field("Split 1 amount"), { target: { value: "1.33" } });
+    await fireEvent.input(field("Split 2 amount"), { target: { value: "189.90" } });
+    await screen.findByText(/Remainder: ✗ 7\.00/);
+    expect(field("Payment").value).toBe("184.23");
     await fireEvent.submit(field("Date").closest("form")!);
     expect((await screen.findByRole("alert")).textContent).toContain("add up");
     expect(c.entryCreate).not.toHaveBeenCalled();
@@ -419,7 +439,7 @@ describe("split remainder validation (TXN-020)", () => {
   it("saves when the remainder is zero", async () => {
     c.splitRemainder.mockImplementation(() => ok("0.00"));
     await toSplit();
-    await screen.findByText(/Remainder: 0\.00/);
+    await screen.findByText(/Remainder: ✓ 0\.00/);
     await fireEvent.submit(field("Date").closest("form")!);
     await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
     expect(c.entryCreate.mock.calls[0][0].lines).toHaveLength(2);

@@ -8,6 +8,8 @@ import { call, commands } from "../api";
 import type {
   AccountId,
   Cleared,
+  Entry,
+  ScheduleId,
   TxnId,
   RegisterPage,
   RegisterQuery,
@@ -50,6 +52,9 @@ class RegisterState {
   selected = $state<TxnId | null>(null);
   editing = $state<TxnId | null>(null);
   loading = $state(false);
+  /** A scheduled occurrence to enter: the new-entry row takes the entry as
+   * its draft, then clears this (REC-110). */
+  prefill = $state<{ entry: Entry; schedule: ScheduleId; due: string } | null>(null);
   error = $state<string | null>(null);
 
   #seq = 0;

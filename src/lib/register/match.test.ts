@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchTargets, type TargetOption } from "./match";
+import { matchTargets, newCategoryPath, type TargetOption } from "./match";
 
 const opts: TargetOption[] = [
   { value: "split", label: "--Split--" },
@@ -34,5 +34,23 @@ describe("matchTargets", () => {
   });
   it("returns everything for an empty query", () => {
     expect(values("")).toHaveLength(opts.length);
+  });
+});
+
+describe("newCategoryPath", () => {
+  it("offers a new single-level or nested path, trimmed", () => {
+    expect(newCategoryPath(opts, "Fuel")).toBe("Fuel");
+    expect(newCategoryPath(opts, " Charity : Fast Offering ")).toBe("Charity:Fast Offering");
+    expect(newCategoryPath(opts, "Auto:Tires")).toBe("Auto:Tires");
+  });
+  it("offers nothing for existing paths, accounts, or incomplete text", () => {
+    expect(newCategoryPath(opts, "")).toBeNull();
+    expect(newCategoryPath(opts, "auto:fuel")).toBeNull();
+    expect(newCategoryPath(opts, "Bank Charges")).toBeNull();
+    expect(newCategoryPath(opts, "checking")).toBeNull(); // an account, brackets are display only
+    expect(newCategoryPath(opts, "[Checking]")).toBeNull();
+    expect(newCategoryPath(opts, "Charity:")).toBeNull();
+    expect(newCategoryPath(opts, "A::B")).toBeNull();
+    expect(newCategoryPath(opts, "--Split--")).toBeNull();
   });
 });
