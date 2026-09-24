@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.1 (draft) |
+| **Document version** | 0.2 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-23 |
 | **Owner** | Stan |
-| **Status** | Draft — restructured from initial notes; contains recommendations pending decision |
+| **Status** | Draft — D-30 and D-35 decided; testing framework and prototype plan added; schema pending |
 
 ---
 
@@ -498,49 +498,55 @@ Seed investment lots from brokerage cost-basis reports rather than from Quicken;
 
 ### 16. Technology Stack
 
-#### 16.1 Stack as proposed in original notes [S]
+#### 16.1 Decided stack [S]
 
 | Layer | Technology |
 |---|---|
-| UI structure/presentation | HTML + CSS |
-| UI and application logic | TypeScript |
-| Frontend build | Vite |
+| UI | Svelte 5 components (HTML, CSS, TypeScript) |
+| Frontend build | Vite (plain Svelte; SvelteKit not used) |
 | Desktop framework | Tauri v2 |
-| Native layer | Rust |
-| Database | SQLite |
-| Source control | Git + GitHub |
+| Application services and domain engine | Rust (`kansha-core` crate) |
+| Numeric | Integer minor units; `rust_decimal` for intermediate math |
+| Database | SQLite via `rusqlite` with `bundled-sqlcipher` (encryption per D-20/D-110) |
+| Testing | `cargo test`, `proptest`, `insta`, Vitest, Svelte Testing Library |
+| Source control / CI | Git + GitHub; GitHub Actions |
 
-The overall choice is sound: Tauri is a good fit for a local, cross-platform app, SQLite is close to ideal for single-user finance data, and the stack matches Stan's existing projects.
+#### 16.2 Decision record
 
-#### 16.2 Recommendations and commentary [R]
+**DR-01 — Accounting engine in Rust (D-30, decided 2026-09-23).**
+All financial logic (ledger, postings, lots, cost basis, recurrence, reconciliation, reports, integrity checks) lives in Rust. TypeScript owns presentation only: UI state, forms, display formatting, and charts.
+Rationale:
+- Exact arithmetic is enforced by types (integer cents, scaled quantities) rather than by discipline in a language whose default number type is binary floating point.
+- Validation and persistence share one transactional boundary; a multi-record change is validated and committed atomically in one place, so a UI bug cannot write inconsistent data.
+- The engine is testable with `cargo test` independent of the UI.
+- Cost accepted: a larger IPC command surface, mitigated by generated TypeScript types (D-120).
 
-**R1 — Put the accounting engine in Rust, not TypeScript (D-30).**
-The original notes place domain logic (balances, lots, cost basis) in TypeScript and keep Rust as a thin native layer. Given that accuracy is the top priority, I recommend the reverse for the financial core:
-- **Numeric safety:** JavaScript's `number` is binary floating point; exact money math in TypeScript requires discipline with `bigint` or a decimal library everywhere. Rust with integer minor units or `rust_decimal` makes exactness the default, enforced by the type system.
-- **One transactional boundary:** if validation and posting logic live next to the database, every multi-record change (a sale consuming three lots and posting cash) is validated and committed atomically in one place. With logic in TypeScript, the frontend assembles changes and Rust just writes them, which makes it easier for a UI bug to write inconsistent data.
-- **Testability:** the engine can be tested with `cargo test`, including property-based tests, without any UI.
-- **Cost:** a larger IPC surface (commands like `post_transaction`, `sell_lots`, `run_report`). This is manageable with typed command definitions shared between Rust and TypeScript (e.g., generated with `specta`/`tauri-specta` or `ts-rs`).
+**DR-02 — Svelte 5 + Vite for the UI (D-35, decided 2026-09-23).**
+Rationale:
+- The UI is form- and grid-heavy (register, split editor, calendar, tabbed account views, modals, reports); a framework avoids large amounts of hand-written DOM update code.
+- Svelte compiles to small, fast output with minimal boilerplate, and Stan already uses it (Photyx), so there is no learning cost.
+- Plain Svelte + Vite rather than SvelteKit: SvelteKit's routing and server features target web apps and add configuration without benefit in a desktop app. Navigation is handled by a simple view store.
+- The register grid is custom-built; off-the-shelf grids don't fit Quicken-style keyboard entry and split expansion.
+- Alternatives considered: React (largest ecosystem; more verbose, more re-render tuning needed), Vue (reasonable middle ground), Solid (small ecosystem), plain TypeScript (most code to maintain).
+- Frontend state uses Svelte 5 runes in `.svelte.ts` modules; no external state-management library.
 
-TypeScript would then own UI state, forms, display formatting, and charts. Reports would be computed in Rust (SQL plus engine) and rendered in TypeScript.
-
-**R2 — Reconsider "no UI framework" (D-35).**
-Kansha's UI is more demanding than a typical utility: an editable, keyboard-driven register grid, split editors, a calendar, tabbed account views, modals, and many reports. Plain TypeScript can do this, but it tends to accumulate hand-written DOM update code. Since Photyx already uses Svelte with Tauri, **Svelte 5** would add little new learning and reduce UI code substantially while staying lightweight. If you prefer no framework, the document should define a small component pattern up front so the UI stays consistent.
+#### 16.3 Remaining recommendations [R]
 
 **R3 — Database access and encryption.**
-- `rusqlite` with the `bundled-sqlcipher` feature (single, consistent SQLite/SQLCipher version on all platforms).
-- Schema migrations managed in Rust with a versioned migration table (e.g., `rusqlite_migration` or hand-rolled numbered SQL files).
-- External browsing: DB Browser for SQLite, SQLCipher-enabled build.
+- `rusqlite` with `bundled-sqlcipher` for one consistent SQLite/SQLCipher version on all platforms. An unkeyed database under this build behaves as plain SQLite, so encryption can be turned on later without changing libraries (see D-110).
+- Numbered, forward-only SQL migrations with a `schema_version` table, run by the core crate.
+- External browsing via DB Browser for SQLite (SQLCipher-enabled build), read-only.
 
-**R4 — Supporting libraries (candidates, to evaluate).**
-- Decimal math: `rust_decimal` (Rust).
-- Dates: `chrono` or `time` in Rust, using date-only types; in TypeScript, keep dates as ISO `YYYY-MM-DD` strings and avoid the JavaScript `Date` object for financial dates.
-- Charts: a lightweight library such as Chart.js, uPlot, or ECharts (evaluate for print/PDF export).
-- PDF export: render report HTML to PDF through the webview's print facility, or a Rust PDF crate.
-- Keyring: `keyring` crate (supports KWallet/Secret Service and Windows Credential Manager).
-- Testing: `cargo test` + `proptest` (engine); Vitest (TypeScript); Playwright or WebdriverIO for end-to-end (optional in 1.0).
+**R4 — Supporting libraries (candidates).**
+- Decimal math: `rust_decimal`. Errors: `thiserror`. Serialization: `serde`.
+- Dates: `time` or `chrono` date-only types in Rust; ISO `YYYY-MM-DD` strings in TypeScript. The JavaScript `Date` object is not used for financial dates.
+- Charts: Chart.js, uPlot, or ECharts (D-140).
+- PDF export: webview print-to-PDF of report HTML, or a Rust PDF crate (evaluate in Phase 7).
+- Keyring: `keyring` crate (KWallet/Secret Service, Windows Credential Manager).
+- Testing: see Section 20.
 
 **R5 — Tauri security configuration.**
-Use Tauri v2 capabilities to expose only Kansha's own commands to the frontend; disable remote content; keep the network permission limited to the price provider (if enabled).
+Tauri v2 capabilities expose only Kansha's own commands to the frontend; no remote content; network permission limited to the price provider when enabled.
 
 ### 17. Architecture
 
@@ -548,7 +554,7 @@ Use Tauri v2 capabilities to expose only Kansha's own commands to the frontend; 
 
 ```
 ┌───────────────────────────────────────────────┐
-│ UI (TypeScript, optional Svelte)              │
+│ UI (Svelte 5 + TypeScript)                    │
 │  Views, forms, register grid, calendar,       │
 │  charts, formatting, UI state                 │
 └───────────────────────┬───────────────────────┘
@@ -590,6 +596,51 @@ Use Tauri v2 capabilities to expose only Kansha's own commands to the frontend; 
 
 Rule: modules interact only through their public APIs; only `persistence` issues SQL against another module's tables.
 
+#### 17.3 Frontend structure [R]
+
+- `src/lib/api/` — typed wrappers around Tauri commands; the only place `invoke` is called. Makes IPC mockable in tests.
+- `src/lib/types/` — types generated from Rust (D-120); not hand-edited.
+- `src/lib/format/` — the only place money, quantities, and dates are formatted or parsed for display. Amounts arrive from Rust as integers or decimal strings and are never converted through floating point.
+- `src/lib/state/` — Svelte 5 rune-based state modules (current view, open tabs, settings).
+- `src/lib/components/` — reusable components (register grid, split editor, money input, date input, modal, account picker).
+- `src/views/` — top-level views (Dashboard, Account, Scheduled, Calendar, Reconcile, Reports, Settings).
+
+#### 17.4 Repository layout [R]
+
+```
+kansha/
+├── devdocs/
+│   ├── kansha-spec.md
+│   ├── CONVENTIONS.md
+│   └── phase-notes/
+├── Cargo.toml                 # workspace
+├── crates/
+│   └── kansha-core/           # no Tauri dependency
+│       ├── src/
+│       │   ├── lib.rs
+│       │   ├── money.rs       # Money, Quantity, Price newtypes
+│       │   ├── date.rs        # date type, Clock trait
+│       │   ├── error.rs
+│       │   ├── persistence/   # db, migrations/, repositories
+│       │   ├── accounts/  ledger/  categories/  schedule/
+│       │   ├── reconcile/  securities/  investments/
+│       │   ├── reports/  import/  integrity/  audit/  backup/
+│       │   └── settings/
+│       └── tests/
+│           ├── scenarios.rs   # scenario runner
+│           ├── properties.rs  # proptest invariants
+│           └── integration/
+├── tests/
+│   └── scenarios/             # TOML scenario files by area
+│       └── ledger/  schedule/  reconcile/  lots/  reports/
+├── src-tauri/                 # Tauri shell, command handlers only
+├── src/                       # Svelte frontend (see 17.3)
+├── package.json
+├── vite.config.ts
+├── justfile                   # `just test`, `just dev`, `just check`
+└── .github/workflows/ci.yml
+```
+
 ### 18. Conceptual Data Model [R]
 
 Entity outline (full schema to be specified in the next revision):
@@ -625,15 +676,135 @@ Entity outline (full schema to be specified in the next revision):
 - **Allocation:** when dividing an amount (basis across lots, return of capital), allocate remainders deterministically so parts sum exactly to the whole.
 - **IPC:** amounts cross to TypeScript as integers or strings, never as floating-point numbers.
 
-### 20. Testing and Verification Strategy [R]
+### 20. Testing Framework and Verification (TEST)
 
-1. **Engine unit tests** with hand-computed expected results, written before implementation. Example: buy 100 VTI @ $200, buy 50 @ $220, sell 75 FIFO @ $250 → basis $15,000, proceeds $18,750, gain $3,750; remaining lots 25 @ $200 and 50 @ $220.
-2. **Property-based tests** for invariants: postings always sum to zero; share balances equal open lot sums; basis is conserved through splits and transfers; recurrence rules never skip or duplicate occurrences.
-3. **Recurrence tests** covering month-end, leap years, Nth weekday, twice-monthly, and weekend adjustment.
-4. **Import tests** using sample QIF files (synthetic plus sanitized excerpts of Stan's exports), including the pitfalls in MIG-160.
-5. **Migration verification** (MIG-100): Kansha balances and category totals match Quicken reports exactly.
-6. **Parallel run:** Kansha and Quicken used side by side for an agreed period (recommend 2–3 months including at least one full reconciliation cycle per account) before Quicken is retired.
-7. **Backup/restore drills:** restore a backup into a scratch location and run the integrity check.
+A repeatable, automated test framework is a built-in part of Kansha, not an add-on. The engine's tests define what "correct" means.
+
+#### 20.1 Requirements
+
+- **TEST-010** [1.0][S] The full automated test suite runs with a single command (`just test`), is deterministic, requires no network, and does not depend on the current date.
+- **TEST-020** [1.0][R] **Clock injection:** the engine never reads system time directly; "today" is supplied through a `Clock` interface. Tests use a fixed clock.
+- **TEST-030** [1.0][R] **Unit tests** for pure logic (recurrence date generation, lot allocation, rounding, money arithmetic) live alongside the code in each Rust module.
+- **TEST-040** [1.0][R] **Integration tests** run against a fresh in-memory database with all migrations applied, created by a shared fixture helper, so every test starts from a known state.
+- **TEST-050** [1.0][S] **Scenario tests:** engine behavior is specified in human-readable TOML scenario files under `tests/scenarios/<area>/`. A single runner discovers and executes every file. Each scenario declares an ID, description, the requirement IDs it covers, an as-of date, setup (accounts, categories, securities, schedules), a sequence of actions, and expected results (balances, lots, realized gains, occurrences, report totals). Failures report the scenario file, the step, and the mismatched field with expected vs. actual values.
+- **TEST-060** [1.0][R] Stan can add or modify scenarios without writing Rust.
+- **TEST-070** [1.0][R] **Traceability:** every engine requirement in the TXN, INT, REC, RCN, INV, LOT, POS, and RPT areas is covered by at least one scenario or test that cites its ID. `just trace` lists requirement IDs with no covering test.
+- **TEST-080** [1.0][R] **Property-based tests** (`proptest`) generate random transaction sequences and verify the invariants of INT-030 (postings sum to zero; shares equal open lots; basis conserved through splits, transfers, and return of capital; recurrence never skips or duplicates occurrences). Failing seeds are committed as regression cases.
+- **TEST-090** [1.0][R] **Snapshot tests** (`insta`) record report output for fixed datasets; any change fails until explicitly reviewed and accepted.
+- **TEST-100** [1.0][R] **Migration tests:** each schema migration is tested by applying it to a database at the previous version containing sample data and verifying data integrity afterward.
+- **TEST-105** [1.0][R] **Import tests** use sample QIF files (synthetic plus sanitized excerpts of Stan's exports) covering the pitfalls in MIG-160.
+- **TEST-110** [1.0][R] **Test data builders** (a fluent Rust API for creating accounts, transactions, lots) and a **synthetic dataset generator** producing a realistic, multi-year household dataset from a fixed seed, used for prototype use, report snapshots, and performance checks (NFR-040).
+- **TEST-120** [1.0][R] **Frontend tests** (Vitest + Svelte Testing Library, with Tauri IPC mocked) cover money/date input parsing and formatting, register keyboard behavior, and split-remainder validation. UI tests are deliberately lighter than engine tests.
+- **TEST-130** [1.0][R] **Regression rule:** every engine bug fix includes a test or scenario that fails before the fix and passes after.
+- **TEST-140** [1.0][R] **CI:** GitHub Actions runs `cargo fmt --check`, `cargo clippy -D warnings`, the Rust suite, `svelte-check`, and the frontend suite on Ubuntu and Windows for every push.
+- **TEST-150** [1.0][R] Coverage is measured (`cargo-llvm-cov`) and reported; no hard threshold during the prototype.
+- **TEST-160** [Later][R] End-to-end automation of the real application window (e.g., WebdriverIO with `tauri-driver`; note `tauri-driver` does not support macOS).
+
+#### 20.2 Scenario file format (illustrative; finalized in Phase 0)
+
+All amounts, quantities, and prices are written as strings to avoid TOML floating-point parsing.
+
+```toml
+id = "LOT-FIFO-001"
+description = "FIFO sale spanning two lots; long-term gain"
+requirements = ["LOT-020", "LOT-040", "LOT-100"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+ticker = "VTI"
+type = "etf"
+
+[[actions]]
+date = "2024-01-02"
+type = "transfer_cash_in"
+account = "Brokerage"
+amount = "50000.00"
+
+[[actions]]
+date = "2024-01-10"
+type = "buy"
+account = "Brokerage"
+security = "VTI"
+quantity = "100"
+price = "200.00"
+commission = "0.00"
+
+[[actions]]
+date = "2024-06-10"
+type = "buy"
+account = "Brokerage"
+security = "VTI"
+quantity = "50"
+price = "220.00"
+commission = "0.00"
+
+[[actions]]
+date = "2026-03-15"
+type = "sell"
+account = "Brokerage"
+security = "VTI"
+quantity = "75"
+price = "250.00"
+commission = "0.00"
+method = "fifo"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "VTI"
+acquired = "2024-01-10"
+quantity = "25"
+basis = "5000.00"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "VTI"
+acquired = "2024-06-10"
+quantity = "50"
+basis = "11000.00"
+
+[[expect.realized]]
+sale_date = "2026-03-15"
+acquired = "2024-01-10"
+quantity = "75"
+proceeds = "18750.00"
+basis = "15000.00"
+gain = "3750.00"
+term = "long"
+
+[expect.cash]
+"Brokerage" = "37750.00"
+```
+
+A recurrence scenario follows the same pattern:
+
+```toml
+id = "REC-MONTHEND-001"
+description = "Monthly on the 31st clamps to month end"
+requirements = ["REC-020", "REC-040"]
+as_of = "2026-01-01"
+
+[[schedules]]
+name = "Rent"
+start = "2026-01-31"
+frequency = { kind = "monthly", day = 31 }
+end = { kind = "never" }
+
+[[expect.occurrences]]
+schedule = "Rent"
+through = "2026-04-30"
+dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
+```
+
+#### 20.3 Verification beyond automated tests
+
+1. **Migration verification** (MIG-100): Kansha balances and category totals match Quicken reports exactly.
+2. **Parallel run** (D-80): Kansha and Quicken used side by side, including at least one full reconciliation cycle per account, before Quicken is retired.
+3. **Backup/restore drills:** restore a backup to a scratch location and run the integrity check.
+4. **Stan reviews** the lot, recurrence, and reconciliation scenario suites before each phase is closed.
 
 ### 21. Versioning, Schema Migration, and Release [R]
 
@@ -648,19 +819,23 @@ Entity outline (full schema to be specified in the next revision):
 
 ### Decisions needed
 
-| ID | Decision | Recommendation |
-|---|---|---|
-| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | Separate columns |
-| D-20 | Encryption: SQLCipher vs. disk-level only | SQLCipher (tentatively accepted; final decision before development) |
-| D-30 | Accounting engine in Rust vs. TypeScript | Rust |
-| D-35 | UI framework: none vs. Svelte 5 | Svelte 5 |
-| D-40 | Price download in 1.0, and which provider | Yes, pluggable; provider to be evaluated |
-| D-50 | Money market funds: security or cash | Per-account option |
-| D-60 | Average-cost basis needed in 1.0? | Depends on brokerage reporting for Stan's funds |
-| D-70 | Share/price decimal precision | 6 decimal places, confirm with brokerage data |
-| D-80 | Parallel-run duration before retiring Quicken | 2–3 months |
-| D-90 | Confirm 1.0 report list (Section 12.2) | As listed |
-| D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | As listed in ACCT-010/020 |
+| ID | Decision | Status | Recommendation / Outcome |
+|---|---|---|---|
+| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | Open | Separate columns |
+| D-20 | Encryption: SQLCipher vs. disk-level only | Tentative | SQLCipher; final decision before 1.0 development |
+| D-30 | Accounting engine in Rust vs. TypeScript | **Decided** | Rust (DR-01) |
+| D-35 | UI framework | **Decided** | Svelte 5 + Vite, no SvelteKit (DR-02) |
+| D-40 | Price download in 1.0, and which provider | Open | Yes, pluggable; provider to be evaluated |
+| D-50 | Money market funds: security or cash | Open | Per-account option |
+| D-60 | Average-cost basis needed in 1.0? | Open | Depends on brokerage reporting for Stan's funds |
+| D-70 | Share/price decimal precision | Open | 6 decimal places; confirm with brokerage data |
+| D-80 | Parallel-run duration before retiring Quicken | Open | 2–3 months |
+| D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
+| D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | Open | As listed in ACCT-010/020 |
+| D-110 | Encryption during the prototype | Open | Unencrypted prototype database (synthetic data only) using the same `bundled-sqlcipher` build; enable encryption in Phase 8 or at 1.0 |
+| D-120 | Rust→TypeScript type generation for IPC | Open | Evaluate `tauri-specta` vs. `ts-rs` in Phase 0 |
+| D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
+| D-140 | Chart library | Open | Evaluate in Phase 7 (Chart.js, uPlot, ECharts) |
 
 ### Placeholders
 
@@ -674,8 +849,69 @@ Entity outline (full schema to be specified in the next revision):
 
 ---
 
+## Part VI — Prototype Plan
+
+### 22. Purpose and Approach
+
+The prototype validates the requirements and design before 1.0 development, using synthetic data. It implements as many 1.0 requirements as practical, excluding Quicken import (pending placeholders P-01 to P-05).
+
+**Evolutionary (kept for 1.0):**
+- `kansha-core`: schema, migrations, engine, services
+- All tests, scenario files, builders, and the dataset generator
+- The IPC command API and generated types
+
+**Throwaway-permitted (may be rewritten after review):**
+- Svelte views, layouts, and styling
+
+Throwaway code still follows CONVENTIONS.md: it uses `src/lib/api` for all IPC and never performs money arithmetic.
+
+### 23. Prototype Scope
+
+**In scope:** ACCT, CAT, PAY, TAG, TXN, REG, REC, CAL, RCN, SEC, PRC (manual and CSV), INV, LOT (FIFO and specific ID), POS, RPT (1.0 list except PDF export), DSH, INT, AUD, BAK (manual backup/restore and backup-on-close), UI, SET, TEST.
+
+**Out of scope for the prototype:** MIG (all, except MIG-120 lot-seeding mechanics on synthetic data), PRC-040 (price download), BAK-040 (retention policy), SECU (per D-110), RPT PDF export, and all [Later] items.
+
+### 24. Phases
+
+Each phase ends with its exit criteria met, `just test` passing on Kubuntu and Windows, and Stan's review. Schema design is completed as a separate spec revision (0.3) before Phase 1.
+
+| Phase | Content | Exit criteria |
+|---|---|---|
+| **0 — Skeleton and test harness** | Cargo workspace; `kansha-core` crate; Tauri shell; Svelte app shell with view navigation and theme/font-size plumbing; `Money`/`Quantity`/`Price` newtypes; date type and `Clock`; error types; scenario runner with one trivial scenario; `justfile`; CI; decide D-120 | App launches on both platforms; `just test` and CI green; scenario runner reports a deliberately failing scenario clearly |
+| **1 — Schema and persistence** | Migrations from spec 0.3 schema; repositories; audit log writer; in-memory test fixture; migration test pattern | Migration and repository tests pass; schema matches spec |
+| **2 — Ledger engine** | Accounts, categories, payees, tags, transactions, postings, splits, transfers, voids, derived balances; integrity check v1; test data builders | Ledger scenarios and posting/transfer property tests pass |
+| **3 — Register UI** | Account list/sidebar, account modal, register with keyboard entry, splits, transfers, filters, memorized payees, audit view; synthetic dataset generator | Stan enters a month of transactions by keyboard; generator loads a multi-year dataset; register meets NFR-040 |
+| **4 — Scheduling and calendar** | Recurrence engine; occurrences; enter/skip/edit-one; due and overdue list; scheduled list; calendar | Recurrence suite passes (month-end, leap years, Nth weekday, twice-monthly, weekend shifting, # left, end dates) |
+| **5 — Reconciliation** | Reconcile workflow, save/resume, history, change detection, explicit adjustments | Reconciliation scenarios pass; Stan completes a reconciliation on synthetic data |
+| **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID); splits; return of capital; share transfers; positions; investment account tabs; lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
+| **7 — Reports and dashboard** | 1.0 report list; saved reports; drill-down; CSV export; charts; dashboard | Report snapshot tests pass; drill-down reaches transactions for every figure |
+| **8 — Backup, settings, review** | Manual backup/restore, backup on close, verification; settings; performance check; prototype review | Restore drill passes; review findings recorded for spec 0.4 |
+
+### 25. Chat Workflow (no Claude Code)
+
+- The spec and CONVENTIONS.md are stored in the Claude Project's files; they are not pasted into chats.
+- One fresh chat per phase, or per sub-phase if a phase is large, to keep context small.
+- Each phase chat starts with the kickoff template below.
+- New files, or files changed so extensively that regeneration is more economical, are delivered complete. All other changes are delivered as a single unified patch per request, applied from the repository root with `patch -p1`.
+- Stan runs tests locally and pastes back only failing test names and assertion messages.
+- At the end of each phase, a short phase summary (files created, decisions made, known gaps) is committed to `devdocs/phase-notes/phase-N.md`, and later chats read that rather than earlier transcripts.
+
+**Kickoff template:**
+
+```
+Kansha — Phase N: <name>
+Spec: devdocs/kansha-spec.md v<x> (Project files)
+Conventions: devdocs/CONVENTIONS.md (Project files)
+Previous phase notes: <paste devdocs/phase-notes/phase-(N-1).md>
+Current tree: <paste `tree -I 'node_modules|target' -L 3`>
+Goal for this chat: <sub-scope>
+```
+
+---
+
 ## Appendix A — Change Log
 
 | Version | Date | Changes |
 |---|---|---|
 | 0.1 | 2026-09-23 | Restructured from initial notes; added requirement IDs, release/source tags, recommendations, design rationale, open decisions, and migration placeholders. |
+| 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
