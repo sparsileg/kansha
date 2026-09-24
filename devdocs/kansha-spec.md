@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.2 (draft) |
+| **Document version** | 0.3 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-23 |
+| **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
-| **Status** | Draft — D-30 and D-35 decided; testing framework and prototype plan added; schema pending |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); D-50, D-60, D-100, D-110 decided |
 
 ---
 
@@ -90,7 +90,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 #### 5.1 Account types
 
 - **ACCT-010** [1.0][S] Support these account types: Checking, Savings, Credit Card, Cash, Money Market, Brokerage (taxable), Traditional IRA, Roth IRA, HSA, Other Asset, Other Liability.
-- **ACCT-020** [1.0][R] Add account types 401(k)/403(b) and Loan/Mortgage (liability). Loan accounts in 1.0 are balance-tracking only; amortization schedules are [Later] (see REC-200).
+- **ACCT-020** [1.0][S] Add account types 401(k)/403(b) and Loan/Mortgage (liability). Loan accounts in 1.0 are balance-tracking only; amortization schedules are [Later] (see REC-200).
 - **ACCT-030** [1.0][R] Each account has a **tax treatment** of Taxable, Tax-Deferred, or Tax-Exempt, defaulted by type:
   - Traditional IRA, 401(k) → Tax-Deferred
   - Roth IRA, HSA (qualified use) → Tax-Exempt
@@ -273,7 +273,7 @@ Stan uses this heavily in Quicken; it must be robust and cover all common patter
 - **INV-020** [1.0][R] Each investment transaction records trade date and, optionally, settlement date.
 - **INV-030** [1.0][R] Entry forms are type-specific (e.g., Sell prompts for lot selection); the register shows Date, Action, Security, Quantity, Price, Commission, Amount, Cash Balance.
 - **INV-040** [1.0][R] Every investment transaction that affects cash also produces the corresponding ledger postings, so investment income appears in income/expense reports.
-- **INV-050** [1.0][R] Money market funds held as "cash" can be treated either as a security (with $1.00 price) or as the account's cash balance, configurable per account (D-50).
+- **INV-050** [1.0][S] Money market funds held as "cash" can be treated either as a security (with $1.00 price) or as the account's cash balance, configurable per account (D-50, decided).
 
 #### 10.4 Cash handling
 
@@ -289,7 +289,8 @@ Stan uses this heavily in Quicken; it must be robust and cover all common patter
 - **LOT-030** [1.0][R] Rounding: when basis is split, cents are allocated so the parts always sum exactly to the original basis (no penny drift).
 - **LOT-040** [1.0][R] Each realized gain/loss record stores: sale date, acquisition date, quantity, proceeds, basis, gain/loss, and holding period (short-term if held one year or less, long-term otherwise).
 - **LOT-100** [1.0][S] Lot selection methods: **FIFO** and **Specific Identification**. Default method configurable per account and per security; overridable on each sale.
-- **LOT-110** [TBD][R] **Average cost** method for mutual funds. Needed if either brokerage reports average cost for any of Stan's funds (D-60).
+- **LOT-110** [TBD][R] **Average cost** method for mutual funds. Needed if either brokerage reports average cost for any of Stan's funds (D-60). The schema already accepts `average`; only the engine is deferred.
+- **LOT-115** [TBD][S] **HIFO** (highest cost first) and **minimum tax** lot selection. Minimum tax picks lots in this order, without needing tax rates: short-term losses, long-term losses, long-term gains (smallest first), short-term gains (smallest first). The engine resolves either method to specific lots at sale time and records them as ordinary disposals. The schema accepts `hifo` and `min_tax` (D-60); the engine is Phase 6 or later.
 - **LOT-120** [1.0][R] Stock splits adjust quantity and per-share basis of every open lot while preserving acquisition dates and total basis.
 - **LOT-130** [1.0][R] Return of capital reduces basis across open lots pro rata by quantity; if basis would go below zero, the excess is a capital gain.
 - **LOT-140** [1.0][R] Share transfers between accounts carry lots intact.
@@ -507,7 +508,7 @@ Seed investment lots from brokerage cost-basis reports rather than from Quicken;
 | Desktop framework | Tauri v2 |
 | Application services and domain engine | Rust (`kansha-core` crate) |
 | Numeric | Integer minor units; `rust_decimal` for intermediate math |
-| Database | SQLite via `rusqlite` with `bundled-sqlcipher` (encryption per D-20/D-110) |
+| Database | SQLite via `rusqlite` with `bundled-sqlcipher-vendored-openssl` (SQLCipher with its own OpenSSL; no system crypto library needed; encryption per D-20/D-110) |
 | Testing | `cargo test`, `proptest`, `insta`, Vitest, Svelte Testing Library |
 | Source control / CI | Git + GitHub; GitHub Actions |
 
@@ -630,7 +631,7 @@ kansha/
 │       │   ├── money.rs       # Money, Quantity, Price newtypes
 │       │   ├── date.rs        # date type, Clock trait
 │       │   ├── error.rs
-│       │   ├── persistence/   # db, migrations/, repositories
+│       │   ├── persistence/   # Db, migrate, audit, repositories, migrations/*.sql
 │       │   ├── accounts/  ledger/  categories/  schedule/
 │       │   ├── reconcile/  securities/  investments/
 │       │   ├── reports/  import/  integrity/  audit/  backup/
@@ -638,7 +639,7 @@ kansha/
 │       └── tests/
 │           ├── scenarios.rs   # scenario runner
 │           ├── properties.rs  # proptest invariants
-│           └── integration/
+│           └── integration/   # main.rs + fixture, migrations, schema, repositories
 ├── tests/
 │   └── scenarios/             # TOML scenario files by area
 │       └── ledger/  schedule/  reconcile/  lots/  reports/
@@ -654,31 +655,22 @@ kansha/
 └── .github/workflows/ci.yml
 ```
 
-### 18. Conceptual Data Model [R]
+### 18. Data Model
 
-Entity outline (full schema to be specified in the next revision):
+The schema is defined in SQL, not in this document:
+`crates/kansha-core/src/persistence/migrations/0001_init.sql` (plus any later migrations). Comments in that file explain every table, column, and constraint. Migrations are forward-only and never edited once released.
 
-- **account** — id, type, name, attributes, tax_treatment, status, group, sort order
-- **category** — id, parent_id, kind (income/expense/system), name, flags (tax-related, tithable, giving), hidden
-- **payee** — id, name, memorized defaults
-- **tag** — id, name, hidden
-- **transaction** — id (immutable), date, payee_id, check_num, memo, status (normal/void), origin, import_batch_id, schedule_id, created_at
-- **posting** — id, transaction_id, account_id *or* category_id, amount (integer cents), memo, cleared_status, reconcile_id
-- **posting_tag** — posting_id, tag_id
-- **security** — id, ticker, name, type, asset_class, cusip, default_lot_method
-- **price** — security_id, date, price
-- **investment_txn** — transaction_id, account_id, security_id, action, quantity, price, commission, trade_date, settle_date
-- **lot** — id, account_id, security_id, acquired_date, quantity, cost_basis, origin_txn_id, status
-- **lot_disposal** — id, lot_id, sale_txn_id, quantity, proceeds, basis, gain, term
-- **lot_adjustment** — id, lot_id, txn_id, type (split, return of capital, transfer), details
-- **schedule** — id, template (payee, account, amount, splits…), recurrence rule, next_due, end condition, remaining, remind_days, mode, weekend rule
-- **schedule_occurrence** — schedule_id, due_date, status (pending/entered/skipped), txn_id
-- **reconciliation** — id, account_id, statement_date, statement_balance, status, finished_at
-- **import_batch** — id, source file, format, created_at, status (staged/committed/rolled back)
-- **audit_log** — id, timestamp, entity, entity_id, action, before_json, after_json, origin
-- **saved_report** — id, name, type, settings_json
-- **setting** — key, value
-- **schema_version** — version, applied_at
+Modeling choices that affect other sections:
+
+- **`txn`**, not `transaction` (SQL keyword).
+- **Every table is STRICT.** Money is INTEGER cents; quantity, price, and interest rate are INTEGER × 10^6. Dates are TEXT checked with `x IS date(x)`. Timestamps are UTC TEXT from the injected `Clock`.
+- **Posting sign:** + increases an asset or records an expense; − increases a liability or records income. Postings of a transaction sum to zero (view `unbalanced_txn`).
+- **Investment holdings in the ledger:** a posting to an investment account with `security_id` carries that holding's cost basis; one without is the account's cash. So a buy, sell, or reinvestment balances like any other transaction.
+- **Equity** category kind, system-only, for opening balances. Built-in categories (CAT-060, RCN-040) are seeded by migration 0001 and identified by `system_key`.
+- **Lots** store immutable acquisition facts. Open quantity and basis are derived from `lot_disposal` (sales, transfers out, removals) and `lot_adjustment` (splits, return of capital). A partial sale is a disposal, not a physical lot split.
+- **Schedules** store a template (`schedule` + `schedule_line`) and a recurrence rule. Occurrences are stored only once acted on (entered, skipped, or edited individually).
+- **Audit log** is append-only, enforced by triggers.
+- **Account type** is fixed at creation.
 
 ### 19. Numeric Precision and Rounding [R]
 
@@ -696,7 +688,7 @@ A repeatable, automated test framework is a built-in part of Kansha, not an add-
 #### 20.1 Requirements
 
 - **TEST-010** [1.0][S] The full automated test suite runs with a single command (`just test`), is deterministic, requires no network, and does not depend on the current date.
-- **TEST-020** [1.0][R] **Clock injection:** the engine never reads system time directly; "today" is supplied through a `Clock` interface. Tests use a fixed clock.
+- **TEST-020** [1.0][R] **Clock injection:** the engine never reads system time directly; "today" (a date) and "now" (a UTC timestamp, for `created_at` and audit entries only) are supplied through a `Clock` interface. Tests use a fixed clock.
 - **TEST-030** [1.0][R] **Unit tests** for pure logic (recurrence date generation, lot allocation, rounding, money arithmetic) live alongside the code in each Rust module.
 - **TEST-040** [1.0][R] **Integration tests** run against a fresh in-memory database with all migrations applied, created by a shared fixture helper, so every test starts from a known state.
 - **TEST-050** [1.0][S] **Scenario tests:** engine behavior is specified in human-readable TOML scenario files under `tests/scenarios/<area>/`. A single runner discovers and executes every file. Each scenario declares an ID, description, the requirement IDs it covers, an as-of date, setup (accounts, categories, securities, schedules), a sequence of actions, and expected results (balances, lots, realized gains, occurrences, report totals). Failures report the scenario file, the step, and the mismatched field with expected vs. actual values.
@@ -834,18 +826,18 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 
 | ID | Decision | Status | Recommendation / Outcome |
 |---|---|---|---|
-| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | Open | Separate columns |
+| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | Open | Separate columns. No schema impact (postings are signed); decide in Phase 3 |
 | D-20 | Encryption: SQLCipher vs. disk-level only | Tentative | SQLCipher; final decision before 1.0 development |
 | D-30 | Accounting engine in Rust vs. TypeScript | **Decided** | Rust (DR-01) |
 | D-35 | UI framework | **Decided** | Svelte 5 + Vite, no SvelteKit (DR-02) |
 | D-40 | Price download in 1.0, and which provider | Open | Yes, pluggable; provider to be evaluated |
-| D-50 | Money market funds: security or cash | Open | Per-account option |
-| D-60 | Average-cost basis needed in 1.0? | Open | Depends on brokerage reporting for Stan's funds |
+| D-50 | Money market funds: security or cash | **Decided** | Per-account option (`account.mmf_mode`) |
+| D-60 | Lot selection methods | **Decided** (schema) | Schema accepts `fifo`, `specific`, `average`, `hifo`, `min_tax`. The engine does FIFO and specific ID first; average (LOT-110) and HIFO/min-tax (LOT-115) are TBD |
 | D-70 | Share/price decimal precision | Open | 6 decimal places; confirm with brokerage data |
 | D-80 | Parallel-run duration before retiring Quicken | Open | 2–3 months |
 | D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
-| D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | Open | As listed in ACCT-010/020 |
-| D-110 | Encryption during the prototype | Open | Unencrypted prototype database (synthetic data only) using the same `bundled-sqlcipher` build; enable encryption in Phase 8 or at 1.0 |
+| D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | **Decided** | As listed in ACCT-010/020 |
+| D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; enable encryption in Phase 8 or at 1.0 |
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
 | D-140 | Chart library | Open | Evaluate in Phase 7 (Chart.js, uPlot, ECharts) |
@@ -886,7 +878,7 @@ Throwaway code still follows CONVENTIONS.md: it uses `src/lib/api` for all IPC a
 
 ### 24. Phases
 
-Each phase ends with its exit criteria met, `just test` passing on Kubuntu and Windows, and Stan's review. Schema design is completed as a separate spec revision (0.3) before Phase 1.
+Each phase ends with its exit criteria met, `just test` passing on Kubuntu and Windows, and Stan's review. The schema (spec 0.3) is delivered as migration 0001 in Phase 1.
 
 | Phase | Content | Exit criteria |
 |---|---|---|
@@ -929,3 +921,4 @@ Goal for this chat: <sub-scope>
 | 0.1 | 2026-09-23 | Restructured from initial notes; added requirement IDs, release/source tags, recommendations, design rationale, open decisions, and migration placeholders. |
 | 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
 | 0.2.1 | 2026-09-24 | D-120 decided: `tauri-specta`/`specta`/`specta-typescript` pinned to `2.0.0-rc.25` (DR-03), verified against Tauri v2 in Phase 0. §17.3 and §17.4 updated to reflect the built `src-tauri` layout and committed `bindings.ts`. §25 patch command corrected to `git apply` (matches CONVENTIONS.md; the draft had said `patch -p1`). |
+| 0.3 | 2026-09-24 | Phase 1. §18 replaced by a pointer to `migrations/0001_init.sql` (the schema is now defined in SQL) and a short list of modeling choices. D-50, D-60, D-100, D-110 decided; D-10 marked schema-neutral. ACCT-020 and INV-050 accepted ([S]). LOT-115 added (HIFO and minimum-tax lot selection). LOT-110 notes that the schema accepts `average`. TEST-020: `Clock` also supplies UTC timestamps. §16.1: `bundled-sqlcipher-vendored-openssl`. §17.4 layout updated. |

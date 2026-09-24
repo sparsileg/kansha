@@ -141,9 +141,15 @@ scaled6!(
     Price,
     "price"
 );
+scaled6!(
+    /// An annual interest rate in percent, exact to 6 decimal places
+    /// (`"4.35"` is 4.35 %).
+    Rate,
+    "rate"
+);
 
 // ---------------------------------------------------------------------------
-// Arithmetic (Money and Quantity; Price has none)
+// Arithmetic (Money and Quantity; Price and Rate have none)
 // ---------------------------------------------------------------------------
 
 macro_rules! arithmetic {

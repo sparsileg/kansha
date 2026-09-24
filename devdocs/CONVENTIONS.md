@@ -4,7 +4,7 @@
 |---|---|
 | **Applies to** | All Kansha work: code, tests, docs, and chat deliveries |
 | **Companion doc** | `devdocs/kansha-spec.md` |
-| **Last updated** | 2026-09-23 |
+| **Last updated** | 2026-09-24 |
 
 Rules here are binding. If this file and the spec disagree, fix one of them; do not guess.
 
@@ -33,11 +33,12 @@ Rules here are binding. If this file and the spec disagree, fix one of them; do 
 ### 2.2 Patch format
 
 - Unified diff, paths `a/<path>` and `b/<path>` relative to the repo root.
+- Stan downloads deliveries to `~/Downloads/`. Commands reference that path.
 - Applied from the repo root:
 
   ```
-  git apply --check -v <file>.patch
-  git apply -v <file>.patch
+  git apply --check -v ~/Downloads/<file>.patch
+  git apply -v ~/Downloads/<file>.patch
   ```
 
 - **Every hunk must have trailing context (≥1 unchanged line after the last change)** unless the hunk truly ends the file. A hunk without trailing context is anchored to EOF by git and fails.
@@ -77,7 +78,11 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 ## 5. Database
 
 - SQLite via `rusqlite` with `bundled-sqlcipher`.
-- Numbered, forward-only migrations; `schema_version` table.
+- Numbered, forward-only migrations (`persistence/migrations/NNNN_name.sql`); `schema_version` table. Never edit a released migration; add a new one. The SQL files are the schema spec.
+- Every table is `STRICT`. Money INTEGER cents; quantity/price/rate INTEGER × 10^6; dates TEXT with `CHECK (x IS date(x))`; timestamps UTC TEXT from the `Clock`, never `CURRENT_TIMESTAMP`.
+- Enumerations: TEXT + CHECK list, mirrored by a `text_enum!` in Rust. A test inserts every Rust value.
+- IDs: `INTEGER PRIMARY KEY AUTOINCREMENT` (never reused).
+- Writes go through `Db::write`; every repository write records its audit entry in the same transaction.
 - WAL mode, `synchronous=FULL`, `foreign_keys=ON`.
 - Multi-record changes run in a single DB transaction.
 - The ledger is the source of truth. Balances, positions, and gains are derived; caches are rebuildable and never authoritative.

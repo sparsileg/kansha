@@ -6,7 +6,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 
 use crate::error::{Error, Result};
 
@@ -78,24 +78,100 @@ impl fmt::Display for Date {
     }
 }
 
-/// Source of "today". Inject everywhere the engine needs the current date.
-pub trait Clock: Send + Sync {
-    fn today(&self) -> Date;
+/// A UTC instant to the second, for record-keeping (audit log, created_at).
+/// Never used for financial dates. Text form is `YYYY-MM-DDTHH:MM:SSZ`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(NaiveDateTime);
+
+const TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%SZ";
+
+impl Timestamp {
+    /// Midnight UTC at the start of `date`.
+    pub fn start_of(date: Date) -> Timestamp {
+        Timestamp(date.0.and_time(NaiveTime::MIN))
+    }
+
+    pub fn from_ymd_hms(
+        year: i32,
+        month: u32,
+        day: u32,
+        h: u32,
+        m: u32,
+        s: u32,
+    ) -> Result<Timestamp> {
+        NaiveDate::from_ymd_opt(year, month, day)
+            .and_then(|d| d.and_hms_opt(h, m, s))
+            .map(Timestamp)
+            .ok_or_else(|| Error::Parse {
+                kind: "timestamp",
+                input: format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z"),
+                reason: "no such instant".into(),
+            })
+    }
 }
 
-/// A clock that always returns the same date. Used by tests and scenarios.
+impl FromStr for Timestamp {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let parsed = NaiveDateTime::parse_from_str(s, TIMESTAMP_FORMAT)
+            .ok()
+            .map(Timestamp)
+            // Round-trip check rejects non-canonical forms (e.g. `2026-9-1T…`).
+            .filter(|t| t.to_string() == s);
+        parsed.ok_or_else(|| Error::Parse {
+            kind: "timestamp",
+            input: s.to_string(),
+            reason: "expected YYYY-MM-DDTHH:MM:SSZ".into(),
+        })
+    }
+}
+
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.format(TIMESTAMP_FORMAT))
+    }
+}
+
+/// Source of "today" and "now". Inject everywhere the engine needs the
+/// current date or time.
+pub trait Clock: Send + Sync {
+    /// The current calendar date (local), for financial logic.
+    fn today(&self) -> Date;
+
+    /// The current UTC instant, for record-keeping only.
+    fn now(&self) -> Timestamp;
+}
+
+/// A clock that always returns the same date and instant. Used by tests
+/// and scenarios.
 #[derive(Debug, Clone, Copy)]
-pub struct FixedClock(Date);
+pub struct FixedClock {
+    today: Date,
+    now: Timestamp,
+}
 
 impl FixedClock {
+    /// `now` is midnight UTC at the start of `today`.
     pub fn new(today: Date) -> Self {
-        FixedClock(today)
+        FixedClock {
+            today,
+            now: Timestamp::start_of(today),
+        }
+    }
+
+    pub fn with_now(today: Date, now: Timestamp) -> Self {
+        FixedClock { today, now }
     }
 }
 
 impl Clock for FixedClock {
     fn today(&self) -> Date {
-        self.0
+        self.today
+    }
+
+    fn now(&self) -> Timestamp {
+        self.now
     }
 }
 
@@ -107,6 +183,12 @@ pub struct SystemClock;
 impl Clock for SystemClock {
     fn today(&self) -> Date {
         Date(chrono::Local::now().date_naive())
+    }
+
+    fn now(&self) -> Timestamp {
+        // Truncated to whole seconds to match the stored text form.
+        let now = chrono::Utc::now().naive_utc();
+        Timestamp(now.with_nanosecond(0).unwrap_or(now))
     }
 }
 
@@ -156,5 +238,30 @@ mod tests {
         let d: Date = "2026-06-30".parse().unwrap();
         let clock: &dyn Clock = &FixedClock::new(d);
         assert_eq!(clock.today(), d);
+        assert_eq!(clock.now().to_string(), "2026-06-30T00:00:00Z");
+    }
+
+    #[test]
+    fn timestamp_round_trips_and_rejects_bad_forms() {
+        let t: Timestamp = "2026-09-24T01:55:25Z".parse().unwrap();
+        assert_eq!(t.to_string(), "2026-09-24T01:55:25Z");
+        assert_eq!(Timestamp::from_ymd_hms(2026, 9, 24, 1, 55, 25).unwrap(), t);
+        for bad in [
+            "",
+            "2026-09-24T01:55:25",
+            "2026-09-24 01:55:25Z",
+            "2026-9-24T01:55:25Z",
+            "2026-02-30T00:00:00Z",
+            "2026-09-24T24:00:00Z",
+            "2026-09-24T01:55:25.5Z",
+        ] {
+            assert!(bad.parse::<Timestamp>().is_err(), "accepted {bad:?}");
+        }
+    }
+
+    #[test]
+    fn system_clock_now_has_whole_seconds() {
+        let now = SystemClock.now().to_string();
+        assert_eq!(now.parse::<Timestamp>().unwrap().to_string(), now);
     }
 }
