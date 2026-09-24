@@ -1,0 +1,100 @@
+id = "REC-008"
+description = "Estimated amounts need confirmation; one-time overrides and edits at entry leave the series alone"
+requirements = ["REC-060", "REC-110", "REC-120"]
+as_of = "2026-07-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "power"
+account = "Checking"
+payee = "Power Co"
+amount = "-100.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 10
+start = "2026-07-10"
+amount_type = "estimated"
+
+[[actions]]
+type = "enter_occurrence"
+ref = "power"
+due = "2026-07-10"
+expect_error = "estimate"
+
+# The actual amount confirms it.
+[[actions]]
+type = "enter_occurrence"
+ref = "power"
+due = "2026-07-10"
+amount = "-87.45"
+txn_ref = "jul"
+
+# August: pay early and a different amount, this occurrence only.
+[[actions]]
+type = "override_occurrence"
+ref = "power"
+due = "2026-08-10"
+date = "2026-08-05"
+amount = "-120.00"
+
+# Same override on a schedule nobody enters: it shows on the new date.
+[[actions]]
+type = "schedule"
+ref = "power_b"
+account = "Checking"
+amount = "-100.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 10
+start = "2026-08-10"
+
+[[actions]]
+type = "override_occurrence"
+ref = "power_b"
+due = "2026-08-10"
+date = "2026-08-05"
+amount = "-120.00"
+
+[[expect.occurrences]]
+ref = "power_b"
+from = "2026-08-01"
+to = "2026-09-30"
+dates = ["2026-08-05", "2026-09-10"]
+
+[[actions]]
+type = "enter_occurrence"
+ref = "power"
+due = "2026-08-10"
+txn_ref = "aug"
+
+# September: confirm the estimate as it stands, dated a day late.
+[[actions]]
+type = "enter_occurrence"
+ref = "power"
+due = "2026-09-10"
+date = "2026-09-11"
+confirm = true
+txn_ref = "sep"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "5000.00", balance = "5000.00" },
+    { date = "2026-07-10", amount = "-87.45", balance = "4912.55", ref = "jul" },
+    { date = "2026-08-05", amount = "-120.00", balance = "4792.55", ref = "aug" },
+    { date = "2026-09-11", amount = "-100.00", balance = "4692.55", ref = "sep" },
+]

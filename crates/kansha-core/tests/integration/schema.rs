@@ -10,7 +10,7 @@ use kansha_core::persistence::{accounts, categories};
 use kansha_core::{Db, Error, Origin};
 use rusqlite::params;
 
-use crate::fixture::{clock, count, db};
+use crate::fixture::{clock, count, date, db};
 
 const T: &str = "2026-06-30T12:00:00Z";
 
@@ -319,4 +319,115 @@ fn every_rust_enum_value_is_accepted_by_the_schema() {
             .unwrap_or_else(|err| panic!("{cl}: {err}"));
         }
     }
+}
+
+#[test]
+fn every_schedule_enum_value_is_accepted_by_the_schema() {
+    use kansha_core::accounts::AccountType;
+    use kansha_core::persistence::schedules;
+    use kansha_core::schedule::{
+        AmountType, End, EntryMode, Frequency, Occurrence, OccurrenceStatus, Recurrence,
+        ScheduleFields, ScheduleId, ScheduleLine, ScheduleStatus, WeekendRule,
+    };
+
+    let mut db = db();
+    let clock = clock();
+    db.write(&clock, Origin::Ui, |tx| {
+        let chk = accounts::insert(tx, &AccountFields::new("C", AccountType::Checking))?;
+        let cat = categories::insert(
+            tx,
+            &kansha_core::categories::CategoryFields::new(
+                "Bills",
+                kansha_core::categories::CategoryKind::Expense,
+            ),
+        )?;
+        let start = date("2026-01-01");
+        let base = |rec: Recurrence| ScheduleFields {
+            account: chk.id,
+            payee: None,
+            memo: String::new(),
+            amount_type: AmountType::Fixed,
+            lines: vec![ScheduleLine {
+                target: kansha_core::ledger::Target::Category(cat.id),
+                amount: "-1.00".parse().unwrap(),
+                memo: String::new(),
+                tag: None,
+            }],
+            recurrence: rec,
+            end: End::Never,
+            remind_days: 0,
+            mode: EntryMode::Remind,
+        };
+        for f in Frequency::ALL {
+            let mut rec = Recurrence::new(*f, start);
+            match f {
+                Frequency::Monthly => rec.day1 = Some(5),
+                Frequency::TwiceMonthly => {
+                    rec.day1 = Some(5);
+                    rec.day2 = Some(20);
+                }
+                Frequency::MonthlyNthWeekday => {
+                    rec.weekday = Some(3);
+                    rec.week_of_month = Some(-1);
+                }
+                _ => {}
+            }
+            schedules::insert(tx, &base(rec), Some(start))?;
+        }
+        let mut last = ScheduleId(0);
+        for w in WeekendRule::ALL {
+            for a in AmountType::ALL {
+                for m in EntryMode::ALL {
+                    let mut f = base(Recurrence::new(Frequency::Daily, start));
+                    f.recurrence.weekend_rule = *w;
+                    f.amount_type = *a;
+                    f.mode = *m;
+                    last = schedules::insert(tx, &f, Some(start))?.id;
+                }
+            }
+        }
+        for end in [
+            End::Never,
+            End::OnDate {
+                date: date("2026-12-31"),
+            },
+            End::AfterCount { count: 3 },
+        ] {
+            let mut f = base(Recurrence::new(Frequency::Daily, start));
+            f.end = end;
+            schedules::insert(tx, &f, Some(start))?;
+        }
+        let f = base(Recurrence::new(Frequency::Daily, start));
+        for s in ScheduleStatus::ALL {
+            let next = (*s == ScheduleStatus::Active).then_some(start);
+            schedules::update(tx, last, &f, next, *s)?;
+        }
+        for (i, st) in OccurrenceStatus::ALL.iter().enumerate() {
+            let txn = if *st == OccurrenceStatus::Entered {
+                tx.conn().execute(
+                    "INSERT INTO txn (txn_date, status, origin, schedule_id, created_at)
+                     VALUES ('2026-01-01', 'normal', 'schedule', ?1, ?2)",
+                    params![last.0, T],
+                )?;
+                Some(kansha_core::ledger::TxnId(tx.conn().last_insert_rowid()))
+            } else {
+                None
+            };
+            schedules::put_occurrence(
+                tx,
+                &Occurrence {
+                    id: 0,
+                    schedule: last,
+                    due_date: date(&format!("2026-02-0{}", i + 1)),
+                    status: *st,
+                    override_date: None,
+                    override_amount: None,
+                    txn,
+                    needs_review: false,
+                },
+            )?;
+        }
+        Ok::<_, Error>(())
+    })
+    .unwrap();
 }

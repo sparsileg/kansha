@@ -22,11 +22,18 @@ pub struct Migration {
 
 /// All migrations, in order. Versions are 1, 2, 3, … with no gaps.
 /// Never edit a released migration; add a new one.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "initial schema",
-    sql: include_str!("migrations/0001_init.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "initial schema",
+        sql: include_str!("migrations/0001_init.sql"),
+    },
+    Migration {
+        version: 2,
+        description: "occurrence review flag",
+        sql: include_str!("migrations/0002_occurrence_review.sql"),
+    },
+];
 
 /// The newest schema version this build understands.
 pub const LATEST_VERSION: u32 = MIGRATIONS[MIGRATIONS.len() - 1].version;

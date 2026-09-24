@@ -12,6 +12,7 @@ pub mod integrity;
 pub mod ledger;
 pub mod migrate;
 pub mod payees;
+pub mod schedules;
 pub mod settings;
 pub mod tags;
 mod values;

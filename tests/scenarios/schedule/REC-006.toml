@@ -1,0 +1,109 @@
+id = "REC-006"
+description = "# left: entering and skipping both use one up; the schedule ends at zero"
+requirements = ["REC-030", "REC-110", "REC-160"]
+as_of = "2026-07-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "loan"
+account = "Checking"
+payee = "Lender"
+amount = "-200.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+count = 3
+
+# Only the next occurrence can be handled.
+[[actions]]
+type = "enter_occurrence"
+ref = "loan"
+due = "2026-08-01"
+expect_error = "next occurrence"
+
+[[actions]]
+type = "enter_occurrence"
+ref = "loan"
+due = "2026-07-01"
+txn_ref = "p1"
+
+[[actions]]
+type = "skip_occurrence"
+ref = "loan"
+due = "2026-08-01"
+
+[[actions]]
+type = "enter_occurrence"
+ref = "loan"
+due = "2026-09-01"
+txn_ref = "p3"
+
+[[actions]]
+type = "enter_occurrence"
+ref = "loan"
+due = "2026-10-01"
+expect_error = "no more occurrences"
+
+# `loan2` is entered once and skipped once: one left.
+[[actions]]
+type = "schedule"
+ref = "loan2"
+account = "Checking"
+amount = "-200.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+count = 3
+
+[[actions]]
+type = "enter_occurrence"
+ref = "loan2"
+due = "2026-07-01"
+
+[[actions]]
+type = "skip_occurrence"
+ref = "loan2"
+due = "2026-08-01"
+
+[[expect.schedules]]
+ref = "loan"
+next_due = "none"
+left = 0
+status = "ended"
+
+[[expect.schedules]]
+ref = "loan2"
+next_due = "2026-09-01"
+left = 1
+status = "active"
+
+[expect]
+txn_count = 4
+
+[expect.ending_balances]
+"Checking" = "4400.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "5000.00", balance = "5000.00" },
+    { date = "2026-07-01", amount = "-200.00", balance = "4800.00", ref = "p1", payee = "Lender", counterpart = "Bills" },
+    { date = "2026-07-01", amount = "-200.00", balance = "4600.00" },
+    { date = "2026-09-01", amount = "-200.00", balance = "4400.00", ref = "p3", payee = "Lender", counterpart = "Bills" },
+]

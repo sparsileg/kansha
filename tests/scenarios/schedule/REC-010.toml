@@ -1,0 +1,100 @@
+id = "REC-010"
+description = "Every N days, weeks, months, and years; quarterly and twice a year"
+requirements = ["REC-020"]
+as_of = "2026-01-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "daily"
+account = "Checking"
+amount = "-1.00"
+category = "Bills"
+frequency = "daily"
+interval = 10
+start = "2026-01-01"
+
+[[actions]]
+type = "schedule"
+ref = "biweekly"
+account = "Checking"
+amount = "-1.00"
+category = "Bills"
+frequency = "weekly"
+interval = 2
+start = "2026-01-02"
+
+[[actions]]
+type = "schedule"
+ref = "quarterly"
+account = "Checking"
+amount = "-1.00"
+category = "Bills"
+frequency = "monthly"
+interval = 3
+day1 = 15
+start = "2026-01-15"
+
+[[actions]]
+type = "schedule"
+ref = "twice_a_year"
+account = "Checking"
+amount = "-1.00"
+category = "Bills"
+frequency = "monthly"
+interval = 6
+day1 = 1
+start = "2026-03-01"
+
+[[actions]]
+type = "schedule"
+ref = "every_two_years"
+account = "Checking"
+amount = "-1.00"
+category = "Bills"
+frequency = "yearly"
+interval = 2
+start = "2026-05-05"
+
+[[expect.occurrences]]
+ref = "daily"
+from = "2026-01-01"
+to = "2026-02-01"
+dates = ["2026-01-01", "2026-01-11", "2026-01-21", "2026-01-31"]
+
+[[expect.occurrences]]
+ref = "biweekly"
+from = "2026-01-01"
+to = "2026-02-28"
+dates = ["2026-01-02", "2026-01-16", "2026-01-30", "2026-02-13", "2026-02-27"]
+
+[[expect.occurrences]]
+ref = "quarterly"
+from = "2026-01-01"
+to = "2026-12-31"
+dates = ["2026-01-15", "2026-04-15", "2026-07-15", "2026-10-15"]
+
+[[expect.occurrences]]
+ref = "twice_a_year"
+from = "2026-01-01"
+to = "2027-12-31"
+dates = ["2026-03-01", "2026-09-01", "2027-03-01", "2027-09-01"]
+
+[[expect.occurrences]]
+ref = "every_two_years"
+from = "2026-01-01"
+to = "2032-12-31"
+dates = ["2026-05-05", "2028-05-05", "2030-05-05", "2032-05-05"]

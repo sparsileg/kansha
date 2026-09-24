@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.4 (draft) |
+| **Document version** | 0.3.5 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
@@ -678,6 +678,7 @@ Modeling choices that affect other sections:
 - **Equity** category kind, system-only, for opening balances. Built-in categories (CAT-060, RCN-040) are seeded by migration 0001 and identified by `system_key`.
 - **Lots** store immutable acquisition facts. Open quantity and basis are derived from `lot_disposal` (sales, transfers out, removals) and `lot_adjustment` (splits, return of capital). A partial sale is a disposal, not a physical lot split.
 - **Schedules** store a template (`schedule` + `schedule_line`) and a recurrence rule. Occurrences are stored only once acted on (entered, skipped, or edited individually).
+- **Schedule rules (Phase 4a):** the recurrence engine generates *nominal* dates from the rule alone; the weekend rule (REC-050) shifts the due date but the nominal date identifies the occurrence. `schedule.next_due` holds the next nominal date. Occurrences are handled in order: only `next_due` can be entered or skipped. Entering and skipping both use up one of "# left" (REC-030). Editing a schedule is "this and all future" (REC-120): entered and skipped history stays, the series continues after the last occurrence acted on, and pending one-time overrides are dropped. "This occurrence only" is a pending `schedule_occurrence` row with `override_date` and/or `override_amount` (amount on single-line schedules only). Estimated amounts need confirmation on entry and are never auto-entered (REC-060). Auto-enter (REC-070) enters every due occurrence, missed ones included, with origin `scheduler`, and flags each for review (`needs_review`, migration 0002) until dismissed. A schedule with entered or skipped occurrences is soft-deleted (`status = deleted`) so REC-160 links survive; an unused one is removed. The projected balance (CAL-050) counts pending occurrences on their due dates, overdue ones on today.
 - **Audit log** is append-only, enforced by triggers.
 - **Account type** is fixed at creation.
 
@@ -935,3 +936,4 @@ Goal for this chat: <sub-scope>
 | 0.3.2 | 2026-09-24 | Phase 3a. §18 gains IPC conventions, register query, payee memorization, and audit view choices. `sample` module provides the synthetic dataset (TEST-110, D-130); NFR-040 measured (see phase-notes/phase-3.md). |
 | 0.3.3 | 2026-09-24 | D-10 decided: separate Payment and Deposit columns (REG-010). |
 | 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |
+| 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |

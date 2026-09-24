@@ -1,0 +1,78 @@
+id = "REC-009"
+description = "Auto-enter enters every due and missed occurrence, but never estimated or remind schedules"
+requirements = ["REC-070", "REC-130", "REC-160"]
+as_of = "2026-09-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "auto"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+mode = "auto"
+
+[[actions]]
+type = "schedule"
+ref = "est"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+mode = "auto"
+amount_type = "estimated"
+
+[[actions]]
+type = "schedule"
+ref = "remind"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+
+[[actions]]
+type = "auto_enter"
+expect_entered = 3
+
+# Running it again enters nothing more.
+[[actions]]
+type = "auto_enter"
+expect_entered = 0
+
+[[expect.schedules]]
+ref = "auto"
+next_due = "2026-10-01"
+
+[[expect.schedules]]
+ref = "est"
+next_due = "2026-07-01"
+
+[[expect.schedules]]
+ref = "remind"
+next_due = "2026-07-01"
+
+[expect]
+txn_count = 4
+
+[expect.ending_balances]
+"Checking" = "4970.00"

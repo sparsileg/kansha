@@ -1,0 +1,60 @@
+id = "REC-011"
+description = "Scheduled transfers and splits enter with the right postings on both sides"
+requirements = ["REC-010", "REC-150", "REC-160"]
+as_of = "2026-07-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[categories]]
+path = "Housing"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "rent_and_save"
+account = "Checking"
+payee = "Landlord"
+amount = "-1000.00"
+transfer = "Savings"
+frequency = "monthly"
+day1 = 1
+start = "2026-07-01"
+
+[[actions.lines]]
+category = "Housing"
+amount = "-800.00"
+memo = "rent"
+
+[[actions]]
+type = "enter_occurrence"
+ref = "rent_and_save"
+due = "2026-07-01"
+txn_ref = "jul"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "5000.00", balance = "5000.00" },
+    { date = "2026-07-01", amount = "-1000.00", balance = "4000.00", ref = "jul", payee = "Landlord", counterpart = "--Split--" },
+]
+
+[[expect.register]]
+account = "Savings"
+rows = [
+    { date = "2026-07-01", amount = "200.00", balance = "200.00", ref = "jul", payee = "Landlord", counterpart = "--Split--" },
+]
+
+[expect.category_totals]
+"Housing" = "800.00"

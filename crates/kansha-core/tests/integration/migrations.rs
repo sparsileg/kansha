@@ -227,3 +227,41 @@ fn foreign_keys_hold_after_migration() {
         .unwrap();
     assert_eq!(ok, "ok");
 }
+
+#[test]
+fn migration_0002_adds_the_review_flag_and_keeps_existing_occurrences() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 1).unwrap();
+    let c = db.conn();
+    c.execute(
+        "INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+         VALUES ('C', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z')",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO schedule (account_id, frequency, start_date, next_due, created_at)
+         VALUES (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z')",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO schedule_occurrence (schedule_id, due_date, status)
+         VALUES (1, '2026-07-01', 'skipped')",
+        [],
+    )
+    .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let flag: i64 = db
+        .conn()
+        .query_row("SELECT needs_review FROM schedule_occurrence", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(flag, 0);
+    assert!(
+        db.conn()
+            .execute("UPDATE schedule_occurrence SET needs_review = 2", [])
+            .is_err()
+    );
+}

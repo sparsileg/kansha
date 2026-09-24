@@ -111,6 +111,65 @@ export const commands = {
 	 *  book that already has accounts.
 	 */
 	sampleDataLoad: (seed: number) => typedError<SampleSummary, IpcError>(__TAURI_INVOKE("sample_data_load", { seed })),
+	/**  The Scheduled Transactions list, next due first (REC-300). */
+	scheduleList: () => typedError<ScheduleRow[], IpcError>(__TAURI_INVOKE("schedule_list")),
+	scheduleGet: (id: ScheduleId) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_get", { id })),
+	/**  Create a schedule (REC-100). */
+	scheduleCreate: (fields: ScheduleFields) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_create", { fields })),
+	/**  Edit a schedule for this and all future occurrences (REC-120). */
+	scheduleUpdate: (id: ScheduleId, fields: ScheduleFields) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_update", { id, fields })),
+	scheduleDelete: (id: ScheduleId) => typedError<null, IpcError>(__TAURI_INVOKE("schedule_delete", { id })),
+	/**
+	 *  A schedule prefilled from a transaction, for "Schedule this" (REC-140).
+	 *  Nothing is saved; the UI shows it for editing, then calls
+	 *  `schedule_create`.
+	 */
+	scheduleFromTxn: (txn: TxnId, account: AccountId) => typedError<ScheduleFields, IpcError>(__TAURI_INVOKE("schedule_from_txn", { txn, account })),
+	/**
+	 *  Enter an occurrence as a transaction (REC-110). An estimated amount
+	 *  fails with `confirmation_required` until `confirmed` or an amount is
+	 *  given.
+	 */
+	scheduleEnter: (schedule: ScheduleId, due: string, edits: EnterEdits, confirmed: boolean) => typedError<Entered, IpcError>(__TAURI_INVOKE("schedule_enter", { schedule, due, edits, confirmed })),
+	scheduleSkip: (schedule: ScheduleId, due: string) => typedError<null, IpcError>(__TAURI_INVOKE("schedule_skip", { schedule, due })),
+	/**
+	 *  "Edit this occurrence only" (REC-110): a one-time date and/or amount;
+	 *  both `null` clears it.
+	 */
+	scheduleOverride: (schedule: ScheduleId, due: string, date: string | null, amount: string | null) => typedError<{
+	id: number,
+	schedule: ScheduleId,
+	/**  Nominal date. */
+	due_date: string,
+	status: OccurrenceStatus,
+	override_date: string | null,
+	/**  The main account's amount, when changed for this occurrence only. */
+	override_amount: string | null,
+	txn: TxnId | null,
+	needs_review: boolean,
+} | null, IpcError>(__TAURI_INVOKE("schedule_override", { schedule, due, date, amount })),
+	/**
+	 *  Due and overdue occurrences, within each schedule's reminder window
+	 *  (REC-130).
+	 */
+	scheduleDueList: () => typedError<OccurrenceView[], IpcError>(__TAURI_INVOKE("schedule_due_list")),
+	/**
+	 *  Enter what auto-entry schedules owe up to today, including occurrences
+	 *  missed while the app was closed (REC-070). Call once at startup, before
+	 *  the due list.
+	 */
+	scheduleAutoEnter: () => typedError<AutoEnterReport, IpcError>(__TAURI_INVOKE("schedule_auto_enter")),
+	/**  Auto-entered occurrences awaiting review. */
+	scheduleReviewList: () => typedError<OccurrenceView[], IpcError>(__TAURI_INVOKE("schedule_review_list")),
+	/**
+	 *  Mark auto-entered occurrences (schedule and nominal date, as in
+	 *  `schedule_review_list`) as reviewed.
+	 */
+	scheduleReviewDismiss: (items: ([ScheduleId, string])[]) => typedError<number, IpcError>(__TAURI_INVOKE("schedule_review_dismiss", { items })),
+	/**  Calendar occurrences dated `from..=to` (CAL-010, CAL-020, CAL-040). */
+	calendarOccurrences: (from: string, to: string, accounts: AccountId[] | null, includeDone: boolean) => typedError<OccurrenceView[], IpcError>(__TAURI_INVOKE("calendar_occurrences", { from, to, accounts, includeDone })),
+	/**  Projected end-of-day balance of an account (CAL-050). */
+	calendarProjection: (account: AccountId, from: string, to: string) => typedError<DayBalance[], IpcError>(__TAURI_INVOKE("calendar_projection", { account, from, to })),
 };
 
 /* Types */
@@ -176,6 +235,12 @@ export type AccountType = "checking" | "savings" | "credit_card" | "cash" | "mon
 /**  Loan or mortgage; balance tracking only in 1.0. */
 "loan";
 
+/**
+ *  Fixed amounts enter as scheduled; estimated ones are confirmed on
+ *  entry (REC-060).
+ */
+export type AmountType = "fixed" | "estimated";
+
 /**  Kind of an Other Asset account (ACCT-140). */
 export type AssetSubtype = "house" | "vehicle" | "other";
 
@@ -198,6 +263,23 @@ export type AuditEntry = {
 	 *  field (`after` empty); anything else lists only differing fields.
 	 */
 	changes: FieldChange[],
+};
+
+/**  An occurrence auto-entry could not enter. */
+export type AutoEnterFailure = {
+	schedule: ScheduleId,
+	nominal: string,
+	reason: string,
+};
+
+/**  What auto-entry did. */
+export type AutoEnterReport = {
+	entered: Entered[],
+	/**
+	 *  Schedules stopped by an error (a closed account, say). They stay in
+	 *  the due list.
+	 */
+	failed: AutoEnterFailure[],
 };
 
 /**  Where an investment account's cash lives (INV-300). */
@@ -268,6 +350,41 @@ export type Counterpart =
 /**  More than one other posting (REG-050 "--Split--"). */
 { kind: "split" };
 
+/**  Projected balance at the end of a day (CAL-050). */
+export type DayBalance = {
+	date: string,
+	balance: string,
+};
+
+/**  When a schedule stops (REC-030). */
+export type End = { kind: "never" } | 
+/**  Occurrences dated after `date` do not happen. */
+{ kind: "on_date"; date: string } | 
+/**
+ *  `count` occurrences remain ("# left"); entering or skipping one
+ *  uses it up.
+ */
+{ kind: "after_count"; count: number };
+
+/**  Changes the user makes while entering an occurrence (REC-110). */
+export type EnterEdits = {
+	/**  Enter it on this date instead. */
+	date: string | null,
+	/**
+	 *  The main account's amount, for a schedule with a single line. Split
+	 *  schedules are edited in the register after entering.
+	 */
+	amount: string | null,
+};
+
+/**  An occurrence that became a transaction. */
+export type Entered = {
+	schedule: ScheduleId,
+	nominal: string,
+	txn: TxnId,
+	date: string,
+};
+
 /**  A transaction as one account's register shows it. */
 export type Entry = {
 	account: AccountId,
@@ -302,6 +419,12 @@ export type EntryLine = {
 	tags: TagId[],
 };
 
+/**
+ *  Remind: the user enters each occurrence. Auto: entered on the due
+ *  date and flagged for review (REC-070).
+ */
+export type EntryMode = "remind" | "auto";
+
 export type ErrorKind = 
 /**  The request broke a domain rule; show the message. */
 "invalid" | "not_found" | 
@@ -324,6 +447,12 @@ export type FieldChange = {
 	before: string | null,
 	after: string | null,
 };
+
+/**
+ *  How often a schedule repeats (REC-020). Quarterly and twice a year
+ *  are `Monthly` with interval 3 and 6.
+ */
+export type Frequency = "once" | "daily" | "weekly" | "twice_monthly" | "monthly" | "monthly_last_day" | "monthly_nth_weekday" | "yearly";
 
 /**  Result of an integrity check. */
 export type IntegrityReport = {
@@ -396,6 +525,51 @@ export type MmfMode =
 /**  Part of the account's cash balance. */
 "cash";
 
+/**  A stored occurrence row. */
+export type Occurrence = {
+	id: number,
+	schedule: ScheduleId,
+	/**  Nominal date. */
+	due_date: string,
+	status: OccurrenceStatus,
+	override_date: string | null,
+	/**  The main account's amount, when changed for this occurrence only. */
+	override_amount: string | null,
+	txn: TxnId | null,
+	needs_review: boolean,
+};
+
+/**
+ *  What became of an occurrence (REC-110). `Pending` rows carry a
+ *  one-time override.
+ */
+export type OccurrenceStatus = "pending" | "entered" | "skipped";
+
+/**  One occurrence as lists and the calendar show it. */
+export type OccurrenceView = {
+	schedule: ScheduleId,
+	/**  Nominal date: identifies the occurrence. */
+	nominal: string,
+	/**  When it is due: weekend rule or one-time override applied. */
+	date: string,
+	/**  The main account's amount, override applied. */
+	amount: string,
+	status: OccurrenceStatus,
+	account: AccountId,
+	payee: PayeeId | null,
+	estimated: boolean,
+	mode: EntryMode,
+	/**  A one-time date or amount is set. */
+	overridden: boolean,
+	/**  The transaction, once entered. */
+	txn: TxnId | null,
+	needs_review: boolean,
+	/**  Pending and dated before today. */
+	overdue: boolean,
+	/**  Only the schedule's next occurrence can be entered or skipped. */
+	actionable: boolean,
+};
+
 /**  Settings only Other Asset accounts have (ACCT-140). */
 export type OtherAssetSettings = {
 	subtype: AssetSubtype,
@@ -420,6 +594,30 @@ export type PayeeFields = {
 
 /**  Row ID of a payee. */
 export type PayeeId = number;
+
+/**
+ *  A repeating pattern. Field use by frequency:
+ * 
+ *  | frequency | fields |
+ *  |---|---|
+ *  | once | `start_date` |
+ *  | daily, weekly, monthly_last_day, yearly | `interval` |
+ *  | twice_monthly | `day1`, `day2` (`day1 < day2`) |
+ *  | monthly | `day1`, `interval` |
+ *  | monthly_nth_weekday | `weekday` (1 = Monday … 7 = Sunday), `week_of_month` (1–4, or −1 = last), `interval` |
+ * 
+ *  Weekly repeats on `start_date`'s weekday; yearly on its month and day.
+ */
+export type Recurrence = {
+	frequency: Frequency,
+	interval: number,
+	day1: number | null,
+	day2: number | null,
+	weekday: number | null,
+	week_of_month: number | null,
+	start_date: string,
+	weekend_rule: WeekendRule,
+};
 
 /**  A page of register rows. */
 export type RegisterPage = {
@@ -517,6 +715,62 @@ export type SampleSummary = {
 	txns: number,
 };
 
+/**  A stored schedule. */
+export type Schedule = {
+	id: ScheduleId,
+	fields: ScheduleFields,
+	/**  Nominal date of the next occurrence; `None` once ended or deleted. */
+	next_due: string | null,
+	status: ScheduleStatus,
+	created_at: string,
+};
+
+/**  Everything the user sets on a schedule (REC-010). */
+export type ScheduleFields = {
+	/**  The account whose register the transaction goes in. */
+	account: AccountId,
+	payee: PayeeId | null,
+	memo: string,
+	amount_type: AmountType,
+	/**  At least one. One line is a simple transaction. */
+	lines: ScheduleLine[],
+	recurrence: Recurrence,
+	end: End,
+	/**  Days before the due date it shows in the due list. */
+	remind_days: number,
+	mode: EntryMode,
+};
+
+/**  Row ID of a schedule. */
+export type ScheduleId = number;
+
+/**  One line of the other side of a scheduled transaction (REC-150). */
+export type ScheduleLine = {
+	/**  A category, or the other account of a transfer. */
+	target: Target,
+	/**  Same sign as the schedule's amount, like an entry line. */
+	amount: string,
+	memo: string,
+	tag: TagId | null,
+};
+
+/**  A row of the Scheduled Transactions list (REC-300). */
+export type ScheduleRow = {
+	schedule: Schedule,
+	/**  "How often" text. */
+	how_often: string,
+	amount: string,
+	/**  Next due date, weekend rule applied. */
+	due_date: string | null,
+	/**  "# left" for an after-count schedule. */
+	left: number | null,
+};
+
+/**  Where a schedule stands. */
+export type ScheduleStatus = "active" | 
+/**  Ran out of occurrences (end date passed or "# left" reached 0). */
+"ended" | "deleted";
+
 /**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
 export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";
 
@@ -546,6 +800,9 @@ export type TxnId = number;
 
 /**  Normal or voided (TXN-040). */
 export type TxnStatus = "normal" | "void";
+
+/**  What to do when a due date falls on a weekend (REC-050). */
+export type WeekendRule = "none" | "previous" | "next";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

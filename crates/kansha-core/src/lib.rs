@@ -14,6 +14,7 @@ pub mod ledger;
 pub mod money;
 pub mod persistence;
 pub mod sample;
+pub mod schedule;
 mod serde_impls;
 pub mod testkit;
 mod text_enum;

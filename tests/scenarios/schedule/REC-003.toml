@@ -1,0 +1,70 @@
+id = "REC-003"
+description = "Nth weekday of the month: second Tuesday, last Friday, fourth Thursday every 3 months"
+requirements = ["REC-020"]
+as_of = "2026-01-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "second_tue"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly_nth_weekday"
+weekday = 2
+week_of_month = 2
+start = "2026-01-01"
+
+[[actions]]
+type = "schedule"
+ref = "last_fri"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly_nth_weekday"
+weekday = 5
+week_of_month = -1
+start = "2026-01-01"
+
+[[actions]]
+type = "schedule"
+ref = "fourth_thu"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly_nth_weekday"
+interval = 3
+weekday = 4
+week_of_month = 4
+start = "2026-01-01"
+
+[[expect.occurrences]]
+ref = "second_tue"
+from = "2026-01-01"
+to = "2026-04-30"
+dates = ["2026-01-13", "2026-02-10", "2026-03-10", "2026-04-14"]
+
+[[expect.occurrences]]
+ref = "last_fri"
+from = "2026-01-01"
+to = "2026-04-30"
+dates = ["2026-01-30", "2026-02-27", "2026-03-27", "2026-04-24"]
+
+[[expect.occurrences]]
+ref = "fourth_thu"
+from = "2026-01-01"
+to = "2026-12-31"
+dates = ["2026-01-22", "2026-04-23", "2026-07-23", "2026-10-22"]

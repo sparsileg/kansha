@@ -1,0 +1,70 @@
+id = "REC-004"
+description = "Twice a month, including days that clamp in short months"
+requirements = ["REC-020", "REC-040"]
+as_of = "2026-01-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "first_fifteenth"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "twice_monthly"
+day1 = 1
+day2 = 15
+start = "2026-01-01"
+
+[[actions]]
+type = "schedule"
+ref = "fifteenth_31st"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "twice_monthly"
+day1 = 15
+day2 = 31
+start = "2026-02-01"
+
+[[actions]]
+type = "schedule"
+ref = "thirtieth_31st"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "twice_monthly"
+day1 = 30
+day2 = 31
+start = "2026-02-01"
+
+[[expect.occurrences]]
+ref = "first_fifteenth"
+from = "2026-01-01"
+to = "2026-02-28"
+dates = ["2026-01-01", "2026-01-15", "2026-02-01", "2026-02-15"]
+
+[[expect.occurrences]]
+ref = "fifteenth_31st"
+from = "2026-02-01"
+to = "2026-03-31"
+dates = ["2026-02-15", "2026-02-28", "2026-03-15", "2026-03-31"]
+
+# Both days clamp to Feb 28: one occurrence, not two.
+[[expect.occurrences]]
+ref = "thirtieth_31st"
+from = "2026-02-01"
+to = "2026-03-31"
+dates = ["2026-02-28", "2026-03-30", "2026-03-31"]

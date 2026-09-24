@@ -64,6 +64,21 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ledger::audit_history,
             commands::ledger::integrity_check,
             commands::sample::sample_data_load,
+            commands::schedule::schedule_list,
+            commands::schedule::schedule_get,
+            commands::schedule::schedule_create,
+            commands::schedule::schedule_update,
+            commands::schedule::schedule_delete,
+            commands::schedule::schedule_from_txn,
+            commands::schedule::schedule_enter,
+            commands::schedule::schedule_skip,
+            commands::schedule::schedule_override,
+            commands::schedule::schedule_due_list,
+            commands::schedule::schedule_auto_enter,
+            commands::schedule::schedule_review_list,
+            commands::schedule::schedule_review_dismiss,
+            commands::schedule::calendar_occurrences,
+            commands::schedule::calendar_projection,
         ])
 }
 

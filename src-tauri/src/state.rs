@@ -95,6 +95,12 @@ impl AppState {
         Ok(db.write(&self.clock, origin, f)?)
     }
 
+    /// Enter everything auto-entry schedules owe up to today (REC-070).
+    pub fn auto_enter(&self) -> CmdResult<kansha_core::schedule::AutoEnterReport> {
+        let mut db = self.lock()?;
+        Ok(kansha_core::schedule::auto_enter_due(&mut db, &self.clock)?)
+    }
+
     fn lock(&self) -> CmdResult<std::sync::MutexGuard<'_, Db>> {
         self.db.lock().map_err(|_| IpcError {
             kind: ErrorKind::Internal,

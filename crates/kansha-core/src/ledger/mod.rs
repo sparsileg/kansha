@@ -21,6 +21,7 @@
 
 mod service;
 
+pub(crate) use service::create_with_source;
 pub use service::{
     close_account, create, create_entry, delete, memorize_payee, set_cleared, update, update_entry,
     void,

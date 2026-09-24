@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod ledger;
 pub mod lists;
 pub mod sample;
+pub mod schedule;
 
 use kansha_core::Date;
 use tauri::State;

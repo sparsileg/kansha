@@ -1,0 +1,76 @@
+id = "REC-007"
+description = "End date: the series stops after the last date on or before it"
+requirements = ["REC-030"]
+as_of = "2026-01-01"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "schedule"
+ref = "s"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "monthly"
+day1 = 15
+start = "2026-01-15"
+end_date = "2026-04-15"
+
+[[actions]]
+type = "schedule"
+ref = "once"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "once"
+start = "2026-03-03"
+
+[[expect.occurrences]]
+ref = "s"
+from = "2026-01-01"
+to = "2026-12-31"
+dates = ["2026-01-15", "2026-02-15", "2026-03-15", "2026-04-15"]
+
+[[actions]]
+type = "schedule"
+ref = "once_b"
+account = "Checking"
+amount = "-10.00"
+category = "Bills"
+frequency = "once"
+start = "2026-03-03"
+
+[[expect.occurrences]]
+ref = "once_b"
+from = "2026-01-01"
+to = "2026-12-31"
+dates = ["2026-03-03"]
+
+# Entered, so nothing is pending.
+[[expect.occurrences]]
+ref = "once"
+from = "2026-01-01"
+to = "2026-12-31"
+dates = []
+
+[[actions]]
+type = "enter_occurrence"
+ref = "once"
+due = "2026-03-03"
+
+[[expect.schedules]]
+ref = "once"
+next_due = "none"
+status = "ended"

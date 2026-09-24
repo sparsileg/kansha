@@ -21,7 +21,11 @@ use std::path::{Path, PathBuf};
 use kansha_core::accounts::{AccountFields, AccountId, AccountType};
 use kansha_core::categories::{CategoryId, CategoryKind};
 use kansha_core::ledger::{self, Cleared, Counterpart, EntryLine, Target, TxnId};
-use kansha_core::persistence::{accounts, categories, payees, tags};
+use kansha_core::persistence::{accounts, categories, payees, schedules, tags};
+use kansha_core::schedule::{
+    self, AmountType, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
+    ScheduleId, ScheduleLine, WeekendRule,
+};
 use kansha_core::testkit::Book;
 use kansha_core::{Clock, Date, FixedClock, Money, integrity};
 use serde::Deserialize;
@@ -112,6 +116,80 @@ enum Action {
     MergeCategories(MergeSpec),
     MergePayees(MergeSpec),
     MergeTags(MergeSpec),
+    /// Create a schedule (Phase 4).
+    Schedule(ScheduleSpec),
+    /// Enter the occurrence of schedule `ref` whose nominal date is `due`.
+    EnterOccurrence {
+        #[serde(rename = "ref")]
+        reference: String,
+        due: String,
+        /// Name for the transaction it creates.
+        txn_ref: Option<String>,
+        date: Option<String>,
+        amount: Option<String>,
+        #[serde(default)]
+        confirm: bool,
+        expect_error: Option<String>,
+    },
+    SkipOccurrence {
+        #[serde(rename = "ref")]
+        reference: String,
+        due: String,
+        expect_error: Option<String>,
+    },
+    /// One-time date and/or amount for an occurrence; give neither to clear.
+    OverrideOccurrence {
+        #[serde(rename = "ref")]
+        reference: String,
+        due: String,
+        date: Option<String>,
+        amount: Option<String>,
+        expect_error: Option<String>,
+    },
+    /// Run auto-entry as of `as_of`; optionally check how many it entered.
+    AutoEnter {
+        expect_entered: Option<usize>,
+        expect_error: Option<String>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScheduleSpec {
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+    account: String,
+    payee: Option<String>,
+    #[serde(default)]
+    memo: String,
+    /// The main account's amount, register sign.
+    amount: String,
+    /// Category or transfer taking the whole amount (or what `lines` leave).
+    category: Option<String>,
+    transfer: Option<String>,
+    #[serde(default)]
+    lines: Vec<LineSpec>,
+    /// Tag on the (first) line.
+    tag: Option<String>,
+    frequency: String,
+    interval: Option<i64>,
+    day1: Option<i64>,
+    day2: Option<i64>,
+    weekday: Option<i64>,
+    week_of_month: Option<i64>,
+    start: String,
+    /// none, previous, or next.
+    weekend_rule: Option<String>,
+    end_date: Option<String>,
+    /// "# left".
+    count: Option<i64>,
+    #[serde(default)]
+    remind_days: i64,
+    /// remind or auto.
+    mode: Option<String>,
+    /// fixed or estimated.
+    amount_type: Option<String>,
+    expect_error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +269,11 @@ impl Action {
             Action::MergeCategories(_) => "merge_categories",
             Action::MergePayees(_) => "merge_payees",
             Action::MergeTags(_) => "merge_tags",
+            Action::Schedule(_) => "schedule",
+            Action::EnterOccurrence { .. } => "enter_occurrence",
+            Action::SkipOccurrence { .. } => "skip_occurrence",
+            Action::OverrideOccurrence { .. } => "override_occurrence",
+            Action::AutoEnter { .. } => "auto_enter",
         }
     }
 
@@ -202,7 +285,12 @@ impl Action {
             Action::MergeCategories(m) | Action::MergePayees(m) | Action::MergeTags(m) => {
                 m.expect_error.as_deref()
             }
+            Action::Schedule(sp) => sp.expect_error.as_deref(),
             Action::SetCleared { expect_error, .. }
+            | Action::EnterOccurrence { expect_error, .. }
+            | Action::SkipOccurrence { expect_error, .. }
+            | Action::OverrideOccurrence { expect_error, .. }
+            | Action::AutoEnter { expect_error, .. }
             | Action::CloseAccount { expect_error, .. }
             | Action::ReopenAccount { expect_error, .. }
             | Action::DeleteAccount { expect_error, .. } => expect_error.as_deref(),
@@ -239,6 +327,37 @@ struct Expect {
     txn_count: Option<i64>,
     #[serde(default)]
     register: Vec<RegisterExpect>,
+    /// State of schedules after the actions.
+    #[serde(default)]
+    schedules: Vec<ScheduleExpect>,
+    /// Pending occurrences in a date range.
+    #[serde(default)]
+    occurrences: Vec<OccurrencesExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScheduleExpect {
+    #[serde(rename = "ref")]
+    reference: String,
+    /// Nominal date of the next occurrence, or "none".
+    next_due: Option<String>,
+    /// active or ended.
+    status: Option<String>,
+    /// "# left".
+    left: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OccurrencesExpect {
+    #[serde(rename = "ref")]
+    reference: String,
+    from: String,
+    to: String,
+    /// Due dates (weekend rule applied) of the pending occurrences from
+    /// `from` to `to`, in order.
+    dates: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -469,6 +588,7 @@ struct Ctx {
     book: Book,
     total: Money,
     refs: BTreeMap<String, TxnId>,
+    schedules: BTreeMap<String, ScheduleId>,
 }
 
 impl Ctx {
@@ -550,6 +670,93 @@ impl Ctx {
         Ok(entry)
     }
 
+    fn schedule_id(&self, reference: &str) -> Result<ScheduleId, ActErr> {
+        self.schedules
+            .get(reference)
+            .copied()
+            .ok_or_else(|| ActErr::Harness(format!("unknown schedule ref {reference:?}")))
+    }
+
+    fn schedule_fields(&mut self, spec: &ScheduleSpec) -> Result<ScheduleFields, ActErr> {
+        let account = self.account(&spec.account)?;
+        let amount: Money = parse("amount", &spec.amount)?;
+        let tag = match &spec.tag {
+            Some(t) => Some(self.book.tag(t)?),
+            None => None,
+        };
+        let mut lines = Vec::new();
+        for l in &spec.lines {
+            let target = self
+                .target(&l.category, &l.transfer)?
+                .ok_or_else(|| ActErr::Harness("a line needs a category or a transfer".into()))?;
+            let mut line = ScheduleLine {
+                target,
+                amount: parse("line amount", &l.amount)?,
+                memo: l.memo.clone(),
+                tag: None,
+            };
+            if let Some(t) = l.tags.first() {
+                line.tag = Some(self.book.tag(t)?);
+            }
+            lines.push(line);
+        }
+        if let Some(target) = self.target(&spec.category, &spec.transfer)? {
+            let rest = ledger::split_remainder(amount, lines.iter().map(|l| l.amount))?;
+            lines.push(ScheduleLine {
+                target,
+                amount: rest,
+                memo: String::new(),
+                tag: None,
+            });
+        }
+        if let Some(first) = lines.first_mut() {
+            first.tag = first.tag.or(tag);
+        }
+        let mut rec = Recurrence::new(
+            parse::<Frequency>("frequency", &spec.frequency)?,
+            parse("start", &spec.start)?,
+        );
+        rec.interval = spec.interval.unwrap_or(1);
+        rec.day1 = spec.day1;
+        rec.day2 = spec.day2;
+        rec.weekday = spec.weekday;
+        rec.week_of_month = spec.week_of_month;
+        if let Some(w) = &spec.weekend_rule {
+            rec.weekend_rule = parse::<WeekendRule>("weekend_rule", w)?;
+        }
+        let end = match (&spec.end_date, spec.count) {
+            (Some(_), Some(_)) => {
+                return Err(ActErr::Harness("give end_date or count, not both".into()));
+            }
+            (Some(d), None) => End::OnDate {
+                date: parse("end_date", d)?,
+            },
+            (None, Some(count)) => End::AfterCount { count },
+            (None, None) => End::Never,
+        };
+        let payee = match &spec.payee {
+            Some(p) => Some(self.book.payee(p)?),
+            None => None,
+        };
+        Ok(ScheduleFields {
+            account,
+            payee,
+            memo: spec.memo.clone(),
+            amount_type: match &spec.amount_type {
+                Some(t) => parse::<AmountType>("amount_type", t)?,
+                None => AmountType::Fixed,
+            },
+            lines,
+            recurrence: rec,
+            end,
+            remind_days: spec.remind_days,
+            mode: match &spec.mode {
+                Some(m) => parse::<EntryMode>("mode", m)?,
+                None => EntryMode::Remind,
+            },
+        })
+    }
+
     fn remember(&mut self, reference: &Option<String>, id: TxnId) {
         if let Some(r) = reference {
             self.refs.insert(r.clone(), id);
@@ -628,6 +835,68 @@ impl Ctx {
                 let (from, into) = (find(&m.from)?, find(&m.into)?);
                 self.book.write(|tx| payees::merge(tx, from, into))?;
             }
+            Action::Schedule(spec) => {
+                let fields = self.schedule_fields(spec)?;
+                let created = self.book.write(|tx| schedule::create(tx, &fields))?;
+                if let Some(r) = &spec.reference {
+                    self.schedules.insert(r.clone(), created.id);
+                }
+            }
+            Action::EnterOccurrence {
+                reference,
+                due,
+                txn_ref,
+                date,
+                amount,
+                confirm,
+                ..
+            } => {
+                let id = self.schedule_id(reference)?;
+                let edits = EnterEdits {
+                    date: date.as_deref().map(|d| parse("date", d)).transpose()?,
+                    amount: amount.as_deref().map(|a| parse("amount", a)).transpose()?,
+                };
+                let due: Date = parse("due", due)?;
+                let entered = self
+                    .book
+                    .write(|tx| schedule::enter(tx, id, due, &edits, *confirm))?;
+                self.remember(txn_ref, entered.txn);
+            }
+            Action::SkipOccurrence { reference, due, .. } => {
+                let id = self.schedule_id(reference)?;
+                let due: Date = parse("due", due)?;
+                self.book.write(|tx| schedule::skip(tx, id, due))?;
+            }
+            Action::OverrideOccurrence {
+                reference,
+                due,
+                date,
+                amount,
+                ..
+            } => {
+                let id = self.schedule_id(reference)?;
+                let due: Date = parse("due", due)?;
+                let date: Option<Date> = date.as_deref().map(|d| parse("date", d)).transpose()?;
+                let amount: Option<Money> =
+                    amount.as_deref().map(|a| parse("amount", a)).transpose()?;
+                self.book
+                    .write(|tx| schedule::set_override(tx, id, due, date, amount))?;
+            }
+            Action::AutoEnter { expect_entered, .. } => {
+                let clock = *self.book.clock();
+                let report = schedule::auto_enter_due(self.book.db_mut(), &clock)?;
+                if let Some(n) = expect_entered {
+                    if report.entered.len() != *n {
+                        return Err(ActErr::Harness(format!(
+                            "auto_enter entered {}, expected {n}",
+                            report.entered.len()
+                        )));
+                    }
+                }
+                if let Some(f) = report.failed.first() {
+                    return Err(ActErr::Harness(format!("auto_enter failed: {}", f.reason)));
+                }
+            }
             Action::MergeTags(m) => {
                 let all = tags::list(self.book.conn())?;
                 let find = |name: &str| {
@@ -678,6 +947,7 @@ fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx, Failure> {
         book,
         total: Money::ZERO,
         refs: BTreeMap::new(),
+        schedules: BTreeMap::new(),
     };
     for (i, a) in s.accounts.iter().enumerate() {
         let step = format!("accounts[{}] ({})", i + 1, a.name);
@@ -883,6 +1153,49 @@ fn check_expectations(
             &expected.to_string(),
             &actual.to_string(),
         )?;
+    }
+
+    for sx in &e.schedules {
+        let step = format!("expect.schedules ({})", sx.reference);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.schedule_id(&sx.reference).map_err(err)?;
+        let sched = schedules::get(conn, id).map_err(|e| err(e.into()))?;
+        if let Some(want) = &sx.next_due {
+            let actual = sched.next_due.map_or("none".to_string(), |d| d.to_string());
+            compare(&step, "next_due", want, &actual)?;
+        }
+        if let Some(want) = &sx.status {
+            compare(&step, "status", want, sched.status.as_str())?;
+        }
+        if let Some(want) = sx.left {
+            let actual = match sched.fields.end {
+                End::AfterCount { count } => count.to_string(),
+                _ => "none".into(),
+            };
+            compare(&step, "left", &want.to_string(), &actual)?;
+        }
+    }
+
+    for ox in &e.occurrences {
+        let step = format!("expect.occurrences ({})", ox.reference);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.schedule_id(&ox.reference).map_err(err)?;
+        let from: Date = ox
+            .from
+            .parse()
+            .map_err(|e: kansha_core::Error| err(ActErr::Harness(e.to_string())))?;
+        let to: Date = ox
+            .to
+            .parse()
+            .map_err(|e: kansha_core::Error| err(ActErr::Harness(e.to_string())))?;
+        let views = schedule::occurrences_between(conn, from, to, as_of, None, false)
+            .map_err(|e| err(e.into()))?;
+        let actual: Vec<String> = views
+            .iter()
+            .filter(|v| v.schedule == id)
+            .map(|v| v.date.to_string())
+            .collect();
+        compare(&step, "dates", &ox.dates.join(", "), &actual.join(", "))?;
     }
 
     for reg in &e.register {

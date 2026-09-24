@@ -13,4 +13,5 @@ mod ledger;
 mod migrations;
 mod register;
 mod repositories;
+mod schedule;
 mod schema;

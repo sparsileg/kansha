@@ -143,6 +143,42 @@ from = "Supermarket"
 into = "Food:Groceries"
 ```
 
+### Schedules (Phase 4)
+
+```toml
+[[actions]]
+type = "schedule"
+ref = "rent"                      # name for later actions and expectations
+account = "Checking"
+payee = "Landlord"                # optional
+amount = "-1000.00"               # the main account's amount, register sign
+category = "Housing"              # or transfer = "Savings"; takes the amount
+                                  # left after any [[actions.lines]]
+frequency = "monthly"             # once, daily, weekly, twice_monthly, monthly,
+                                  # monthly_last_day, monthly_nth_weekday, yearly
+interval = 1                      # optional (quarterly = monthly, interval 3)
+day1 = 1                          # monthly, twice_monthly; day2 too for twice
+weekday = 2                       # monthly_nth_weekday: 1 = Monday ... 7
+week_of_month = 2                 # 1-4, or -1 = last
+start = "2026-01-01"
+weekend_rule = "previous"         # optional: none, previous, next
+end_date = "2026-12-31"           # or count = 12 ("# left"); optional
+remind_days = 3                   # optional
+mode = "auto"                     # optional: remind (default), auto
+amount_type = "estimated"         # optional: fixed (default), estimated
+tag = "Trip"                      # optional, on the first line
+```
+
+`enter_occurrence` (`ref`, `due` = nominal date, optional `date`, `amount`,
+`confirm`, `txn_ref` to name the transaction), `skip_occurrence` (`ref`,
+`due`), `override_occurrence` (`ref`, `due`, `date` and/or `amount`; neither
+clears it), and `auto_enter` (runs auto-entry as of `as_of`; optional
+`expect_entered = N`).
+
+Expectations are checked after **all** actions, so an occurrence entered
+by an action is no longer pending. Use a second, untouched schedule to check
+a full series.
+
 ## Expectations
 
 ```toml
@@ -173,6 +209,20 @@ rows = [
     { date = "2026-01-01", amount = "1000.00", balance = "1000.00" },
     { date = "2026-01-05", amount = "-184.32", balance = "815.68", ref = "costco", payee = "Costco", counterpart = "Food:Groceries" },
 ]
+```
+
+```toml
+[[expect.schedules]]
+ref = "rent"
+next_due = "2026-08-01"           # nominal date, or "none" once ended
+status = "active"                 # active or ended
+left = 3                          # "# left" (after-count schedules)
+
+[[expect.occurrences]]            # pending occurrences, due dates in order
+ref = "rent"
+from = "2026-01-01"
+to = "2026-06-30"
+dates = ["2026-01-01", "2026-02-01"]
 ```
 
 Register rows must list every row, in register order (date, then entry
