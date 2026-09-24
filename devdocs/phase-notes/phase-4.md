@@ -52,7 +52,7 @@ Startup order for the UI: `schedule_auto_enter`, then show `schedule_review_list
 - No holiday calendar (REC-050 is weekends only, as specified).
 - Deleted payee/account merges: `payee_merge` already moves schedules; account and category merge paths for `schedule_line` were done in Phase 3 (not re-tested here).
 - `describe()` text is English-only, fixed strings.
-- UI (4b) not built: Scheduled list, edit form, due-and-overdue dialog, review list, calendar, "Schedule this" menu item, plus Phase 3 carry-overs (show closed accounts toggle, account panel redesign).
+- UI (4b) not built at this point: Scheduled list, edit form, due-and-overdue dialog, review list, calendar, "Schedule this" menu item, plus Phase 3 carry-overs (show closed accounts toggle, account panel redesign). All built in 4b or in the UI shell (see `shell.md`).
 
 ## 4b — what was built
 
@@ -67,7 +67,7 @@ No API or schema change in 4b (uses the 4a commands).
 - Components: `ScheduleModal` (create, edit, delete), `OccurrenceRow` (Enter, Skip, Edit…: enter with edits, or change this occurrence only, or undo the change), `DueDialog` (auto-entry failures, review list, due list).
 - Views: `Scheduled` (REC-300 columns; click a row to edit), `Calendar` (month grid, account filter, show entered and skipped, projected balance per day, day panel, "New schedule on this date").
 - Register context menu: "Schedule this…" (REC-140).
-- Nav: Scheduled, Calendar, Due (n). Nav checkbox "Show closed accounts" (Phase 3 carry-over).
+- Nav (superseded by the UI shell, `shell.md`): Scheduled, Calendar, Due (n), and a "Show closed accounts" checkbox were top-bar buttons. They are now the Reminders and Calendar quick jumps (Reminders carries the due count), and the checkbox is in the account list.
 - Tests: `OccurrenceRow.test.ts`, `ScheduleModal.test.ts`, smoke test for Scheduled and Calendar.
 
 ### Decisions
@@ -112,11 +112,23 @@ Tests 1–12 passed. Changes from that review:
 - **One memo:** a single-line schedule shows only the transaction memo; the line memo shows with two or more lines. A saved single line with only a line memo shows it as the transaction memo.
 - **Calendar:** "+n more" is a button; the selected day shows all its items in its cell, and the day panel is sticky and scrolls into view. Overdue chips say "Overdue". Chip and day-panel payee/account text is smaller, one line, cut with "…" (full text in the tooltip).
 - **Calendar day panel:** one line per item (date, payee, account, amount). Clicking an item opens `OccurrenceModal` with the flags and Enter, Skip, Edit…. The Due dialog still shows full rows.
-- **Account button** in the top bar returns to the last selected account from any view.
+- **Account button** in the top bar returned to the last selected account from any view. Superseded: the account list (panel or drop-down) does this now.
 - **Colors (Stan is red-green colorblind):** `--bad` (vermilion) and `--good` (blue) tokens on `.app`, per theme, replace the old red and green. Split remainder shows ✓ or ✗; the invalid filter date outline is dashed.
 
 ### Known gaps
-- **Placeholders:** the top-bar buttons (including "Account: …"), the layout, and the colors are all placeholders pending a real UI design and theme. Nothing here is a design decision.
-- Calendar is still a view, not a docked panel. Top-bar layout is still a set of buttons.
-- No requirement ID yet for inline category creation; add one to the spec when the spec is next revised.
+- **Placeholders:** the layout and the colors are still placeholders pending a real UI design and theme.
+- Calendar is still a view, not a docked panel.
 - The picker offers "Create" even for the name of the account being edited (which cannot be its own transfer target).
+- The Due dialog still shows full rows; the calendar day panel shows one line per item with details in a modal.
+
+## Changes after the Phase 4 commit
+
+Phase 4 ended with the commit "Finish Phase 4". Work after it, driven by Stan's review and the UI design in `devdocs/UI-conventions.md`, is recorded in `devdocs/phase-notes/shell.md`. What it changed for Phase 4 features:
+
+- **Scheduled is now "Reminders"** (spec wording: the scheduled transactions). The list view is headed Reminders and has a "Due and overdue (n)" button that opens the Due dialog. The Reminders quick-jump button carries the due count. The startup behavior (auto-enter, review list, Due dialog when anything needs attention) is unchanged.
+- **Calendar** and **Reminders** are menu items (Tools) and quick-jump buttons the user can place (Edit > Navigation Bar). The old top bar is gone.
+- **Home screen setting** can be Reminders or Calendar; the app opens there at startup, before the auto-enter step reports.
+- **Account panel redesign** (a Phase 3 carry-over) and **Show closed accounts** are done, in the shell.
+- **Search** (`search_transactions`, spec UI-070) replaced the register's text-filter box.
+- **Spec 0.3.6:** REC-030 says "entered or skipped" (confirmed by Stan). **0.3.7:** UI-070; REG-040.
+- **⚠ API changes since the Phase 4 commit:** `search_transactions` only. No schema change.

@@ -8,6 +8,9 @@ class DialogState {
   /** Transaction whose audit history is shown (AUD-020). */
   history = $state<{ txn: TxnId; account: AccountId } | null>(null);
   integrity = $state(false);
+  settings = $state(false);
+  /** The Navigation Bar dialog (which buttons, in what order). */
+  navbar = $state(false);
   /** Due, overdue, and auto-entered items (REC-130, REC-070). */
   due = $state(false);
   /** Schedule form: `id` set when editing; `fields` seeds a new one

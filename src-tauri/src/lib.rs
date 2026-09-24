@@ -55,6 +55,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::lists::tag_merge,
             commands::ledger::register_query,
             commands::ledger::register_summary,
+            commands::ledger::search_transactions,
             commands::ledger::entry_get,
             commands::ledger::entry_create,
             commands::ledger::entry_update,

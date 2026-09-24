@@ -441,6 +441,60 @@ pub struct RegisterRow {
     pub future: bool,
 }
 
+/// A search across accounts (UI-conventions: navigation bar search).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct SearchQuery {
+    /// Case-insensitive text found in the payee, memo, notes, check
+    /// number, line memos, or category (a transfer's `[Account]` too);
+    /// or an amount ("184.23", "1,000"), which matches any line of the
+    /// transaction. Blank finds nothing.
+    pub text: String,
+    /// Only this account's postings; `None` searches every account.
+    pub account: Option<AccountId>,
+    /// Most rows to return, newest first.
+    pub limit: i64,
+}
+
+/// One match: a transaction as one account's register shows it. A
+/// transfer matches once in each account it touches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct SearchHit {
+    pub txn_id: TxnId,
+    /// The register that shows this row.
+    pub account: AccountId,
+    pub date: Date,
+    pub payee_name: String,
+    pub memo: String,
+    pub status: TxnStatus,
+    /// This account's posting.
+    pub amount: Money,
+    /// As the register's Category column shows it.
+    pub category: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct SearchPage {
+    pub rows: Vec<SearchHit>,
+    /// All matches, before `limit`.
+    pub total: i64,
+}
+
+/// Matches for `query`, newest first.
+pub fn search(conn: &Connection, query: &SearchQuery) -> Result<SearchPage> {
+    let text = query.text.trim();
+    if text.is_empty() {
+        return Ok(SearchPage {
+            rows: Vec::new(),
+            total: 0,
+        });
+    }
+    let (rows, total) = repo::search(conn, text, query.account, query.limit.clamp(1, 1000))?;
+    Ok(SearchPage { rows, total })
+}
+
 /// Register columns that can be sorted (REG-040). Ties break by date, then
 /// entry order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

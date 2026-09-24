@@ -7,7 +7,9 @@ use std::time::Instant;
 use kansha_core::accounts::AccountId;
 use kansha_core::audit;
 use kansha_core::categories::CategoryKind;
-use kansha_core::ledger::{self, Cleared, Counterpart, RegisterQuery, RegisterSort, Target};
+use kansha_core::ledger::{
+    self, Cleared, Counterpart, RegisterQuery, RegisterSort, SearchQuery, Target,
+};
 use kansha_core::persistence::audit::AuditEntity;
 use kansha_core::persistence::payees;
 use kansha_core::sample::{SampleSpec, generate};
@@ -185,6 +187,103 @@ fn text_search_covers_payee_memo_check_line_memo_and_category() {
     assert_eq!(found("dining"), vec!["2026-01-10", "2026-07-04"]);
     assert_eq!(found("100%_"), Vec::<String>::new()); // no wildcard meaning
     assert_eq!(found("  ").len(), 6); // blank means no filter
+}
+
+fn search(f: &Fixture, text: &str, account: Option<AccountId>) -> kansha_core::ledger::SearchPage {
+    let q = SearchQuery {
+        text: text.into(),
+        account,
+        limit: 100,
+    };
+    ledger::search(f.book.conn(), &q).unwrap()
+}
+
+#[test]
+fn search_finds_text_and_amounts_across_accounts_newest_first() {
+    let f = fixture();
+
+    // Payee, in any account: both Cafe entries, newest first.
+    let p = search(&f, "cafe", None);
+    assert_eq!(p.total, 2);
+    assert_eq!(
+        p.rows
+            .iter()
+            .map(|r| r.date.to_string())
+            .collect::<Vec<_>>(),
+        ["2026-07-04", "2026-01-10"]
+    );
+    assert!(
+        p.rows
+            .iter()
+            .all(|r| r.account == f.chk && r.payee_name == "Cafe")
+    );
+    assert_eq!(p.rows[1].category, "Food:Dining");
+
+    // Memo, line memo, check number, and category.
+    assert_eq!(search(&f, "team lunch", None).total, 1);
+    assert_eq!(search(&f, "towels", None).total, 1);
+    assert_eq!(search(&f, "1001", None).total, 1); // check number (not an amount here)
+    assert_eq!(search(&f, "groceries", None).total, 2); // the plain and the split one
+    assert_eq!(search(&f, "  COSTCO ", None).total, 2);
+
+    // An amount, with or without commas, dollar sign, or sign, matches any
+    // line of the transaction and either direction.
+    assert_eq!(
+        search(&f, "250.00", None).rows[0].date.to_string(),
+        "2026-02-01"
+    );
+    assert_eq!(search(&f, "$250", None).total, 1);
+    assert_eq!(search(&f, "-250.00", None).total, 1);
+    assert_eq!(search(&f, "200", None).total, 1); // a split line's amount
+    assert_eq!(search(&f, "1,000", None).total, 1); // the opening balance
+
+    // A transfer matches once in each account it touches, with that
+    // account's own posting.
+    let p = search(&f, "300.00", None);
+    assert_eq!(p.total, 2);
+    let mut got: Vec<(AccountId, String)> = p
+        .rows
+        .iter()
+        .map(|r| (r.account, r.amount.to_string()))
+        .collect();
+    got.sort();
+    let mut want = vec![
+        (f.chk, "-300.00".to_string()),
+        (f.sav, "300.00".to_string()),
+    ];
+    want.sort();
+    assert_eq!(got, want);
+    // ... and is found by the other account's name.
+    assert!(
+        search(&f, "savings", None)
+            .rows
+            .iter()
+            .any(|r| r.account == f.chk)
+    );
+
+    // Limited to one account.
+    let p = search(&f, "300.00", Some(f.sav));
+    assert_eq!(p.total, 1);
+    assert_eq!(p.rows[0].account, f.sav);
+    assert_eq!(search(&f, "cafe", Some(f.sav)).total, 0);
+}
+
+#[test]
+fn search_blank_finds_nothing_and_limit_caps_rows_not_the_count() {
+    let f = fixture();
+    assert_eq!(search(&f, "", None).total, 0);
+    assert_eq!(search(&f, "   ", None).rows.len(), 0);
+    let q = SearchQuery {
+        text: "cafe".into(),
+        account: None,
+        limit: 1,
+    };
+    let p = ledger::search(f.book.conn(), &q).unwrap();
+    assert_eq!(p.rows.len(), 1);
+    assert_eq!(p.total, 2);
+    assert_eq!(p.rows[0].date.to_string(), "2026-07-04");
+    // Text that is not a number never matches an amount, and vice versa.
+    assert_eq!(search(&f, "12.5x", None).total, 0);
 }
 
 #[test]

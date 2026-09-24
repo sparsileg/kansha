@@ -18,8 +18,11 @@
 
 <section>
   <header>
-    <h1>Scheduled transactions</h1>
+    <h1>Reminders</h1>
     <button type="button" onclick={() => dialogState.newSchedule()}>New schedule</button>
+    <button type="button" onclick={() => (dialogState.due = true)}>
+      Due and overdue{scheduleState.attention > 0 ? ` (${scheduleState.attention})` : ""}
+    </button>
   </header>
   {#if scheduleState.error}<p class="err">{scheduleState.error}</p>{/if}
   {#if scheduleState.rows.length === 0}

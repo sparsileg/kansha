@@ -82,6 +82,11 @@ export const commands = {
 	registerQuery: (query: RegisterQuery) => typedError<RegisterPage, IpcError>(__TAURI_INVOKE("register_query", { query })),
 	/**  Footer figures: current, cleared, ending, available credit (REG-060). */
 	registerSummary: (account: AccountId) => typedError<RegisterSummary, IpcError>(__TAURI_INVOKE("register_summary", { account })),
+	/**
+	 *  Transactions matching some text or amount, in any account or one
+	 *  (navigation bar search). Newest first, capped by `limit`.
+	 */
+	searchTransactions: (query: SearchQuery) => typedError<SearchPage, IpcError>(__TAURI_INVOKE("search_transactions", { query })),
 	/**  A transaction as `account`'s register shows it, for editing. */
 	entryGet: (txn: TxnId, account: AccountId) => typedError<Entry, IpcError>(__TAURI_INVOKE("entry_get", { txn, account })),
 	/**
@@ -788,6 +793,45 @@ export type ScheduleRow = {
 export type ScheduleStatus = "active" | 
 /**  Ran out of occurrences (end date passed or "# left" reached 0). */
 "ended" | "deleted";
+
+/**
+ *  One match: a transaction as one account's register shows it. A
+ *  transfer matches once in each account it touches.
+ */
+export type SearchHit = {
+	txn_id: TxnId,
+	/**  The register that shows this row. */
+	account: AccountId,
+	date: string,
+	payee_name: string,
+	memo: string,
+	status: TxnStatus,
+	/**  This account's posting. */
+	amount: string,
+	/**  As the register's Category column shows it. */
+	category: string,
+};
+
+export type SearchPage = {
+	rows: SearchHit[],
+	/**  All matches, before `limit`. */
+	total: number,
+};
+
+/**  A search across accounts (UI-conventions: navigation bar search). */
+export type SearchQuery = {
+	/**
+	 *  Case-insensitive text found in the payee, memo, notes, check
+	 *  number, line memos, or category (a transfer's `[Account]` too);
+	 *  or an amount ("184.23", "1,000"), which matches any line of the
+	 *  transaction. Blank finds nothing.
+	 */
+	text: string,
+	/**  Only this account's postings; `None` searches every account. */
+	account: AccountId | null,
+	/**  Most rows to return, newest first. */
+	limit: number,
+};
 
 /**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
 export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";

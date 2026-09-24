@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.6 (draft) |
+| **Document version** | 0.3.7 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
@@ -161,7 +161,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   > **Decided (D-10):** separate Payment and Deposit columns (as in Quicken), which reduces sign errors during entry. The entry row has both fields; typing an amount in one clears the other. Stan's draft had a combined column.
 - **REG-020** [1.0][R] Running balance is computed in date order (tie-broken by entry order) and reflects all transactions up to that row.
 - **REG-030** [1.0][R] Inline entry and editing at the bottom of the register, keyboard-driven: Tab moves between fields; Enter saves; Esc cancels; `+`/`-` adjusts date; `t` sets today.
-- **REG-040** [1.0][R] Sort by any column; filter by date range, payee, category, tag, cleared status, and text search.
+- **REG-040** [1.0][R] Sort by any column; filter by date range, payee, category, tag, and cleared status. Text search is the navigation bar search (UI-070), which can be limited to the open account.
 - **REG-050** [1.0][R] Split transactions show "--Split--" in the Category column with an expander to view/edit lines.
 - **REG-060** [1.0][R] Footer shows current balance, cleared balance, and (for credit cards) available credit.
 - **REG-070** [1.0][R] Future-dated transactions are visually distinguished and a line separates today from future entries.
@@ -430,6 +430,7 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 - **UI-040** [1.0][R] Multiple accounts/reports can be open in tabs within the main window.
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions; full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent edit in the current session (implemented as an explicit reversing change, recorded in the audit log).
+- **UI-070** [1.0][R] Search box in the navigation bar: finds transactions by payee, category, memo, note, check number, account name, or amount, across all accounts or (from a register) in that account only. Results are a list, newest first, one line each; choosing one opens its account on that transaction.
 
 #### 14.2 Settings
 
@@ -938,3 +939,4 @@ Goal for this chat: <sub-scope>
 | 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
+| 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |

@@ -1,45 +1,54 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { themeState } from "./lib/state/theme.svelte";
-  import { viewState } from "./lib/state/view.svelte";
   import { onMount } from "svelte";
-  import AccountSelector from "./lib/components/AccountSelector.svelte";
-  import { listsState } from "./lib/state/lists.svelte";
-  import { settingsState } from "./lib/state/settings.svelte";
   import Account from "./views/Account.svelte";
+  import Accounts from "./views/Accounts.svelte";
   import AccountModal from "./lib/components/AccountModal.svelte";
   import ConfirmDialog from "./lib/components/ConfirmDialog.svelte";
+  import DueDialog from "./lib/components/DueDialog.svelte";
   import HistoryModal from "./lib/components/HistoryModal.svelte";
   import IntegrityModal from "./lib/components/IntegrityModal.svelte";
+  import ScheduleModal from "./lib/components/ScheduleModal.svelte";
+  import NavBarModal from "./lib/components/NavBarModal.svelte";
+  import SettingsModal from "./lib/components/SettingsModal.svelte";
+  import AccountBar from "./lib/components/shell/AccountBar.svelte";
+  import AccountPanel from "./lib/components/shell/AccountPanel.svelte";
+  import MenuBar from "./lib/components/shell/MenuBar.svelte";
+  import NavBar from "./lib/components/shell/NavBar.svelte";
+  import { runAction } from "./lib/shell/actions";
+  import { goHome } from "./lib/shell/nav";
+  import { MENUS } from "./lib/shell/menus";
   import { dialogState } from "./lib/state/dialogs.svelte";
-  import Manage from "./views/Manage.svelte";
+  import { listsState } from "./lib/state/lists.svelte";
+  import { scheduleState } from "./lib/state/schedule.svelte";
+  import { settingsState } from "./lib/state/settings.svelte";
+  import { themeState } from "./lib/state/theme.svelte";
+  import { viewState } from "./lib/state/view.svelte";
+  import Calendar from "./views/Calendar.svelte";
   import Dashboard from "./views/Dashboard.svelte";
   import EmptyBook from "./views/EmptyBook.svelte";
+  import Manage from "./views/Manage.svelte";
   import Scheduled from "./views/Scheduled.svelte";
-  import Calendar from "./views/Calendar.svelte";
-  import DueDialog from "./lib/components/DueDialog.svelte";
-  import ScheduleModal from "./lib/components/ScheduleModal.svelte";
-  import { scheduleState } from "./lib/state/schedule.svelte";
-  import { registerState } from "./lib/state/register.svelte";
+  import Search from "./views/Search.svelte";
 
   onMount(() => {
-    void listsState.loadAll().then(() => scheduleState.startup());
+    void listsState.loadAll().then(() => {
+      // Start on the home screen, unless the user has already gone somewhere.
+      if (viewState.untouched) void goHome();
+      return scheduleState.startup();
+    });
   });
 
-  // Placeholder until the other views exist (Phase 3+); Dashboard is the
-  // only real one in Phase 0.
   const views: Record<string, Component> = {
     dashboard: Dashboard,
     account: Account,
+    accounts: Accounts,
     manage: Manage,
     scheduled: Scheduled,
     calendar: Calendar,
+    search: Search,
   };
   const View = $derived(views[viewState.current]);
-  /** The account whose register was last open, to get back to from any view. */
-  const lastAccount = $derived(
-    registerState.accountId === null ? undefined : listsState.account(registerState.accountId),
-  );
 </script>
 
 <div
@@ -47,43 +56,17 @@
   data-theme={themeState.theme}
   style="font-size: {themeState.fontSize}px"
 >
-  <nav>
-    <button onclick={() => viewState.navigate("dashboard")}>Dashboard</button>
-    {#if lastAccount}
-      <button
-        onclick={() => viewState.navigate("account")}
-        aria-current={viewState.current === "account" ? "page" : undefined}
-      >
-        Account: {lastAccount.name}
-      </button>
-    {/if}
-    {#if settingsState.accountNav === "dropdown" && !listsState.isEmptyBook}
-      <AccountSelector />
-    {/if}
-    <button onclick={() => viewState.navigate("scheduled")}>Scheduled</button>
-    <button onclick={() => viewState.navigate("calendar")}>Calendar</button>
-    <button onclick={() => (dialogState.due = true)}>
-      Due{scheduleState.attention > 0 ? ` (${scheduleState.attention})` : ""}
-    </button>
-    <button onclick={() => viewState.navigate("manage")}>Payees, categories, tags</button>
-    <button onclick={() => dialogState.newAccount()}>New account</button>
-    <button onclick={() => (dialogState.integrity = true)}>Integrity check</button>
-    <label class="closed">
-      <input type="checkbox" bind:checked={settingsState.showClosedAccounts} /> Show closed accounts
-    </label>
-    <button onclick={() => settingsState.toggleAccountNav()}>
-      Accounts: {settingsState.accountNav}
-    </button>
-    <button onclick={() => themeState.toggle()}>
-      Toggle theme ({themeState.theme})
-    </button>
-  </nav>
+  <MenuBar menus={MENUS} onselect={runAction} />
+  <NavBar />
+  {#if !listsState.isEmptyBook}<AccountBar />{/if}
   {#if listsState.error}<p class="err">{listsState.error}</p>{/if}
   {#if dialogState.account !== undefined}
     {#key dialogState.account?.id ?? "new"}<AccountModal account={dialogState.account} />{/key}
   {/if}
   {#if dialogState.history}<HistoryModal txn={dialogState.history.txn} />{/if}
   {#if dialogState.integrity}<IntegrityModal />{/if}
+  {#if dialogState.settings}<SettingsModal />{/if}
+  {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
   {#if dialogState.schedule !== undefined}
     {#key dialogState.schedule.id ?? `new-${dialogState.schedule.start}`}
@@ -95,9 +78,9 @@
     {/key}
   {/if}
   <ConfirmDialog />
-  <div class="body">
-    {#if settingsState.accountNav === "sidebar" && !listsState.isEmptyBook}
-      <AccountSelector />
+  <div class="body" class:right={settingsState.accountPanelSide === "right"}>
+    {#if settingsState.accountPanelOpen && !listsState.isEmptyBook}
+      <AccountPanel />
     {/if}
     <main>
       {#if listsState.isEmptyBook}
@@ -148,21 +131,13 @@
     background: #fff;
     color: #111;
   }
-  nav {
-    flex-wrap: wrap;
-    padding: 0.5rem;
-    display: flex;
-    gap: 0.5rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
-  }
-  .closed {
-    align-self: center;
-    font-size: 0.9em;
-  }
   .body {
     display: flex;
     flex: 1;
     min-height: 0;
+  }
+  .body.right {
+    flex-direction: row-reverse;
   }
   main {
     padding: 1rem;

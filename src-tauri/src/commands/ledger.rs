@@ -4,7 +4,8 @@ use kansha_core::accounts::AccountId;
 use kansha_core::audit::{self, AuditEntity, AuditEntry};
 use kansha_core::integrity::{self, IntegrityReport};
 use kansha_core::ledger::{
-    self, Cleared, Entry, RegisterPage, RegisterQuery, RegisterSummary, TxnId,
+    self, Cleared, Entry, RegisterPage, RegisterQuery, RegisterSummary, SearchPage, SearchQuery,
+    TxnId,
 };
 use kansha_core::persistence::payees;
 use kansha_core::{Money, Tx};
@@ -18,6 +19,17 @@ use crate::state::{AppState, CmdResult};
 #[specta::specta]
 pub fn register_query(state: State<'_, AppState>, query: RegisterQuery) -> CmdResult<RegisterPage> {
     state.read(|db, today| ledger::register_query(db.conn(), &query, today))
+}
+
+/// Transactions matching some text or amount, in any account or one
+/// (navigation bar search). Newest first, capped by `limit`.
+#[tauri::command]
+#[specta::specta]
+pub fn search_transactions(
+    state: State<'_, AppState>,
+    query: SearchQuery,
+) -> CmdResult<SearchPage> {
+    state.read(|db, _| ledger::search(db.conn(), &query))
 }
 
 /// Footer figures: current, cleared, ending, available credit (REG-060).

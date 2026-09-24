@@ -6,15 +6,12 @@
 
   let from = $state("");
   let to = $state("");
-  let text = $state("");
-  let timer: ReturnType<typeof setTimeout> | undefined;
 
   // Reflect a cleared or replaced filter set back into the inputs.
   $effect(() => {
     const f = registerState.filters;
     from = f.date_from ? displayDate(f.date_from) : "";
     to = f.date_to ? displayDate(f.date_to) : "";
-    text = f.text ?? "";
   });
 
   const fromBad = $derived(from.trim() !== "" && parseDate(from, listsState.today) === null);
@@ -26,20 +23,12 @@
     void registerState.setFilters({ [which]: iso });
   }
 
-  function onText(e: Event) {
-    text = (e.currentTarget as HTMLInputElement).value;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      void registerState.setFilters({ text: text.trim() === "" ? null : text.trim() });
-    }, 250);
-  }
-
   const num = (v: string) => (v === "" ? null : Number(v));
 </script>
 
 <div class="filters" role="search" aria-label="Register filters">
-  <label>From <input class="date" class:bad={fromBad} bind:value={from} placeholder="MM/DD/YYYY" onchange={() => setDate("date_from", from)} /></label>
-  <label>To <input class="date" class:bad={toBad} bind:value={to} placeholder="MM/DD/YYYY" onchange={() => setDate("date_to", to)} /></label>
+  <label class="date-l">From <input class="date" class:bad={fromBad} bind:value={from} placeholder="MM/DD/YYYY" onchange={() => setDate("date_from", from)} /></label>
+  <label class="date-l">To <input class="date" class:bad={toBad} bind:value={to} placeholder="MM/DD/YYYY" onchange={() => setDate("date_to", to)} /></label>
   <label>
     Payee
     <select value={registerState.filters.payee ?? ""} onchange={(e) => registerState.setFilters({ payee: num(e.currentTarget.value) })}>
@@ -70,7 +59,6 @@
       <option value="reconciled">Reconciled</option>
     </select>
   </label>
-  <label>Search <input type="search" value={text} oninput={onText} /></label>
   <button type="button" disabled={!registerState.filtered} onclick={() => registerState.clearFilters()}>Clear all</button>
 </div>
 
@@ -82,19 +70,26 @@
     align-items: end;
     padding: 0.25rem 0;
   }
+  /* The boxes share the row and grow with it, so they follow the
+     register's width when the account list is closed or opened. */
   label {
     display: flex;
     flex-direction: column;
+    flex: 1 1 9rem;
+    min-width: 7rem;
     font-size: 0.8em;
   }
-  .date {
-    width: 7.5rem;
+  label.date-l {
+    flex-basis: 7.5rem;
+  }
+  input,
+  select {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
   }
   .bad {
     /* Dashed as well as colored: not a hue-only cue. */
     outline: 3px dashed var(--bad, #a83200);
-  }
-  select {
-    max-width: 11rem;
   }
 </style>

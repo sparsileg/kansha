@@ -17,7 +17,7 @@ use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::ledger::{
     AccountBalance, Cleared, Counterpart, Posting, PostingId, PostingInput, RegisterQuery,
-    RegisterRow, RegisterSort, Target, Txn, TxnId, TxnInput, TxnSource,
+    RegisterRow, RegisterSort, SearchHit, Target, Txn, TxnId, TxnInput, TxnSource,
 };
 use crate::money::Money;
 
@@ -321,6 +321,106 @@ pub fn register_query(
                 tags: r.get("tags")?,
                 balance: r.get("balance")?,
                 future: date > today,
+            })
+        },
+    )?;
+    Ok((rows.collect::<rusqlite::Result<Vec<_>>>()?, total))
+}
+
+/// The typed text as a number of cents ("184.23", "$1,000", "-5"), if it
+/// is one; matches a posting of that size in either direction.
+fn amount_cents(text: &str) -> Option<i64> {
+    let t: String = text
+        .chars()
+        .filter(|c| !matches!(c, ',' | '$') && !c.is_whitespace())
+        .collect();
+    let t = t.strip_prefix('-').unwrap_or(&t);
+    if t.is_empty() || !t.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return None;
+    }
+    t.parse::<Money>().ok().map(|m| m.cents())
+}
+
+/// Rows whose payee, memo, notes, check number, line memo, category, or
+/// amount matches `text`, one per (transaction, account) posting, newest
+/// first, and the count of all matches (search box).
+pub fn search(
+    conn: &Connection,
+    text: &str,
+    account: Option<AccountId>,
+    limit: i64,
+) -> Result<(Vec<SearchHit>, i64)> {
+    let ctes = "WITH RECURSIVE
+        cat_path (id, path) AS (
+            SELECT id, name FROM category WHERE parent_id IS NULL
+            UNION ALL
+            SELECT c.id, cp.path || ':' || c.name FROM category c JOIN cat_path cp ON c.parent_id = cp.id
+        ),
+        base AS (
+            SELECT t.id AS txn_id, t.txn_date, t.check_num, t.payee_id, t.memo, t.notes, t.status,
+                   p.id AS posting_id, p.account_id, p.amount
+            FROM posting p JOIN txn t ON t.id = p.txn_id
+            WHERE p.account_id IS NOT NULL AND (:account IS NULL OR p.account_id = :account)
+        ),
+        oc AS (
+            SELECT txn_id, count(*) AS n FROM posting
+            WHERE txn_id IN (SELECT txn_id FROM base) GROUP BY txn_id
+        ),
+        shaped AS (
+            SELECT b.*, ifnull(py.name, '') AS payee_name,
+                   CASE oc.n - 1
+                       WHEN 0 THEN ''
+                       WHEN 1 THEN CASE WHEN o.account_id IS NOT NULL THEN '[' || oa.name || ']'
+                                        ELSE cp.path END
+                       ELSE '--Split--'
+                   END AS category
+            FROM base b
+            LEFT JOIN payee py ON py.id = b.payee_id
+            JOIN oc ON oc.txn_id = b.txn_id
+            LEFT JOIN posting o ON o.id = (
+                SELECT x.id FROM posting x
+                WHERE x.txn_id = b.txn_id AND x.id <> b.posting_id
+                ORDER BY x.line_no LIMIT 1)
+            LEFT JOIN account oa ON oa.id = o.account_id
+            LEFT JOIN cat_path cp ON cp.id = o.category_id
+        )";
+    let filter = "WHERE instr(lower(s.payee_name || char(31) || s.memo || char(31) || s.notes
+                              || char(31) || s.check_num || char(31) || s.category),
+                        lower(:text)) > 0
+               OR EXISTS (SELECT 1 FROM posting o
+                          LEFT JOIN cat_path cp ON cp.id = o.category_id
+                          WHERE o.txn_id = s.txn_id
+                            AND (instr(lower(o.memo), lower(:text)) > 0
+                                 OR instr(lower(ifnull(cp.path, '')), lower(:text)) > 0))
+               OR (:cents IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM posting o
+                          WHERE o.txn_id = s.txn_id AND abs(o.amount) = :cents))";
+    let cents = amount_cents(text);
+    let total: i64 = conn
+        .prepare_cached(&format!("{ctes} SELECT count(*) FROM shaped s {filter}"))?
+        .query_row(
+            named_params! {":account": account, ":text": text, ":cents": cents},
+            |r| r.get(0),
+        )?;
+    let sql = format!(
+        "{ctes} SELECT s.txn_id, s.account_id, s.txn_date, s.payee_name, s.memo, s.status,
+                s.amount, s.category
+         FROM shaped s {filter}
+         ORDER BY s.txn_date DESC, s.txn_id DESC, s.posting_id DESC LIMIT :limit"
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let rows = stmt.query_map(
+        named_params! {":account": account, ":text": text, ":cents": cents, ":limit": limit},
+        |r| {
+            Ok(SearchHit {
+                txn_id: r.get("txn_id")?,
+                account: r.get("account_id")?,
+                date: r.get("txn_date")?,
+                payee_name: r.get("payee_name")?,
+                memo: r.get("memo")?,
+                status: r.get("status")?,
+                amount: r.get("amount")?,
+                category: r.get("category")?,
             })
         },
     )?;

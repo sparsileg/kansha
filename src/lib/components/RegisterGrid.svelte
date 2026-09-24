@@ -311,17 +311,17 @@
   <EntryEditor bind:this={newEntry} {account} />
 
   <footer>
-    <span>Current <b>{formatMoney(registerState.summary?.current ?? "0.00")}</b></span>
-    <span>Cleared <b>{formatMoney(registerState.summary?.cleared ?? "0.00")}</b></span>
-    <span>Ending <b>{formatMoney(registerState.summary?.ending ?? "0.00")}</b></span>
-    {#if registerState.summary?.available_credit != null}
-      <span>Available credit <b>{formatMoney(registerState.summary.available_credit)}</b></span>
-    {/if}
-    <span class="spacer"></span>
-    <span>{registerState.total} entries</span>
+    <span>{registerState.total} {registerState.total === 1 ? "transaction" : "transactions"}</span>
     <button type="button" disabled={registerState.pageIndex === 0} onclick={() => registerState.goToPage(registerState.pageIndex - 1)}>‹ Previous</button>
     <span>Page {registerState.pageIndex + 1} of {registerState.pageCount}</span>
     <button type="button" disabled={registerState.pageIndex + 1 >= registerState.pageCount} onclick={() => registerState.goToPage(registerState.pageIndex + 1)}>Next ›</button>
+    <span class="spacer"></span>
+    {#if registerState.summary?.available_credit != null}
+      <span>Available credit <b>{formatMoney(registerState.summary.available_credit)}</b></span>
+    {/if}
+    <span>Cleared <b>{formatMoney(registerState.summary?.cleared ?? "0.00")}</b></span>
+    <span>Current <b>{formatMoney(registerState.summary?.current ?? "0.00")}</b></span>
+    <span>Ending <b>{formatMoney(registerState.summary?.ending ?? "0.00")}</b></span>
   </footer>
 </div>
 
