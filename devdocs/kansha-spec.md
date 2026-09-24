@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.5 (draft) |
+| **Document version** | 0.3.6 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
@@ -185,7 +185,7 @@ Stan uses this heavily in Quicken; it must be robust and cover all common patter
   - Quarterly
   - Twice a year
   - Yearly; every N years
-- **REC-030** [1.0][S] End conditions: never, on a specific end date, or after N occurrences ("# left," e.g., for loans). The remaining count decrements as occurrences are entered.
+- **REC-030** [1.0][S] End conditions: never, on a specific end date, or after N occurrences ("# left," e.g., for loans). The remaining count decrements as occurrences are entered or skipped.
 - **REC-040** [1.0][R] Day-of-month overflow handling: if a scheduled day does not exist in a month (e.g., the 31st), use the last day of that month.
 - **REC-050** [1.0][R] Weekend/holiday adjustment option per schedule: none, move to previous business day, or move to next business day. 1.0 uses weekends only; a US bank holiday calendar is [Later].
 - **REC-060** [1.0][R] Amount type: fixed, or estimated (the user confirms the actual amount when entering).
@@ -937,3 +937,4 @@ Goal for this chat: <sub-scope>
 | 0.3.3 | 2026-09-24 | D-10 decided: separate Payment and Deposit columns (REG-010). |
 | 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
+| 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |

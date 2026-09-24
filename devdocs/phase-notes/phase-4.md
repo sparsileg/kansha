@@ -33,7 +33,7 @@ Startup order for the UI: `schedule_auto_enter`, then show `schedule_review_list
 
 - Nominal date identifies an occurrence; the weekend rule and one-time date only change when it is due. `schedule.next_due` stores the nominal date.
 - Handled in order: only `next_due` can be entered or skipped. Keeps "# left" and `next_due` simple. The calendar shows later occurrences (`actionable = false`) and allows one-time edits on them.
-- Skip uses up one of "# left" (as Quicken does). Spec REC-030 says "entered"; the spec text stands, the behavior is skip-counts. **Stan: confirm.**
+- Skip uses up one of "# left" (as Quicken does). Confirmed by Stan; REC-030 now says "entered or skipped" (spec 0.3.6).
 - Monthly with `day1` earlier than `start_date`'s day starts next month (series = pattern dates on or after `start_date`).
 - Twice monthly with both days clamping to one date (30 and 31 in February) yields one occurrence.
 - Series edit ("this and future"): continues after the last handled occurrence or at `start_date` if later; drops pending overrides; can revive an ended schedule.
