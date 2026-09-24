@@ -15,6 +15,13 @@ export const commands = {
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
 	/**  Current and ending balance of every account (ACCT-230). */
 	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
+	/**
+	 *  A new account's fields with the type's defaults: group, tax treatment,
+	 *  investment or other-asset settings (ACCT-030, ACCT-240).
+	 */
+	accountDefaults: (name: string, accountType: AccountType) => __TAURI_INVOKE<AccountFields>("account_defaults", { name, accountType }),
+	/**  An account number reduced to its last four characters (ACCT-150). */
+	accountNumberMasked: (number: string) => __TAURI_INVOKE<string>("account_number_masked", { number }),
 	accountCreate: (fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_create", { fields })),
 	/**  The account type cannot change after creation. */
 	accountUpdate: (id: AccountId, fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_update", { id, fields })),
@@ -29,6 +36,15 @@ export const commands = {
 	/**  All categories, parents before children. */
 	categoryList: () => typedError<Category[], IpcError>(__TAURI_INVOKE("category_list")),
 	categoryCreate: (fields: CategoryFields) => typedError<Category, IpcError>(__TAURI_INVOKE("category_create", { fields })),
+	/**  Built-in categories cannot be changed (CAT-060). */
+	categoryUpdate: (id: CategoryId, fields: CategoryFields) => typedError<Category, IpcError>(__TAURI_INVOKE("category_update", { id, fields })),
+	/**  Only an unused category can be deleted (CAT-030); hide it otherwise. */
+	categoryDelete: (id: CategoryId) => typedError<null, IpcError>(__TAURI_INVOKE("category_delete", { id })),
+	/**
+	 *  Move everything from `source` to `target`, then remove `source`
+	 *  (CAT-020).
+	 */
+	categoryMerge: (source: CategoryId, target: CategoryId) => typedError<Merged, IpcError>(__TAURI_INVOKE("category_merge", { source, target })),
 	payeeList: () => typedError<Payee[], IpcError>(__TAURI_INVOKE("payee_list")),
 	/**
 	 *  Visible payees starting with `prefix`, ignoring case (PAY-020
@@ -37,8 +53,23 @@ export const commands = {
 	payeeSearch: (prefix: string, limit: number) => typedError<Payee[], IpcError>(__TAURI_INVOKE("payee_search", { prefix, limit })),
 	/**  Change a payee's name, memorized defaults, or visibility. */
 	payeeUpdate: (id: PayeeId, fields: PayeeFields) => typedError<Payee, IpcError>(__TAURI_INVOKE("payee_update", { id, fields })),
+	/**  Only an unused payee can be deleted (PAY-030); hide it otherwise. */
+	payeeDelete: (id: PayeeId) => typedError<null, IpcError>(__TAURI_INVOKE("payee_delete", { id })),
+	/**
+	 *  Move everything from `source` to `target`, then remove `source`
+	 *  (PAY-030).
+	 */
+	payeeMerge: (source: PayeeId, target: PayeeId) => typedError<Merged, IpcError>(__TAURI_INVOKE("payee_merge", { source, target })),
 	tagList: () => typedError<Tag[], IpcError>(__TAURI_INVOKE("tag_list")),
 	tagCreate: (fields: TagFields) => typedError<Tag, IpcError>(__TAURI_INVOKE("tag_create", { fields })),
+	tagUpdate: (id: TagId, fields: TagFields) => typedError<Tag, IpcError>(__TAURI_INVOKE("tag_update", { id, fields })),
+	/**  Only an unused tag can be deleted (TAG-020); hide it otherwise. */
+	tagDelete: (id: TagId) => typedError<null, IpcError>(__TAURI_INVOKE("tag_delete", { id })),
+	/**
+	 *  Move everything from `source` to `target`, then remove `source`
+	 *  (TAG-020).
+	 */
+	tagMerge: (source: TagId, target: TagId) => typedError<Merged, IpcError>(__TAURI_INVOKE("tag_merge", { source, target })),
 	/**
 	 *  Register rows for an account with filters, sort, and paging (REG-040).
 	 *  The running balance is always the true one in date order (REG-020).
@@ -343,6 +374,21 @@ export type LotMethod = "fifo" | "specific" | "average" |
  */
 "min_tax";
 
+/**
+ *  What a merge moved from the source to the target (CAT-020, PAY-030,
+ *  TAG-020). Recorded as the `after` value of the merge's audit entry.
+ */
+export type Merged = {
+	/**  ID of the surviving category, payee, or tag. */
+	into: number,
+	postings: number,
+	txns: number,
+	schedules: number,
+	schedule_lines: number,
+	payee_defaults: number,
+	subcategories: number,
+};
+
 /**  How money market funds are held in an investment account (INV-050, D-50). */
 export type MmfMode = 
 /**  A security priced at $1.00. */
@@ -428,6 +474,11 @@ export type RegisterRow = {
 	 *  transfer, `--Split--` (REG-050), or empty.
 	 */
 	category: string,
+	/**
+	 *  Names of the tags on the transaction's postings, comma-separated
+	 *  (TAG-010); empty when none.
+	 */
+	tags: string,
 	/**
 	 *  Running balance through this row in date order, whatever the
 	 *  filter or sort (REG-020).

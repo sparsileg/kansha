@@ -162,6 +162,7 @@ pub struct Tag {
 /// What a merge moved from the source to the target (CAT-020, PAY-030,
 /// TAG-020). Recorded as the `after` value of the merge's audit entry.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Merged {
     /// ID of the surviving category, payee, or tag.
     pub into: i64,

@@ -159,6 +159,13 @@ fn filters_narrow_rows_but_not_the_running_balance() {
     let trip = f.book.clone_tag("Trip");
     let p = query(&f, |q| q.tag = Some(trip));
     assert_eq!(dates(&p), vec!["2026-01-05"]);
+    // The Tag column shows the tag names; untagged rows are empty.
+    assert_eq!(p.rows[0].tags, "Trip");
+    let all = query(&f, |_| {});
+    assert_eq!(
+        all.rows.iter().filter(|r| r.tags.is_empty()).count(),
+        all.total as usize - 1
+    );
 
     let p = query(&f, |q| q.cleared = Some(Cleared::Cleared));
     assert_eq!(dates(&p), vec!["2026-02-15"]);

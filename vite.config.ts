@@ -1,11 +1,12 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { svelteTesting } from "@testing-library/svelte/vite";
 
 // Tauri expects a fixed dev-server port (see src-tauri/tauri.conf.json).
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
-  plugins: [svelte()],
+  plugins: [svelte(), svelteTesting()],
   // Prevent Vite from clearing the terminal so Rust build errors stay visible.
   clearScreen: false,
   server: {

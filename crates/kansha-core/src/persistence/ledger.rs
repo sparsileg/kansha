@@ -279,7 +279,13 @@ pub fn register_query(
     let sql = format!(
         "{ctes} SELECT s.txn_id, s.txn_date, s.check_num, s.payee_id, s.payee_name, s.memo,
                 s.status, s.amount, s.cleared, s.others, s.other_account, s.other_category,
-                s.category, s.balance
+                s.category, s.balance,
+                ifnull((SELECT group_concat(name, ', ') FROM (
+                            SELECT DISTINCT tg.name AS name
+                            FROM posting o
+                            JOIN posting_tag pt ON pt.posting_id = o.id
+                            JOIN tag tg ON tg.id = pt.tag_id
+                            WHERE o.txn_id = s.txn_id ORDER BY tg.name)), '') AS tags
          FROM shaped s {filter} ORDER BY {order} LIMIT :limit OFFSET :offset"
     );
     let mut stmt = conn.prepare_cached(&sql)?;
@@ -312,6 +318,7 @@ pub fn register_query(
                 cleared: r.get("cleared")?,
                 counterpart,
                 category: r.get("category")?,
+                tags: r.get("tags")?,
                 balance: r.get("balance")?,
                 future: date > today,
             })

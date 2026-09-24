@@ -8,6 +8,7 @@ export type ViewId =
   | "calendar"
   | "reconcile"
   | "reports"
+  | "manage"
   | "settings";
 
 class ViewState {

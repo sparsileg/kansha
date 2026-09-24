@@ -7,9 +7,9 @@ Spec: 0.3.4. Split into 3a (core queries, sample data, IPC) and 3b (Svelte UI), 
 | Sub-phase | State |
 |---|---|
 | 3a Core queries, sample data, IPC | Done. `just check` green. |
-| 3b Svelte UI | Not started. |
+| 3b Svelte UI | Built. `just check` green (73 frontend tests). **Not run in the real app**: Stan must run `just dev` and check the exit criteria below. |
 
-Phase 2 and 3a are uncommitted in the working tree; Stan commits in GitKraken.
+3a is committed. All of 3b is uncommitted in the working tree; Stan commits in GitKraken.
 
 ## 3a — done
 
@@ -59,33 +59,110 @@ No schema change. **⚠ API change:** 28 new IPC commands; `src/lib/types/bindin
 - No update, delete, or merge commands for categories and tags. Payee update exists. Add if the UI needs them.
 - Payee search is prefix only.
 
-## 3b — remaining sub-tasks
+## 3b — what was built
 
-Order is roughly the dependency order. Each item is one reviewable chunk.
+**⚠ API change** (items 5–16, `just bindings` run): new commands `account_defaults`, `account_number_masked`, `category_update`, `category_delete`, `category_merge`, `payee_delete`, `payee_merge`, `tag_update`, `tag_delete`, `tag_merge`; `RegisterRow` gains `tags` (comma-separated tag names of the transaction). `Merged` now derives `specta::Type`. No schema change. Engine change: register query returns tag names (test added in `integration/register.rs`; register tests still pass at NFR-040 timings).
 
-1. **API wrapper.** In `src/lib/api/`, unwrap `{status, data|error}` into thrown `ApiError` carrying `IpcError.kind`. Helper for the `confirmation_required` retry flow. Mockable for tests.
-2. **Format module** (`src/lib/format/`). Parse typed money ("1,234.56", "-5", ".5") into canonical strings using string operations only. Display money with separators. Date parse and display, and `+`/`-`/`t` date keys via string or Rust helpers, with no JS `Date`. Split negative money into Payment and Deposit columns. Vitest (TEST-120).
-3. **State modules** (`src/lib/state/`). Accounts and balances, categories, tags, current account, register query and page, settings. Runes in `.svelte.ts`.
-4. **Shell.** View navigation to an Account view. Account selector dropdown that can toggle to a sidebar (UI-010). Groups per ACCT-240. Balances with credit and liability sign display. "Load sample data" button for an empty book, with the empty-book state.
-5. **Account modal** (ACCT-200 … ACCT-220). Create and edit. Type-specific fields (interest rate, credit limit, investment settings, other asset). Masked account number with reveal (ACCT-150). Close with confirmation. Reopen. Delete only when empty.
-6. **Register grid** (REG-010, REG-020, REG-070). Custom grid with columns Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Virtualized rows or paging (NFR-040). Newest-first opening. Sort by column. Split rows show "--Split--" (REG-050). Today line and future-row styling. Footer (REG-060).
-7. **Filters** (REG-040). Date range, payee, category, tag, cleared status, text search. Debounced. Clear-all.
-8. **Keyboard entry** (REG-030). Inline entry row at the bottom. Tab order, Enter saves, Esc cancels, `+`/`-` adjusts date, `t` sets today. Full keyboard operation (UI-050).
-9. **QuickFill** (PAY-020). Payee autocomplete from `payee_search`. Filling category, tag, memo, and amount from memorized defaults. Sending `payee_name` for new payees.
-10. **Splits and transfers** (TXN-020, TXN-030). Split editor with live remainder from `split_remainder`. Save blocked until the remainder is zero. Transfer target picker. "Go to other side" of a transfer.
-11. **Edit, void, delete, clear.** Edit in place. Context menu (REG-080). Clr toggle. Confirmation dialog driven by `confirmation_required`.
-12. **Audit view** (AUD-020). Per-transaction history panel from `audit_history`, showing changed fields.
-13. **Integrity check** button and result list (INT-030), so Stan can run it on generated data.
-14. **Tests** (TEST-120). Money and date input parsing, register keyboard behavior, split-remainder validation. IPC mocked.
-15. **Payee editor** (PAY-020, PAY-030). Edit a payee's memorized defaults, rename, hide. Needs `payee_merge` and `payee_delete` commands (core has them).
-16. **Category and tag management** (CAT-020, CAT-030, CAT-040, TAG-020). Categories: create, rename, re-parent, merge, hide, tax-related, tithable, and giving flags; built-in categories are protected. Tags: create, rename, merge, hide. Delete only when unused. Needs `category_update`, `category_delete`, `category_merge`, `tag_update`, `tag_delete`, `tag_merge` commands (core repositories already have them), then `just bindings`. **⚠ API change.**
-17. **Docs and close-out.** Update this file with the final 3b decisions. Bump the spec if it or the conventions change.
+### Items 1–2 (API wrapper, format module)
+
+- `src/lib/api/index.ts`: `commands` (raw generated surface), `call` (unwraps `{status, data|error}`, throws `ApiError` with `kind` and `needsConfirmation`), `withConfirmation(run, ask)` (repeats with `confirmed = true` after the user agrees; returns `null` if declined; rethrows other errors without asking).
+- `src/lib/format/money.ts`: `parseMoney`, `formatMoney`, `negateMoney`, `splitPaymentDeposit`, `combinePaymentDeposit`. String operations only.
+- `src/lib/format/date.ts`: `addDays`, `parseDate`, `displayDate`, `isValidIso`, `applyDateKey`. Integer calendar math on ISO strings; no JS `Date`. "Today" is always passed in.
+- Tests: `src/lib/api/api.test.ts` (5), `src/lib/format/format.test.ts` (24).
+
+### Item 3 (state modules)
+
+- `src/lib/state/lists.svelte.ts`: `listsState` holds `today`, accounts, balances, categories, tags, with id lookup maps, `isEmptyBook`, `loadAll`, `loadBalances`.
+- `src/lib/state/register.svelte.ts`: `registerState` holds the open account, filters, sort, page index, page, and summary. Methods: `open`, `close`, `reload`, `refresh` (rows, footer, balances), `setFilters`, `clearFilters`, `sortBy`, `goToPage`.
+- `src/lib/state/settings.svelte.ts`: `settingsState.pageSize` (100). Theme and font size stay in `theme.svelte.ts`. Not persisted yet (SET-070).
+- Tests: `src/lib/state/state.test.ts` (7), IPC mocked.
+
+### Item 4 (shell)
+
+- `src/App.svelte`: loads `listsState` on mount; nav bar with the account selector (dropdown mode), a dropdown/sidebar toggle, and a theme toggle; error banner; empty-book state.
+- `src/lib/components/AccountSelector.svelte`: native `<select>` with group `optgroup`s and current balance, or a sidebar list. `AccountBalance.svelte`: formatted balance, red when negative.
+- `src/lib/state/groups.ts`: `groupAccounts` (fixed group order, then `sort_order`, then name; hides closed and `show_in_list = false`). Test in `groups.test.ts`.
+- `src/views/Account.svelte`: placeholder header (name, current, ending, entry count). The grid arrives in item 6. `src/views/EmptyBook.svelte`: "Load sample data" (seed 1).
+- `settingsState` gains `accountNav` and `showClosedAccounts`.
+
+### Decisions (item 4)
+
+- Balances show as stored: negative means owed on credit and liability accounts, shown in red. No sign flip. Revisit if Stan wants Quicken-style positive "owed" display (`negateMoney` exists).
+- Reordering accounts (ACCT-240) waits for the account modal (`sort_order` field), item 5. There is no drag-and-drop yet.
+- No toggle in the UI for `showClosedAccounts` yet.
+- Not run in the real app: only `just check` (svelte-check and Vitest). No component tests.
+
+### Decisions
+
+- Opening an account resets filters and shows newest-first (date, descending). A filter, sort, or clear-all resets to page 0.
+- Sorting a new column starts ascending, except date, which starts descending.
+- A response that arrives after a newer request is dropped (stale-response guard by sequence number).
+- Current account lives in `registerState.accountId`. `viewState` still only holds the top-level view.
+- Errors are stored as message strings on the state (`error`); the shell will display them.
+
+### Decisions (items 1–2)
+
+- `parseMoney` rejects more than two decimals; it never rounds. It accepts thousands commas, a leading `$`, `+`/`-`, and `.5`. "-0" becomes "0.00".
+- `parseDate` accepts `M/D/YYYY`, `M/D/YY` (read as 20yy), `M/D` (year from `today`), and ISO. Separators `/`, `.`, `-`. Display is `MM/DD/YYYY`.
+- Date keys: `+` or `=` next day, `-` previous day, `t` today. An empty or invalid field falls back to `today` before adjusting.
+- `combinePaymentDeposit` returns `null` if both fields are set or either is invalid. The entry row must clear the other field on typing (D-10).
+- Not yet wired: no component uses these modules.
+
+## 3b — sub-task status
+
+All 17 items are built. Items 1–4 are described above. Items 5–17:
+
+### Items 5–16
+
+- **5 Account modal** (`AccountModal.svelte`): create and edit; type-specific fields (interest rate, credit limit, investment settings, other asset); type defaults come from Rust (`account_defaults`), so the UI does not duplicate group and tax rules. Account number masked through `account_number_masked` with Reveal (ACCT-150). Close (confirmation via `withConfirmation`), reopen, delete. Type is locked after creation. Reached from "New account" and "Edit account".
+- **6 Register grid** (`RegisterGrid.svelte`): Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Paging (100 rows, "Newer/Older"), not virtualized. Newest-first opening. Sort by clicking a header (Payment and Deposit both sort by amount). Split rows show `--Split--` from the query. Today line (REG-070) where `future` flips between adjacent rows, drawn only on date sort. Future rows dimmed. Void rows struck through. Footer: current, cleared, ending, available credit (REG-060), entry count, paging.
+- **7 Filters** (`FilterBar.svelte`): date range, payee, category, tag, cleared, text (250 ms debounce), Clear all.
+- **8 Keyboard entry** (`EntryEditor.svelte`, `register/draft.ts`, `register/keys.ts`): the entry row is pinned below the grid. Tab order is Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Enter. Enter saves; Esc cancels. In Date: `+` or `=` next day, `-` previous day, `t` today. After a save the row resets, keeps the date, and refocuses Date. Grid keys: arrows, Home, End, PageUp, PageDown move; Enter edits; Delete deletes; Space toggles cleared; Insert or Ctrl+N focuses the entry row; Shift+F10 or the menu key opens the context menu.
+- **9 QuickFill**: payee suggestions from `payee_search` through a datalist. On change, an exact name match fills empty category, tag, memo, and amount from the payee's defaults. Never overwrites typed values. Edits do not QuickFill. `payee_name` is always sent; Rust finds or creates the payee.
+- **10 Splits and transfers**: choosing `--Split--` opens the split panel (two blank lines). Line amounts are typed as magnitudes and signed like the total (payment or deposit). The remainder comes from `split_remainder` on every change; save is blocked unless it is zero. Transfers use the same picker (`[Account]` entries; investment accounts excluded). "Go to other side": opens the other account, filters to that date, and selects the entry.
+- **11 Edit, void, delete, clear**: double-click or Enter edits in place. Context menu (`ContextMenu.svelte`): Edit, Mark cleared/unmarked, Go to other side, History, Void, Delete. Void and delete ask first, then `withConfirmation` handles a `confirmation_required` from Rust (reconciled entries).
+- **12 Audit view** (`HistoryModal.svelte`): per-field changes from `audit_history`, newest first.
+- **13 Integrity check** (`IntegrityModal.svelte`): runs on open, "Run again", issue table.
+- **14 Tests**: `draft.test.ts` (build, split signing, QuickFill, round trip of a split), `keys.test.ts`, `EntryEditor.test.ts` (date keys, Enter saves, Esc, D-10, QuickFill, split remainder blocks save), `RegisterGrid.test.ts` (columns, today line, sort, arrow/space/Enter). IPC mocked. `vite.config.ts` gained `svelteTesting()`.
+- **15 Payee editor** (`PayeeManager.svelte`): rename, memorized defaults, hide, merge, delete (in use gives a message from Rust). Payees are created only by entering a transaction.
+- **16 Category and tag management** (`CategoryManager.svelte`, `TagManager.svelte`): create, rename, re-parent, flags, hide, merge, delete. Built-in categories are shown but locked. All three screens are tabs in `views/Manage.svelte`, reached from "Payees, categories, tags".
+
+### Decisions (items 5–16)
+
+- An entry needs a category, a transfer account, or a split. Uncategorized entries are not allowed: the engine has no uncategorized posting, and a non-zero entry with no lines does not balance.
+- Tag column and tag picker use the transaction's first tag. The entry row edits one tag per transaction; extra tags on lines are preserved on edit but not editable.
+- The register does not search the payee list on every keystroke for QuickFill lookup; it uses the last `payee_search` result, then the full payee list loaded at start.
+- Filters reset when switching accounts.
+- "Go to other side" leaves a one-day date filter on; Clear all removes it.
+- Category kind cannot change after creation in the UI (only income and expense are offered; equity is system-only).
+- Clr shows `c` or `R`; the Clr column click on a row is Space or the menu, not a mouse click on the cell.
+
+### Bug found on first real run
+
+Selecting an account did nothing: `App.svelte` rendered the view with `{@const View = views[viewState.current]}`, which did not swap the component when the view changed (state changed, DOM did not). Now `const View = $derived(views[viewState.current])`. `App.smoke.test.ts` renders the whole app with IPC mocked and covers select-account and view switching, so this class of bug is caught. Lesson: jsdom component tests missed it because no test mounted `App`.
+
+### Known gaps from 3b
+
+- **Not exercised in the real app.** All checks are Vitest (jsdom, IPC mocked), `svelte-check`, and `vite build`. Layout, focus behavior in a real webview, and NFR-040 in the UI are unconfirmed.
+- Paging, not virtualization. Sorting or filtering resets to page 0.
+- Account reordering (ACCT-240) is by the Sort order number in the account modal; no drag and drop.
+- No UI toggle for `showClosedAccounts`.
+- Settings (page size, sidebar/dropdown, theme) are not persisted (SET-070).
+- Balances on credit and liability accounts show as stored (negative = owed).
+- Split lines keep their tags and cleared status on edit but the split panel does not edit them. No per-line tag picker.
+- Payee suggestions and the payee filter list load all payees; fine at hundreds, revisit if it grows.
+- No keyboard shortcut list or focus trap in modals beyond Esc and initial focus.
+- Accessibility pass and the icon bar (UI-020) are not done.
+
+### 17 Docs and close-out
+
+This file. The spec is unchanged: no requirement or convention changed. The spec header still says 0.3.4.
 
 ### Exit criteria (spec §24, Phase 3)
 
-- Stan enters a month of transactions by keyboard.
+- Stan enters a month of transactions by keyboard. (**To confirm by hand**; the keyboard paths are unit-tested.)
 - The generator loads a multi-year dataset (done in 3a).
-- The register meets NFR-040 in the running app (measured in 3a at the query level; confirm in the UI).
+- The register meets NFR-040 in the running app (measured in 3a at the query level; **confirm in the UI**: `just dev`, Load sample data, open the largest account).
 
 ### Decided with Stan
 

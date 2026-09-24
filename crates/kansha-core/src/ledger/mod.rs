@@ -430,6 +430,9 @@ pub struct RegisterRow {
     /// What the Category column shows: a category path, `[Account]` for a
     /// transfer, `--Split--` (REG-050), or empty.
     pub category: String,
+    /// Names of the tags on the transaction's postings, comma-separated
+    /// (TAG-010); empty when none.
+    pub tags: String,
     /// Running balance through this row in date order, whatever the
     /// filter or sort (REG-020).
     pub balance: Money,
