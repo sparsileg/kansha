@@ -87,7 +87,7 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 
 - Svelte 5 + Vite. **Not SvelteKit.** State via runes in `.svelte.ts` modules; no external state library.
 - `invoke` is called only in `src/lib/api/`.
-- Types in `src/lib/types/` are generated from Rust; never hand-edited.
+- Types in `src/lib/types/` are generated from Rust; never hand-edited. `bindings.ts` is committed to the repo (so frontend-only CI and `npm run build` don't need the Rust toolchain) and regenerated with `just bindings` whenever a command's signature changes — check in the diff.
 - Money/quantity/date formatting and parsing only in `src/lib/format/`.
 - **No business logic or money arithmetic in TypeScript.** Throwaway prototype UI follows these rules too.
 

@@ -530,6 +530,15 @@ Rationale:
 - Alternatives considered: React (largest ecosystem; more verbose, more re-render tuning needed), Vue (reasonable middle ground), Solid (small ecosystem), plain TypeScript (most code to maintain).
 - Frontend state uses Svelte 5 runes in `.svelte.ts` modules; no external state-management library.
 
+**DR-03 — Rust→TypeScript type generation: `tauri-specta` (D-120, decided 2026-09-24).**
+`tauri-specta` + `specta` + `specta-typescript`, pinned to the exact release candidate `2.0.0-rc.25` (the newest versions compatible with Tauri v2 at the time of writing — `tauri-specta`'s last version compatible with Tauri v1 pulls in a conflicting `gtk-sys`, so it cannot be used with Tauri v2 at all). Verified in Phase 0: a command decorated with `#[specta::specta]`, registered through `tauri_specta::Builder`, compiles against Tauri v2 and generates a matching `commands.appVersion()` wrapper in `src/lib/types/bindings.ts` (including its doc comment) on every debug build.
+Rationale:
+- Generates exactly the shape §17.3 calls for: a typed `commands` object, so a mistyped command name or a mismatched argument type is a compile error in the frontend, not a runtime IPC failure.
+- One source of truth: the command list passed to `tauri_specta::Builder` is also what Tauri registers as its invoke handler, so the two can't drift apart.
+- `ts-rs` (the alternative) only derives per-struct TypeScript types; it does not generate command wrappers, so `src/lib/api/` would still be hand-written and could still drift from the Rust signatures.
+- Risk accepted: both `tauri-specta` and `specta` are pre-1.0 (release candidates, `rc.25` at the time of writing) and their API has changed across `rc` versions before. The version is pinned exactly (`=2.0.0-rc.25`) rather than with a caret range; bumping it is a deliberate, tested change, not an automatic `cargo update`.
+- `bindings.ts` is generated but checked into the repository (§17.3, CONVENTIONS.md) so frontend-only tooling (`svelte-check`, `vite build`, CI's frontend job) doesn't need the Rust toolchain. It's regenerated with `just bindings` whenever a command signature changes.
+
 #### 16.3 Remaining recommendations [R]
 
 **R3 — Database access and encryption.**
@@ -599,7 +608,7 @@ Rule: modules interact only through their public APIs; only `persistence` issues
 #### 17.3 Frontend structure [R]
 
 - `src/lib/api/` — typed wrappers around Tauri commands; the only place `invoke` is called. Makes IPC mockable in tests.
-- `src/lib/types/` — types generated from Rust (D-120); not hand-edited.
+- `src/lib/types/` — types generated from Rust (D-120: `tauri-specta`, DR-03); not hand-edited. `bindings.ts` is committed and regenerated with `just bindings`.
 - `src/lib/format/` — the only place money, quantities, and dates are formatted or parsed for display. Amounts arrive from Rust as integers or decimal strings and are never converted through floating point.
 - `src/lib/state/` — Svelte 5 rune-based state modules (current view, open tabs, settings).
 - `src/lib/components/` — reusable components (register grid, split editor, money input, date input, modal, account picker).
@@ -613,7 +622,7 @@ kansha/
 │   ├── kansha-spec.md
 │   ├── CONVENTIONS.md
 │   └── phase-notes/
-├── Cargo.toml                 # workspace
+├── Cargo.toml                 # workspace (kansha-core, src-tauri)
 ├── crates/
 │   └── kansha-core/           # no Tauri dependency
 │       ├── src/
@@ -633,11 +642,15 @@ kansha/
 ├── tests/
 │   └── scenarios/             # TOML scenario files by area
 │       └── ledger/  schedule/  reconcile/  lots/  reports/
-├── src-tauri/                 # Tauri shell, command handlers only
+├── src-tauri/                 # Tauri shell: command handlers + specta builder only
+│   ├── src/lib.rs             # run(), specta_builder()
+│   ├── src/commands.rs        # #[tauri::command] handlers
+│   ├── capabilities/
+│   └── icons/
 ├── src/                       # Svelte frontend (see 17.3)
 ├── package.json
 ├── vite.config.ts
-├── justfile                   # `just test`, `just dev`, `just check`
+├── justfile                   # `just test`, `just dev`, `just check`, `just bindings`
 └── .github/workflows/ci.yml
 ```
 
@@ -833,7 +846,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
 | D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | Open | As listed in ACCT-010/020 |
 | D-110 | Encryption during the prototype | Open | Unencrypted prototype database (synthetic data only) using the same `bundled-sqlcipher` build; enable encryption in Phase 8 or at 1.0 |
-| D-120 | Rust→TypeScript type generation for IPC | Open | Evaluate `tauri-specta` vs. `ts-rs` in Phase 0 |
+| D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
 | D-140 | Chart library | Open | Evaluate in Phase 7 (Chart.js, uPlot, ECharts) |
 
@@ -892,7 +905,7 @@ Each phase ends with its exit criteria met, `just test` passing on Kubuntu and W
 - The spec and CONVENTIONS.md are stored in the Claude Project's files; they are not pasted into chats.
 - One fresh chat per phase, or per sub-phase if a phase is large, to keep context small.
 - Each phase chat starts with the kickoff template below.
-- New files, or files changed so extensively that regeneration is more economical, are delivered complete. All other changes are delivered as a single unified patch per request, applied from the repository root with `patch -p1`.
+- New files, or files changed so extensively that regeneration is more economical, are delivered complete. All other changes are delivered as a single unified patch per request, applied from the repository root with `git apply`.
 - Stan runs tests locally and pastes back only failing test names and assertion messages.
 - At the end of each phase, a short phase summary (files created, decisions made, known gaps) is committed to `devdocs/phase-notes/phase-N.md`, and later chats read that rather than earlier transcripts.
 
@@ -915,3 +928,4 @@ Goal for this chat: <sub-scope>
 |---|---|---|
 | 0.1 | 2026-09-23 | Restructured from initial notes; added requirement IDs, release/source tags, recommendations, design rationale, open decisions, and migration placeholders. |
 | 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
+| 0.2.1 | 2026-09-24 | D-120 decided: `tauri-specta`/`specta`/`specta-typescript` pinned to `2.0.0-rc.25` (DR-03), verified against Tauri v2 in Phase 0. §17.3 and §17.4 updated to reflect the built `src-tauri` layout and committed `bindings.ts`. §25 patch command corrected to `git apply` (matches CONVENTIONS.md; the draft had said `patch -p1`). |

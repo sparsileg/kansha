@@ -1,0 +1,29 @@
+[package]
+name = "kansha"
+description = "Kansha desktop shell (Tauri commands only; no business logic)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+# Required so `cargo run` and the Android/iOS shells share one entry point.
+name = "kansha_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kansha-core = { path = "../crates/kansha-core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde.workspace = true
+serde_json = "1"
+specta = { version = "=2.0.0-rc.25", features = ["derive", "std"] }
+specta-typescript = "0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+thiserror.workspace = true
+
+[lints]
+workspace = true
