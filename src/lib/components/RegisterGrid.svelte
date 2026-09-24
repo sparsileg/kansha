@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import { formatMoney, splitPaymentDeposit } from "../format/money";
@@ -15,10 +16,60 @@
 
   let menu = $state<{ x: number; y: number; row: RegisterRow } | null>(null);
   let newEntry: EntryEditor | undefined;
+  let rowsEl: HTMLDivElement | undefined;
   let actionError = $state<string | null>(null);
 
   const rows = $derived(registerState.rows);
   const dateSorted = $derived(registerState.sort === "date");
+
+  // The rows scroll and their scrollbar takes width the header, the entry
+  // row, and the footer do not have. Measure it so all of them keep the
+  // same right edge, plus a pad so the last column never touches it.
+  let scrollbar = $state(0);
+  $effect(() => {
+    void rows.length;
+    void registerState.loading;
+    if (rowsEl) scrollbar = rowsEl.offsetWidth - rowsEl.clientWidth;
+  });
+
+  /** Scroll the rows area, not the page, so `id` is fully visible. */
+  function revealRow(id: number) {
+    const el = document.getElementById(`row-${id}`);
+    if (!el || !rowsEl) return;
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    if (bottom > rowsEl.scrollTop + rowsEl.clientHeight) {
+      rowsEl.scrollTop = bottom - rowsEl.clientHeight;
+    } else if (top < rowsEl.scrollTop) {
+      rowsEl.scrollTop = top;
+    }
+  }
+
+  // Keep the just-saved (or just-selected) row fully visible, also when
+  // the area around it changes size (the entry row grows or shrinks).
+  $effect(() => {
+    const id = registerState.reveal;
+    void rows.length;
+    if (id === null || registerState.loading) return;
+    void tick().then(() => requestAnimationFrame(() => revealRow(id)));
+  });
+
+  $effect(() => {
+    if (!rowsEl || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (registerState.reveal !== null) revealRow(registerState.reveal);
+    });
+    ro.observe(rowsEl);
+    return () => ro.disconnect();
+  });
+
+  // After opening an account, show the bottom (newest) rows.
+  $effect(() => {
+    if (registerState.scrollToEnd && !registerState.loading && rows.length > 0) {
+      registerState.scrollToEnd = false;
+      if (rowsEl) rowsEl.scrollTop = rowsEl.scrollHeight;
+    }
+  });
 
   /** REG-070: the today line sits where `future` flips between rows. */
   function todayLineBefore(i: number): boolean {
@@ -42,6 +93,29 @@
   function arrow(col: RegisterSort | null): string {
     if (col === null || registerState.sort !== col) return "";
     return registerState.descending ? " ▼" : " ▲";
+  }
+
+  /**
+   * Leave an in-place edit. After a save, Enter moves on to the next row
+   * (Quicken style); after the last row, to the new-entry row. Focus goes
+   * back to the grid so the arrow and Enter keys keep working.
+   */
+  async function afterEdit(txn: number, saved: boolean) {
+    registerState.editing = null;
+    registerState.selected = txn;
+    if (saved) {
+      const i = rows.findIndex((x) => x.txn_id === txn);
+      const next = i >= 0 ? rows[i + 1] : undefined;
+      if (next) {
+        registerState.selected = next.txn_id;
+      } else {
+        newEntry?.focus();
+        return;
+      }
+    }
+    await tick();
+    rowsEl?.focus();
+    registerState.reveal = registerState.selected;
   }
 
   function fail(e: unknown) {
@@ -114,6 +188,21 @@
     menu = { x, y, row: r };
   }
 
+  function openMenuForSelected() {
+    const sel = rows.find((r) => r.txn_id === registerState.selected) ?? null;
+    if (!sel) return;
+    const b = document.getElementById(`row-${sel.txn_id}`)?.getBoundingClientRect();
+    openMenuAt(sel, b?.left ?? 100, b?.bottom ?? 100);
+  }
+
+  // Keyboard-originated context menu (Shift+F10 / Menu key) can arrive as a
+  // native contextmenu event instead of a keydown, depending on the webview.
+  function onRowsContextMenu(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest(".row")) return;
+    e.preventDefault();
+    openMenuForSelected();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (registerState.editing !== null) return;
     const action = rowKeyAction(e);
@@ -134,11 +223,7 @@
         if (sel) void toggleCleared(sel);
         return;
       case "menu":
-        if (sel) {
-          const el = document.getElementById(`row-${sel.txn_id}`);
-          const b = el?.getBoundingClientRect();
-          openMenuAt(sel, b?.left ?? 100, b?.bottom ?? 100);
-        }
+        openMenuForSelected();
         return;
       default: {
         const next = moveSelection(
@@ -147,9 +232,8 @@
           action,
         );
         registerState.selected = next;
-        if (next !== null) {
-          document.getElementById(`row-${next}`)?.scrollIntoView({ block: "nearest" });
-        }
+        registerState.reveal = null;
+        if (next !== null) revealRow(next);
       }
     }
   }
@@ -159,7 +243,7 @@
 
 {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
 
-<div class="register" style="--cols: 6.5rem 4rem 1.6fr 6rem 6rem 1.6fr 6rem 1.2fr 2rem 9rem">
+<div class="register" style="--cols: 6.5rem 4rem 1.6fr 6rem 6rem 1.6fr 6rem 1.2fr 2rem 9rem; --gap-r: calc({scrollbar}px + 0.75rem)">
   <div class="head" role="row">
     {#each cols as [label, key], i (i)}
       {#if key}
@@ -171,11 +255,11 @@
   </div>
 
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-  <div class="rows" role="grid" aria-label="Register" tabindex="0" onkeydown={onKeydown}>
+  <div class="rows" bind:this={rowsEl} role="grid" onwheel={() => (registerState.reveal = null)} onpointerdown={() => (registerState.reveal = null)} aria-label="Register" tabindex="0" onkeydown={onKeydown} oncontextmenu={onRowsContextMenu}>
     {#each rows as r, i (r.txn_id)}
       {#if todayLineBefore(i)}<div class="today" aria-label="Today"><span>Today</span></div>{/if}
       {#if registerState.editing === r.txn_id}
-        <EntryEditor txn={r.txn_id} {account} ondone={() => (registerState.editing = null)} />
+        <EntryEditor txn={r.txn_id} {account} ondone={(saved) => afterEdit(r.txn_id, saved)} />
       {:else}
         {@const pd = splitPaymentDeposit(r.amount)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -192,7 +276,9 @@
           ondblclick={() => (registerState.editing = r.txn_id)}
           oncontextmenu={(e) => {
             e.preventDefault();
-            openMenuAt(r, e.clientX, e.clientY);
+            e.stopPropagation();
+            if (e.clientX === 0 && e.clientY === 0) openMenuForSelected();
+            else openMenuAt(r, e.clientX, e.clientY);
           }}
         >
           <span>{displayDate(r.date)}</span>
@@ -223,9 +309,9 @@
     {/if}
     <span class="spacer"></span>
     <span>{registerState.total} entries</span>
-    <button type="button" disabled={registerState.pageIndex === 0} onclick={() => registerState.goToPage(registerState.pageIndex - 1)}>‹ Newer</button>
+    <button type="button" disabled={registerState.pageIndex === 0} onclick={() => registerState.goToPage(registerState.pageIndex - 1)}>‹ Previous</button>
     <span>Page {registerState.pageIndex + 1} of {registerState.pageCount}</span>
-    <button type="button" disabled={registerState.pageIndex + 1 >= registerState.pageCount} onclick={() => registerState.goToPage(registerState.pageIndex + 1)}>Older ›</button>
+    <button type="button" disabled={registerState.pageIndex + 1 >= registerState.pageCount} onclick={() => registerState.goToPage(registerState.pageIndex + 1)}>Next ›</button>
   </footer>
 </div>
 
@@ -238,7 +324,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    flex: 1;
+    flex: 1 1 auto;
     font-size: 0.92em;
   }
   .head,
@@ -247,6 +333,7 @@
     grid-template-columns: var(--cols);
     gap: 2px;
     align-items: center;
+    padding-right: var(--gap-r);
   }
   .head {
     font-weight: 600;
@@ -265,16 +352,19 @@
     text-align: right;
   }
   .rows {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 5rem;
     overflow-y: auto;
-    max-height: 60vh;
+    position: relative;
     outline: none;
+    /* Inside the scrolling area the scrollbar is already outside the rows. */
+    --gap-r: 0.75rem;
   }
   .rows:focus-visible {
     box-shadow: inset 0 0 0 2px rgba(80, 130, 220, 0.6);
   }
   .row {
-    padding: 0.12rem 0;
+    padding-block: 0.12rem;
     cursor: default;
   }
   .row:nth-child(even) {
@@ -326,7 +416,7 @@
     flex-wrap: wrap;
     gap: 0.25rem 1rem;
     align-items: center;
-    padding: 0.4rem 0;
+    padding: 0.4rem var(--gap-r) 0.4rem 0;
     border-top: 1px solid rgba(128, 128, 128, 0.5);
   }
   .spacer {

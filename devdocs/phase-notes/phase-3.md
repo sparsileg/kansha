@@ -7,9 +7,27 @@ Spec: 0.3.4. Split into 3a (core queries, sample data, IPC) and 3b (Svelte UI), 
 | Sub-phase | State |
 |---|---|
 | 3a Core queries, sample data, IPC | Done. `just check` green. |
-| 3b Svelte UI | Built. `just check` green (73 frontend tests). **Not run in the real app**: Stan must run `just dev` and check the exit criteria below. |
+| 3b Svelte UI | Built. `just check` green (114 frontend tests). Hands-on tests 1-8 done by Stan; open issues listed under "Phase 3 close-out summary". |
 
 3a is committed. All of 3b is uncommitted in the working tree; Stan commits in GitKraken.
+
+## Phase 3 close-out summary
+
+**Files created (3b, beyond 3a):** `src/lib/api/`, `src/lib/format/`, `src/lib/state/*.svelte.ts`, `src/lib/register/{draft,keys,match}.ts` (+ tests), components `AccountModal`, `AccountSelector`, `AccountBalance`, `CategoryManager`, `ConfirmDialog`, `ContextMenu`, `EntryEditor`, `FilterBar`, `HistoryModal`, `IntegrityModal`, `Modal`, `PayeeManager`, `RegisterGrid`, `TagManager`, `TargetCombo`; views `Account`, `Dashboard`, `EmptyBook`, `Manage`; `App.smoke.test.ts`. `TargetSelect.svelte` was replaced by `TargetCombo.svelte` (type-ahead).
+
+**Decisions:** D-10 separate Payment/Deposit columns; Today line full-width; payee/category/tag screens built in 3b; type-ahead Category with accounts; Enter moves to next row; amount fields numeric-only; Tithable and Giving removed from the category form and list (columns and API stay, values preserved on edit; reports will cover them); Tax-related stays. Details in the sections below.
+
+**⚠ API change:** 3b added the commands listed under "3b — what was built". `just bindings` was run. **No schema change** in Phase 3b.
+
+**Known gaps and open issues:**
+- Shift+F10 and the Menu key do not open the row context menu in the running app. A native `contextmenu` fallback did not fix it. Cause unknown.
+- Right-click menu placement is still wrong near the bottom of the window despite viewport clamping in `ContextMenu.svelte`.
+- No UI toggle for `showClosedAccounts`, so closed accounts cannot be seen or reopened. Phase 4.
+- Paging, not continuous scroll. After Phase 4.
+- Account panel is a sidebar/dropdown mode switch. Redesign in Phase 4.
+- Settings not persisted (SET-070); other gaps under "Known gaps from 3b".
+
+**Hands-on tests:** all 8 confirmed by Stan except the open issues above.
 
 ## 3a — done
 
@@ -90,11 +108,11 @@ No schema change. **⚠ API change:** 28 new IPC commands; `src/lib/types/bindin
 - Balances show as stored: negative means owed on credit and liability accounts, shown in red. No sign flip. Revisit if Stan wants Quicken-style positive "owed" display (`negateMoney` exists).
 - Reordering accounts (ACCT-240) waits for the account modal (`sort_order` field), item 5. There is no drag-and-drop yet.
 - No toggle in the UI for `showClosedAccounts` yet.
-- Not run in the real app: only `just check` (svelte-check and Vitest). No component tests.
+- Written before the first real run; see "Hands-on testing" for what has since been confirmed.
 
 ### Decisions
 
-- Opening an account resets filters and shows newest-first (date, descending). A filter, sort, or clear-all resets to page 0.
+- Opening an account resets filters and sorts by date ascending, on the last page, scrolled to the bottom so the newest entries sit next to the entry row (Stan's choice, replacing the earlier newest-first plan). A new sort column also starts ascending. A filter, sort, or clear-all resets to page 0.
 - Sorting a new column starts ascending, except date, which starts descending.
 - A response that arrives after a newer request is dropped (stale-response guard by sequence number).
 - Current account lives in `registerState.accountId`. `viewState` still only holds the top-level view.
@@ -115,11 +133,11 @@ All 17 items are built. Items 1–4 are described above. Items 5–17:
 ### Items 5–16
 
 - **5 Account modal** (`AccountModal.svelte`): create and edit; type-specific fields (interest rate, credit limit, investment settings, other asset); type defaults come from Rust (`account_defaults`), so the UI does not duplicate group and tax rules. Account number masked through `account_number_masked` with Reveal (ACCT-150). Close (confirmation via `withConfirmation`), reopen, delete. Type is locked after creation. Reached from "New account" and "Edit account".
-- **6 Register grid** (`RegisterGrid.svelte`): Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Paging (100 rows, "Newer/Older"), not virtualized. Newest-first opening. Sort by clicking a header (Payment and Deposit both sort by amount). Split rows show `--Split--` from the query. Today line (REG-070) where `future` flips between adjacent rows, drawn only on date sort. Future rows dimmed. Void rows struck through. Footer: current, cleared, ending, available credit (REG-060), entry count, paging.
+- **6 Register grid** (`RegisterGrid.svelte`): Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Paging (100 rows, "Previous/Next"), not virtualized. Opens date-ascending on the last page, scrolled to the bottom. Sort by clicking a header (Payment and Deposit both sort by amount). Split rows show `--Split--` from the query. Today line (REG-070) where `future` flips between adjacent rows, drawn only on date sort. Future rows dimmed. Void rows struck through. Footer: current, cleared, ending, available credit (REG-060), entry count, paging.
 - **7 Filters** (`FilterBar.svelte`): date range, payee, category, tag, cleared, text (250 ms debounce), Clear all.
 - **8 Keyboard entry** (`EntryEditor.svelte`, `register/draft.ts`, `register/keys.ts`): the entry row is pinned below the grid. Tab order is Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Enter. Enter saves; Esc cancels. In Date: `+` or `=` next day, `-` previous day, `t` today. After a save the row resets, keeps the date, and refocuses Date. Grid keys: arrows, Home, End, PageUp, PageDown move; Enter edits; Delete deletes; Space toggles cleared; Insert or Ctrl+N focuses the entry row; Shift+F10 or the menu key opens the context menu.
 - **9 QuickFill**: payee suggestions from `payee_search` through a datalist. On change, an exact name match fills empty category, tag, memo, and amount from the payee's defaults. Never overwrites typed values. Edits do not QuickFill. `payee_name` is always sent; Rust finds or creates the payee.
-- **10 Splits and transfers**: choosing `--Split--` opens the split panel (two blank lines). Line amounts are typed as magnitudes and signed like the total (payment or deposit). The remainder comes from `split_remainder` on every change; save is blocked unless it is zero. Transfers use the same picker (`[Account]` entries; investment accounts excluded). "Go to other side": opens the other account, filters to that date, and selects the entry.
+- **10 Splits and transfers**: choosing `--Split--` opens the split panel (two blank lines). Line amounts are typed as magnitudes and signed like the total (payment or deposit). The remainder comes from `split_remainder` on every change; save is blocked unless it is zero. Transfers use the same type-ahead (`[Account]` entries; investment accounts excluded). "Go to other side": opens the other account, filters to that date, and selects the entry.
 - **11 Edit, void, delete, clear**: double-click or Enter edits in place. Context menu (`ContextMenu.svelte`): Edit, Mark cleared/unmarked, Go to other side, History, Void, Delete. Void and delete ask first, then `withConfirmation` handles a `confirmation_required` from Rust (reconciled entries).
 - **12 Audit view** (`HistoryModal.svelte`): per-field changes from `audit_history`, newest first.
 - **13 Integrity check** (`IntegrityModal.svelte`): runs on open, "Run again", issue table.
@@ -141,9 +159,56 @@ All 17 items are built. Items 1–4 are described above. Items 5–17:
 
 Selecting an account did nothing: `App.svelte` rendered the view with `{@const View = views[viewState.current]}`, which did not swap the component when the view changed (state changed, DOM did not). Now `const View = $derived(views[viewState.current])`. `App.smoke.test.ts` renders the whole app with IPC mocked and covers select-account and view switching, so this class of bug is caught. Lesson: jsdom component tests missed it because no test mounted `App`.
 
+### Fixes from hands-on use
+
+- **Edit did not close or refresh.** `entry_update` succeeds with `null` data, and `withConfirmation` returned `null` for "user declined", so the editor treated success as a decline and stopped. `withConfirmation` now returns the `DECLINED` symbol. Tests cover save and the confirm-and-repeat path for an existing transaction.
+- **Enter moves to the next row.** Enter in an in-place edit saves and selects the next row (the new-entry row after the last one); the grid keeps focus, so Enter again edits that row. If the edit is untouched, nothing is written (no audit entry) and the selection still moves on. Esc cancels and keeps the row selected.
+- **Amount fields are numeric-only.** Payment, Deposit, and split amounts accept digits, commas, and one decimal point (max two decimals); other characters are blocked as typed and stripped on paste (`sanitizeAmountInput`). No sign: the column carries the direction.
+- **Split panel.** Column headings (Category or transfer account, Amount, Memo) and a one-line explanation. Choosing `--Split--` puts the whole amount on line 1 and moves focus there. Each empty amount is offered what is still unassigned when its line gets focus (from `split_remainder`; nothing offered when the split is complete or over-allocated). Tab out of the last line with an amount left opens a new line. The remove button is out of the Tab order.
+- **Layout fits the window.** The app is exactly one window tall and the register's row area takes whatever the header, entry row, and footer leave (it shrinks; it no longer has a fixed 60 vh cap). A growing entry row or split panel therefore pushes nothing off the bottom.
+- **Split panel placement.** The panel is above the entry line when the register sorts ascending and below it when descending. The new-entry row stays pinned at the bottom in both.
+- **Saved row never clipped.** After a save the grid pins that row fully in view and re-applies it whenever the rows area changes size, until the user scrolls or navigates. The entry row keeps a one-line message slot so "Saved..." or an error never changes its height (that resize was what left the last row partly hidden).
+- **Payee completion.** Tab or Enter on a payee with exactly one visible prefix match takes it, runs QuickFill (new entries only), and moves on; Enter moves to Payment without saving.
+- **Scrollbar over Balance.** The grid measures its scrollbar width and gives the header, entry row, and footer the same right edge, plus a 0.75 rem pad, so columns line up and Balance is clear of the scrollbar.
+
+### Category type-ahead
+
+The entry row's Category (and each split line's) is a type-ahead box, `TargetCombo.svelte`, not a dropdown. Typing filters categories and transfer accounts together; brackets are never typed (`register/match.ts`: every word must appear, case-insensitive; label-start matches rank first, then word-start, then anywhere). Up/Down move; Tab or Enter with the list open takes the highlighted match; Esc closes the list (a second Esc cancels the entry); with the list closed, Enter saves. The list opens only when the user types or presses Up/Down. The filter bar and manager screens still use plain dropdowns.
+
+### Focus highlight
+
+Focused inputs, selects, and textareas get a 3 px blue outline, a glow, and a yellow background (global rule in `App.svelte`), so the active field is obvious during Tab entry.
+
+### Hands-on testing (Stan, `just dev`)
+
+Legend: [x] confirmed by Stan in the running app; [ ] still to do.
+
+- [x] Select an account; register and entry row appear (after the view-switch fix).
+- [x] Enter a transaction; Enter saves and returns to the entry row; focus highlight; type-ahead Category with accounts.
+- [x] Edit in place; Enter saves and moves to the next row (also when unchanged).
+- [x] NFR-040: register meets the target with the sample data.
+- [x] Split entry: panel placement (above when ascending), amounts offered, remainder.
+- [x] Scrolling and layout: entry row and split panel fit the window; the saved row is never clipped.
+- [x] 1. Transfer: enter by typing an account name; right-click, "Go to other side of transfer" (opens the other account, entry selected, one-day date filter on).
+- [x] 2. Right-click menu (passed with the open issues below): Mark cleared, Void, Delete, History. Keys: Space, Delete, Shift+F10 on a selected row.
+  - Open issue: Shift+F10 and the Menu key do not open the row menu in the running app. A native `contextmenu` fallback was added in `RegisterGrid.svelte`; it did not help. Cause not found. Look at again later.
+  - Open issue: right-click menu is still not placed correctly (viewport clamping added in `ContextMenu.svelte`; Stan reports placement is still wrong). Look at again later.
+- [x] 3. Filters: text, date range, category, tag, cleared; Clear all; empty result message "No entries match the filters."
+- [x] 4. Account modal: create each account type; edit; Reveal account number; close an account with a balance (confirmation); reopen; delete an empty account; deleting one with transactions is refused.
+  - Open issue (deferred to Phase 4): no UI toggles `settingsState.showClosedAccounts`, so a closed account cannot be seen or reopened. Add a "Show closed accounts" checkbox in the sidebar.
+- [x] 5. Integrity check: no problems on the sample data.
+- [x] 6. Payees, Categories, Tags screens: rename; merge (register updates); delete unused; delete used shows an error; built-in category locked.
+  - Decision: Tithable and Giving checkboxes removed from the category form and list (reports will cover them). The `tithable` and `giving` columns and fields stay in the schema and API for now; editing a category preserves their values. Tax-related stays.
+- [x] 7. Payee Tab/Enter completion on a unique match; Balance column clear of the scrollbar.
+- [x] 8. Sidebar/dropdown toggle; dark and light themes; narrower window; Esc closes each modal.
+
+Bugs found so far in hands-on use, all fixed and covered by tests (see "Bug found on first real run" and "Fixes from hands-on use"): view did not switch; edit save treated as declined; empty-row Enter error; Enter in a select; scrollbar over Balance; layout past the window; saved row clipped.
+
+3b is committed by Stan in GitKraken. Phase 3 is done. The spec header stays 0.3.4 (no requirement or convention changed).
+
 ### Known gaps from 3b
 
-- **Not exercised in the real app.** All checks are Vitest (jsdom, IPC mocked), `svelte-check`, and `vite build`. Layout, focus behavior in a real webview, and NFR-040 in the UI are unconfirmed.
+- **Only partly exercised in the real app.** See "Hands-on testing". Automated checks are Vitest (jsdom, IPC mocked), `svelte-check`, and `vite build`; jsdom has no layout, so layout and focus fixes were confirmed only by hand.
 - Paging, not virtualization. Sorting or filtering resets to page 0.
 - Account reordering (ACCT-240) is by the Sort order number in the account modal; no drag and drop.
 - No UI toggle for `showClosedAccounts`.
@@ -160,12 +225,36 @@ This file. The spec is unchanged: no requirement or convention changed. The spec
 
 ### Exit criteria (spec §24, Phase 3)
 
-- Stan enters a month of transactions by keyboard. (**To confirm by hand**; the keyboard paths are unit-tested.)
+- Stan enters a month of transactions by keyboard. Entry, in-place edit, and Enter-to-next-row confirmed by Stan; a longer real-data pass is optional.
 - The generator loads a multi-year dataset (done in 3a).
-- The register meets NFR-040 in the running app (measured in 3a at the query level; **confirm in the UI**: `just dev`, Load sample data, open the largest account).
+- The register meets NFR-040 in the running app. **Confirmed by Stan.**
 
 ### Decided with Stan
 
 - **D-10:** separate Payment and Deposit columns. The UI splits the signed amount for display (`src/lib/format/`). The entry row has both fields; typing in one clears the other. Recorded in spec 0.3.3.
 - **Today line** (REG-070): a horizontal line across the full register row between the last entry dated today or earlier and the first future-dated one. Future rows are dimmed. Stan had no preference; full-width chosen.
 - **Category, tag, and payee screens:** the spec's phase table (§24) gives them no phase. Stan wants all three in 3b. Payee editing (memorized defaults, rename, hide, merge), category management (create, rename, re-parent, merge, hide), and tag management (create, rename, merge, hide) are required 3b items 15 and 16.
+
+### Deferred to Phase 4: account panel redesign
+
+Replaces the `sidebar`/`dropdown` modes (`settingsState.accountNav`) and the top-bar mode button.
+
+- One collapsible account panel with a toggle header labelled "Accounts" (never the current account's name).
+- Open: header plus the full grouped account list at the side; register narrows.
+- Closed: the panel disappears and the register expands to fill the space. Only the toggle and "Accounts" label remain, above the register at the panel's side.
+- Clicking the header while closed shows the account list as a drop-down menu; picking an account selects it and closes the menu.
+- Open/closed state persists between launches.
+- Panel side (left or right) is a setting, default left; a settings screen can come later.
+- Add "Show closed accounts" checkbox in the same panel (see test 4 issue).
+
+### Deferred to after Phase 4: continuous-scroll register
+
+Replaces pagination (`pageIndex`, `goToPage`, footer pager). Decided with Stan; do after the Phase 4 account-panel work.
+
+- **Why:** paging loses running-balance context at page edges and slows scanning. Not a performance need: one rendered page already meets NFR-040 at 10,000 transactions.
+- **Design:** one scroll area sized to `total` rows at a fixed row height. A sliding window of loaded rows; fetch the next or previous chunk near an edge, drop chunks far from the viewport.
+- **Backend:** `register_query` already takes `limit`/`offset`, and balances are computed over the whole account before filter, sort, and paging, so they stay correct. ⚠ API change: add a command returning a row's offset for a `txn_id` (filtered and sorted), for jumps. Then `just bindings`. No schema change.
+- **Anchoring:** open on the newest row (ascending) or the top (descending). Save, edit, and "Go to other side of transfer" scroll to a `txn_id`.
+- **Frontend:** rework `RegisterGrid.svelte` and `register.svelte.ts`. Selection, PageUp/PageDown, Home/End work across unloaded rows (Home/End jump the scroll).
+- **Check:** uniform row height (single-line columns); Today line; split panel and entry-row growth; saved-row pinning ("never clipped") against virtualization; scrollbar-width alignment.
+- **Stopgap if postponed further:** larger page size plus a "Go to date" jump.

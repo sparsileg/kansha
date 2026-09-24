@@ -75,8 +75,20 @@
   :global(body) {
     margin: 0;
   }
+  /* The field being typed in must be unmistakable (keyboard entry). */
+  :global(input:focus),
+  :global(select:focus),
+  :global(textarea:focus) {
+    outline: 3px solid #1f6feb;
+    outline-offset: 0;
+    background: #fff6b0;
+    color: #111;
+    box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.35);
+    position: relative;
+    z-index: 1;
+  }
   .app {
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     --bg: #fff;
@@ -105,6 +117,11 @@
   main {
     padding: 1rem;
     flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
   }
   .err {
     color: #c0392b;

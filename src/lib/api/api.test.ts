@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, call, withConfirmation } from "./index";
+import { ApiError, DECLINED, call, withConfirmation } from "./index";
 
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const err = (kind: "invalid" | "confirmation_required", message: string) =>
@@ -29,10 +29,14 @@ describe("withConfirmation", () => {
     expect(run.mock.calls).toEqual([[false], [true]]);
   });
 
-  it("returns null and does not repeat when declined", async () => {
+  it("returns DECLINED and does not repeat when declined", async () => {
     const run = vi.fn(() => err("confirmation_required", "sure?"));
-    expect(await withConfirmation(run, async () => false)).toBeNull();
+    expect(await withConfirmation(run, async () => false)).toBe(DECLINED);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("a successful command with no data is not a decline", async () => {
+    expect(await withConfirmation(() => ok(null), async () => false)).toBeNull();
   });
 
   it("rethrows other errors without asking", async () => {

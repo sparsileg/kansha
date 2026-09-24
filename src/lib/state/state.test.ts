@@ -77,13 +77,13 @@ describe("listsState", () => {
 });
 
 describe("registerState", () => {
-  it("opens newest-first with paging", async () => {
+  it("opens date-ascending with paging", async () => {
     await registerState.open(7);
     expect(c.registerQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         account: 7,
         sort: "date",
-        descending: true,
+        descending: false,
         limit: 100,
         offset: 0,
       }),
@@ -109,15 +109,26 @@ describe("registerState", () => {
     expect(registerState.filtered).toBe(false);
   });
 
-  it("sortBy toggles direction and starts non-date columns ascending", async () => {
+  it("sortBy toggles direction and starts every new column ascending", async () => {
     await registerState.open(7);
-    await registerState.sortBy("date");
     expect(registerState.descending).toBe(false);
+    await registerState.sortBy("date");
+    expect(registerState.descending).toBe(true);
     await registerState.sortBy("payee");
     expect(registerState.sort).toBe("payee");
     expect(registerState.descending).toBe(false);
     await registerState.sortBy("date");
-    expect(registerState.descending).toBe(true);
+    expect(registerState.descending).toBe(false);
+  });
+
+  it("opens on the last page so the newest rows are at the bottom", async () => {
+    c.registerQuery.mockImplementation(() => ok(page(100, 250)));
+    await registerState.open(7);
+    expect(registerState.pageIndex).toBe(2);
+    expect(c.registerQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 200 }),
+    );
+    expect(registerState.scrollToEnd).toBe(true);
   });
 
   it("drops a stale response", async () => {

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { ApiError, call, commands, withConfirmation } from "../api";
-  import { formatMoney, isZeroMoney } from "../format/money";
+  import { DECLINED, call, commands, withConfirmation } from "../api";
+  import { displayDate } from "../format/date";
+  import { blockNonAmountChar, formatMoney, isZeroMoney, sanitizeAmountInput } from "../format/money";
   import {
     SPLIT,
     applyQuickFill,
@@ -9,6 +10,7 @@
     dateFieldKey,
     draftFromEntry,
     emptySplit,
+    isBlank,
     newDraft,
     setAmountField,
     splitParts,
@@ -18,22 +20,26 @@
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import type { AccountId, Payee } from "../types/bindings";
-  import TargetSelect from "./TargetSelect.svelte";
+  import TargetCombo from "./TargetCombo.svelte";
 
   /** `null` = the new-entry row; otherwise edit this transaction in place. */
   let {
     txn = null,
     account,
     ondone,
-  }: { txn?: number | null; account: AccountId; ondone?: () => void } = $props();
+  }: { txn?: number | null; account: AccountId; ondone?: (saved: boolean) => void } = $props();
 
   let d = $state<Draft>(newDraft(listsState.today));
   let error = $state<string | null>(null);
   let busy = $state(false);
+  let status = $state<string | null>(null);
   let suggestions = $state<Payee[]>([]);
   let remainder = $state<string | null>(null);
   let dateInput: HTMLInputElement;
   let seq = 0;
+  let formEl: HTMLFormElement | undefined;
+  /** The draft as loaded, to tell an untouched edit from a changed one. */
+  let original = "";
 
   const listId = `payees-${Math.random().toString(36).slice(2)}`;
   const isSplit = $derived(d.category === SPLIT);
@@ -44,12 +50,14 @@
         const entry = await call(commands.entryGet(txn, account));
         const name = entry.payee ? (listsState.payee(entry.payee)?.name ?? "") : "";
         d = draftFromEntry(entry, name);
+        original = JSON.stringify($state.snapshot(d));
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
       }
     }
     dateInput?.focus();
     dateInput?.select();
+    if (txn !== null) formEl?.scrollIntoView?.({ block: "nearest" });
   });
 
   // Live split remainder from Rust (TXN-020); latest answer wins.
@@ -103,19 +111,120 @@
     if (p) d = applyQuickFill($state.snapshot(d) as Draft, p);
   }
 
+  /** Hidden payees are not offered; prefix match, as `payee_search` does. */
+  function uniquePayeeMatch(): Payee | null {
+    const t = d.payee.trim().toLowerCase();
+    if (!t) return null;
+    const hits = listsState.payees.filter(
+      (p) => !p.hidden && p.name.toLowerCase().startsWith(t),
+    );
+    return hits.length === 1 ? hits[0] : null;
+  }
+
+  /**
+   * Tab or Enter on a payee with exactly one memorized match takes it
+   * (QuickFill included) and moves on to the next field (PAY-020).
+   */
+  function onPayeeKey(e: KeyboardEvent) {
+    if ((e.key !== "Tab" && e.key !== "Enter") || e.shiftKey) return;
+    const p = uniquePayeeMatch();
+    if (!p) return;
+    d.payee = p.name;
+    if (txn === null) d = applyQuickFill($state.snapshot(d) as Draft, p);
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      (e.currentTarget as HTMLElement)
+        .closest("form")
+        ?.querySelector<HTMLElement>(".c-pay")
+        ?.focus();
+    }
+  }
+
   function addSplit() {
     d.splits = [...d.splits, emptySplit()];
   }
 
-  function onCategoryChange() {
+  /** Amount fields take digits, commas, and one decimal point only. */
+  function amountField(field: "payment" | "deposit") {
+    return (e: Event & { currentTarget: HTMLInputElement }) => {
+      const clean = sanitizeAmountInput(e.currentTarget.value);
+      if (clean !== e.currentTarget.value) e.currentTarget.value = clean;
+      d = setAmountField(d, field, clean);
+    };
+  }
+
+  function splitAmountInput(i: number) {
+    return (e: Event & { currentTarget: HTMLInputElement }) => {
+      const clean = sanitizeAmountInput(e.currentTarget.value);
+      if (clean !== e.currentTarget.value) e.currentTarget.value = clean;
+      d.splits[i].amount = clean;
+    };
+  }
+
+  /**
+   * An empty split amount is offered what is still unassigned, as the
+   * magnitude (TXN-020): the whole total on the first line, then what is
+   * left after each completed line. Rust computes it; nothing is added up
+   * here. Nothing is offered once the split is complete or over-allocated.
+   */
+  async function prefill(i: number) {
+    const s = d.splits[i];
+    if (!s || s.amount.trim() !== "") return;
+    const parts = splitParts($state.snapshot(d) as Draft);
+    if (parts === null) return;
+    try {
+      const r = await call(commands.splitRemainder(parts.total, parts.parts));
+      if (isZeroMoney(r) || r.startsWith("-") !== parts.total.startsWith("-")) return;
+      if (d.splits[i] && d.splits[i].amount.trim() === "") {
+        d.splits[i].amount = r.replace(/^-/, "");
+      }
+    } catch {
+      /* the remainder line shows the problem */
+    }
+  }
+
+  /** Unassigned amount left, in the total's direction. */
+  const unassigned = $derived(
+    remainder !== null &&
+      !isZeroMoney(remainder) &&
+      remainder.startsWith("-") === (splitParts($state.snapshot(d) as Draft)?.total.startsWith("-") ?? false),
+  );
+
+  function focusSplit(i: number) {
+    formEl
+      ?.querySelector<HTMLElement>(`[aria-label="Split ${i + 1} category"]`)
+      ?.focus();
+  }
+
+  /** Tab out of the last line while amount is left over: open a new line. */
+  async function onSplitMemoKey(e: KeyboardEvent, i: number) {
+    if (e.key !== "Tab" || e.shiftKey || i !== d.splits.length - 1 || !unassigned) return;
+    e.preventDefault();
+    addSplit();
+    await tick();
+    focusSplit(i + 1);
+  }
+
+  async function onCategoryChange() {
     if (d.category === SPLIT && d.splits.length === 0) {
       d.splits = [emptySplit(), emptySplit()];
+      await tick();
+      await prefill(0);
+      focusSplit(0);
     }
   }
 
   async function save(e?: Event) {
     e?.preventDefault();
     error = null;
+    if (txn === null && isBlank(d)) return; // Enter on an empty new row
+    // Enter on an untouched edit writes nothing; it just moves on.
+    if (txn !== null && original !== "" && JSON.stringify($state.snapshot(d)) === original) {
+      ondone?.(true);
+      return;
+    }
+    status = null;
     const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today);
     if (!built.ok) {
       error = built.error;
@@ -130,29 +239,37 @@
     busy = true;
     try {
       const name = built.payeeName;
+      let savedId: number = txn ?? -1;
       if (txn === null) {
-        await call(commands.entryCreate(built.entry, name));
+        savedId = await call(commands.entryCreate(built.entry, name));
       } else {
         const id = txn;
         const done = await withConfirmation(
           (c) => commands.entryUpdate(id, built.entry, name, c),
           confirmState.ask,
         );
-        if (done === null) return;
+        if (done === DECLINED) return;
       }
       if (name) await listsState.loadPayees();
+      registerState.selected = savedId;
+      registerState.reveal = savedId;
       await registerState.refresh();
       if (txn === null) {
         // Ready for the next one; keep the date for fast entry.
+        status = `Saved ${displayDate(built.entry.date)} ${name} ${formatMoney(built.entry.amount)}`;
         d = newDraft(listsState.today, built.entry.date);
         remainder = null;
         await tick();
+        // Keep the saved row fully in view, even as this row's height
+        // changes (the grid re-applies it on resize).
+        registerState.reveal = savedId;
         dateInput?.focus();
         dateInput?.select();
       }
-      ondone?.();
+      ondone?.(true);
     } catch (err) {
-      error = err instanceof ApiError || err instanceof Error ? err.message : String(err);
+      error =
+        (err instanceof Error ? err.message : String(err)) || "Save failed.";
     } finally {
       busy = false;
     }
@@ -164,10 +281,16 @@
       d = newDraft(listsState.today);
       remainder = null;
     }
-    ondone?.();
+    ondone?.(false);
   }
 
   function onkeydown(e: KeyboardEvent) {
+    // A text input submits the form on Enter by itself; a select does not.
+    if (e.key === "Enter" && e.target instanceof HTMLSelectElement) {
+      e.preventDefault();
+      void save();
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -183,16 +306,17 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<form class="entry" class:editing={txn !== null} onsubmit={save} {onkeydown}>
+<form class="entry" class:editing={txn !== null} onsubmit={save} {onkeydown} bind:this={formEl}>
+  {#if isSplit && !registerState.descending}{@render splitPanel()}{/if}
   <div class="cells">
     <input class="c-date" aria-label="Date" bind:this={dateInput} bind:value={d.date} onkeydown={onDateKey} onblur={() => (d.date = d.date.trim())} />
     <input class="c-num" aria-label="Num" bind:value={d.check_num} />
-    <input class="c-payee" aria-label="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} />
+    <input class="c-payee" aria-label="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" inputmode="decimal" value={d.payment} oninput={(e) => (d = setAmountField(d, "payment", e.currentTarget.value))} />
-    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" value={d.deposit} oninput={(e) => (d = setAmountField(d, "deposit", e.currentTarget.value))} />
+    <input class="c-pay num" aria-label="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
+    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
     <div class="c-cat">
-      <TargetSelect bind:value={d.category} excludeAccount={account} allowSplit onchange={onCategoryChange} />
+      <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit onchange={onCategoryChange} />
     </div>
     <select class="c-tag" aria-label="Tag" bind:value={d.tag}>
       <option value="">—</option>
@@ -208,14 +332,20 @@
     </span>
   </div>
 
-  {#if isSplit}
+  {#snippet splitPanel()}
     <div class="split" role="group" aria-label="Split lines">
+      <div class="split-title">
+        Split of {d.payment.trim() ? `payment ${d.payment}` : d.deposit.trim() ? `deposit ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Amounts are positive; each new line offers what is left.
+      </div>
+      <div class="split-line split-head" aria-hidden="true">
+        <span>Category or transfer account</span><span class="num">Amount</span><span>Memo</span><span></span>
+      </div>
       {#each d.splits as s, i (i)}
-        <div class="split-line">
-          <TargetSelect bind:value={s.target} excludeAccount={account} label={`Split ${i + 1} category`} />
-          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" bind:value={s.amount} />
-          <input aria-label={`Split ${i + 1} memo`} bind:value={s.memo} />
-          <button type="button" aria-label={`Remove split ${i + 1}`} onclick={() => (d.splits = d.splits.filter((_, j) => j !== i))}>×</button>
+        <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
+          <TargetCombo bind:value={s.target} excludeAccount={account} label={`Split ${i + 1} category`} />
+          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
+          <input aria-label={`Split ${i + 1} memo`} bind:value={s.memo} onkeydown={(e) => onSplitMemoKey(e, i)} />
+          <button type="button" tabindex="-1" aria-label={`Remove split ${i + 1}`} onclick={() => (d.splits = d.splits.filter((_, j) => j !== i))}>×</button>
         </div>
       {/each}
       <div class="split-foot">
@@ -225,8 +355,15 @@
         </span>
       </div>
     </div>
+  {/snippet}
+
+  {#if isSplit && registerState.descending}{@render splitPanel()}{/if}
+  {#if txn === null}
+    <!-- Always one line tall, so a message appearing never resizes the row. -->
+    <div class="msg" class:err={error} class:ok={!error && status} role={error ? "alert" : "status"}>{error ?? status ?? ""}</div>
+  {:else if error}
+    <div class="err" role="alert">{error}</div>
   {/if}
-  {#if error}<div class="err" role="alert">{error}</div>{/if}
 </form>
 
 <style>
@@ -242,6 +379,7 @@
     grid-template-columns: var(--cols);
     gap: 2px;
     align-items: center;
+    padding-right: var(--gap-r, 0.5rem);
   }
   input,
   select {
@@ -268,6 +406,15 @@
     grid-template-columns: 2fr 8rem 2fr 2rem;
     gap: 2px;
   }
+  .split-title {
+    font-size: 0.85em;
+    opacity: 0.85;
+  }
+  .split-head {
+    font-size: 0.8em;
+    font-weight: 600;
+    opacity: 0.85;
+  }
   .split-foot {
     display: flex;
     gap: 1rem;
@@ -281,6 +428,14 @@
   }
   .err {
     color: #c0392b;
+    padding: 0.15rem 0.25rem;
+  }
+  .msg {
+    min-height: 1.4em;
+    padding: 0.15rem 0.25rem;
+  }
+  .ok {
+    color: #2e8b57;
     padding: 0.15rem 0.25rem;
   }
 </style>

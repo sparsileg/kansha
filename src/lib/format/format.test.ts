@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  sanitizeAmountInput,
   combinePaymentDeposit,
   formatMoney,
   parseMoney,
@@ -85,4 +86,16 @@ describe("dates", () => {
     expect(applyDateKey("-", "", today)).toBe("2026-09-23");
     expect(applyDateKey("x", "2026-03-05", today)).toBeNull();
   });
+});
+
+describe("sanitizeAmountInput", () => {
+  it.each([
+    ["12a.5x", "12.5"],
+    ["-5", "5"],
+    ["$1,234.567", "1,234.56"],
+    ["1.2.3", "1.23"],
+    ["abc", ""],
+    ["1,000", "1,000"],
+    [".5", ".5"],
+  ])("%j → %j", (i, o) => expect(sanitizeAmountInput(i)).toBe(o));
 });

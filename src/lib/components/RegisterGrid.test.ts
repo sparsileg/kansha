@@ -11,6 +11,9 @@ vi.mock("../api", async (orig) => {
       accountBalances: vi.fn(),
       payeeSearch: vi.fn(),
       txnSetCleared: vi.fn(),
+      entryGet: vi.fn(),
+      entryUpdate: vi.fn(),
+      payeeList: vi.fn(),
     },
   };
 });
@@ -52,6 +55,15 @@ beforeEach(async () => {
   c.accountBalances.mockImplementation(() => ok([]));
   c.payeeSearch.mockImplementation(() => ok([]));
   c.txnSetCleared.mockImplementation(() => ok(null));
+  c.payeeList.mockImplementation(() => ok([]));
+  c.entryUpdate.mockImplementation(() => ok(null));
+  c.entryGet.mockImplementation(() =>
+    ok({
+      account: 1, date: "2026-10-01", payee: null, check_num: "", memo: "", notes: "",
+      amount: "20.00", cleared: "unmarked" as const, tags: [],
+      lines: [{ target: { kind: "category" as const, id: 5 }, amount: "20.00", memo: "", cleared: "unmarked" as const, tags: [] }],
+    }),
+  );
   await registerState.open(1);
 });
 
@@ -97,5 +109,54 @@ describe("RegisterGrid", () => {
     await fireEvent.keyDown(grid, { key: "ArrowDown" });
     await fireEvent.keyDown(grid, { key: "Enter" });
     expect(registerState.editing).toBe(4);
+  });
+
+  it("Enter in an edited row saves and moves to the next row; the grid keeps focus", async () => {
+    render(RegisterGrid, { account: 1 });
+    const grid = screen.getByRole("grid");
+    await fireEvent.keyDown(grid, { key: "ArrowDown" }); // row 4
+    await fireEvent.keyDown(grid, { key: "ArrowDown" }); // row 3
+    await fireEvent.keyDown(grid, { key: "Enter" });
+    const form = (await screen.findAllByLabelText("Payment"))[0].closest("form")!;
+    await waitFor(() => expect((screen.getAllByLabelText("Deposit")[0] as HTMLInputElement).value).toBe("20.00"));
+    await fireEvent.input(screen.getAllByLabelText("Memo")[0], { target: { value: "edited" } });
+    await fireEvent.submit(form);
+    await waitFor(() => expect(c.entryUpdate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(registerState.editing).toBeNull());
+    expect(registerState.selected).toBe(2);
+    await waitFor(() => expect(document.activeElement).toBe(grid));
+  });
+
+  it("Esc cancels an edit and keeps the same row selected", async () => {
+    render(RegisterGrid, { account: 1 });
+    const grid = screen.getByRole("grid");
+    await fireEvent.keyDown(grid, { key: "ArrowDown" });
+    await fireEvent.keyDown(grid, { key: "Enter" });
+    const pay = (await screen.findAllByLabelText("Payment"))[0];
+    await fireEvent.keyDown(pay, { key: "Escape" });
+    await waitFor(() => expect(registerState.editing).toBeNull());
+    expect(registerState.selected).toBe(4);
+    expect(c.entryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("Enter on an untouched edit writes nothing and still moves to the next row", async () => {
+    render(RegisterGrid, { account: 1 });
+    const grid = screen.getByRole("grid");
+    await fireEvent.keyDown(grid, { key: "ArrowDown" }); // row 4
+    await fireEvent.keyDown(grid, { key: "Enter" });
+    const dep = (await screen.findAllByLabelText("Deposit"))[0] as HTMLInputElement;
+    await waitFor(() => expect(dep.value).toBe("20.00"));
+    await fireEvent.submit(dep.closest("form")!);
+    await waitFor(() => expect(registerState.editing).toBeNull());
+    expect(c.entryUpdate).not.toHaveBeenCalled();
+    expect(registerState.selected).toBe(3);
+  });
+
+  it("keeps the saved row pinned in view until the user scrolls", async () => {
+    render(RegisterGrid, { account: 1 });
+    registerState.reveal = 2;
+    await waitFor(() => expect(registerState.reveal).toBe(2));
+    await fireEvent.wheel(screen.getByRole("grid"));
+    expect(registerState.reveal).toBeNull();
   });
 });

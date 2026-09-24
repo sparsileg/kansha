@@ -13,6 +13,16 @@
   }: { x: number; y: number; items: MenuItem[]; onclose: () => void } = $props();
 
   let menu: HTMLDivElement;
+  let left = $state(0);
+  let top = $state(0);
+
+  // Keep the whole menu inside the window: shift left/up when it would overflow.
+  $effect(() => {
+    const { width, height } = menu.getBoundingClientRect();
+    const pad = 4;
+    left = Math.max(pad, Math.min(x, window.innerWidth - width - pad));
+    top = Math.max(pad, Math.min(y, window.innerHeight - height - pad));
+  });
 
   $effect(() => {
     menu.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
@@ -42,7 +52,7 @@
   class="menu"
   role="menu"
   tabindex="-1"
-  style="left: {x}px; top: {y}px"
+  style="left: {left}px; top: {top}px"
   bind:this={menu}
   {onkeydown}
 >

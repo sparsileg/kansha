@@ -115,6 +115,13 @@ export function draftFromEntry(entry: Entry, payeeName: string): Draft {
   return d;
 }
 
+/** Nothing typed except (possibly) the date: Enter on it is a no-op. */
+export function isBlank(d: Draft): boolean {
+  return [d.check_num, d.payee, d.payment, d.deposit, d.memo, d.tag].every(
+    (v) => v.trim() === "",
+  ) && d.category === "";
+}
+
 export function emptySplit(): SplitDraft {
   return { target: "", amount: "", memo: "", cleared: "unmarked", tags: [] };
 }

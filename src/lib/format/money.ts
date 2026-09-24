@@ -77,3 +77,20 @@ export function combinePaymentDeposit(
   if (p !== null) return negateMoney(p.replace(/^-/, ""));
   return d;
 }
+
+/**
+ * Keep only what an amount field may hold: digits, thousands commas, and
+ * one decimal point with at most two decimals. No sign: the field (Payment
+ * or Deposit) carries the direction.
+ */
+export function sanitizeAmountInput(text: string): string {
+  const out = text.replace(/[^0-9.,]/g, "");
+  const dot = out.indexOf(".");
+  if (dot < 0) return out;
+  return out.slice(0, dot + 1) + out.slice(dot + 1).replace(/[.,]/g, "").slice(0, 2);
+}
+
+/** Block a typed character that can never be part of an amount. */
+export function blockNonAmountChar(e: InputEvent): void {
+  if (e.data && /[^0-9.,]/.test(e.data)) e.preventDefault();
+}

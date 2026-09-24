@@ -1,6 +1,7 @@
 // The open account's register: which account, the filter/sort/paging
 // query, the current page, and the footer summary (REG-010 … REG-060).
-// Opens newest-first. A response that arrives after a newer request was
+// Opens date-ascending, on the last page, so the newest entries are at the
+// bottom next to the entry row (Quicken style). A response that arrives after a newer request was
 // issued is dropped, so fast typing in a filter cannot show stale rows.
 
 import { call, commands } from "../api";
@@ -39,7 +40,7 @@ class RegisterState {
   accountId = $state<AccountId | null>(null);
   filters = $state<RegisterFilters>(emptyFilters());
   sort = $state<RegisterSort>("date");
-  descending = $state(true);
+  descending = $state(false);
   /** Zero-based page index. */
   pageIndex = $state(0);
 
@@ -74,18 +75,31 @@ class RegisterState {
     };
   }
 
-  /** Switch account: filters reset, register opens newest-first. */
+  /** A row to keep fully in view (after a save or a move) until the user
+   * scrolls or navigates; the grid re-applies it when its size changes. */
+  reveal = $state<TxnId | null>(null);
+
+  /** Set on open; the grid scrolls to the bottom once, then clears it. */
+  scrollToEnd = $state(false);
+
+  /** Switch account: filters reset; opens date-ascending on the last page. */
   async open(account: AccountId): Promise<void> {
     this.accountId = account;
     this.filters = emptyFilters();
     this.sort = "date";
-    this.descending = true;
+    this.descending = false;
     this.pageIndex = 0;
     this.page = null;
     this.summary = null;
     this.selected = null;
     this.editing = null;
+    this.reveal = null;
     await this.reload();
+    if (this.accountId === account && this.pageCount > 1) {
+      this.pageIndex = this.pageCount - 1;
+      await this.reload();
+    }
+    this.scrollToEnd = true;
   }
 
   /** TXN-030: show the other side of a transfer, next to its entry. */
@@ -149,13 +163,13 @@ class RegisterState {
   }
 
   /** Click a column header: same column flips direction; a new one starts
-   * ascending, except date, which starts newest-first. */
+   * ascending. */
   async sortBy(column: RegisterSort): Promise<void> {
     if (column === this.sort) {
       this.descending = !this.descending;
     } else {
       this.sort = column;
-      this.descending = column === "date";
+      this.descending = false;
     }
     this.pageIndex = 0;
     await this.reload();

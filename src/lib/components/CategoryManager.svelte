@@ -99,7 +99,7 @@
           <tr class:sel={selected?.id === c.id} class:dim={c.hidden} onclick={() => pick(c)}>
             <td>{listsState.categoryPath(c.id)}{c.system ? " (built-in)" : ""}</td>
             <td>{c.kind}</td>
-            <td>{[c.tax_related && "tax", c.tithable && "tithable", c.giving && "giving", c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
+            <td>{[c.tax_related && "tax", c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
           </tr>
         {/each}
       </tbody>
@@ -128,8 +128,6 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" bind:checked={f.tax_related} disabled={locked} /> Tax-related</label>
-    <label class="check"><input type="checkbox" bind:checked={f.tithable} disabled={locked} /> Tithable</label>
-    <label class="check"><input type="checkbox" bind:checked={f.giving} disabled={locked} /> Giving</label>
     <label class="check"><input type="checkbox" bind:checked={f.hidden} disabled={locked} /> Hidden</label>
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <div class="row">
