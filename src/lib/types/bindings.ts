@@ -6,5 +6,503 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**  The running application version, as declared in `tauri.conf.json`. */
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
+	/**
+	 *  Today's date from the app clock (financial dates never come from the
+	 *  browser).
+	 */
+	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
+	/**  All accounts, open and closed, in display order. */
+	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
+	/**  Current and ending balance of every account (ACCT-230). */
+	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
+	accountCreate: (fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_create", { fields })),
+	/**  The account type cannot change after creation. */
+	accountUpdate: (id: AccountId, fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_update", { id, fields })),
+	/**
+	 *  Close as of `date` (ACCT-210). A non-zero balance fails with
+	 *  `confirmation_required` until `confirmed` is true.
+	 */
+	accountClose: (id: AccountId, date: string, confirmed: boolean) => typedError<Account, IpcError>(__TAURI_INVOKE("account_close", { id, date, confirmed })),
+	accountReopen: (id: AccountId) => typedError<Account, IpcError>(__TAURI_INVOKE("account_reopen", { id })),
+	/**  Only an account with no transactions can be deleted (ACCT-220). */
+	accountDelete: (id: AccountId) => typedError<null, IpcError>(__TAURI_INVOKE("account_delete", { id })),
+	/**  All categories, parents before children. */
+	categoryList: () => typedError<Category[], IpcError>(__TAURI_INVOKE("category_list")),
+	categoryCreate: (fields: CategoryFields) => typedError<Category, IpcError>(__TAURI_INVOKE("category_create", { fields })),
+	payeeList: () => typedError<Payee[], IpcError>(__TAURI_INVOKE("payee_list")),
+	/**
+	 *  Visible payees starting with `prefix`, ignoring case (PAY-020
+	 *  QuickFill). Each carries its memorized defaults.
+	 */
+	payeeSearch: (prefix: string, limit: number) => typedError<Payee[], IpcError>(__TAURI_INVOKE("payee_search", { prefix, limit })),
+	/**  Change a payee's name, memorized defaults, or visibility. */
+	payeeUpdate: (id: PayeeId, fields: PayeeFields) => typedError<Payee, IpcError>(__TAURI_INVOKE("payee_update", { id, fields })),
+	tagList: () => typedError<Tag[], IpcError>(__TAURI_INVOKE("tag_list")),
+	tagCreate: (fields: TagFields) => typedError<Tag, IpcError>(__TAURI_INVOKE("tag_create", { fields })),
+	/**
+	 *  Register rows for an account with filters, sort, and paging (REG-040).
+	 *  The running balance is always the true one in date order (REG-020).
+	 */
+	registerQuery: (query: RegisterQuery) => typedError<RegisterPage, IpcError>(__TAURI_INVOKE("register_query", { query })),
+	/**  Footer figures: current, cleared, ending, available credit (REG-060). */
+	registerSummary: (account: AccountId) => typedError<RegisterSummary, IpcError>(__TAURI_INVOKE("register_summary", { account })),
+	/**  A transaction as `account`'s register shows it, for editing. */
+	entryGet: (txn: TxnId, account: AccountId) => typedError<Entry, IpcError>(__TAURI_INVOKE("entry_get", { txn, account })),
+	/**
+	 *  Save a new transaction. `payee_name`, when given, is looked up (or
+	 *  created) in the same transaction and replaces `entry.payee`; an empty
+	 *  name clears the payee. A first-time payee learns its defaults
+	 *  (PAY-020). Returns the new transaction ID.
+	 */
+	entryCreate: (entry: Entry, payeeName: string | null) => typedError<TxnId, IpcError>(__TAURI_INVOKE("entry_create", { entry, payeeName })),
+	/**
+	 *  Replace a transaction (TXN-030: from either side of a transfer);
+	 *  `payee_name` works as in [`entry_create`]. A reconciled one fails with
+	 *  `confirmation_required` until `confirmed`.
+	 */
+	entryUpdate: (txn: TxnId, entry: Entry, payeeName: string | null, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("entry_update", { txn, entry, payeeName, confirmed })),
+	txnVoid: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_void", { txn, confirmed })),
+	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
+	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
+	txnSetCleared: (txn: TxnId, account: AccountId, cleared: Cleared, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_set_cleared", { txn, account, cleared, confirmed })),
+	/**
+	 *  `total` minus the sum of `parts`: the unassigned amount of a split
+	 *  (TXN-020). The UI does no money arithmetic, so it asks here.
+	 */
+	splitRemainder: (total: string, parts: string[]) => typedError<string, IpcError>(__TAURI_INVOKE("split_remainder", { total, parts })),
+	/**  What changed, when, and from where, for one record (AUD-020). */
+	auditHistory: (entity: AuditEntity, id: number) => typedError<AuditEntry[], IpcError>(__TAURI_INVOKE("audit_history", { entity, id })),
+	/**  Run the integrity check (INT-030). */
+	integrityCheck: () => typedError<IntegrityReport, IpcError>(__TAURI_INVOKE("integrity_check")),
+	/**
+	 *  Fill an empty book with about three years of synthetic data ending
+	 *  three weeks from today, so the register shows the today line. Refuses a
+	 *  book that already has accounts.
+	 */
+	sampleDataLoad: (seed: number) => typedError<SampleSummary, IpcError>(__TAURI_INVOKE("sample_data_load", { seed })),
 };
+
+/* Types */
+/**  A stored account. */
+export type Account = {
+	id: AccountId,
+	status: AccountStatus,
+	closed_date: string | null,
+	created_at: string,
+} & AccountFields;
+
+/**  One account's figures for the account list (UI-010). */
+export type AccountBalance = {
+	account: AccountId,
+	/**  Postings dated today or earlier. */
+	current: string,
+	/**  All postings, including future-dated ones. */
+	ending: string,
+};
+
+/**
+ *  Editable attributes of an account (ACCT-100 … ACCT-160). Used to
+ *  create and to update.
+ */
+export type AccountFields = {
+	name: string,
+	account_type: AccountType,
+	group: AccountGroup,
+	tax_treatment: TaxTreatment,
+	description: string,
+	institution: string,
+	account_number: string,
+	contact_phone: string,
+	home_url: string,
+	notes: string,
+	opening_date: string | null,
+	show_in_bar: boolean,
+	show_in_list: boolean,
+	sort_order: number,
+	/**  Checking, Savings, Money Market only. */
+	interest_rate: string | null,
+	/**  Credit Card only. */
+	credit_limit: string | null,
+	/**  Required for investment types; absent otherwise. */
+	investment: InvestmentSettings | null,
+	/**  Required for Other Asset; absent otherwise. */
+	other_asset: OtherAssetSettings | null,
+};
+
+/**  Account list groups (ACCT-240). */
+export type AccountGroup = "banking" | "credit" | "investments" | "retirement" | "assets" | "liabilities";
+
+/**  Row ID of an account. */
+export type AccountId = number;
+
+/**  Open or closed (ACCT-210). */
+export type AccountStatus = "open" | "closed";
+
+/**  Account types (ACCT-010, ACCT-020; D-100). */
+export type AccountType = "checking" | "savings" | "credit_card" | "cash" | "money_market" | "brokerage" | "traditional_ira" | "roth_ira" | "hsa" | 
+/**  401(k)/403(b). */
+"retirement_401k" | "other_asset" | "other_liability" | 
+/**  Loan or mortgage; balance tracking only in 1.0. */
+"loan";
+
+/**  Kind of an Other Asset account (ACCT-140). */
+export type AssetSubtype = "house" | "vehicle" | "other";
+
+/**  What happened. */
+export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
+
+/**  What kind of record an audit entry describes. */
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report";
+
+/**  An audit entry with its changes spelled out. */
+export type AuditEntry = {
+	id: number,
+	at: string,
+	action: AuditAction,
+	/**  `ui`, `import`, `scheduler`, or `system`. */
+	origin: string,
+	import_batch_id: number | null,
+	/**
+	 *  A create lists every field (`before` empty); a delete lists every
+	 *  field (`after` empty); anything else lists only differing fields.
+	 */
+	changes: FieldChange[],
+};
+
+/**  Where an investment account's cash lives (INV-300). */
+export type CashMode = "internal" | "linked";
+
+/**  A stored category. */
+export type Category = {
+	id: CategoryId,
+	/**
+	 *  Set for built-in categories, which can't be renamed, moved, or
+	 *  deleted.
+	 */
+	system: SystemCategory | null,
+	created_at: string,
+} & CategoryFields;
+
+/**  Editable attributes of a category. */
+export type CategoryFields = {
+	parent: CategoryId | null,
+	kind: CategoryKind,
+	name: string,
+	/**  CAT-040 flags. */
+	tax_related: boolean,
+	tithable: boolean,
+	giving: boolean,
+	/**  CAT-030: hide instead of delete. */
+	hidden: boolean,
+};
+
+/**  Row ID of a category. */
+export type CategoryId = number;
+
+/**  Category kind (CAT-010). `Equity` is system-only (opening balances). */
+export type CategoryKind = "income" | "expense" | "equity";
+
+/**  Which invariant failed. */
+export type Check = 
+/**  `PRAGMA integrity_check` reported a problem. */
+"sqlite_integrity" | 
+/**  `PRAGMA foreign_key_check` found a dangling reference. */
+"foreign_keys" | 
+/**  A transaction's postings do not sum to zero. */
+"unbalanced" | 
+/**  A transaction has no posting to an account, so no register shows it. */
+"no_account_posting" | 
+/**  One transaction posts to the same account twice (not a holding). */
+"duplicate_account_posting" | 
+/**  A voided transaction has a non-zero posting. */
+"void_with_amount" | 
+/**  A closed account has a posting dated after its closing date. */
+"posting_after_close" | 
+/**  A posting links to a reconciliation that is not finished. */
+"unfinished_reconciliation" | 
+/**  Following parents from a category leads back to it. */
+"category_cycle" | 
+/**  A subcategory's kind differs from its parent's. */
+"category_kind_mismatch";
+
+/**  Cleared status of an account posting (glossary; RCN-020). */
+export type Cleared = "unmarked" | "cleared" | 
+/**  Set only by reconciliation (Phase 5) or an import (MIG-090). */
+"reconciled";
+
+/**  What sits on the other side of a register row. */
+export type Counterpart = 
+/**  No other posting (a zero-amount entry). */
+{ kind: "none" } | { kind: "category"; id: CategoryId } | { kind: "transfer"; id: AccountId } | 
+/**  More than one other posting (REG-050 "--Split--"). */
+{ kind: "split" };
+
+/**  A transaction as one account's register shows it. */
+export type Entry = {
+	account: AccountId,
+	date: string,
+	payee: PayeeId | null,
+	check_num: string,
+	memo: string,
+	notes: string,
+	/**
+	 *  This account's posting: − payment or charge, + deposit (for a
+	 *  liability account, − is a charge and + a payment).
+	 */
+	amount: string,
+	cleared: Cleared,
+	/**  Transaction-level tags (TAG-010), stored on this account's posting. */
+	tags: TagId[],
+	/**  One line for a simple transaction; several for a split. */
+	lines: EntryLine[],
+};
+
+/**
+ *  One line on the other side of an entry: a category or a transfer
+ *  account (TXN-020).
+ */
+export type EntryLine = {
+	target: Target,
+	/**  Same sign as [`Entry::amount`]; the line's posting is minus this. */
+	amount: string,
+	memo: string,
+	/**  The other account's cleared status (transfer lines only). */
+	cleared: Cleared,
+	tags: TagId[],
+};
+
+export type ErrorKind = 
+/**  The request broke a domain rule; show the message. */
+"invalid" | "not_found" | 
+/**  The row is used elsewhere; hide or close it instead. */
+"in_use" | 
+/**  Repeat the call with `confirmed = true` after the user agrees. */
+"confirmation_required" | 
+/**  Malformed input (a bad amount or date). */
+"bad_input" | 
+/**  Anything else: a database or internal failure. */
+"internal";
+
+/**
+ *  One field that differs between the before and after snapshots.
+ *  Nested values use paths like `postings[1].amount`. `None` means the
+ *  field did not exist on that side.
+ */
+export type FieldChange = {
+	path: string,
+	before: string | null,
+	after: string | null,
+};
+
+/**  Result of an integrity check. */
+export type IntegrityReport = {
+	issues: Issue[],
+};
+
+/**  Settings only investment accounts have (ACCT-130, INV-300, D-50). */
+export type InvestmentSettings = {
+	subtype: string | null,
+	cash_mode: CashMode,
+	/**  Required when `cash_mode` is `Linked`. */
+	linked_cash_account: AccountId | null,
+	mmf_mode: MmfMode,
+	default_lot_method: LotMethod,
+};
+
+/**
+ *  Why a command failed, in a shape the UI can act on. `kind` picks the
+ *  reaction (e.g. `confirmation_required` opens a confirm dialog);
+ *  `message` is display text.
+ */
+export type IpcError = {
+	kind: ErrorKind,
+	message: string,
+};
+
+/**  One failed invariant on one record. */
+export type Issue = {
+	check: Check,
+	/**  Table of the offending record (`txn`, `posting`, `category`, ...). */
+	table: string,
+	/**  Its row ID, when there is one. */
+	id: number | null,
+	detail: string,
+};
+
+/**
+ *  Lot selection methods (LOT-100, LOT-110, D-60). The prototype
+ *  engine implements `Fifo` and `Specific`; the others are stored so
+ *  the schema doesn't change when they arrive.
+ */
+export type LotMethod = "fifo" | "specific" | "average" | 
+/**  Highest cost first. */
+"hifo" | 
+/**
+ *  Minimize tax: short-term losses, long-term losses, long-term
+ *  gains (smallest first), short-term gains (smallest first).
+ */
+"min_tax";
+
+/**  How money market funds are held in an investment account (INV-050, D-50). */
+export type MmfMode = 
+/**  A security priced at $1.00. */
+"security" | 
+/**  Part of the account's cash balance. */
+"cash";
+
+/**  Settings only Other Asset accounts have (ACCT-140). */
+export type OtherAssetSettings = {
+	subtype: AssetSubtype,
+	linked_liability: AccountId | null,
+};
+
+/**  A stored payee. */
+export type Payee = {
+	id: PayeeId,
+	created_at: string,
+} & PayeeFields;
+
+/**  Editable attributes of a payee, including memorized defaults (PAY-020). */
+export type PayeeFields = {
+	name: string,
+	default_category: CategoryId | null,
+	default_tag: TagId | null,
+	default_memo: string,
+	default_amount: string | null,
+	hidden: boolean,
+};
+
+/**  Row ID of a payee. */
+export type PayeeId = number;
+
+/**  A page of register rows. */
+export type RegisterPage = {
+	rows: RegisterRow[],
+	/**  Rows matching the filters, before `limit` and `offset`. */
+	total: number,
+	/**  The clock's today, for the today line (REG-070). */
+	today: string,
+};
+
+/**
+ *  Which register rows to show (REG-040). Every filter that is set must
+ *  match.
+ */
+export type RegisterQuery = {
+	account: AccountId,
+	date_from: string | null,
+	date_to: string | null,
+	payee: PayeeId | null,
+	/**  A category and its subcategories, on any line of the transaction. */
+	category: CategoryId | null,
+	tag: TagId | null,
+	/**  This account's cleared status. */
+	cleared: Cleared | null,
+	/**
+	 *  Case-insensitive text found in the payee, memo, notes, check
+	 *  number, line memos, or category.
+	 */
+	text: string | null,
+	sort: RegisterSort,
+	descending: boolean,
+	/**  Page size; `None` returns every matching row. */
+	limit: number | null,
+	offset: number,
+};
+
+/**  One row of an account register (REG-010, REG-020). */
+export type RegisterRow = {
+	txn_id: TxnId,
+	date: string,
+	check_num: string,
+	payee: PayeeId | null,
+	payee_name: string,
+	memo: string,
+	status: TxnStatus,
+	/**  This account's posting. */
+	amount: string,
+	cleared: Cleared,
+	counterpart: Counterpart,
+	/**
+	 *  What the Category column shows: a category path, `[Account]` for a
+	 *  transfer, `--Split--` (REG-050), or empty.
+	 */
+	category: string,
+	/**
+	 *  Running balance through this row in date order, whatever the
+	 *  filter or sort (REG-020).
+	 */
+	balance: string,
+	/**  Dated after today (REG-070). */
+	future: boolean,
+};
+
+/**
+ *  Register columns that can be sorted (REG-040). Ties break by date, then
+ *  entry order.
+ */
+export type RegisterSort = "date" | "check_num" | "payee" | "amount" | "category" | "memo" | "cleared" | "balance";
+
+/**  Register footer figures (REG-060). */
+export type RegisterSummary = {
+	/**  Postings dated today or earlier. */
+	current: string,
+	/**  Cleared and reconciled postings, any date. */
+	cleared: string,
+	/**  All postings, including future-dated ones (REG-070). */
+	ending: string,
+	/**
+	 *  Credit cards with a limit: limit + current balance (the balance is
+	 *  negative while money is owed).
+	 */
+	available_credit: string | null,
+};
+
+/**  What was generated. */
+export type SampleSummary = {
+	accounts: number,
+	categories: number,
+	payees: number,
+	txns: number,
+};
+
+/**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
+export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";
+
+/**  A stored tag. */
+export type Tag = {
+	id: TagId,
+	created_at: string,
+} & TagFields;
+
+/**  Editable attributes of a tag. */
+export type TagFields = {
+	name: string,
+	hidden: boolean,
+};
+
+/**  Row ID of a tag. */
+export type TagId = number;
+
+/**  What a posting is to. */
+export type Target = { kind: "account"; id: AccountId } | { kind: "category"; id: CategoryId };
+
+/**  Tax treatment (ACCT-030). */
+export type TaxTreatment = "taxable" | "tax_deferred" | "tax_exempt";
+
+/**  Row ID of a transaction. Immutable (TXN-070). */
+export type TxnId = number;
+
+/**  Normal or voided (TXN-040). */
+export type TxnStatus = "normal" | "void";
+
+/* Tauri Specta runtime */
+async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+    try {
+        return { status: "ok", data: await result };
+    } catch (e) {
+        if (e instanceof Error) throw e;
+        return { status: "error", error: e as any };
+    }
+}
 

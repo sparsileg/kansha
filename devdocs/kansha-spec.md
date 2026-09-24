@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3 (draft) |
+| **Document version** | 0.3.4 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); D-50, D-60, D-100, D-110 decided |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); D-50, D-60, D-100, D-110 decided |
 
 ---
 
@@ -158,7 +158,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 #### 7.2 Register view
 
 - **REG-010** [1.0][S] Register columns: Date, Num (check number) [R], Payee, Payment/Charge, Deposit [R], Category, Tag, Memo, Clr, Balance.
-  > **Recommendation:** separate Payment and Deposit columns (as in Quicken) rather than a single signed column; this reduces sign errors during entry. Stan's draft had a combined Charge/Payment column — decision needed (D-10).
+  > **Decided (D-10):** separate Payment and Deposit columns (as in Quicken), which reduces sign errors during entry. The entry row has both fields; typing an amount in one clears the other. Stan's draft had a combined column.
 - **REG-020** [1.0][R] Running balance is computed in date order (tie-broken by entry order) and reflects all transactions up to that row.
 - **REG-030** [1.0][R] Inline entry and editing at the bottom of the register, keyboard-driven: Tab moves between fields; Enter saves; Esc cancels; `+`/`-` adjusts date; `t` sets today.
 - **REG-040** [1.0][R] Sort by any column; filter by date range, payee, category, tag, cleared status, and text search.
@@ -665,6 +665,15 @@ Modeling choices that affect other sections:
 - **`txn`**, not `transaction` (SQL keyword).
 - **Every table is STRICT.** Money is INTEGER cents; quantity, price, and interest rate are INTEGER × 10^6. Dates are TEXT checked with `x IS date(x)`. Timestamps are UTC TEXT from the injected `Clock`.
 - **Posting sign:** + increases an asset or records an expense; − increases a liability or records income. Postings of a transaction sum to zero (view `unbalanced_txn`).
+- **Register entry view (Phase 2):** the engine stores postings; the register reads and writes a transaction as an *entry* seen from one account: that account's posting (`amount`) plus lines for the other side (categories and transfer accounts). Lines carry the same sign as `amount` and must add up to it (TXN-020); the engine computes the unassigned remainder. A non-zero entry needs at least one line (no uncategorized postings). Transaction-level tags (TAG-010) are stored on the viewing account's posting.
+- **Void (TXN-040):** the transaction and its postings stay; every amount becomes zero and status is `void`. Original amounts live in the audit entry. A void can be deleted but not edited.
+- **Reconciled edits (TXN-050):** edit, void, delete, or un-reconcile of a transaction with a reconciled posting requires explicit confirmation. Only reconciliation (or an import, MIG-090) sets `reconciled`; an edit keeps an existing reconciled posting's reconciliation link.
+- **Closed accounts (ACCT-210):** closing requires no transactions after the closing date and a zero balance or confirmation. A closed account takes no new, edited, voided, deleted, or re-cleared transactions until reopened.
+- **IPC conventions (Phase 3a):** types that cross IPC derive `specta::Type` behind kansha-core's `specta` feature (enabled only by src-tauri). Money, quantities, prices, rates, dates, and timestamps are canonical strings; enums are snake_case strings; tagged unions carry `kind` (`{kind:"category", id}`). IDs and counters are i64 in Rust and `number` in TypeScript (`dangerously_cast_bigints_to_number`; safe because nothing near 2^53 is an i64 on the wire and money is never an integer on the wire). Commands return `Result<T, IpcError>`; `IpcError.kind` is `confirmation_required` when the UI must ask the user and repeat with `confirmed = true`. `bindings.ts` is checked by a test (`bindings_are_up_to_date`) and regenerated with `just bindings`.
+- **Register query (REG-040):** one SQL query numbers every posting of the account with a running balance in date order, then filters, sorts, and pages, so the balance never depends on filters or sort. Category filter includes subcategories and any split line.
+- **Payee memorization (PAY-020):** a payee with no defaults learns them from its first saved entry; existing defaults are never overwritten silently (AUD-030). New payee names are created in the same transaction as the entry.
+- **Audit view (AUD-020):** the `audit` module turns before/after JSON into per-field changes for display.
+- **Investment accounts** take no postings through the general ledger API; their transactions come from the investments engine (Phase 6).
 - **Investment holdings in the ledger:** a posting to an investment account with `security_id` carries that holding's cost basis; one without is the account's cash. So a buy, sell, or reinvestment balances like any other transaction.
 - **Equity** category kind, system-only, for opening balances. Built-in categories (CAT-060, RCN-040) are seeded by migration 0001 and identified by `system_key`.
 - **Lots** store immutable acquisition facts. Open quantity and basis are derived from `lot_disposal` (sales, transfers out, removals) and `lot_adjustment` (splits, return of capital). A partial sale is a disposal, not a physical lot split.
@@ -698,7 +707,7 @@ A repeatable, automated test framework is a built-in part of Kansha, not an add-
 - **TEST-090** [1.0][R] **Snapshot tests** (`insta`) record report output for fixed datasets; any change fails until explicitly reviewed and accepted.
 - **TEST-100** [1.0][R] **Migration tests:** each schema migration is tested by applying it to a database at the previous version containing sample data and verifying data integrity afterward.
 - **TEST-105** [1.0][R] **Import tests** use sample QIF files (synthetic plus sanitized excerpts of Stan's exports) covering the pitfalls in MIG-160.
-- **TEST-110** [1.0][R] **Test data builders** (a fluent Rust API for creating accounts, transactions, lots) and a **synthetic dataset generator** producing a realistic, multi-year household dataset from a fixed seed, used for prototype use, report snapshots, and performance checks (NFR-040).
+- **TEST-110** [1.0][R] **Test data builders** (a fluent Rust API for creating accounts, transactions, lots; `kansha_core::testkit::Book`, Phase 2) and a **synthetic dataset generator** producing a realistic, multi-year household dataset from a fixed seed, used for prototype use, report snapshots, and performance checks (NFR-040).
 - **TEST-120** [1.0][R] **Frontend tests** (Vitest + Svelte Testing Library, with Tauri IPC mocked) cover money/date input parsing and formatting, register keyboard behavior, and split-remainder validation. UI tests are deliberately lighter than engine tests.
 - **TEST-130** [1.0][R] **Regression rule:** every engine bug fix includes a test or scenario that fails before the fix and passes after.
 - **TEST-140** [1.0][R] **CI:** GitHub Actions runs `cargo fmt --check`, `cargo clippy -D warnings`, the Rust suite, `svelte-check`, and the frontend suite on Ubuntu and Windows for every push.
@@ -707,7 +716,7 @@ A repeatable, automated test framework is a built-in part of Kansha, not an add-
 
 #### 20.2 Scenario file format (illustrative; finalized in Phase 0)
 
-All amounts, quantities, and prices are written as strings to avoid TOML floating-point parsing.
+All amounts, quantities, and prices are written as strings to avoid TOML floating-point parsing. The implemented format — setup, actions, and expectations per area — is documented in `tests/scenarios/README.md`; the examples below show the intended shape for later phases.
 
 ```toml
 id = "LOT-FIFO-001"
@@ -826,7 +835,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 
 | ID | Decision | Status | Recommendation / Outcome |
 |---|---|---|---|
-| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | Open | Separate columns. No schema impact (postings are signed); decide in Phase 3 |
+| D-10 | Register: combined signed amount column or separate Payment/Deposit columns | **Decided** (2026-09-24) | Separate Payment and Deposit columns (REG-010). No schema impact; postings stay signed. |
 | D-20 | Encryption: SQLCipher vs. disk-level only | Tentative | SQLCipher; final decision before 1.0 development |
 | D-30 | Accounting engine in Rust vs. TypeScript | **Decided** | Rust (DR-01) |
 | D-35 | UI framework | **Decided** | Svelte 5 + Vite, no SvelteKit (DR-02) |
@@ -885,7 +894,7 @@ Each phase ends with its exit criteria met, `just test` passing on Kubuntu and W
 | **0 — Skeleton and test harness** | Cargo workspace; `kansha-core` crate; Tauri shell; Svelte app shell with view navigation and theme/font-size plumbing; `Money`/`Quantity`/`Price` newtypes; date type and `Clock`; error types; scenario runner with one trivial scenario; `justfile`; CI; decide D-120 | App launches on both platforms; `just test` and CI green; scenario runner reports a deliberately failing scenario clearly |
 | **1 — Schema and persistence** | Migrations from spec 0.3 schema; repositories; audit log writer; in-memory test fixture; migration test pattern | Migration and repository tests pass; schema matches spec |
 | **2 — Ledger engine** | Accounts, categories, payees, tags, transactions, postings, splits, transfers, voids, derived balances; integrity check v1; test data builders | Ledger scenarios and posting/transfer property tests pass |
-| **3 — Register UI** | Account list/sidebar, account modal, register with keyboard entry, splits, transfers, filters, memorized payees, audit view; synthetic dataset generator | Stan enters a month of transactions by keyboard; generator loads a multi-year dataset; register meets NFR-040 |
+| **3 — Register UI** | Account list/sidebar, account modal, register with keyboard entry, splits, transfers, filters, memorized payees, category, tag, and payee management screens, audit view; synthetic dataset generator | Stan enters a month of transactions by keyboard; generator loads a multi-year dataset; register meets NFR-040 |
 | **4 — Scheduling and calendar** | Recurrence engine; occurrences; enter/skip/edit-one; due and overdue list; scheduled list; calendar | Recurrence suite passes (month-end, leap years, Nth weekday, twice-monthly, weekend shifting, # left, end dates) |
 | **5 — Reconciliation** | Reconcile workflow, save/resume, history, change detection, explicit adjustments | Reconciliation scenarios pass; Stan completes a reconciliation on synthetic data |
 | **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID); splits; return of capital; share transfers; positions; investment account tabs; lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
@@ -922,3 +931,7 @@ Goal for this chat: <sub-scope>
 | 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
 | 0.2.1 | 2026-09-24 | D-120 decided: `tauri-specta`/`specta`/`specta-typescript` pinned to `2.0.0-rc.25` (DR-03), verified against Tauri v2 in Phase 0. §17.3 and §17.4 updated to reflect the built `src-tauri` layout and committed `bindings.ts`. §25 patch command corrected to `git apply` (matches CONVENTIONS.md; the draft had said `patch -p1`). |
 | 0.3 | 2026-09-24 | Phase 1. §18 replaced by a pointer to `migrations/0001_init.sql` (the schema is now defined in SQL) and a short list of modeling choices. D-50, D-60, D-100, D-110 decided; D-10 marked schema-neutral. ACCT-020 and INV-050 accepted ([S]). LOT-115 added (HIFO and minimum-tax lot selection). LOT-110 notes that the schema accepts `average`. TEST-020: `Clock` also supplies UTC timestamps. §16.1: `bundled-sqlcipher-vendored-openssl`. §17.4 layout updated. |
+| 0.3.1 | 2026-09-24 | Phase 2 (ledger engine). §18 gains modeling choices for the register entry view, void, reconciled edits, closed accounts, and investment-account postings. TEST-110 names `testkit::Book`. §20.2 points to `tests/scenarios/README.md` for the implemented scenario format. |
+| 0.3.2 | 2026-09-24 | Phase 3a. §18 gains IPC conventions, register query, payee memorization, and audit view choices. `sample` module provides the synthetic dataset (TEST-110, D-130); NFR-040 measured (see phase-notes/phase-3.md). |
+| 0.3.3 | 2026-09-24 | D-10 decided: separate Payment and Deposit columns (REG-010). |
+| 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |

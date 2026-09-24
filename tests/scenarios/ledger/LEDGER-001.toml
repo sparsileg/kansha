@@ -1,0 +1,76 @@
+id = "LEDGER-001"
+description = "Payments and deposits; running balance in date order; future-dated entries excluded from the current balance"
+requirements = ["TXN-010", "REG-020", "REG-070", "ACCT-230", "INT-010"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "1000.00"
+opening_date = "2026-01-01"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+# Entered out of date order; the register sorts by date, then entry order.
+[[actions]]
+type = "entry"
+ref = "paycheck"
+date = "2026-02-01"
+account = "Checking"
+payee = "Employer"
+amount = "2500.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "costco"
+date = "2026-01-05"
+account = "Checking"
+payee = "Costco"
+check_num = "1001"
+amount = "-184.32"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "safeway"
+date = "2026-02-01"
+account = "Checking"
+payee = "Safeway"
+amount = "-60.10"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "future"
+date = "2026-04-01"
+account = "Checking"
+payee = "Costco"
+amount = "-100.00"
+category = "Food:Groceries"
+
+[expect.balances]
+"Checking" = "3255.58"
+
+[expect.ending_balances]
+"Checking" = "3155.58"
+
+[expect.category_totals]
+"Food:Groceries" = "344.42"
+"Salary" = "-2500.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00", counterpart = "Opening Balance" },
+    { date = "2026-01-05", amount = "-184.32", balance = "815.68", ref = "costco", payee = "Costco", check_num = "1001", counterpart = "Food:Groceries" },
+    { date = "2026-02-01", amount = "2500.00", balance = "3315.68", ref = "paycheck", counterpart = "Salary" },
+    { date = "2026-02-01", amount = "-60.10", balance = "3255.58", ref = "safeway" },
+    { date = "2026-04-01", amount = "-100.00", balance = "3155.58", ref = "future" },
+]

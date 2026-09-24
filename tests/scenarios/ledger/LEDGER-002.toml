@@ -1,0 +1,89 @@
+id = "LEDGER-002"
+description = "Split across categories and a transfer; lines must add up to the amount"
+requirements = ["TXN-020", "TXN-030", "REG-050"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "2000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Household"
+kind = "expense"
+
+# Lines leave 10.00 unassigned: refused.
+[[actions]]
+type = "entry"
+date = "2026-02-01"
+account = "Checking"
+amount = "-300.00"
+expect_error = "-10.00 unassigned"
+
+[[actions.lines]]
+category = "Food:Groceries"
+amount = "-250.00"
+
+[[actions.lines]]
+category = "Household"
+amount = "-40.00"
+
+# A payment with no category is refused.
+[[actions]]
+type = "entry"
+date = "2026-02-01"
+account = "Checking"
+amount = "-5.00"
+expect_error = "category or transfer account is required"
+
+# The same split, with the rest moved to savings.
+[[actions]]
+type = "entry"
+ref = "split"
+date = "2026-02-01"
+account = "Checking"
+payee = "Costco"
+amount = "-300.00"
+transfer = "Savings"
+
+[[actions.lines]]
+category = "Food:Groceries"
+amount = "-250.00"
+memo = "food"
+
+[[actions.lines]]
+category = "Household"
+amount = "-40.00"
+
+[expect]
+txn_count = 2
+
+[expect.ending_balances]
+"Checking" = "1700.00"
+"Savings" = "10.00"
+
+[expect.category_totals]
+"Food:Groceries" = "250.00"
+"Household" = "40.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "2000.00", balance = "2000.00" },
+    { date = "2026-02-01", amount = "-300.00", balance = "1700.00", ref = "split", counterpart = "--Split--" },
+]
+
+[[expect.register]]
+account = "Savings"
+rows = [
+    { date = "2026-02-01", amount = "10.00", balance = "10.00", ref = "split", payee = "Costco", counterpart = "--Split--" },
+]

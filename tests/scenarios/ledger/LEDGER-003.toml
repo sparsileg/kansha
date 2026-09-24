@@ -1,0 +1,71 @@
+id = "LEDGER-003"
+description = "A transfer is one transaction in both registers; editing or deleting either side changes both"
+requirements = ["TXN-030", "INT-020", "INT-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "1000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[actions]]
+type = "entry"
+ref = "move"
+date = "2026-02-01"
+account = "Checking"
+amount = "-400.00"
+transfer = "Savings"
+
+# Edit from the savings side: now 250.00, dated a day later.
+[[actions]]
+type = "edit"
+ref = "move"
+date = "2026-02-02"
+account = "Savings"
+amount = "250.00"
+transfer = "Checking"
+memo = "corrected"
+
+[[actions]]
+type = "entry"
+ref = "back"
+date = "2026-03-01"
+account = "Savings"
+amount = "-100.00"
+transfer = "Checking"
+
+[[actions]]
+type = "entry"
+ref = "self"
+date = "2026-03-01"
+account = "Savings"
+amount = "-1.00"
+transfer = "Savings"
+expect_error = "more than once"
+
+[expect.ending_balances]
+"Checking" = "850.00"
+"Savings" = "5150.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00" },
+    { date = "2026-02-02", amount = "-250.00", balance = "750.00", ref = "move", counterpart = "[Savings]" },
+    { date = "2026-03-01", amount = "100.00", balance = "850.00", ref = "back", counterpart = "[Savings]" },
+]
+
+[[expect.register]]
+account = "Savings"
+rows = [
+    { date = "2026-01-01", amount = "5000.00", balance = "5000.00" },
+    { date = "2026-02-02", amount = "250.00", balance = "5250.00", ref = "move", counterpart = "[Checking]" },
+    { date = "2026-03-01", amount = "-100.00", balance = "5150.00", ref = "back", counterpart = "[Checking]" },
+]

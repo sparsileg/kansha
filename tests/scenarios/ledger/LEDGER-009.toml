@@ -1,0 +1,72 @@
+id = "LEDGER-009"
+description = "Merging categories, payees, and tags moves every posting to the survivor"
+requirements = ["CAT-020", "PAY-030", "TAG-020", "TAG-010"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "500.00"
+opening_date = "2026-01-01"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Supermarket"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+date = "2026-02-01"
+account = "Checking"
+payee = "COSTCO WHSE #123"
+amount = "-40.00"
+category = "Supermarket"
+tags = ["Vacation"]
+
+[[actions]]
+type = "entry"
+date = "2026-02-02"
+account = "Checking"
+payee = "Costco"
+amount = "-60.00"
+category = "Food:Groceries"
+tags = ["Trip"]
+
+[[actions]]
+type = "merge_categories"
+from = "Supermarket"
+into = "Salary"
+expect_error = "cannot merge expense"
+
+[[actions]]
+type = "merge_categories"
+from = "Supermarket"
+into = "Food:Groceries"
+
+[[actions]]
+type = "merge_payees"
+from = "COSTCO WHSE #123"
+into = "Costco"
+
+[[actions]]
+type = "merge_tags"
+from = "Vacation"
+into = "Trip"
+
+[expect.category_totals]
+"Food:Groceries" = "100.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "500.00", balance = "500.00" },
+    { date = "2026-02-01", amount = "-40.00", balance = "460.00", payee = "Costco", counterpart = "Food:Groceries" },
+    { date = "2026-02-02", amount = "-60.00", balance = "400.00", payee = "Costco", counterpart = "Food:Groceries" },
+]

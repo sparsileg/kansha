@@ -46,7 +46,8 @@ text_enum! {
 }
 
 /// One stored audit entry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct AuditRecord {
     pub id: i64,
     pub at: Timestamp,

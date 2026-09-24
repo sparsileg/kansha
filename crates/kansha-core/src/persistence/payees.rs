@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::categories::{Payee, PayeeFields, PayeeId};
+use crate::categories::{Merged, Payee, PayeeFields, PayeeId};
 use crate::error::{Error, Result};
 
 const COLUMNS: &str = "id, name, default_category_id, default_tag_id, default_memo, \
@@ -138,4 +138,61 @@ pub fn delete(tx: &Tx<'_>, id: PayeeId) -> Result<()> {
         None,
     )?;
     Ok(())
+}
+
+/// The payee with this name (ignoring case), created if new (PAY-010:
+/// the payee list builds from entered transactions).
+pub fn find_or_insert(tx: &Tx<'_>, name: &str) -> Result<Payee> {
+    match find_by_name(tx.conn(), name)? {
+        Some(p) => Ok(p),
+        None => insert(tx, &PayeeFields::new(name)),
+    }
+}
+
+/// Merge `source` into `target` (PAY-030): transactions and schedules move
+/// to `target`; `source` is deleted.
+pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
+    let conn = tx.conn();
+    if source == target {
+        return Err(Error::Invalid(
+            "a payee cannot be merged into itself".into(),
+        ));
+    }
+    let src = get(conn, source)?;
+    get(conn, target)?;
+    let moved = Merged {
+        into: target.0,
+        txns: conn.execute(
+            "UPDATE txn SET payee_id = ?2 WHERE payee_id = ?1",
+            [source, target],
+        )?,
+        schedules: conn.execute(
+            "UPDATE schedule SET payee_id = ?2 WHERE payee_id = ?1",
+            [source, target],
+        )?,
+        ..Merged::default()
+    };
+    conn.execute("DELETE FROM payee WHERE id = ?1", [source])?;
+    audit::record(
+        tx,
+        AuditEntity::Payee,
+        source.0,
+        AuditAction::Merge,
+        Some(&src),
+        Some(&moved),
+    )?;
+    Ok(moved)
+}
+
+/// Visible payees whose name starts with `prefix`, ignoring case, by name
+/// (register QuickFill, PAY-020). An empty prefix lists the first `limit`.
+pub fn search(conn: &Connection, prefix: &str, limit: i64) -> Result<Vec<Payee>> {
+    let sql = format!(
+        "SELECT {COLUMNS} FROM payee
+         WHERE hidden = 0 AND substr(name, 1, length(?1)) = ?1 COLLATE NOCASE
+         ORDER BY name COLLATE NOCASE, id LIMIT ?2"
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let rows = stmt.query_map(rusqlite::params![prefix.trim_start(), limit], from_row)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }

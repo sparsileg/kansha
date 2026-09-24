@@ -15,12 +15,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-kansha-core = { path = "../crates/kansha-core" }
+kansha-core = { path = "../crates/kansha-core", features = ["specta"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde.workspace = true
 serde_json = "1"
-specta = { version = "=2.0.0-rc.25", features = ["derive", "std"] }
+specta.workspace = true
 specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 thiserror.workspace = true

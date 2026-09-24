@@ -1,0 +1,37 @@
+id = "LEDGER-004"
+description = "Delete from the other side of a transfer removes the whole transaction"
+requirements = ["TXN-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "1000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[actions]]
+type = "entry"
+ref = "move"
+date = "2026-02-01"
+account = "Checking"
+amount = "-400.00"
+transfer = "Savings"
+
+[[actions]]
+type = "delete"
+ref = "move"
+
+[expect]
+txn_count = 1
+
+[expect.ending_balances]
+"Checking" = "1000.00"
+"Savings" = "0.00"
+
+[[expect.register]]
+account = "Savings"
+rows = []

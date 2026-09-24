@@ -7,6 +7,10 @@
 #![allow(clippy::unwrap_used)]
 
 mod fixture;
+mod integrity;
+mod ipc_json;
+mod ledger;
 mod migrations;
+mod register;
 mod repositories;
 mod schema;

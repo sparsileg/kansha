@@ -1,0 +1,75 @@
+id = "LEDGER-008"
+description = "Closing an account: no later transactions, zero balance or confirmation; closed accounts take no changes"
+requirements = ["ACCT-210", "ACCT-220"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "100.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Old Savings"
+type = "savings"
+opening_balance = "250.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Unused"
+type = "cash"
+
+[[actions]]
+type = "close_account"
+account = "Old Savings"
+date = "2026-03-31"
+expect_error = "balance of 250.00"
+
+[[actions]]
+type = "entry"
+date = "2026-04-15"
+account = "Old Savings"
+amount = "-250.00"
+transfer = "Checking"
+
+[[actions]]
+type = "close_account"
+account = "Old Savings"
+date = "2026-03-31"
+expect_error = "transactions after 2026-03-31"
+
+[[actions]]
+type = "close_account"
+account = "Old Savings"
+date = "2026-04-30"
+
+[[actions]]
+type = "entry"
+date = "2026-05-01"
+account = "Checking"
+amount = "-1.00"
+transfer = "Old Savings"
+expect_error = "is closed"
+
+[[actions]]
+type = "delete_account"
+account = "Old Savings"
+expect_error = "in use"
+
+[[actions]]
+type = "delete_account"
+account = "Unused"
+
+[[actions]]
+type = "close_account"
+account = "Checking"
+date = "2026-06-30"
+confirm = true
+
+[expect.account_status]
+"Old Savings" = "closed"
+"Checking" = "closed"
+
+[expect.ending_balances]
+"Checking" = "350.00"
+"Old Savings" = "0.00"

@@ -1,0 +1,57 @@
+id = "LEDGER-006"
+description = "Credit card: charges are negative, a payment is a transfer, available credit follows the balance"
+requirements = ["REG-060", "TXN-030", "ACCT-120"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "3000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Visa"
+type = "credit_card"
+credit_limit = "5000.00"
+opening_balance = "-500.00"
+opening_date = "2026-01-01"
+
+[[categories]]
+path = "Dining"
+kind = "expense"
+
+[[actions]]
+type = "entry"
+date = "2026-02-03"
+account = "Visa"
+payee = "Cafe"
+amount = "-45.50"
+category = "Dining"
+
+[[actions]]
+type = "entry"
+date = "2026-02-10"
+account = "Visa"
+payee = "Cafe"
+amount = "12.25"
+category = "Dining"
+memo = "refund"
+
+[[actions]]
+type = "entry"
+date = "2026-02-20"
+account = "Checking"
+payee = "Visa payment"
+amount = "-500.00"
+transfer = "Visa"
+
+[expect.balances]
+"Checking" = "2500.00"
+"Visa" = "-33.25"
+
+[expect.available_credit]
+"Visa" = "4966.75"
+"Checking" = "none"
+
+[expect.category_totals]
+"Dining" = "33.25"

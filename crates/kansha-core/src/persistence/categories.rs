@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::categories::{Category, CategoryFields, CategoryId, SystemCategory};
+use crate::categories::{Category, CategoryFields, CategoryId, Merged, SystemCategory};
 use crate::error::{Error, Result};
 
 const COLUMNS: &str =
@@ -214,4 +214,84 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
         None,
     )?;
     Ok(())
+}
+
+/// Merge `source` into `target` (CAT-020): postings, schedule lines, payee
+/// defaults, and subcategories move to `target`; `source` is deleted. Both
+/// must have the same kind; a built-in category can't be the source;
+/// `target` can't be inside `source`'s subtree.
+pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merged> {
+    let conn = tx.conn();
+    if source == target {
+        return Err(Error::Invalid(
+            "a category cannot be merged into itself".into(),
+        ));
+    }
+    let src = get(conn, source)?;
+    let dst = get(conn, target)?;
+    if src.system.is_some() {
+        return Err(Error::Invalid(format!(
+            "built-in category {:?} cannot be merged into another",
+            src.fields.name
+        )));
+    }
+    if src.fields.kind != dst.fields.kind {
+        return Err(Error::Invalid(format!(
+            "cannot merge {} category {:?} into {} category {:?}",
+            src.fields.kind, src.fields.name, dst.fields.kind, dst.fields.name
+        )));
+    }
+    let mut cursor = dst.fields.parent;
+    while let Some(c) = cursor {
+        if c == source {
+            return Err(Error::Invalid(
+                "a category cannot be merged into one of its subcategories".into(),
+            ));
+        }
+        cursor = get(conn, c)?.fields.parent;
+    }
+    let clash: Option<String> = conn
+        .prepare_cached(
+            "SELECT a.name FROM category a JOIN category b
+                 ON b.parent_id = ?2 AND b.name = a.name COLLATE NOCASE
+             WHERE a.parent_id = ?1 ORDER BY a.name LIMIT 1",
+        )?
+        .query_row([source, target], |r| r.get(0))
+        .optional()?;
+    if let Some(name) = clash {
+        return Err(Error::Invalid(format!(
+            "both categories have a subcategory named {name:?}; merge those first"
+        )));
+    }
+
+    let moved = Merged {
+        into: target.0,
+        postings: conn.execute(
+            "UPDATE posting SET category_id = ?2 WHERE category_id = ?1",
+            [source, target],
+        )?,
+        schedule_lines: conn.execute(
+            "UPDATE schedule_line SET category_id = ?2 WHERE category_id = ?1",
+            [source, target],
+        )?,
+        payee_defaults: conn.execute(
+            "UPDATE payee SET default_category_id = ?2 WHERE default_category_id = ?1",
+            [source, target],
+        )?,
+        subcategories: conn.execute(
+            "UPDATE category SET parent_id = ?2 WHERE parent_id = ?1",
+            [source, target],
+        )?,
+        ..Merged::default()
+    };
+    conn.execute("DELETE FROM category WHERE id = ?1", [source])?;
+    audit::record(
+        tx,
+        AuditEntity::Category,
+        source.0,
+        AuditAction::Merge,
+        Some(&src),
+        Some(&moved),
+    )?;
+    Ok(moved)
 }

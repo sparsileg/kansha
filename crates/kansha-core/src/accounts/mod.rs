@@ -1,16 +1,17 @@
 //! Accounts: types, attributes, and lifecycle (ACCT-010 … ACCT-240).
 //!
-//! Phase 1 defines the domain types and their storage. Lifecycle rules
-//! that need the ledger (ACCT-210 zero-balance close) arrive in Phase 2.
+//! Domain types. Storage is `persistence::accounts`; closing, which needs
+//! the ledger (ACCT-210), is `ledger::close_account`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::date::{Date, Timestamp};
 use crate::money::{Money, Rate};
 use crate::text_enum::text_enum;
 
 /// Row ID of an account.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(transparent)]
 pub struct AccountId(pub i64);
 
@@ -120,6 +121,27 @@ impl AccountType {
         )
     }
 
+    /// Liability accounts: their ledger balance is negative while money
+    /// is owed (spec §18 posting sign).
+    pub const fn is_liability(self) -> bool {
+        matches!(
+            self,
+            AccountType::CreditCard | AccountType::OtherLiability | AccountType::Loan
+        )
+    }
+
+    /// Accounts that can serve as an investment account's linked cash
+    /// account (INV-300).
+    pub const fn is_cash_bearing(self) -> bool {
+        matches!(
+            self,
+            AccountType::Checking
+                | AccountType::Savings
+                | AccountType::Cash
+                | AccountType::MoneyMarket
+        )
+    }
+
     /// Default tax treatment (ACCT-030).
     pub const fn default_tax_treatment(self) -> TaxTreatment {
         match self {
@@ -149,7 +171,8 @@ impl AccountType {
 }
 
 /// Settings only investment accounts have (ACCT-130, INV-300, D-50).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct InvestmentSettings {
     pub subtype: Option<String>,
     pub cash_mode: CashMode,
@@ -160,7 +183,8 @@ pub struct InvestmentSettings {
 }
 
 /// Settings only Other Asset accounts have (ACCT-140).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct OtherAssetSettings {
     pub subtype: AssetSubtype,
     pub linked_liability: Option<AccountId>,
@@ -168,7 +192,8 @@ pub struct OtherAssetSettings {
 
 /// Editable attributes of an account (ACCT-100 … ACCT-160). Used to
 /// create and to update.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct AccountFields {
     pub name: String,
     pub account_type: AccountType,
@@ -232,6 +257,7 @@ impl AccountFields {
 
 /// A stored account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Account {
     pub id: AccountId,
     #[serde(flatten)]

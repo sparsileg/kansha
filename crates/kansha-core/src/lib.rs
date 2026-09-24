@@ -5,12 +5,17 @@
 //! handlers.
 
 pub mod accounts;
+pub mod audit;
 pub mod categories;
 pub mod date;
 pub mod error;
+pub mod integrity;
+pub mod ledger;
 pub mod money;
 pub mod persistence;
+pub mod sample;
 mod serde_impls;
+pub mod testkit;
 mod text_enum;
 
 pub use date::{Clock, Date, FixedClock, SystemClock, Timestamp};

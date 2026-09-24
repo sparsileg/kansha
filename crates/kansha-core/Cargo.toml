@@ -13,6 +13,12 @@ rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+specta = { workspace = true, optional = true }
+
+[features]
+# Derive `specta::Type` on the types that cross IPC (D-120). Enabled by
+# src-tauri; the crate itself has no Tauri dependency.
+specta = ["dep:specta"]
 
 [dev-dependencies]
 proptest.workspace = true

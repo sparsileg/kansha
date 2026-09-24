@@ -31,6 +31,12 @@ pub enum Error {
     #[error("{entity} {id} is in use and cannot be deleted")]
     InUse { entity: &'static str, id: i64 },
 
+    /// The change is allowed, but only after the user confirms it: editing
+    /// a reconciled transaction (TXN-050), closing an account with a
+    /// non-zero balance (ACCT-210). Retry with confirmation.
+    #[error("confirmation required: {0}")]
+    ConfirmationRequired(String),
+
     /// The database was written by a newer Kansha (§21).
     #[error("database schema version {found} is newer than this Kansha supports ({supported})")]
     SchemaTooNew { found: u32, supported: u32 },

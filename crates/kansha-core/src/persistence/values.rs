@@ -80,5 +80,6 @@ id_sql!(
     crate::accounts::AccountId,
     crate::categories::CategoryId,
     crate::categories::PayeeId,
-    crate::categories::TagId
+    crate::categories::TagId,
+    crate::ledger::TxnId
 );

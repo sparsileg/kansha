@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::categories::{Tag, TagFields, TagId};
+use crate::categories::{Merged, Tag, TagFields, TagId};
 use crate::error::{Error, Result};
 
 const COLUMNS: &str = "id, name, hidden, created_at";
@@ -108,4 +108,45 @@ pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
         None,
     )?;
     Ok(())
+}
+
+/// Merge `source` into `target` (TAG-020): tagged postings, schedule
+/// lines, and payee defaults move to `target`; `source` is deleted. A
+/// posting that had both keeps one.
+pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
+    let conn = tx.conn();
+    if source == target {
+        return Err(Error::Invalid("a tag cannot be merged into itself".into()));
+    }
+    let src = get(conn, source)?;
+    get(conn, target)?;
+    let postings = conn.execute(
+        "INSERT OR IGNORE INTO posting_tag (posting_id, tag_id)
+         SELECT posting_id, ?2 FROM posting_tag WHERE tag_id = ?1",
+        [source, target],
+    )?;
+    conn.execute("DELETE FROM posting_tag WHERE tag_id = ?1", [source])?;
+    let moved = Merged {
+        into: target.0,
+        postings,
+        schedule_lines: conn.execute(
+            "UPDATE schedule_line SET tag_id = ?2 WHERE tag_id = ?1",
+            [source, target],
+        )?,
+        payee_defaults: conn.execute(
+            "UPDATE payee SET default_tag_id = ?2 WHERE default_tag_id = ?1",
+            [source, target],
+        )?,
+        ..Merged::default()
+    };
+    conn.execute("DELETE FROM tag WHERE id = ?1", [source])?;
+    audit::record(
+        tx,
+        AuditEntity::Tag,
+        source.0,
+        AuditAction::Merge,
+        Some(&src),
+        Some(&moved),
+    )?;
+    Ok(moved)
 }

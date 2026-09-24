@@ -1,23 +1,26 @@
 //! Categories, payees, and tags (CAT, PAY, TAG).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::date::Timestamp;
 use crate::money::Money;
 use crate::text_enum::text_enum;
 
 /// Row ID of a category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(transparent)]
 pub struct CategoryId(pub i64);
 
 /// Row ID of a payee.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(transparent)]
 pub struct PayeeId(pub i64);
 
 /// Row ID of a tag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(transparent)]
 pub struct TagId(pub i64);
 
@@ -48,7 +51,8 @@ text_enum! {
 }
 
 /// Editable attributes of a category.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct CategoryFields {
     pub parent: Option<CategoryId>,
     pub kind: CategoryKind,
@@ -82,6 +86,7 @@ impl CategoryFields {
 
 /// A stored category.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Category {
     pub id: CategoryId,
     #[serde(flatten)]
@@ -93,7 +98,8 @@ pub struct Category {
 }
 
 /// Editable attributes of a payee, including memorized defaults (PAY-020).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct PayeeFields {
     pub name: String,
     pub default_category: Option<CategoryId>,
@@ -118,6 +124,7 @@ impl PayeeFields {
 
 /// A stored payee.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Payee {
     pub id: PayeeId,
     #[serde(flatten)]
@@ -126,7 +133,8 @@ pub struct Payee {
 }
 
 /// Editable attributes of a tag.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct TagFields {
     pub name: String,
     pub hidden: bool,
@@ -143,9 +151,24 @@ impl TagFields {
 
 /// A stored tag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Tag {
     pub id: TagId,
     #[serde(flatten)]
     pub fields: TagFields,
     pub created_at: Timestamp,
+}
+
+/// What a merge moved from the source to the target (CAT-020, PAY-030,
+/// TAG-020). Recorded as the `after` value of the merge's audit entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Merged {
+    /// ID of the surviving category, payee, or tag.
+    pub into: i64,
+    pub postings: usize,
+    pub txns: usize,
+    pub schedules: usize,
+    pub schedule_lines: usize,
+    pub payee_defaults: usize,
+    pub subcategories: usize,
 }

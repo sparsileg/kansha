@@ -45,7 +45,7 @@ build:
 
 # Regenerate src/lib/types/bindings.ts from the Rust command signatures
 bindings:
-    cargo build --manifest-path src-tauri/Cargo.toml
+    cargo test -p kansha write_bindings -- --ignored
 
 # Run scenarios from one file or directory, e.g. `just scenario tests/scenarios/harness`
 scenario $KANSHA_SCENARIOS:

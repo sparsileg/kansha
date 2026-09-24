@@ -3,7 +3,8 @@
 
 /// Declares an enum whose variants map one-to-one onto TEXT values.
 ///
-/// Generates `as_str`, `ALL`, `FromStr`, `Display`, `serde::Serialize`,
+/// Generates `as_str`, `ALL`, `FromStr`, `Display`, serde `Serialize` and
+/// `Deserialize`, `specta::Type` (feature `specta`),
 /// and rusqlite `ToSql`/`FromSql`. The strings must match the column's
 /// CHECK list in the migrations; `tests/integration/schema.rs` verifies
 /// that every value is accepted.
@@ -15,9 +16,10 @@ macro_rules! text_enum {
         }
     ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ::serde::Serialize, ::serde::Deserialize)]
+        #[cfg_attr(feature = "specta", derive(specta::Type))]
         pub enum $name {
-            $( $(#[$vmeta])* $variant ),+
+            $( $(#[$vmeta])* #[serde(rename = $text)] $variant ),+
         }
 
         impl $name {
@@ -50,12 +52,6 @@ macro_rules! text_enum {
         impl ::std::fmt::Display for $name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 f.write_str(self.as_str())
-            }
-        }
-
-        impl ::serde::Serialize for $name {
-            fn serialize<S: ::serde::Serializer>(&self, s: S) -> ::std::result::Result<S::Ok, S::Error> {
-                s.serialize_str(self.as_str())
             }
         }
 

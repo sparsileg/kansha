@@ -4,9 +4,12 @@
 //! runs it. Set `KANSHA_SCENARIOS` to a file or directory (relative to the
 //! repo root) to run just those — `just scenario <path>` does this.
 //!
-//! Phase 0 supports only the harness actions (`add`, `subtract`) and
-//! expectations (`total`, `today`). Each later phase extends `Action` and
-//! `Expect` for its area.
+//! The file format is documented in `tests/scenarios/README.md`. Harness
+//! actions (`add`, `subtract`) exercise the runner itself; ledger actions
+//! (Phase 2) run against a fresh in-memory database built with
+//! `kansha_core::testkit::Book`. Every scenario ends with the integrity
+//! check (INT-030), which must be clean. Later phases extend `Action` and
+//! `Expect` for their areas.
 
 // Failure is large; fine for a test runner.
 #![allow(clippy::result_large_err)]
@@ -15,7 +18,12 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use kansha_core::{Clock, Date, FixedClock, Money};
+use kansha_core::accounts::{AccountFields, AccountId, AccountType};
+use kansha_core::categories::{CategoryId, CategoryKind};
+use kansha_core::ledger::{self, Cleared, Counterpart, EntryLine, Target, TxnId};
+use kansha_core::persistence::{accounts, categories, payees, tags};
+use kansha_core::testkit::Book;
+use kansha_core::{Clock, Date, FixedClock, Money, integrity};
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
@@ -31,18 +39,140 @@ struct Scenario {
     requirements: Vec<String>,
     as_of: String,
     #[serde(default)]
+    accounts: Vec<AccountSpec>,
+    #[serde(default)]
+    categories: Vec<CategorySpec>,
+    #[serde(default)]
     actions: Vec<Action>,
     #[serde(default)]
     expect: Expect,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AccountSpec {
+    name: String,
+    #[serde(rename = "type")]
+    account_type: String,
+    /// Ledger sign; negative for money owed on a liability.
+    opening_balance: Option<String>,
+    opening_date: Option<String>,
+    credit_limit: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CategorySpec {
+    /// `"Parent:Child"`; missing parents are created with the same kind.
+    path: String,
+    kind: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum Action {
     /// Harness only: add `amount` to the running total.
-    Add { amount: String },
+    Add {
+        amount: String,
+    },
     /// Harness only: subtract `amount` from the running total.
-    Subtract { amount: String },
+    Subtract {
+        amount: String,
+    },
+    /// Enter a transaction in `account`'s register.
+    Entry(EntrySpec),
+    /// Replace the transaction named by `ref`, as seen from `account`.
+    Edit(EntrySpec),
+    Void(RefSpec),
+    Delete(RefSpec),
+    SetCleared {
+        #[serde(rename = "ref")]
+        reference: String,
+        account: String,
+        cleared: String,
+        #[serde(default)]
+        confirm: bool,
+        expect_error: Option<String>,
+    },
+    CloseAccount {
+        account: String,
+        date: String,
+        #[serde(default)]
+        confirm: bool,
+        expect_error: Option<String>,
+    },
+    ReopenAccount {
+        account: String,
+        expect_error: Option<String>,
+    },
+    DeleteAccount {
+        account: String,
+        expect_error: Option<String>,
+    },
+    MergeCategories(MergeSpec),
+    MergePayees(MergeSpec),
+    MergeTags(MergeSpec),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EntrySpec {
+    /// Name for later actions (`edit`, `void`, ...) and register rows.
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+    date: String,
+    account: String,
+    /// This account's posting, ledger sign: − payment/charge, + deposit.
+    amount: String,
+    payee: Option<String>,
+    #[serde(default)]
+    check_num: String,
+    #[serde(default)]
+    memo: String,
+    /// Category path for the whole amount (or what `lines` leave).
+    category: Option<String>,
+    /// Transfer account for the whole amount (or what `lines` leave).
+    transfer: Option<String>,
+    cleared: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    /// Split lines, same sign as `amount`.
+    #[serde(default)]
+    lines: Vec<LineSpec>,
+    #[serde(default)]
+    confirm: bool,
+    expect_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LineSpec {
+    category: Option<String>,
+    transfer: Option<String>,
+    amount: String,
+    #[serde(default)]
+    memo: String,
+    cleared: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RefSpec {
+    #[serde(rename = "ref")]
+    reference: String,
+    #[serde(default)]
+    confirm: bool,
+    expect_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MergeSpec {
+    from: String,
+    into: String,
+    expect_error: Option<String>,
 }
 
 impl Action {
@@ -50,6 +180,32 @@ impl Action {
         match self {
             Action::Add { .. } => "add",
             Action::Subtract { .. } => "subtract",
+            Action::Entry(_) => "entry",
+            Action::Edit(_) => "edit",
+            Action::Void(_) => "void",
+            Action::Delete(_) => "delete",
+            Action::SetCleared { .. } => "set_cleared",
+            Action::CloseAccount { .. } => "close_account",
+            Action::ReopenAccount { .. } => "reopen_account",
+            Action::DeleteAccount { .. } => "delete_account",
+            Action::MergeCategories(_) => "merge_categories",
+            Action::MergePayees(_) => "merge_payees",
+            Action::MergeTags(_) => "merge_tags",
+        }
+    }
+
+    fn expect_error(&self) -> Option<&str> {
+        match self {
+            Action::Add { .. } | Action::Subtract { .. } => None,
+            Action::Entry(e) | Action::Edit(e) => e.expect_error.as_deref(),
+            Action::Void(r) | Action::Delete(r) => r.expect_error.as_deref(),
+            Action::MergeCategories(m) | Action::MergePayees(m) | Action::MergeTags(m) => {
+                m.expect_error.as_deref()
+            }
+            Action::SetCleared { expect_error, .. }
+            | Action::CloseAccount { expect_error, .. }
+            | Action::ReopenAccount { expect_error, .. }
+            | Action::DeleteAccount { expect_error, .. } => expect_error.as_deref(),
         }
     }
 }
@@ -61,6 +217,51 @@ struct Expect {
     total: Option<String>,
     /// Expected `Clock::today()` (always `as_of`).
     today: Option<String>,
+    /// Balance as of `as_of` (future-dated entries excluded).
+    #[serde(default)]
+    balances: BTreeMap<String, String>,
+    /// Balance including future-dated entries.
+    #[serde(default)]
+    ending_balances: BTreeMap<String, String>,
+    /// Cleared and reconciled postings only.
+    #[serde(default)]
+    cleared_balances: BTreeMap<String, String>,
+    /// Σ postings to the category itself (expense +, income −).
+    #[serde(default)]
+    category_totals: BTreeMap<String, String>,
+    /// Credit limit + balance as of `as_of`.
+    #[serde(default)]
+    available_credit: BTreeMap<String, String>,
+    /// "open" or "closed".
+    #[serde(default)]
+    account_status: BTreeMap<String, String>,
+    /// Number of transactions in the database.
+    txn_count: Option<i64>,
+    #[serde(default)]
+    register: Vec<RegisterExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegisterExpect {
+    account: String,
+    rows: Vec<RowExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowExpect {
+    date: String,
+    amount: String,
+    balance: String,
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+    payee: Option<String>,
+    /// Category path, `[Account]` for a transfer, `--Split--`, or "".
+    counterpart: Option<String>,
+    status: Option<String>,
+    cleared: Option<String>,
+    check_num: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -238,8 +439,291 @@ fn run_file(path: &Path) -> (Option<String>, Result<(), Failure>) {
     (id, execute(&scenario))
 }
 
+fn parse<T>(what: &str, s: &str) -> Result<T, ActErr>
+where
+    T: std::str::FromStr<Err = kansha_core::Error>,
+{
+    s.parse()
+        .map_err(|e| ActErr::Harness(format!("{what}: {e}")))
+}
+
 fn money(step: &str, s: &str) -> Result<Money, Failure> {
     s.parse().map_err(|e| Failure::error(step, e))
+}
+
+/// Why an action failed: the scenario is wrong (always a failure), or the
+/// engine refused (a pass if `expect_error` matches).
+enum ActErr {
+    Harness(String),
+    Engine(kansha_core::Error),
+}
+
+impl From<kansha_core::Error> for ActErr {
+    fn from(e: kansha_core::Error) -> Self {
+        ActErr::Engine(e)
+    }
+}
+
+/// State while a scenario runs.
+struct Ctx {
+    book: Book,
+    total: Money,
+    refs: BTreeMap<String, TxnId>,
+}
+
+impl Ctx {
+    fn account(&self, name: &str) -> Result<AccountId, ActErr> {
+        accounts::list(self.book.conn())?
+            .into_iter()
+            .find(|a| a.fields.name.eq_ignore_ascii_case(name))
+            .map(|a| a.id)
+            .ok_or_else(|| ActErr::Harness(format!("unknown account {name:?}")))
+    }
+
+    fn category(&self, path: &str) -> Result<CategoryId, ActErr> {
+        self.book
+            .find_category(path)?
+            .ok_or_else(|| ActErr::Harness(format!("unknown category {path:?}")))
+    }
+
+    fn txn(&self, reference: &str) -> Result<TxnId, ActErr> {
+        self.refs
+            .get(reference)
+            .copied()
+            .ok_or_else(|| ActErr::Harness(format!("unknown ref {reference:?}")))
+    }
+
+    fn tags(&mut self, names: &[String]) -> Result<Vec<kansha_core::categories::TagId>, ActErr> {
+        names
+            .iter()
+            .map(|n| self.book.tag(n).map_err(ActErr::from))
+            .collect()
+    }
+
+    fn target(
+        &self,
+        category: &Option<String>,
+        transfer: &Option<String>,
+    ) -> Result<Option<Target>, ActErr> {
+        match (category, transfer) {
+            (Some(_), Some(_)) => Err(ActErr::Harness(
+                "give category or transfer, not both".into(),
+            )),
+            (Some(c), None) => Ok(Some(Target::Category(self.category(c)?))),
+            (None, Some(a)) => Ok(Some(Target::Account(self.account(a)?))),
+            (None, None) => Ok(None),
+        }
+    }
+
+    fn entry(&mut self, spec: &EntrySpec) -> Result<ledger::Entry, ActErr> {
+        let account = self.account(&spec.account)?;
+        let mut entry = ledger::Entry::new(
+            account,
+            parse("date", &spec.date)?,
+            parse("amount", &spec.amount)?,
+        );
+        if let Some(p) = &spec.payee {
+            entry.payee = Some(self.book.payee(p)?);
+        }
+        entry.check_num = spec.check_num.clone();
+        entry.memo = spec.memo.clone();
+        if let Some(c) = &spec.cleared {
+            entry.cleared = parse("cleared", c)?;
+        }
+        entry.tags = self.tags(&spec.tags)?;
+        for l in &spec.lines {
+            let target = self
+                .target(&l.category, &l.transfer)?
+                .ok_or_else(|| ActErr::Harness("a line needs a category or a transfer".into()))?;
+            let mut line = EntryLine::new(target, parse("line amount", &l.amount)?);
+            line.memo = l.memo.clone();
+            if let Some(c) = &l.cleared {
+                line.cleared = parse("cleared", c)?;
+            }
+            line.tags = self.tags(&l.tags)?;
+            entry.lines.push(line);
+        }
+        if let Some(target) = self.target(&spec.category, &spec.transfer)? {
+            let rest = entry.remainder()?;
+            entry.lines.push(EntryLine::new(target, rest));
+        }
+        Ok(entry)
+    }
+
+    fn remember(&mut self, reference: &Option<String>, id: TxnId) {
+        if let Some(r) = reference {
+            self.refs.insert(r.clone(), id);
+        }
+    }
+
+    fn run(&mut self, action: &Action) -> Result<(), ActErr> {
+        match action {
+            Action::Add { amount } => self.total += parse::<Money>("amount", amount)?,
+            Action::Subtract { amount } => self.total -= parse::<Money>("amount", amount)?,
+            Action::Entry(spec) => {
+                let entry = self.entry(spec)?;
+                let t = self.book.write(|tx| ledger::create_entry(tx, &entry))?;
+                self.remember(&spec.reference, t.id);
+            }
+            Action::Edit(spec) => {
+                let reference = spec
+                    .reference
+                    .as_deref()
+                    .ok_or_else(|| ActErr::Harness("edit needs a ref".into()))?;
+                let id = self.txn(reference)?;
+                let entry = self.entry(spec)?;
+                self.book
+                    .write(|tx| ledger::update_entry(tx, id, &entry, spec.confirm))?;
+            }
+            Action::Void(r) => {
+                let id = self.txn(&r.reference)?;
+                self.book.write(|tx| ledger::void(tx, id, r.confirm))?;
+            }
+            Action::Delete(r) => {
+                let id = self.txn(&r.reference)?;
+                self.book.write(|tx| ledger::delete(tx, id, r.confirm))?;
+            }
+            Action::SetCleared {
+                reference,
+                account,
+                cleared,
+                confirm,
+                ..
+            } => {
+                let id = self.txn(reference)?;
+                let account = self.account(account)?;
+                let cleared: Cleared = parse("cleared", cleared)?;
+                self.book
+                    .write(|tx| ledger::set_cleared(tx, id, account, cleared, *confirm))?;
+            }
+            Action::CloseAccount {
+                account,
+                date,
+                confirm,
+                ..
+            } => {
+                let account = self.account(account)?;
+                let date: Date = parse("date", date)?;
+                self.book
+                    .write(|tx| ledger::close_account(tx, account, date, *confirm))?;
+            }
+            Action::ReopenAccount { account, .. } => {
+                let account = self.account(account)?;
+                self.book.write(|tx| accounts::reopen(tx, account))?;
+            }
+            Action::DeleteAccount { account, .. } => {
+                let account = self.account(account)?;
+                self.book.write(|tx| accounts::delete(tx, account))?;
+            }
+            Action::MergeCategories(m) => {
+                let (from, into) = (self.category(&m.from)?, self.category(&m.into)?);
+                self.book.write(|tx| categories::merge(tx, from, into))?;
+            }
+            Action::MergePayees(m) => {
+                let find = |name: &str| -> Result<_, ActErr> {
+                    payees::find_by_name(self.book.conn(), name)?
+                        .map(|p| p.id)
+                        .ok_or_else(|| ActErr::Harness(format!("unknown payee {name:?}")))
+                };
+                let (from, into) = (find(&m.from)?, find(&m.into)?);
+                self.book.write(|tx| payees::merge(tx, from, into))?;
+            }
+            Action::MergeTags(m) => {
+                let all = tags::list(self.book.conn())?;
+                let find = |name: &str| {
+                    all.iter()
+                        .find(|t| t.fields.name.eq_ignore_ascii_case(name))
+                        .map(|t| t.id)
+                        .ok_or_else(|| ActErr::Harness(format!("unknown tag {name:?}")))
+                };
+                let (from, into) = (find(&m.from)?, find(&m.into)?);
+                self.book.write(|tx| tags::merge(tx, from, into))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Category path by ID, for register counterparts.
+    fn category_path(&self, id: CategoryId) -> Result<String, ActErr> {
+        let all = categories::list(self.book.conn())?;
+        let mut parts = Vec::new();
+        let mut cursor = Some(id);
+        while let Some(c) = cursor {
+            let cat = all
+                .iter()
+                .find(|x| x.id == c)
+                .ok_or_else(|| ActErr::Harness(format!("category {} missing", c.0)))?;
+            parts.push(cat.fields.name.clone());
+            cursor = cat.fields.parent;
+        }
+        parts.reverse();
+        Ok(parts.join(":"))
+    }
+
+    fn counterpart(&self, c: Counterpart) -> Result<String, ActErr> {
+        Ok(match c {
+            Counterpart::None => String::new(),
+            Counterpart::Split => "--Split--".into(),
+            Counterpart::Category(id) => self.category_path(id)?,
+            Counterpart::Transfer(id) => {
+                format!("[{}]", accounts::get(self.book.conn(), id)?.fields.name)
+            }
+        })
+    }
+}
+
+fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx, Failure> {
+    let book = Book::with_clock(clock).map_err(|e| Failure::error("setup", e))?;
+    let mut ctx = Ctx {
+        book,
+        total: Money::ZERO,
+        refs: BTreeMap::new(),
+    };
+    for (i, a) in s.accounts.iter().enumerate() {
+        let step = format!("accounts[{}] ({})", i + 1, a.name);
+        let r = (|| -> Result<(), ActErr> {
+            let t: AccountType = parse("type", &a.account_type)?;
+            let mut f = AccountFields::new(a.name.clone(), t);
+            if let Some(limit) = &a.credit_limit {
+                f.credit_limit = Some(parse("credit_limit", limit)?);
+            }
+            let id = ctx.book.account_with(&f)?;
+            match (&a.opening_balance, &a.opening_date) {
+                (Some(amount), Some(date)) => {
+                    ctx.book.opening_balance(
+                        id,
+                        parse("opening_date", date)?,
+                        parse("opening_balance", amount)?,
+                    )?;
+                }
+                (None, None) => {}
+                _ => {
+                    return Err(ActErr::Harness(
+                        "opening_balance and opening_date go together".into(),
+                    ));
+                }
+            }
+            Ok(())
+        })();
+        r.map_err(|e| act_failure(&step, e))?;
+    }
+    for (i, c) in s.categories.iter().enumerate() {
+        let step = format!("categories[{}] ({})", i + 1, c.path);
+        let r = (|| -> Result<(), ActErr> {
+            let kind: CategoryKind = parse("kind", &c.kind)?;
+            ctx.book.category(&c.path, kind)?;
+            Ok(())
+        })();
+        r.map_err(|e| act_failure(&step, e))?;
+    }
+    Ok(ctx)
+}
+
+fn act_failure(step: &str, e: ActErr) -> Failure {
+    match e {
+        ActErr::Harness(m) => Failure::error(step, m),
+        ActErr::Engine(e) => Failure::error(step, e),
+    }
 }
 
 fn execute(s: &Scenario) -> Result<(), Failure> {
@@ -254,33 +738,213 @@ fn execute(s: &Scenario) -> Result<(), Failure> {
     }
     let as_of: Date = s.as_of.parse().map_err(|e| Failure::error("as_of", e))?;
     let clock = FixedClock::new(as_of);
+    let mut ctx = setup(s, clock)?;
 
-    let mut total = Money::ZERO;
     for (i, action) in s.actions.iter().enumerate() {
         let step = format!("action {} ({})", i + 1, action.kind());
-        match action {
-            Action::Add { amount } => total += money(&step, amount)?,
-            Action::Subtract { amount } => total -= money(&step, amount)?,
+        match (ctx.run(action), action.expect_error()) {
+            (Ok(()), None) => {}
+            (Ok(()), Some(want)) => {
+                return Err(Failure::mismatch(&step, "error", want, "(succeeded)"));
+            }
+            (Err(ActErr::Engine(e)), Some(want)) => {
+                if !e.to_string().contains(want) {
+                    return Err(Failure::mismatch(&step, "error", want, e));
+                }
+            }
+            (Err(e), _) => return Err(act_failure(&step, e)),
         }
     }
 
-    if let Some(expected) = &s.expect.total {
-        let expected = money("expect.total", expected)?;
-        if expected != total {
-            return Err(Failure::mismatch("expect.total", "total", expected, total));
+    check_expectations(s, &ctx, as_of, &clock).map_err(|e| match e {
+        Checked::Fail(f) => f,
+        Checked::Err(step, e) => act_failure(&step, e),
+    })?;
+
+    let report = integrity::check(ctx.book.conn()).map_err(|e| Failure::error("integrity", e))?;
+    if !report.is_clean() {
+        let lines: Vec<String> = report
+            .issues
+            .iter()
+            .map(|i| format!("{:?} {} {:?}: {}", i.check, i.table, i.id, i.detail))
+            .collect();
+        return Err(Failure::error("integrity", lines.join("\n")));
+    }
+    Ok(())
+}
+
+enum Checked {
+    Fail(Failure),
+    Err(String, ActErr),
+}
+
+fn compare(step: &str, field: &str, expected: &str, actual: &str) -> Result<(), Checked> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(Checked::Fail(Failure::mismatch(
+            step, field, expected, actual,
+        )))
+    }
+}
+
+/// Normalize an expected amount ("5" → "5.00") so text compares exactly.
+fn norm_money(step: &str, s: &str) -> Result<String, Checked> {
+    s.parse::<Money>()
+        .map(|m| m.to_string())
+        .map_err(|e| Checked::Err(step.into(), ActErr::Harness(e.to_string())))
+}
+
+fn check_expectations(
+    s: &Scenario,
+    ctx: &Ctx,
+    as_of: Date,
+    clock: &FixedClock,
+) -> Result<(), Checked> {
+    let e = &s.expect;
+    if let Some(expected) = &e.total {
+        let expected = money("expect.total", expected).map_err(Checked::Fail)?;
+        if expected != ctx.total {
+            return Err(Checked::Fail(Failure::mismatch(
+                "expect.total",
+                "total",
+                expected,
+                ctx.total,
+            )));
         }
     }
-    if let Some(expected) = &s.expect.today {
+    if let Some(expected) = &e.today {
         let expected: Date = expected
             .parse()
-            .map_err(|e| Failure::error("expect.today", e))?;
+            .map_err(|e| Checked::Fail(Failure::error("expect.today", e)))?;
         if expected != clock.today() {
-            return Err(Failure::mismatch(
+            return Err(Checked::Fail(Failure::mismatch(
                 "expect.today",
                 "today",
                 expected,
                 clock.today(),
-            ));
+            )));
+        }
+    }
+
+    let conn = ctx.book.conn();
+    let per_account = |step: &str,
+                       map: &BTreeMap<String, String>,
+                       f: &dyn Fn(AccountId) -> Result<String, ActErr>|
+     -> Result<(), Checked> {
+        for (name, expected) in map {
+            let err = |e| Checked::Err(step.to_string(), e);
+            let id = ctx.account(name).map_err(err)?;
+            let actual = f(id).map_err(err)?;
+            let expected = if expected == "none" || expected == "open" || expected == "closed" {
+                expected.clone()
+            } else {
+                norm_money(step, expected)?
+            };
+            compare(step, name, &expected, &actual)?;
+        }
+        Ok(())
+    };
+    per_account("expect.balances", &e.balances, &|id| {
+        Ok(ledger::balance(conn, id, Some(as_of))?.to_string())
+    })?;
+    per_account("expect.ending_balances", &e.ending_balances, &|id| {
+        Ok(ledger::balance(conn, id, None)?.to_string())
+    })?;
+    per_account("expect.cleared_balances", &e.cleared_balances, &|id| {
+        Ok(ledger::cleared_balance(conn, id, None)?.to_string())
+    })?;
+    per_account("expect.available_credit", &e.available_credit, &|id| {
+        Ok(ledger::register_summary(conn, id, as_of)?
+            .available_credit
+            .map_or("none".into(), |m| m.to_string()))
+    })?;
+    per_account("expect.account_status", &e.account_status, &|id| {
+        Ok(accounts::get(conn, id)?.status.to_string())
+    })?;
+
+    for (path, expected) in &e.category_totals {
+        let step = "expect.category_totals";
+        let err = |e| Checked::Err(step.to_string(), e);
+        let id = ctx.category(path).map_err(err)?;
+        let actual = ledger::category_total(conn, id, None)
+            .map_err(|e| err(e.into()))?
+            .to_string();
+        compare(step, path, &norm_money(step, expected)?, &actual)?;
+    }
+
+    if let Some(expected) = e.txn_count {
+        let actual: i64 = conn
+            .query_row("SELECT count(*) FROM txn", [], |r| r.get(0))
+            .map_err(|e| Checked::Err("expect.txn_count".into(), ActErr::Harness(e.to_string())))?;
+        compare(
+            "expect.txn_count",
+            "txn_count",
+            &expected.to_string(),
+            &actual.to_string(),
+        )?;
+    }
+
+    for reg in &e.register {
+        let step = format!("expect.register ({})", reg.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&reg.account).map_err(err)?;
+        let rows = ledger::register(conn, id).map_err(|e| err(e.into()))?;
+        compare(
+            &step,
+            "row count",
+            &reg.rows.len().to_string(),
+            &rows.len().to_string(),
+        )?;
+        for (i, (want, got)) in reg.rows.iter().zip(&rows).enumerate() {
+            let field = |name: &str| format!("row {} {name}", i + 1);
+            compare(&step, &field("date"), &want.date, &got.date.to_string())?;
+            compare(
+                &step,
+                &field("amount"),
+                &norm_money(&step, &want.amount)?,
+                &got.amount.to_string(),
+            )?;
+            compare(
+                &step,
+                &field("balance"),
+                &norm_money(&step, &want.balance)?,
+                &got.balance.to_string(),
+            )?;
+            if let Some(r) = &want.reference {
+                let id = ctx.txn(r).map_err(err)?;
+                let actual = if got.txn_id == id {
+                    r.clone()
+                } else {
+                    format!("txn {}", got.txn_id.0)
+                };
+                compare(&step, &field("ref"), r, &actual)?;
+            }
+            if let Some(p) = &want.payee {
+                let actual = match got.payee {
+                    Some(pid) => {
+                        payees::get(conn, pid)
+                            .map_err(|e| err(e.into()))?
+                            .fields
+                            .name
+                    }
+                    None => String::new(),
+                };
+                compare(&step, &field("payee"), p, &actual)?;
+            }
+            if let Some(c) = &want.counterpart {
+                let actual = ctx.counterpart(got.counterpart).map_err(err)?;
+                compare(&step, &field("counterpart"), c, &actual)?;
+            }
+            if let Some(st) = &want.status {
+                compare(&step, &field("status"), st, got.status.as_str())?;
+            }
+            if let Some(c) = &want.cleared {
+                compare(&step, &field("cleared"), c, got.cleared.as_str())?;
+            }
+            if let Some(n) = &want.check_num {
+                compare(&step, &field("check_num"), n, &got.check_num)?;
+            }
         }
     }
     Ok(())

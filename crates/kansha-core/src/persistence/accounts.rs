@@ -115,9 +115,47 @@ fn validate(f: &AccountFields) -> Result<()> {
     Ok(())
 }
 
+/// Rules that need the linked rows: an investment account's linked cash
+/// account is an open checking, savings, cash, or money market account
+/// (INV-300); an Other Asset's linked liability is a loan or other
+/// liability (ACCT-140). An existing link to a since-closed account may
+/// stay (`before`), so other fields can still be edited.
+fn validate_links(conn: &Connection, f: &AccountFields, before: Option<&Account>) -> Result<()> {
+    use crate::accounts::AccountType as T;
+    if let Some(cash) = f.investment.as_ref().and_then(|i| i.linked_cash_account) {
+        let linked = get(conn, cash)?;
+        if !linked.fields.account_type.is_cash_bearing() {
+            return Err(Error::Invalid(format!(
+                "linked cash account {:?} must be checking, savings, cash, or money market",
+                linked.fields.name
+            )));
+        }
+        let unchanged = before
+            .and_then(|b| b.fields.investment.as_ref())
+            .is_some_and(|i| i.linked_cash_account == Some(cash));
+        if linked.status == AccountStatus::Closed && !unchanged {
+            return Err(Error::Invalid(format!(
+                "linked cash account {:?} is closed",
+                linked.fields.name
+            )));
+        }
+    }
+    if let Some(liability) = f.other_asset.as_ref().and_then(|o| o.linked_liability) {
+        let linked = get(conn, liability)?;
+        if !matches!(linked.fields.account_type, T::Loan | T::OtherLiability) {
+            return Err(Error::Invalid(format!(
+                "linked liability {:?} must be a loan or other liability account",
+                linked.fields.name
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Create an account.
 pub fn insert(tx: &Tx<'_>, f: &AccountFields) -> Result<Account> {
     validate(f)?;
+    validate_links(tx.conn(), f, None)?;
     let inv = f.investment.as_ref();
     let oa = f.other_asset.as_ref();
     tx.conn().execute(
@@ -200,6 +238,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Account>> {
 pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> {
     validate(f)?;
     let before = get(tx.conn(), id)?;
+    validate_links(tx.conn(), f, Some(&before))?;
     if before.fields.account_type != f.account_type {
         return Err(Error::Invalid(format!(
             "account type cannot change ({} to {})",
@@ -257,8 +296,8 @@ pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> 
     Ok(after)
 }
 
-/// Mark an account closed as of `date` (ACCT-210). The zero-balance rule
-/// needs the ledger and is enforced by the accounts service (Phase 2).
+/// Mark an account closed as of `date`. Callers use
+/// `ledger::close_account`, which applies the ACCT-210 rules first.
 pub fn close(tx: &Tx<'_>, id: AccountId, date: Date) -> Result<Account> {
     set_status(tx, id, AccountStatus::Closed, Some(date))
 }

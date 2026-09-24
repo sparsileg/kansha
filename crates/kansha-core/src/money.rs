@@ -166,6 +166,10 @@ macro_rules! arithmetic {
             pub fn checked_sub(self, rhs: $name) -> Option<$name> {
                 self.0.checked_sub(rhs.0).map($name)
             }
+
+            pub fn checked_neg(self) -> Option<$name> {
+                self.0.checked_neg().map($name)
+            }
         }
 
         // Overflow of i64 cents (~$92 quadrillion) is treated as an

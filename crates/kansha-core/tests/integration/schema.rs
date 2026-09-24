@@ -4,6 +4,7 @@
 
 use kansha_core::accounts::{AccountFields, AccountType, LotMethod};
 use kansha_core::categories::{CategoryFields, CategoryKind};
+use kansha_core::ledger::{Cleared, TxnStatus};
 use kansha_core::persistence::audit::{AuditAction, AuditEntity};
 use kansha_core::persistence::{accounts, categories};
 use kansha_core::{Db, Error, Origin};
@@ -291,6 +292,31 @@ fn every_rust_enum_value_is_accepted_by_the_schema() {
                 params![T, e, a, before, after],
             )
             .unwrap_or_else(|err| panic!("{e}/{a}: {err}"));
+        }
+    }
+
+    let acct = c
+        .query_row(
+            "SELECT min(id) FROM account WHERE type = 'checking'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap();
+    for s in TxnStatus::ALL {
+        c.execute(
+            "INSERT INTO txn (txn_date, status, origin, created_at)
+             VALUES ('2026-01-01', ?1, 'manual', ?2)",
+            params![s, T],
+        )
+        .unwrap_or_else(|err| panic!("{s}: {err}"));
+        let txn = c.last_insert_rowid();
+        for (i, cl) in Cleared::ALL.iter().enumerate() {
+            c.execute(
+                "INSERT INTO posting (txn_id, line_no, account_id, amount, cleared)
+                 VALUES (?1, ?2, ?3, 0, ?4)",
+                params![txn, i as i64 + 1, acct, cl],
+            )
+            .unwrap_or_else(|err| panic!("{cl}: {err}"));
         }
     }
 }

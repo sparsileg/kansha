@@ -8,6 +8,8 @@
 pub mod accounts;
 pub mod audit;
 pub mod categories;
+pub mod integrity;
+pub mod ledger;
 pub mod migrate;
 pub mod payees;
 pub mod settings;

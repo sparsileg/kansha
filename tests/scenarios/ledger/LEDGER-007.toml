@@ -1,0 +1,67 @@
+id = "LEDGER-007"
+description = "Cleared status per side of a transfer; cleared balance counts only cleared postings"
+requirements = ["REG-060", "TXN-010", "RCN-020"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "1000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[categories]]
+path = "Utilities"
+kind = "expense"
+
+[[actions]]
+type = "entry"
+ref = "power"
+date = "2026-02-01"
+account = "Checking"
+amount = "-80.00"
+category = "Utilities"
+cleared = "cleared"
+
+[[actions]]
+type = "entry"
+ref = "move"
+date = "2026-02-05"
+account = "Checking"
+amount = "-200.00"
+transfer = "Savings"
+
+[[actions]]
+type = "set_cleared"
+ref = "move"
+account = "Savings"
+cleared = "cleared"
+
+[[actions]]
+type = "set_cleared"
+ref = "power"
+account = "Checking"
+cleared = "reconciled"
+expect_error = "only by reconciling"
+
+[[actions]]
+type = "set_cleared"
+ref = "power"
+account = "Savings"
+cleared = "cleared"
+expect_error = "has no posting to account"
+
+[expect.cleared_balances]
+"Checking" = "-80.00"
+"Savings" = "200.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00", cleared = "unmarked" },
+    { date = "2026-02-01", amount = "-80.00", balance = "920.00", cleared = "cleared" },
+    { date = "2026-02-05", amount = "-200.00", balance = "720.00", cleared = "unmarked" },
+]

@@ -1951,6 +1951,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "specta",
  "tempfile",
  "thiserror 2.0.21",
  "toml 0.9.12+spec-1.1.0",
