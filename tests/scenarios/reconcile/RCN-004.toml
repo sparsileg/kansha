@@ -1,0 +1,76 @@
+id = "RCN-004"
+description = "Interest earned and a service charge from the statement become cleared transactions when the session starts"
+requirements = ["RCN-020"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Interest"
+kind = "income"
+
+[[categories]]
+path = "Bank Fees"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[categories]]
+path = "Bills"
+kind = "expense"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "bill"
+date = "2026-01-05"
+account = "Checking"
+amount = "-200.00"
+category = "Bills"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "797.50"
+interest = { date = "2026-01-31", amount = "2.50", category = "Interest" }
+service_charge = { date = "2026-01-31", amount = "5.00", category = "Bank Fees" }
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open", "bill"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[expect.reconcile_history]]
+account = "Checking"
+rows = [
+    { statement_date = "2026-01-31", statement_balance = "797.50", opening_balance = "0.00", status = "finished", items = 4, total = "797.50" },
+]
+
+[expect.category_totals]
+"Interest" = "-2.50"
+"Bank Fees" = "5.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00", cleared = "reconciled" },
+    { date = "2026-01-05", amount = "-200.00", balance = "800.00", cleared = "reconciled" },
+    { date = "2026-01-31", amount = "2.50", balance = "802.50", counterpart = "Interest", cleared = "reconciled" },
+    { date = "2026-01-31", amount = "-5.00", balance = "797.50", counterpart = "Bank Fees", cleared = "reconciled" },
+]

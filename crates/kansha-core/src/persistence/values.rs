@@ -82,5 +82,6 @@ id_sql!(
     crate::categories::PayeeId,
     crate::categories::TagId,
     crate::ledger::TxnId,
+    crate::reconcile::ReconciliationId,
     crate::schedule::ScheduleId
 );

@@ -298,3 +298,117 @@ proptest! {
         world.check()?;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Reconciliation (Phase 5)
+// ---------------------------------------------------------------------------
+
+/// One entry on its own day, and whether to check it in its first session
+/// and whether that session ends after it.
+#[derive(Debug, Clone)]
+struct Item {
+    cents: i64,
+    check: bool,
+    cut: bool,
+}
+
+fn item() -> impl Strategy<Value = Item> {
+    (-100_000_i64..100_000, any::<bool>(), any::<bool>())
+        .prop_filter("no zero-amount entries", |(c, _, _)| *c != 0)
+        .prop_map(|(cents, check, cut)| Item { cents, check, cut })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    /// Reconciling in chunks, checking some items and leaving others for a
+    /// later statement: each finished statement equals the reconciled
+    /// total, the next opens where it ended, the history chains, and the
+    /// integrity check stays clean (RCN-020, RCN-030, RCN-060, INT-030).
+    #[test]
+    fn chained_reconciliations_keep_reconciled_equal_to_the_statement(
+        items in prop::collection::vec(item(), 1..25)
+    ) {
+        let mut book = Book::new("2026-12-31".parse().unwrap()).unwrap();
+        let chk = book.account("Checking", AccountType::Checking).unwrap();
+        let misc = book.category("Misc", CategoryKind::Expense).unwrap();
+        let start: Date = "2026-01-01".parse().unwrap();
+
+        // (txn, date, cents, reconciled?)
+        let mut txns: Vec<(TxnId, Date, i64, bool)> = Vec::new();
+        for (i, it) in items.iter().enumerate() {
+            let date = kansha_core::schedule::add_days(start, i as i64).unwrap();
+            let t = book
+                .entry(chk, date)
+                .amount(Money::from_cents(it.cents))
+                .category(misc)
+                .save()
+                .unwrap();
+            txns.push((t.id, date, it.cents, false));
+        }
+
+        let mut reconciled_total = 0_i64;
+        let mut previous_statement = 0_i64;
+        let mut sessions = 0_usize;
+        for (i, it) in items.iter().enumerate() {
+            let last = i + 1 == items.len();
+            if !(it.cut || last) {
+                continue;
+            }
+            let statement_date = txns[i].1;
+            sessions += 1;
+            // Items still open on or before the statement date. The first
+            // pass checks per `check`; leftovers are checked on odd sessions.
+            let chosen: Vec<usize> = (0..=i)
+                .filter(|&j| !txns[j].3)
+                .filter(|&j| items[j].check || sessions % 2 == 1 || last)
+                .collect();
+            let chunk: i64 = chosen.iter().map(|&j| txns[j].2).sum();
+            let statement = reconciled_total + chunk;
+
+            let open = kansha_core::reconcile::opening_check(book.conn(), chk).unwrap();
+            prop_assert!(open.matches);
+            prop_assert_eq!(open.actual, Money::from_cents(reconciled_total));
+
+            let rec = book
+                .write(|tx| {
+                    kansha_core::reconcile::start(
+                        tx,
+                        &kansha_core::reconcile::StartInput {
+                            account: chk,
+                            statement_date,
+                            statement_balance: Money::from_cents(statement),
+                            interest: None,
+                            service_charge: None,
+                        },
+                    )
+                })
+                .unwrap();
+            prop_assert_eq!(rec.opening_balance, Money::from_cents(previous_statement));
+            let ids: Vec<TxnId> = chosen.iter().map(|&j| txns[j].0).collect();
+            book.write(|tx| kansha_core::reconcile::set_checked(tx, rec.id, &ids, true))
+                .unwrap();
+            let session = kansha_core::reconcile::session(book.conn(), rec.id).unwrap();
+            prop_assert_eq!(session.difference, Money::ZERO);
+            book.write(|tx| kansha_core::reconcile::finish(tx, rec.id)).unwrap();
+
+            for &j in &chosen {
+                txns[j].3 = true;
+            }
+            reconciled_total = statement;
+            previous_statement = statement;
+
+            let now = kansha_core::reconcile::opening_check(book.conn(), chk).unwrap();
+            prop_assert_eq!(now.actual, Money::from_cents(statement));
+            prop_assert_eq!(now.expected, Money::from_cents(statement));
+            prop_assert!(integrity::check(book.conn()).unwrap().is_clean());
+        }
+
+        // Every reconciled posting is linked to a finished session, and the
+        // history's totals add up to the reconciled balance.
+        let history = kansha_core::reconcile::history(book.conn(), chk).unwrap();
+        prop_assert_eq!(history.len(), sessions);
+        let linked: i64 = history.iter().map(|h| h.items_total.cents()).sum();
+        prop_assert_eq!(linked, reconciled_total);
+    }
+}

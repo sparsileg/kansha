@@ -1,6 +1,9 @@
 // Date-only handling for financial dates. Integer calendar arithmetic on
 // ISO "YYYY-MM-DD" strings; never a JS `Date` (spec §17.3). "Today" is
-// always passed in from the Rust clock (`commands.today`).
+// always passed in from the Rust clock (`commands.today`). Shown and typed
+// dates follow the user's date format (SET-030).
+
+import { dateFormatState } from "../state/dateformat.svelte";
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -58,24 +61,58 @@ export function addDays(iso: string, n: number): string {
   return make(y, mo, d) ?? iso;
 }
 
-/** ISO "2026-03-05" → "03/05/2026". Invalid input is returned as is. */
+/** ISO "2026-03-05" in the user's format: "03/05/2026", "05/03/2026",
+ * or "2026-03-05". Invalid input is returned as is. */
 export function displayDate(iso: string): string {
   const m = ISO.exec(iso);
-  return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
+  if (!m) return iso;
+  switch (dateFormatState.value) {
+    case "dmy":
+      return `${m[3]}/${m[2]}/${m[1]}`;
+    case "ymd":
+      return iso;
+    default:
+      return `${m[2]}/${m[3]}/${m[1]}`;
+  }
 }
 
+/** The format's pattern, for placeholders: "MM/DD/YYYY" and so on. */
+export function datePattern(): string {
+  switch (dateFormatState.value) {
+    case "dmy":
+      return "DD/MM/YYYY";
+    case "ymd":
+      return "YYYY-MM-DD";
+    default:
+      return "MM/DD/YYYY";
+  }
+}
+
+/** An example date in the user's format, for messages. */
+export const dateExample = (): string => displayDate("2026-03-31");
+
 /**
- * Parse a typed date into ISO, or `null`. Accepts "3/5/2026", "3/5/26",
- * "3/5" (year from `today`), "2026-03-05". Two-digit years are 20yy.
+ * Parse a typed date into ISO, or `null`, in the user's format. A
+ * four-digit year first ("2026-3-5", "2026/03/05") is always accepted.
+ * Otherwise:
+ * - MM/DD/YYYY: "3/5/2026", "3/5/26", "3/5" (year from `today`).
+ * - DD/MM/YYYY: "5/3/2026", "5/3/26", "5/3".
+ * - YYYY-MM-DD: "3-5" or "3/5" (month-day, year from `today`).
+ * Two-digit years are 20yy. `/`, `.`, and `-` all separate.
  */
 export function parseDate(input: string, today: string): string | null {
   const s = input.trim();
-  if (isValidIso(s)) return s;
-  const m = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/.exec(s);
+  const ymd = /^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/.exec(s);
+  if (ymd) return make(+ymd[1], +ymd[2], +ymd[3]);
+  const format = dateFormatState.value;
+  const m =
+    format === "ymd"
+      ? /^(\d{1,2})[/.-](\d{1,2})()$/.exec(s)
+      : /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/.exec(s);
   if (!m) return null;
   let y = +today.slice(0, 4);
   if (m[3]) y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
-  return make(y, +m[1], +m[2]);
+  return format === "dmy" ? make(y, +m[2], +m[1]) : make(y, +m[1], +m[2]);
 }
 
 /**

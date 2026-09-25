@@ -20,7 +20,6 @@
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import { scheduleState } from "../state/schedule.svelte";
-  import { selectOnFocus } from "../ui/selectOnFocus";
   import type { AccountId, Payee } from "../types/bindings";
   import TargetCombo from "./TargetCombo.svelte";
 
@@ -355,8 +354,8 @@
     <input class="c-num" aria-label="Num" bind:value={d.check_num} />
     <input class="c-payee" aria-label="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" inputmode="decimal" use:selectOnFocus value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
-    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" use:selectOnFocus value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
+    <input class="c-pay num" aria-label="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
+    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
     <div class="c-cat">
       <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit newKind={newKind} onchange={onCategoryChange} />
     </div>
@@ -385,7 +384,7 @@
       {#each d.splits as s, i (i)}
         <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
           <TargetCombo bind:value={s.target} excludeAccount={account} newKind={newKind} label={`Split ${i + 1} category`} />
-          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" use:selectOnFocus value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
+          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
           <input aria-label={`Split ${i + 1} memo`} bind:value={s.memo} onkeydown={(e) => onSplitMemoKey(e, i)} />
           <button type="button" tabindex="-1" aria-label={`Remove split ${i + 1}`} onclick={() => (d.splits = d.splits.filter((_, j) => j !== i))}>×</button>
         </div>

@@ -24,7 +24,7 @@ describe("Navigation bar dialog", () => {
     render(NavBarModal);
     expect(shown()).toEqual(["Home", "Calendar"]);
     expect(available()).toContain("Checking");
-    expect(available()).toContain("Reconcile (Planned: Phase 5)");
+    expect(available()).toContain("Reconcile");
     expect(available()).not.toContain("Home");
   });
 
@@ -61,7 +61,7 @@ describe("Navigation bar dialog", () => {
   it("Reset to default restores the standard bar", async () => {
     render(NavBarModal);
     await fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
-    expect(shown()).toEqual(["Home", "Reminders", "Calendar", "Reconcile (Planned: Phase 5)", "Investments (Planned: Phase 6)"]);
+    expect(shown()).toEqual(["Home", "Reminders", "Calendar", "Reconcile", "Investments (Planned: Phase 6)"]);
   });
 
   it("Up and Down need a selection; a deleted account is dropped on Save", async () => {

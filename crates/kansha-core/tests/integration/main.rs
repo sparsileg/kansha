@@ -11,6 +11,7 @@ mod integrity;
 mod ipc_json;
 mod ledger;
 mod migrations;
+mod reconcile;
 mod register;
 mod repositories;
 mod schedule;

@@ -1,0 +1,140 @@
+id = "RCN-011"
+description = "Reconciliation refuses what it cannot do: unreconcilable or closed accounts, bad statement items, items already reconciled, void, or from another account"
+requirements = ["RCN-010", "RCN-020"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[accounts]]
+name = "Savings"
+type = "savings"
+
+[[accounts]]
+name = "Car Loan"
+type = "loan"
+
+[[accounts]]
+name = "Old"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "gone"
+date = "2026-01-02"
+account = "Checking"
+amount = "-10.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "elsewhere"
+date = "2026-01-03"
+account = "Savings"
+amount = "5.00"
+category = "Salary"
+
+[[actions]]
+type = "void"
+ref = "gone"
+
+[[actions]]
+type = "close_account"
+account = "Old"
+date = "2026-03-01"
+
+[[actions]]
+type = "reconcile_start"
+account = "Car Loan"
+statement_date = "2026-01-31"
+statement_balance = "0.00"
+expect_error = "cannot be reconciled"
+
+[[actions]]
+type = "reconcile_start"
+account = "Old"
+statement_date = "2026-01-31"
+statement_balance = "0.00"
+expect_error = "is closed"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "0.00"
+interest = { date = "2026-01-31", amount = "0.00", category = "Salary" }
+expect_error = "greater than zero"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "0.00"
+interest = { date = "2026-02-01", amount = "1.00", category = "Salary" }
+expect_error = "after the statement date"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1000.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["gone"]
+expect_error = "is void"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["elsewhere"]
+expect_error = "no posting to this account"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-02-28"
+statement_balance = "1000.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open"]
+expect_error = "already reconciled"
+
+# Only checked transactions of the failed start remain: nothing was created.
+[expect]
+txn_count = 3
+
+[[expect.reconcile]]
+account = "Checking"
+payments = 0
+deposits = 0
+difference = "0.00"

@@ -11,7 +11,6 @@
   } from "../format/money";
   import { listsState } from "../state/lists.svelte";
   import { scheduleState } from "../state/schedule.svelte";
-  import { selectOnFocus } from "../ui/selectOnFocus";
   import type { OccurrenceView } from "../types/bindings";
   import AccountBalance from "./AccountBalance.svelte";
 
@@ -128,7 +127,7 @@
           inputmode="decimal"
           value={amountText}
           disabled={!single}
-          use:selectOnFocus
+         
           onbeforeinput={blockNonAmountChar}
           oninput={onAmount}
         />

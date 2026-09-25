@@ -102,6 +102,23 @@ const QUERIES: &[(Check, &str, &str)] = &[
          WHERE r.status <> 'finished' ORDER BY p.id",
     ),
     (
+        Check::ReconciledBalanceMismatch,
+        "reconciliation",
+        "SELECT r.id, 'account ' || r.account_id || ': reconciled postings total '
+                || (SELECT ifnull(sum(p.amount), 0) FROM posting p
+                    WHERE p.account_id = r.account_id AND p.cleared = 'reconciled')
+                || ' cents; statement ' || r.statement_date || ' ended at '
+                || r.statement_balance || ' cents'
+         FROM reconciliation r
+         WHERE r.status = 'finished'
+           AND r.id = (SELECT max(r2.id) FROM reconciliation r2
+                       WHERE r2.account_id = r.account_id AND r2.status = 'finished')
+           AND (SELECT ifnull(sum(p.amount), 0) FROM posting p
+                WHERE p.account_id = r.account_id AND p.cleared = 'reconciled')
+               <> r.statement_balance
+         ORDER BY r.id",
+    ),
+    (
         Check::CategoryCycle,
         "category",
         "WITH RECURSIVE up (start, cur, depth) AS (

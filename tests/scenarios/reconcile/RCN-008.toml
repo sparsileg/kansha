@@ -1,0 +1,100 @@
+id = "RCN-008"
+description = "Voiding, deleting, or unreconciling reconciled transactions is reported as a change since the last statement"
+requirements = ["RCN-030", "TXN-050"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "d"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "a"
+date = "2026-01-02"
+account = "Checking"
+amount = "-10.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "b"
+date = "2026-01-03"
+account = "Checking"
+amount = "-20.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "c"
+date = "2026-01-04"
+account = "Checking"
+amount = "-30.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "940.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["d", "a", "b", "c"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[actions]]
+type = "void"
+ref = "a"
+confirm = true
+
+[[actions]]
+type = "delete"
+ref = "b"
+confirm = true
+
+[[actions]]
+type = "set_cleared"
+ref = "c"
+account = "Checking"
+cleared = "unmarked"
+confirm = true
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-02-28"
+statement_balance = "970.00"
+
+[[expect.reconcile]]
+account = "Checking"
+opening = "1000.00"
+opening_expected = "940.00"
+changed = ["a", "b", "c"]
+# c is unmarked, so it is on this statement again.
+cleared_balance = "1000.00"
+difference = "-30.00"
+payments = 1
+deposits = 0
+
+[expect]
+integrity = ["reconciled_balance_mismatch"]

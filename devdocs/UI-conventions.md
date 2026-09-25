@@ -111,6 +111,32 @@ section records what was decided about it.
 - Add requirements for the menu structure, search, and multiple books
   (one open at a time).
 
+### Look and feel
+
+Agreed with Stan, 2026-09-24.
+
+- **Focus:** the field, dropdown, or button being worked on is
+  unmistakable, the same everywhere: the theme's focus background and
+  text color and a ring inside its edge. Light theme: dark text on
+  yellow, blue ring. Dark theme: white text on deep blue, yellow ring.
+  Selecting a field's text on focus keeps that look (a stronger shade
+  of the background). A dropdown's open list uses the theme's plain
+  colors.
+- **Select on focus:** entering any text field selects what is in it,
+  so typing replaces it.
+- **Dates:** shown and typed in the format chosen in Settings:
+  MM/DD/YYYY (default), DD/MM/YYYY, or YYYY-MM-DD. Logs and histories
+  show `YYYY-MM-DDTHH:MM:SSZ`.
+- **Register filter bar:** compact. Each box is as wide as its content,
+  labels sit beside the boxes, and the row does not stretch with the
+  window or line up with the register columns.
+- **Register scrolling:** pagination goes; the register lazy-scrolls
+  through all transactions (not yet built).
+- **Reconcile view:** statement, totals, and buttons stay put while
+  each item list scrolls on its own. The checkbox sits by the amount,
+  and a click anywhere on a row toggles it. Credit card amounts appear
+  as the statement prints them (balance owed positive).
+
 ## Status
 
 The structure above is built (menu bar, navigation bar, account bar and

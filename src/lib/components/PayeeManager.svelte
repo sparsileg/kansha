@@ -5,7 +5,6 @@
   import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
-  import { selectOnFocus } from "../ui/selectOnFocus";
   import type { Payee } from "../types/bindings";
 
   let selected = $state<Payee | null>(null);
@@ -134,7 +133,7 @@
         </select>
       </label>
       <label>Default memo <input bind:value={memo} /></label>
-      <label>Default amount (negative = payment) <input bind:value={amount} inputmode="decimal" use:selectOnFocus /></label>
+      <label>Default amount (negative = payment) <input bind:value={amount} inputmode="decimal" /></label>
       <label class="check"><input type="checkbox" bind:checked={hidden} /> Hidden</label>
       {#if error}<p class="err" role="alert">{error}</p>{/if}
       <div class="row">

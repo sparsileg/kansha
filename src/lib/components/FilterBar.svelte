@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { displayDate, parseDate } from "../format/date";
+  import { datePattern, displayDate, parseDate } from "../format/date";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import type { Cleared } from "../types/bindings";
@@ -27,8 +27,8 @@
 </script>
 
 <div class="filters" role="search" aria-label="Register filters">
-  <label class="date-l">From <input class="date" class:bad={fromBad} bind:value={from} placeholder="MM/DD/YYYY" onchange={() => setDate("date_from", from)} /></label>
-  <label class="date-l">To <input class="date" class:bad={toBad} bind:value={to} placeholder="MM/DD/YYYY" onchange={() => setDate("date_to", to)} /></label>
+  <label>From <input class="date" class:bad={fromBad} bind:value={from} placeholder={datePattern()} onchange={() => setDate("date_from", from)} /></label>
+  <label>To <input class="date" class:bad={toBad} bind:value={to} placeholder={datePattern()} onchange={() => setDate("date_to", to)} /></label>
   <label>
     Payee
     <select value={registerState.filters.payee ?? ""} onchange={(e) => registerState.setFilters({ payee: num(e.currentTarget.value) })}>
@@ -63,30 +63,29 @@
 </div>
 
 <style>
+  /* Compact: each box is as wide as its content needs and the row does not
+     stretch with the window. It wraps only when the window is too narrow. */
   .filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 0.75rem;
-    align-items: end;
+    gap: 0.35rem 0.9rem;
+    align-items: center;
     padding: 0.25rem 0;
+    font-size: 0.9em;
   }
-  /* The boxes share the row and grow with it, so they follow the
-     register's width when the account list is closed or opened. */
   label {
     display: flex;
-    flex-direction: column;
-    flex: 1 1 9rem;
-    min-width: 7rem;
-    font-size: 0.8em;
+    align-items: center;
+    gap: 0.3rem;
+    flex: none;
+    white-space: nowrap;
   }
-  label.date-l {
-    flex-basis: 7.5rem;
+  input.date {
+    width: 11ch;
+    box-sizing: content-box;
   }
-  input,
   select {
-    width: 100%;
-    box-sizing: border-box;
-    min-width: 0;
+    width: auto;
   }
   .bad {
     /* Dashed as well as colored: not a hue-only cue. */

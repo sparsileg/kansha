@@ -179,6 +179,32 @@ Expectations are checked after **all** actions, so an occurrence entered
 by an action is no longer pending. Use a second, untouched schedule to check
 a full series.
 
+### Reconciliation (Phase 5)
+
+```toml
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1400.00"     # ledger sign: owed on a credit card = negative
+interest = { date = "2026-01-31", amount = "2.50", category = "Interest" }      # optional
+service_charge = { date = "2026-01-31", amount = "5.00", category = "Bank Fees" }  # optional
+```
+
+The other reconcile actions work on the account's session in progress:
+
+- `reconcile_check`: `account`, `refs = ["a", "b"]` (names given to
+  transactions with `ref`), `checked = false` to uncheck.
+- `reconcile_update`: `account`, `statement_date` and/or `statement_balance`.
+- `reconcile_adjust`: `account`, `confirm = true` (Balance Adjustment).
+- `reconcile_finish`, `reconcile_abandon`: `account`.
+
+To keep a transaction reconciled when editing it, give the `edit` action
+`cleared = "reconciled"` and `confirm = true`.
+
+Interest and service charge amounts are positive; the engine picks the
+sign.
+
 ## Expectations
 
 ```toml
@@ -224,6 +250,30 @@ from = "2026-01-01"
 to = "2026-06-30"
 dates = ["2026-01-01", "2026-02-01"]
 ```
+
+```toml
+[[expect.reconcile]]              # the account's session in progress
+account = "Checking"
+difference = "0.00"               # optional checks:
+cleared_balance = "1400.00"
+opening = "1380.00"               # Σ reconciled postings now
+opening_expected = "1400.00"      # last statement's ending balance
+changed = ["groceries"]           # refs of reconciled txns changed since
+payments = 1                      # items listed (checked or not)
+deposits = 2
+
+[[expect.reconcile_history]]      # newest first; every row listed
+account = "Checking"
+rows = [
+    { statement_date = "2026-01-31", statement_balance = "1400.00", opening_balance = "0.00", status = "finished", items = 3, total = "1400.00" },
+]
+
+[expect]
+integrity = ["reconciled_balance_mismatch"]   # checks expected to fail
+```
+
+`expect.integrity` lists integrity checks (snake_case) that must fail, and
+only those. Leave it out and the check must be clean.
 
 Register rows must list every row, in register order (date, then entry
 order). `date`, `amount`, `balance` are required; `ref`, `payee`,

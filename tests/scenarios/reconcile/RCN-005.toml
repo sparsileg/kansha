@@ -1,0 +1,70 @@
+id = "RCN-005"
+description = "Reconcile a credit card in statement sign: the balance owed is entered positive; the ledger keeps it negative; interest is a charge"
+requirements = ["RCN-010", "RCN-020"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Visa"
+type = "credit_card"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Finance Charges"
+kind = "expense"
+
+[[actions]]
+type = "entry"
+ref = "charge"
+date = "2026-01-03"
+account = "Visa"
+amount = "-400.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "payment"
+date = "2026-01-20"
+account = "Visa"
+amount = "150.00"
+transfer = "Checking"
+
+[[actions]]
+type = "reconcile_start"
+account = "Visa"
+statement_date = "2026-01-31"
+statement_balance = "254.00"
+interest = { date = "2026-01-31", amount = "4.00", category = "Finance Charges" }
+
+[[actions]]
+type = "reconcile_check"
+account = "Visa"
+refs = ["charge", "payment"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Visa"
+
+[expect.cleared_balances]
+"Visa" = "-254.00"
+"Checking" = "0.00"
+
+[[expect.reconcile_history]]
+account = "Visa"
+rows = [
+    { statement_date = "2026-01-31", statement_balance = "254.00", opening_balance = "0.00", status = "finished", items = 3, total = "254.00" },
+]
+
+[[expect.register]]
+account = "Visa"
+rows = [
+    { date = "2026-01-03", amount = "-400.00", balance = "-400.00", cleared = "reconciled" },
+    { date = "2026-01-20", amount = "150.00", balance = "-250.00", cleared = "reconciled" },
+    { date = "2026-01-31", amount = "-4.00", balance = "-254.00", counterpart = "Finance Charges", cleared = "reconciled" },
+]

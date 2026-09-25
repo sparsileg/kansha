@@ -1,0 +1,82 @@
+id = "RCN-006"
+description = "A Balance Adjustment is explicit: it needs confirmation, is labeled, and only exists while there is a difference"
+requirements = ["RCN-040"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-100.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "895.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open", "groceries"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+expect_error = "the difference is -5.00"
+
+[[actions]]
+type = "reconcile_adjust"
+account = "Checking"
+expect_error = "confirmation required"
+
+[[actions]]
+type = "reconcile_adjust"
+account = "Checking"
+confirm = true
+
+[[actions]]
+type = "reconcile_adjust"
+account = "Checking"
+confirm = true
+expect_error = "no difference to adjust"
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[expect]
+txn_count = 3
+
+[expect.category_totals]
+"Balance Adjustment" = "5.00"
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00", cleared = "reconciled" },
+    { date = "2026-01-05", amount = "-100.00", balance = "900.00", cleared = "reconciled" },
+    { date = "2026-01-31", amount = "-5.00", balance = "895.00", counterpart = "Balance Adjustment", cleared = "reconciled" },
+]

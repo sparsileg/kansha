@@ -1,0 +1,89 @@
+id = "RCN-002"
+description = "A session in progress keeps its check marks (save and resume); its statement can be corrected; items can be unchecked"
+requirements = ["RCN-050", "RCN-020"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-100.00"
+payee = "Costco"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "pay"
+date = "2026-01-10"
+account = "Checking"
+amount = "500.00"
+payee = "Employer"
+category = "Salary"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1400.00"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1400.00"
+expect_error = "already has a reconciliation in progress"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open", "groceries"]
+
+[[actions]]
+type = "reconcile_update"
+account = "Checking"
+statement_balance = "900.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["groceries"]
+checked = false
+
+[[expect.reconcile]]
+account = "Checking"
+opening = "0.00"
+opening_expected = "0.00"
+cleared_balance = "1000.00"
+difference = "-100.00"
+changed = []
+payments = 1
+deposits = 2
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "1000.00", balance = "1000.00", cleared = "cleared" },
+    { date = "2026-01-05", amount = "-100.00", balance = "900.00", cleared = "unmarked" },
+    { date = "2026-01-10", amount = "500.00", balance = "1400.00", cleared = "unmarked" },
+]

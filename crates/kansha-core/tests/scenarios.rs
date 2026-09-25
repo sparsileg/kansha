@@ -22,6 +22,7 @@ use kansha_core::accounts::{AccountFields, AccountId, AccountType};
 use kansha_core::categories::{CategoryId, CategoryKind};
 use kansha_core::ledger::{self, Cleared, Counterpart, EntryLine, Target, TxnId};
 use kansha_core::persistence::{accounts, categories, payees, schedules, tags};
+use kansha_core::reconcile::{self, StartInput, StatementItem};
 use kansha_core::schedule::{
     self, AmountType, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
     ScheduleId, ScheduleLine, WeekendRule,
@@ -151,6 +152,61 @@ enum Action {
         expect_entered: Option<usize>,
         expect_error: Option<String>,
     },
+    /// Start a reconciliation of `account` (Phase 5).
+    ReconcileStart {
+        account: String,
+        statement_date: String,
+        /// Ledger sign: a credit card balance owed is negative.
+        statement_balance: String,
+        interest: Option<StatementItemSpec>,
+        service_charge: Option<StatementItemSpec>,
+        expect_error: Option<String>,
+    },
+    /// Change the statement date and/or balance of the account's open
+    /// reconciliation.
+    ReconcileUpdate {
+        account: String,
+        statement_date: Option<String>,
+        statement_balance: Option<String>,
+        expect_error: Option<String>,
+    },
+    /// Check (or, with `checked = false`, uncheck) the named transactions
+    /// in the account's open reconciliation.
+    ReconcileCheck {
+        account: String,
+        refs: Vec<String>,
+        #[serde(default = "yes")]
+        checked: bool,
+        expect_error: Option<String>,
+    },
+    /// Balance Adjustment for the open reconciliation's difference.
+    ReconcileAdjust {
+        account: String,
+        #[serde(default)]
+        confirm: bool,
+        expect_error: Option<String>,
+    },
+    ReconcileFinish {
+        account: String,
+        expect_error: Option<String>,
+    },
+    ReconcileAbandon {
+        account: String,
+        expect_error: Option<String>,
+    },
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StatementItemSpec {
+    date: String,
+    /// Size of the item, positive.
+    amount: String,
+    category: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -274,6 +330,12 @@ impl Action {
             Action::SkipOccurrence { .. } => "skip_occurrence",
             Action::OverrideOccurrence { .. } => "override_occurrence",
             Action::AutoEnter { .. } => "auto_enter",
+            Action::ReconcileStart { .. } => "reconcile_start",
+            Action::ReconcileUpdate { .. } => "reconcile_update",
+            Action::ReconcileCheck { .. } => "reconcile_check",
+            Action::ReconcileAdjust { .. } => "reconcile_adjust",
+            Action::ReconcileFinish { .. } => "reconcile_finish",
+            Action::ReconcileAbandon { .. } => "reconcile_abandon",
         }
     }
 
@@ -291,6 +353,12 @@ impl Action {
             | Action::SkipOccurrence { expect_error, .. }
             | Action::OverrideOccurrence { expect_error, .. }
             | Action::AutoEnter { expect_error, .. }
+            | Action::ReconcileStart { expect_error, .. }
+            | Action::ReconcileUpdate { expect_error, .. }
+            | Action::ReconcileCheck { expect_error, .. }
+            | Action::ReconcileAdjust { expect_error, .. }
+            | Action::ReconcileFinish { expect_error, .. }
+            | Action::ReconcileAbandon { expect_error, .. }
             | Action::CloseAccount { expect_error, .. }
             | Action::ReopenAccount { expect_error, .. }
             | Action::DeleteAccount { expect_error, .. } => expect_error.as_deref(),
@@ -333,6 +401,53 @@ struct Expect {
     /// Pending occurrences in a date range.
     #[serde(default)]
     occurrences: Vec<OccurrencesExpect>,
+    /// The open reconciliation of an account, worked out.
+    #[serde(default)]
+    reconcile: Vec<ReconcileExpect>,
+    /// An account's reconciliation history, newest first.
+    #[serde(default)]
+    reconcile_history: Vec<HistoryExpect>,
+    /// Integrity checks expected to fail (snake_case names). Empty means
+    /// the integrity check must be clean.
+    #[serde(default)]
+    integrity: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReconcileExpect {
+    account: String,
+    difference: Option<String>,
+    cleared_balance: Option<String>,
+    /// Σ reconciled postings now.
+    opening: Option<String>,
+    /// The last statement's ending balance.
+    opening_expected: Option<String>,
+    /// Refs of reconciled transactions reported as changed, sorted.
+    changed: Option<Vec<String>>,
+    /// Payments and deposits listed (checked or not).
+    payments: Option<usize>,
+    deposits: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoryExpect {
+    account: String,
+    rows: Vec<HistoryRowExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoryRowExpect {
+    statement_date: String,
+    statement_balance: String,
+    opening_balance: String,
+    /// in_progress, finished, or abandoned.
+    status: String,
+    /// Postings it reconciled that are still reconciled.
+    items: i64,
+    total: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -757,6 +872,22 @@ impl Ctx {
         })
     }
 
+    fn statement_item(&self, spec: &StatementItemSpec) -> Result<StatementItem, ActErr> {
+        Ok(StatementItem {
+            date: parse("date", &spec.date)?,
+            amount: parse("amount", &spec.amount)?,
+            category: self.category(&spec.category)?,
+        })
+    }
+
+    /// The account's in-progress reconciliation.
+    fn open_reconciliation(&self, account: &str) -> Result<reconcile::Reconciliation, ActErr> {
+        let id = self.account(account)?;
+        reconcile::open_for(self.book.conn(), id)?.ok_or_else(|| {
+            ActErr::Harness(format!("{account:?} has no reconciliation in progress"))
+        })
+    }
+
     fn remember(&mut self, reference: &Option<String>, id: TxnId) {
         if let Some(r) = reference {
             self.refs.insert(r.clone(), id);
@@ -898,6 +1029,76 @@ impl Ctx {
                     return Err(ActErr::Harness(format!("auto_enter failed: {}", f.reason)));
                 }
             }
+            Action::ReconcileStart {
+                account,
+                statement_date,
+                statement_balance,
+                interest,
+                service_charge,
+                ..
+            } => {
+                let input = StartInput {
+                    account: self.account(account)?,
+                    statement_date: parse("statement_date", statement_date)?,
+                    statement_balance: parse("statement_balance", statement_balance)?,
+                    interest: interest
+                        .as_ref()
+                        .map(|i| self.statement_item(i))
+                        .transpose()?,
+                    service_charge: service_charge
+                        .as_ref()
+                        .map(|i| self.statement_item(i))
+                        .transpose()?,
+                };
+                self.book.write(|tx| reconcile::start(tx, &input))?;
+            }
+            Action::ReconcileUpdate {
+                account,
+                statement_date,
+                statement_balance,
+                ..
+            } => {
+                let rec = self.open_reconciliation(account)?;
+                let date: Date = match statement_date {
+                    Some(d) => parse("statement_date", d)?,
+                    None => rec.statement_date,
+                };
+                let balance: Money = match statement_balance {
+                    Some(b) => parse("statement_balance", b)?,
+                    None => rec.statement_balance,
+                };
+                self.book
+                    .write(|tx| reconcile::update_statement(tx, rec.id, date, balance))?;
+            }
+            Action::ReconcileCheck {
+                account,
+                refs,
+                checked,
+                ..
+            } => {
+                let rec = self.open_reconciliation(account)?;
+                let ids = refs
+                    .iter()
+                    .map(|r| self.txn(r))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.book
+                    .write(|tx| reconcile::set_checked(tx, rec.id, &ids, *checked))?;
+            }
+            Action::ReconcileAdjust {
+                account, confirm, ..
+            } => {
+                let rec = self.open_reconciliation(account)?;
+                self.book
+                    .write(|tx| reconcile::add_adjustment(tx, rec.id, *confirm))?;
+            }
+            Action::ReconcileFinish { account, .. } => {
+                let rec = self.open_reconciliation(account)?;
+                self.book.write(|tx| reconcile::finish(tx, rec.id))?;
+            }
+            Action::ReconcileAbandon { account, .. } => {
+                let rec = self.open_reconciliation(account)?;
+                self.book.write(|tx| reconcile::abandon(tx, rec.id))?;
+            }
             Action::MergeTags(m) => {
                 let all = tags::list(self.book.conn())?;
                 let find = |name: &str| {
@@ -1033,13 +1234,39 @@ fn execute(s: &Scenario) -> Result<(), Failure> {
     })?;
 
     let report = integrity::check(ctx.book.conn()).map_err(|e| Failure::error("integrity", e))?;
-    if !report.is_clean() {
-        let lines: Vec<String> = report
+    if s.expect.integrity.is_empty() {
+        if !report.is_clean() {
+            let lines: Vec<String> = report
+                .issues
+                .iter()
+                .map(|i| format!("{:?} {} {:?}: {}", i.check, i.table, i.id, i.detail))
+                .collect();
+            return Err(Failure::error("integrity", lines.join("\n")));
+        }
+    } else {
+        let mut failed: Vec<String> = report
             .issues
             .iter()
-            .map(|i| format!("{:?} {} {:?}: {}", i.check, i.table, i.id, i.detail))
+            .filter_map(|i| {
+                serde_json::to_value(i.check)
+                    .ok()?
+                    .as_str()
+                    .map(String::from)
+            })
             .collect();
-        return Err(Failure::error("integrity", lines.join("\n")));
+        failed.sort();
+        failed.dedup();
+        let mut want = s.expect.integrity.clone();
+        want.sort();
+        want.dedup();
+        if failed != want {
+            return Err(Failure::mismatch(
+                "integrity",
+                "failed checks",
+                want.join(", "),
+                failed.join(", "),
+            ));
+        }
     }
     Ok(())
 }
@@ -1197,6 +1424,115 @@ fn check_expectations(
             .map(|v| v.date.to_string())
             .collect();
         compare(&step, "dates", &ox.dates.join(", "), &actual.join(", "))?;
+    }
+
+    for rx in &e.reconcile {
+        let step = format!("expect.reconcile ({})", rx.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let rec = ctx.open_reconciliation(&rx.account).map_err(err)?;
+        let session = reconcile::session(conn, rec.id).map_err(|e| err(e.into()))?;
+        let money_fields = [
+            ("difference", &rx.difference, session.difference),
+            (
+                "cleared_balance",
+                &rx.cleared_balance,
+                session.cleared_balance,
+            ),
+            ("opening", &rx.opening, session.opening),
+            (
+                "opening_expected",
+                &rx.opening_expected,
+                session.opening_check.expected,
+            ),
+        ];
+        for (field, want, got) in money_fields {
+            if let Some(want) = want {
+                compare(&step, field, &norm_money(&step, want)?, &got.to_string())?;
+            }
+        }
+        if let Some(want) = &rx.changed {
+            let mut names: Vec<String> = session
+                .opening_check
+                .changed
+                .iter()
+                .map(|c| {
+                    ctx.refs
+                        .iter()
+                        .find(|(_, id)| **id == c.txn_id)
+                        .map_or(format!("txn {}", c.txn_id.0), |(name, _)| name.clone())
+                })
+                .collect();
+            names.sort();
+            let mut want = want.clone();
+            want.sort();
+            compare(&step, "changed", &want.join(", "), &names.join(", "))?;
+        }
+        if let Some(n) = rx.payments {
+            compare(
+                &step,
+                "payments",
+                &n.to_string(),
+                &session.payments.len().to_string(),
+            )?;
+        }
+        if let Some(n) = rx.deposits {
+            compare(
+                &step,
+                "deposits",
+                &n.to_string(),
+                &session.deposits.len().to_string(),
+            )?;
+        }
+    }
+
+    for hx in &e.reconcile_history {
+        let step = format!("expect.reconcile_history ({})", hx.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&hx.account).map_err(err)?;
+        let rows = reconcile::history(conn, id).map_err(|e| err(e.into()))?;
+        compare(
+            &step,
+            "row count",
+            &hx.rows.len().to_string(),
+            &rows.len().to_string(),
+        )?;
+        for (i, (want, got)) in hx.rows.iter().zip(&rows).enumerate() {
+            let field = |name: &str| format!("row {} {name}", i + 1);
+            let r = &got.reconciliation;
+            compare(
+                &step,
+                &field("statement_date"),
+                &want.statement_date,
+                &r.statement_date.to_string(),
+            )?;
+            compare(
+                &step,
+                &field("statement_balance"),
+                &norm_money(&step, &want.statement_balance)?,
+                &r.statement_balance.to_string(),
+            )?;
+            compare(
+                &step,
+                &field("opening_balance"),
+                &norm_money(&step, &want.opening_balance)?,
+                &r.opening_balance.to_string(),
+            )?;
+            compare(&step, &field("status"), &want.status, r.status.as_str())?;
+            compare(
+                &step,
+                &field("items"),
+                &want.items.to_string(),
+                &got.item_count.to_string(),
+            )?;
+            if let Some(t) = &want.total {
+                compare(
+                    &step,
+                    &field("total"),
+                    &norm_money(&step, t)?,
+                    &got.items_total.to_string(),
+                )?;
+            }
+        }
     }
 
     for reg in &e.register {

@@ -23,7 +23,8 @@ describe("navCatalog", () => {
     expect(byId("reports.investing")?.label).toBe("Investing report");
     expect(byId("file.open")?.label).toBe("Open book");
     expect(byId("edit.settings")?.label).toBe("Settings");
-    expect(byId("tools.reconcile")?.disabled).toBe("Planned: Phase 5");
+    expect(byId("tools.reconcile")?.disabled).toBeUndefined();
+    expect(byId("view.investments")?.disabled).toBe("Planned: Phase 6");
     expect(byId("tools.calendar")?.disabled).toBeUndefined();
   });
 

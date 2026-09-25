@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod ledger;
 pub mod lists;
+pub mod reconcile;
 pub mod sample;
 pub mod schedule;
 

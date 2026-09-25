@@ -172,8 +172,8 @@
   }
   .list button:hover:not(.off),
   .list button:focus-visible {
-    background: #1f6feb;
-    color: #fff;
+    background: var(--sel-bg, #1f6feb);
+    color: var(--sel-fg, #fff);
     outline: none;
   }
   .list button.off {

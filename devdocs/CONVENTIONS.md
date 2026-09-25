@@ -72,6 +72,8 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - Intermediate math: `rust_decimal`; round to cents only at defined points; round-half-even unless a rule says otherwise.
 - Allocations (basis splits, pro-rata adjustments) distribute remainders deterministically so parts sum exactly to the whole.
 - **Dates:** date-only types in Rust; ISO `YYYY-MM-DD` strings across IPC and in TypeScript. No JS `Date` for financial dates. No time zones.
+- **Showing dates:** every user-facing date, shown or typed, goes through `displayDate`/`parseDate` (and `datePattern`/`dateExample` for placeholders and messages) in `src/lib/format/date.ts`, which follow the date format setting (SET-030). Never hard-code `MM/DD/YYYY` or an example date. Logs and histories show timestamps as stored: `YYYY-MM-DDTHH:MM:SSZ` (UTC).
+- **Statement sign:** reconciliation takes and returns amounts as a statement prints them (a credit card balance owed is positive); `reconcile::Sign` converts at that module's boundary. Everywhere else is ledger sign.
 - **Clock:** "today" comes from an injected `Clock`; never read system time in the engine.
 - **IPC:** amounts cross as integers or decimal strings, never floats.
 
@@ -95,6 +97,9 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - Types in `src/lib/types/` are generated from Rust; never hand-edited. `bindings.ts` is committed to the repo (so frontend-only CI and `npm run build` don't need the Rust toolchain) and regenerated with `just bindings` whenever a command's signature changes — check in the diff.
 - Money/quantity/date formatting and parsing only in `src/lib/format/`.
 - **No business logic or money arithmetic in TypeScript.** Throwaway prototype UI follows these rules too.
+- **Colors come from theme variables** set on `.app` in `App.svelte` (`--bg`, `--bad`, `--good`, `--focus-*`, `--sel-*`, `--opt-*`); components do not hard-code colors. Every pair is readable in every theme, and color is never the only cue: Stan is red-green colorblind.
+- **Focus (NFR-080):** one app-wide look for every field, dropdown, and keyboard-focused button: the theme's focus background and text color plus a ring drawn inside the edge. A focused field's selected text keeps the focus text color. Do not add per-component focus styles.
+- **Select on focus:** every text field selects its contents on focus, installed once on `document` by `App.svelte` (`src/lib/ui/selectOnFocus.ts`). Do not add it per field.
 
 ## 7. Testing
 

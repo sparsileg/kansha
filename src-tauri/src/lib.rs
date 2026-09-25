@@ -82,6 +82,17 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::schedule::schedule_review_dismiss,
             commands::schedule::calendar_occurrences,
             commands::schedule::calendar_projection,
+            commands::reconcile::reconcile_open,
+            commands::reconcile::reconcile_opening_check,
+            commands::reconcile::reconcile_start,
+            commands::reconcile::reconcile_session,
+            commands::reconcile::reconcile_update,
+            commands::reconcile::reconcile_check,
+            commands::reconcile::reconcile_adjust,
+            commands::reconcile::reconcile_finish,
+            commands::reconcile::reconcile_abandon,
+            commands::reconcile::reconcile_history,
+            commands::reconcile::reconcile_history_items,
         ])
 }
 

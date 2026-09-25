@@ -249,7 +249,7 @@
     background: rgba(31, 111, 235, 0.12);
   }
   .day.sel {
-    outline: 2px solid #1f6feb;
+    outline: 2px solid var(--focus-ring, #1f6feb);
     outline-offset: -2px;
   }
   .num {
@@ -282,7 +282,7 @@
     font-size: 0.9em;
   }
   .more:focus-visible {
-    outline: 2px solid #1f6feb;
+    outline: 2px solid var(--focus-ring, #1f6feb);
   }
   .proj {
     margin-top: auto;

@@ -4,7 +4,7 @@
 import { dialogState } from "../state/dialogs.svelte";
 import { registerState } from "../state/register.svelte";
 import { viewState } from "../state/view.svelte";
-import { exitApp, goHome, openAccount } from "./nav";
+import { exitApp, goHome, openAccount, openReconcile } from "./nav";
 import { HOME_ID } from "./navitems";
 
 export function runAction(id: string): void {
@@ -35,6 +35,9 @@ export function runAction(id: string): void {
       case "tools.reminders":
         viewState.navigate("scheduled");
         break;
+      case "tools.reconcile":
+        void openReconcile();
+        break;
       case "tools.payees":
         viewState.navigate("manage", { tab: "payees" });
         break;
@@ -62,6 +65,8 @@ export function isCurrent(id: string): boolean {
       return view === "calendar";
     case "tools.reminders":
       return view === "scheduled";
+    case "tools.reconcile":
+      return view === "reconcile";
     case "tools.payees":
     case "tools.categories":
     case "tools.tags":

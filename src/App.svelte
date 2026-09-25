@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from "svelte";
   import { onMount } from "svelte";
+  import { selectOnFocus } from "./lib/ui/selectOnFocus";
   import Account from "./views/Account.svelte";
   import Accounts from "./views/Accounts.svelte";
   import AccountModal from "./lib/components/AccountModal.svelte";
@@ -28,8 +29,12 @@
   import Dashboard from "./views/Dashboard.svelte";
   import EmptyBook from "./views/EmptyBook.svelte";
   import Manage from "./views/Manage.svelte";
+  import Reconcile from "./views/Reconcile.svelte";
   import Scheduled from "./views/Scheduled.svelte";
   import Search from "./views/Search.svelte";
+
+  // Every text field selects its contents on focus, so typing replaces it.
+  onMount(() => selectOnFocus(document));
 
   onMount(() => {
     void listsState.loadAll().then(() => {
@@ -46,6 +51,7 @@
     manage: Manage,
     scheduled: Scheduled,
     calendar: Calendar,
+    reconcile: Reconcile,
     search: Search,
   };
   const View = $derived(views[viewState.current]);
@@ -96,17 +102,40 @@
   :global(body) {
     margin: 0;
   }
-  /* The field being typed in must be unmistakable (keyboard entry). */
+  /* The field being typed in must be unmistakable (keyboard entry): its
+     background and text take the theme's focus colors. Buttons reached by
+     keyboard look the same. */
   :global(input:focus),
   :global(select:focus),
-  :global(textarea:focus) {
-    outline: 3px solid #1f6feb;
-    outline-offset: 0;
-    background: #fff6b0;
-    color: #111;
-    box-shadow: 0 0 0 4px rgba(31, 111, 235, 0.35);
+  :global(textarea:focus),
+  :global(button:focus-visible) {
+    /* Drawn inside the edge, so a neighbouring cell cannot cover it. */
+    outline: 3px solid var(--focus-ring);
+    outline-offset: -3px;
+    background: var(--focus-bg);
+    color: var(--focus-fg);
+    box-shadow: 0 0 0 4px var(--focus-glow);
     position: relative;
     z-index: 1;
+  }
+  /* A dropdown's open list: the theme's plain colors, never the focus
+     colors its field has while open. */
+  :global(option),
+  :global(optgroup) {
+    background: var(--opt-bg);
+    color: var(--opt-fg);
+  }
+  /* A focused field's contents, selected on focus: a stronger shade of
+     the focus background, same text color, so the field keeps its look. */
+  :global(input:focus::selection),
+  :global(textarea:focus::selection) {
+    background: var(--focus-sel-bg);
+    color: var(--focus-fg);
+  }
+  /* Selected text elsewhere. */
+  :global(::selection) {
+    background: var(--sel-bg);
+    color: var(--sel-fg);
   }
   .app {
     height: 100vh;
@@ -119,11 +148,36 @@
        symbol always says the same thing. */
     --bad: #a83200;
     --good: #005a9c;
+    /* Focus and selection, per theme, the same for every kind of field.
+       Yellow and blue stay apart for a red-green colorblind eye; text on
+       each is 7:1 or better. */
+    color-scheme: light;
+    --opt-bg: #fff;
+    --opt-fg: #111;
+    --focus-bg: #fff6b0;
+    --focus-fg: #111;
+    --focus-sel-bg: #ffc933;
+    --focus-ring: #1f6feb;
+    --focus-glow: rgba(31, 111, 235, 0.35);
+    --sel-bg: #1f6feb;
+    --sel-fg: #fff;
   }
   .app[data-theme="dark"] {
     --bg: #1e1e1e;
     --bad: #ff9f5a;
     --good: #7cc0ff;
+    /* Native controls (fields, dropdown lists, scrollbars) draw dark. */
+    color-scheme: dark;
+    --opt-bg: #2a2a2a;
+    --opt-fg: #eee;
+    /* White on deep blue: 10:1. The yellow ring marks it at a glance. */
+    --focus-bg: #0b3d91;
+    --focus-fg: #fff;
+    --focus-sel-bg: #2563d9;
+    --focus-ring: #ffd84d;
+    --focus-glow: rgba(255, 216, 77, 0.35);
+    --sel-bg: #7cc0ff;
+    --sel-fg: #111;
     background: #1e1e1e;
     color: #eee;
   }

@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.7 (draft) |
+| **Document version** | 0.3.10 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); D-50, D-60, D-100, D-110 decided |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); D-50, D-60, D-100, D-110 decided |
 
 ---
 
@@ -436,7 +436,7 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 
 - **SET-010** [1.0][S] Multiple themes (at least light and dark).
 - **SET-020** [1.0][S] Adjustable font size, applied globally.
-- **SET-030** [1.0][R] Date display format; first day of week.
+- **SET-030** [1.0][R] Date display format: MM/DD/YYYY (default), DD/MM/YYYY, or YYYY-MM-DD. Every user-facing date, shown or typed, follows it; a four-digit year typed first is always accepted. Logs and histories show timestamps as `YYYY-MM-DDTHH:MM:SSZ` (UTC). First day of week.
 - **SET-040** [1.0][R] Default lot selection method; stale-price threshold; tithing percentage.
 - **SET-050** [1.0][R] Backup location, retention, and schedule.
 - **SET-060** [1.0][R] Startup behavior: open dashboard or last view; run integrity check at startup.
@@ -453,7 +453,7 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 - **NFR-050** [1.0][R] Data volume: comfortably supports 20+ years of data (hundreds of thousands of transactions).
 - **NFR-060** [1.0][R] Durability: SQLite WAL mode with `synchronous=FULL`; no data loss on application crash.
 - **NFR-070** [1.0][R] Schema is documented and stable enough for external read-only inspection.
-- **NFR-080** [1.0][R] Accessibility: keyboard navigation throughout; respects font-size setting; adequate contrast in all themes.
+- **NFR-080** [1.0][R] Accessibility: keyboard navigation throughout; respects font-size setting; adequate contrast in all themes. The focused field or button takes the theme's focus background and text colors, not only an outline; a text field selects its contents on focus so typing replaces them. Applies app-wide.
 - **NFR-090** [1.0][R] Dates are calendar dates without time zones (financial dates never shift due to time zone conversion).
 
 ---
@@ -680,6 +680,7 @@ Modeling choices that affect other sections:
 - **Lots** store immutable acquisition facts. Open quantity and basis are derived from `lot_disposal` (sales, transfers out, removals) and `lot_adjustment` (splits, return of capital). A partial sale is a disposal, not a physical lot split.
 - **Schedules** store a template (`schedule` + `schedule_line`) and a recurrence rule. Occurrences are stored only once acted on (entered, skipped, or edited individually).
 - **Schedule rules (Phase 4a):** the recurrence engine generates *nominal* dates from the rule alone; the weekend rule (REC-050) shifts the due date but the nominal date identifies the occurrence. `schedule.next_due` holds the next nominal date. Occurrences are handled in order: only `next_due` can be entered or skipped. Entering and skipping both use up one of "# left" (REC-030). Editing a schedule is "this and all future" (REC-120): entered and skipped history stays, the series continues after the last occurrence acted on, and pending one-time overrides are dropped. "This occurrence only" is a pending `schedule_occurrence` row with `override_date` and/or `override_amount` (amount on single-line schedules only). Estimated amounts need confirmation on entry and are never auto-entered (REC-060). Auto-enter (REC-070) enters every due occurrence, missed ones included, with origin `scheduler`, and flags each for review (`needs_review`, migration 0002) until dismissed. A schedule with entered or skipped occurrences is soft-deleted (`status = deleted`) so REC-160 links survive; an unused one is removed. The projected balance (CAL-050) counts pending occurrences on their due dates, overdue ones on today.
+- **Reconciliation rules (Phase 5):** a session's check marks are the postings' own `cleared` status, so save and resume (RCN-050) need nothing beyond the `reconciliation` row. Checking an item marks its posting `cleared`; Finish turns every cleared posting dated on or before the statement into `reconciled`, linked to the session, and needs a zero difference: `statement balance − (Σ reconciled postings + Σ checked postings ≤ statement date)`. Reconciliation takes and shows every amount in statement sign, as the statement prints it: for a credit card (any liability) the balance owed is positive, a charge positive, a payment negative. The engine converts at its boundary; storage and the register stay in ledger sign. Items dated after the statement are never listed or reconciled, even if marked cleared in the register. One session in progress per account; a new statement date may not precede the last finished one. Only checking, savings, cash, money market, and credit card accounts reconcile (RCN-010); investment accounts wait for Phase 6. The opening balance is the last finished statement's ending balance (Σ reconciled postings if none). If reconciled postings no longer add up to it, the session still runs and the change list (RCN-030) comes from the audit log: transactions whose reconciled amount on the account differs from what it was when the last statement finished (an edit that leaves the amount alone is not listed). Interest earned and a service charge (RCN-020) are created with the session as cleared transactions with source `reconcile`; on a liability, interest is a charge. A Balance Adjustment (RCN-040) is one cleared transaction for the current difference, dated the statement date, in the built-in Balance Adjustment category, created only with confirmation. Abandoning keeps the session as history and leaves check marks as `cleared`. Finish writes one audit entry on the reconciliation, not one per transaction. Integrity check `reconciled_balance_mismatch` (INT-030) flags an account whose reconciled postings differ from its latest finished statement. No schema change.
 - **Audit log** is append-only, enforced by triggers.
 - **Account type** is fixed at creation.
 
@@ -940,3 +941,6 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.10 | 2026-09-24 | SET-030: three date formats (MM/DD/YYYY default, DD/MM/YYYY, YYYY-MM-DD) for every user-facing date; logs and histories use `YYYY-MM-DDTHH:MM:SSZ`. NFR-080: theme focus colors (background and text) and select-on-focus, app-wide. |
+| 0.3.9 | 2026-09-24 | Reconciliation uses statement sign: a credit card's ending balance is entered and shown as the statement prints it (owed = positive); charges positive, payments negative. Ledger sign unchanged elsewhere. |
+| 0.3.8 | 2026-09-24 | Phase 5 (reconciliation). §18 gains reconciliation rules (check marks are cleared status, Finish scope, opening balance and change detection from the audit log, statement items, Balance Adjustment, abandon). INT-030 reconciled-balance check implemented. No schema change; 11 IPC commands added. Scenarios under `tests/scenarios/reconcile/`. |

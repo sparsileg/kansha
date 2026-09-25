@@ -259,8 +259,8 @@
     list-style: none;
     max-height: 15rem;
     overflow-y: auto;
-    background: #fff;
-    color: #111;
+    background: var(--opt-bg, #fff);
+    color: var(--opt-fg, #111);
     border: 1px solid #555;
     border-radius: 4px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
@@ -271,8 +271,8 @@
     white-space: nowrap;
   }
   li.active {
-    background: #1f6feb;
-    color: #fff;
+    background: var(--sel-bg, #1f6feb);
+    color: var(--sel-fg, #fff);
   }
   li.create {
     border-top: 1px solid #555;

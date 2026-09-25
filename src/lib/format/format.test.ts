@@ -6,7 +6,8 @@ import {
   parseMoney,
   splitPaymentDeposit,
 } from "./money";
-import { addDays, applyDateKey, displayDate, parseDate } from "./date";
+import { addDays, applyDateKey, datePattern, displayDate, parseDate } from "./date";
+import { dateFormatState } from "../state/dateformat.svelte";
 
 describe("parseMoney", () => {
   it.each([
@@ -77,6 +78,30 @@ describe("dates", () => {
 
   it("displays MM/DD/YYYY", () => {
     expect(displayDate("2026-03-05")).toBe("03/05/2026");
+  });
+
+  it("follows the date format setting (SET-030)", () => {
+    try {
+      dateFormatState.set("dmy");
+      expect(displayDate("2026-03-05")).toBe("05/03/2026");
+      expect(datePattern()).toBe("DD/MM/YYYY");
+      expect(parseDate("5/3/2026", today)).toBe("2026-03-05");
+      expect(parseDate("5/3", today)).toBe("2026-03-05");
+      expect(parseDate("31/3/26", today)).toBe("2026-03-31");
+      expect(parseDate("3/31/2026", today)).toBeNull();
+      expect(parseDate("2026-03-05", today)).toBe("2026-03-05");
+
+      dateFormatState.set("ymd");
+      expect(displayDate("2026-03-05")).toBe("2026-03-05");
+      expect(datePattern()).toBe("YYYY-MM-DD");
+      expect(parseDate("2026-3-5", today)).toBe("2026-03-05");
+      expect(parseDate("3-5", today)).toBe("2026-03-05");
+      expect(parseDate("3/5/2026", today)).toBeNull();
+    } finally {
+      dateFormatState.set("mdy");
+    }
+    expect(displayDate("2026-03-05")).toBe("03/05/2026");
+    expect(datePattern()).toBe("MM/DD/YYYY");
   });
 
   it("handles register date keys", () => {

@@ -2,6 +2,7 @@
   import { groupAccounts } from "../state/groups";
   import { dialogState } from "../state/dialogs.svelte";
   import { listsState } from "../state/lists.svelte";
+  import { DATE_FORMATS, dateFormatState, type DateFormat } from "../state/dateformat.svelte";
   import { settingsState, type PanelSide } from "../state/settings.svelte";
   import { FONT_SIZES, themeState, type Theme } from "../state/theme.svelte";
   import Modal from "./Modal.svelte";
@@ -22,6 +23,12 @@
       Font size
       <select value={String(themeState.fontSize)} onchange={(e) => themeState.setFontSize(Number(e.currentTarget.value))}>
         {#each FONT_SIZES as px (px)}<option value={String(px)}>{px} px</option>{/each}
+      </select>
+    </label>
+    <label>
+      Date format
+      <select value={dateFormatState.value} onchange={(e) => dateFormatState.set(e.currentTarget.value as DateFormat)}>
+        {#each DATE_FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
       </select>
     </label>
     <label>

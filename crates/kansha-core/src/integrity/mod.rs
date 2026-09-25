@@ -2,8 +2,7 @@
 //!
 //! Read-only. Every issue names the failing check and the specific
 //! record; nothing is repaired. Checks that need investment data (share
-//! balances vs. open lots, lot basis conservation) and reconciliation
-//! history arrive with Phases 5 and 6.
+//! balances vs. open lots, lot basis conservation) arrive with Phase 6.
 //!
 //! "Both sides of every transfer exist and match" holds by construction:
 //! a transfer is one transaction with a posting in each account, so it is
@@ -36,6 +35,9 @@ pub enum Check {
     PostingAfterClose,
     /// A posting links to a reconciliation that is not finished.
     UnfinishedReconciliation,
+    /// An account's reconciled postings no longer add up to its last
+    /// finished statement's ending balance.
+    ReconciledBalanceMismatch,
     /// Following parents from a category leads back to it.
     CategoryCycle,
     /// A subcategory's kind differs from its parent's.

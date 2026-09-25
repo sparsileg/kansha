@@ -1,0 +1,81 @@
+id = "RCN-007"
+description = "Editing a reconciled transaction shows up when the next statement opens: which transaction changed, and by how much"
+requirements = ["RCN-030", "TXN-050"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-100.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "pay"
+date = "2026-01-10"
+account = "Checking"
+amount = "500.00"
+category = "Salary"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1400.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open", "groceries", "pay"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[actions]]
+type = "edit"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-120.00"
+category = "Food:Groceries"
+cleared = "reconciled"
+confirm = true
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-02-28"
+statement_balance = "1380.00"
+
+[[expect.reconcile]]
+account = "Checking"
+opening = "1380.00"
+opening_expected = "1400.00"
+changed = ["groceries"]
+difference = "0.00"
+
+[expect]
+integrity = ["reconciled_balance_mismatch"]

@@ -186,6 +186,57 @@ export const commands = {
 	calendarOccurrences: (from: string, to: string, accounts: AccountId[] | null, includeDone: boolean) => typedError<OccurrenceView[], IpcError>(__TAURI_INVOKE("calendar_occurrences", { from, to, accounts, includeDone })),
 	/**  Projected end-of-day balance of an account (CAL-050). */
 	calendarProjection: (account: AccountId, from: string, to: string) => typedError<DayBalance[], IpcError>(__TAURI_INVOKE("calendar_projection", { account, from, to })),
+	/**
+	 *  The account's in-progress reconciliation, if any, to resume it
+	 *  (RCN-050).
+	 */
+	reconcileOpen: (account: AccountId) => typedError<{
+	id: ReconciliationId,
+	account: AccountId,
+	statement_date: string,
+	/**
+	 *  The prior statement's ending balance when the session started
+	 *  (RCN-030); the reconciled postings' total if there was none.
+	 */
+	opening_balance: string,
+	/**  Ending balance on the statement, statement sign. */
+	statement_balance: string,
+	status: ReconStatus,
+	started_at: string,
+	finished_at: string | null,
+} | null, IpcError>(__TAURI_INVOKE("reconcile_open", { account })),
+	/**
+	 *  Do the account's reconciled postings still add up to its last
+	 *  statement, and if not, which reconciled transactions changed (RCN-030)?
+	 *  Shown before the statement is entered.
+	 */
+	reconcileOpeningCheck: (account: AccountId) => typedError<OpeningCheck, IpcError>(__TAURI_INVOKE("reconcile_opening_check", { account })),
+	/**
+	 *  Start a reconciliation (RCN-020 step 1). Interest and a service charge,
+	 *  when given, are entered as transactions. Reconcile commands take and
+	 *  return amounts in statement sign: a credit card balance owed is
+	 *  positive.
+	 */
+	reconcileStart: (input: StartInput) => typedError<Reconciliation, IpcError>(__TAURI_INVOKE("reconcile_start", { input })),
+	/**  The session's items, checked totals, and difference (RCN-020 step 3). */
+	reconcileSession: (id: ReconciliationId) => typedError<Session, IpcError>(__TAURI_INVOKE("reconcile_session", { id })),
+	/**  Correct the statement date or ending balance of a session in progress. */
+	reconcileUpdate: (id: ReconciliationId, statementDate: string, statementBalance: string) => typedError<Session, IpcError>(__TAURI_INVOKE("reconcile_update", { id, statementDate, statementBalance })),
+	/**  Check or uncheck items; returns the session as it now stands. */
+	reconcileCheck: (id: ReconciliationId, txns: TxnId[], checked: boolean) => typedError<Session, IpcError>(__TAURI_INVOKE("reconcile_check", { id, txns, checked })),
+	/**
+	 *  Balance Adjustment for the current difference (RCN-040). Fails with
+	 *  `confirmation_required` until `confirmed`; returns the session.
+	 */
+	reconcileAdjust: (id: ReconciliationId, confirmed: boolean) => typedError<Session, IpcError>(__TAURI_INVOKE("reconcile_adjust", { id, confirmed })),
+	/**  Finish (RCN-020 step 4): only with a zero difference. */
+	reconcileFinish: (id: ReconciliationId) => typedError<Reconciliation, IpcError>(__TAURI_INVOKE("reconcile_finish", { id })),
+	/**  Give up a session in progress; it stays in the history. */
+	reconcileAbandon: (id: ReconciliationId) => typedError<Reconciliation, IpcError>(__TAURI_INVOKE("reconcile_abandon", { id })),
+	/**  An account's reconciliations, newest first (RCN-060). */
+	reconcileHistory: (account: AccountId) => typedError<HistoryRow[], IpcError>(__TAURI_INVOKE("reconcile_history", { account })),
+	/**  What one reconciliation reconciled (RCN-060). */
+	reconcileHistoryItems: (id: ReconciliationId) => typedError<Item[], IpcError>(__TAURI_INVOKE("reconcile_history_items", { id })),
 };
 
 /* Types */
@@ -331,6 +382,18 @@ export type CategoryId = number;
 /**  Category kind (CAT-010). `Equity` is system-only (opening balances). */
 export type CategoryKind = "income" | "expense" | "equity";
 
+/**  A reconciled transaction changed since the last statement (RCN-030). */
+export type ChangedTxn = {
+	txn_id: TxnId,
+	date: string | null,
+	/**  Its reconciled amount on this account at the last statement. */
+	was: string,
+	/**  Its reconciled amount now: zero if deleted, voided, or unreconciled. */
+	now: string,
+	/**  The latest change: `create`, `update`, `void`, or `delete`. */
+	action: AuditAction,
+};
+
 /**  Which invariant failed. */
 export type Check = 
 /**  `PRAGMA integrity_check` reported a problem. */
@@ -349,6 +412,11 @@ export type Check =
 "posting_after_close" | 
 /**  A posting links to a reconciliation that is not finished. */
 "unfinished_reconciliation" | 
+/**
+ *  An account's reconciled postings no longer add up to its last
+ *  finished statement's ending balance.
+ */
+"reconciled_balance_mismatch" | 
 /**  Following parents from a category leads back to it. */
 "category_cycle" | 
 /**  A subcategory's kind differs from its parent's. */
@@ -477,6 +545,14 @@ export type FieldChange = {
  */
 export type Frequency = "once" | "daily" | "weekly" | "twice_monthly" | "monthly" | "monthly_last_day" | "monthly_nth_weekday" | "yearly";
 
+/**  One row of the reconciliation history (RCN-060). */
+export type HistoryRow = {
+	reconciliation: Reconciliation,
+	/**  Postings it reconciled that are still reconciled. */
+	item_count: number,
+	items_total: string,
+};
+
 /**  Result of an integrity check. */
 export type IntegrityReport = {
 	issues: Issue[],
@@ -510,6 +586,21 @@ export type Issue = {
 	/**  Its row ID, when there is one. */
 	id: number | null,
 	detail: string,
+};
+
+/**  One posting the user can check off. */
+export type Item = {
+	txn_id: TxnId,
+	date: string,
+	check_num: string,
+	payee_name: string,
+	memo: string,
+	/**
+	 *  This account's posting, statement sign: on a credit card a charge
+	 *  is positive and a payment negative.
+	 */
+	amount: string,
+	checked: boolean,
 };
 
 /**
@@ -593,6 +684,25 @@ export type OccurrenceView = {
 	actionable: boolean,
 };
 
+/**  Do the reconciled postings still add up to the last statement? */
+export type OpeningCheck = {
+	/**
+	 *  The last finished statement's ending balance; the reconciled total
+	 *  when there is none.
+	 */
+	expected: string,
+	/**  Σ reconciled postings now. */
+	actual: string,
+	/**
+	 *  Reconciled transactions changed since the last statement, when
+	 *  `expected` and `actual` differ. May be empty: the gap can predate
+	 *  the audit log (e.g. imported data).
+	 */
+	changed: ChangedTxn[],
+	/**  `expected == actual`. */
+	matches: boolean,
+};
+
 /**  Settings only Other Asset accounts have (ACCT-140). */
 export type OtherAssetSettings = {
 	subtype: AssetSubtype,
@@ -617,6 +727,29 @@ export type PayeeFields = {
 
 /**  Row ID of a payee. */
 export type PayeeId = number;
+
+/**  Where a reconciliation stands. */
+export type ReconStatus = "in_progress" | "finished" | "abandoned";
+
+/**  A stored reconciliation. */
+export type Reconciliation = {
+	id: ReconciliationId,
+	account: AccountId,
+	statement_date: string,
+	/**
+	 *  The prior statement's ending balance when the session started
+	 *  (RCN-030); the reconciled postings' total if there was none.
+	 */
+	opening_balance: string,
+	/**  Ending balance on the statement, statement sign. */
+	statement_balance: string,
+	status: ReconStatus,
+	started_at: string,
+	finished_at: string | null,
+};
+
+/**  Row ID of a reconciliation. */
+export type ReconciliationId = number;
 
 /**
  *  A repeating pattern. Field use by frequency:
@@ -831,6 +964,58 @@ export type SearchQuery = {
 	account: AccountId | null,
 	/**  Most rows to return, newest first. */
 	limit: number,
+};
+
+/**  An in-progress reconciliation, worked out for display (RCN-020 step 3). */
+export type Session = {
+	reconciliation: Reconciliation,
+	/**
+	 *  Items dated up to the statement date, oldest first: payments
+	 *  (money out of an asset; charges on a credit card) and deposits
+	 *  (money in; payments and credits on a credit card).
+	 */
+	payments: Item[],
+	deposits: Item[],
+	/**  Σ reconciled postings now. */
+	opening: string,
+	checked_payments: string,
+	checked_payment_count: number,
+	checked_deposits: string,
+	checked_deposit_count: number,
+	/**  `opening + checked payments + checked deposits`. */
+	cleared_balance: string,
+	/**  `statement balance − cleared balance`. Zero lets the user finish. */
+	difference: string,
+	opening_check: OpeningCheck,
+};
+
+/**  What starting a reconciliation needs (RCN-020 step 1). */
+export type StartInput = {
+	account: AccountId,
+	statement_date: string,
+	/**
+	 *  Statement sign, as printed: a credit card balance owed is
+	 *  positive.
+	 */
+	statement_balance: string,
+	interest: StatementItem | null,
+	service_charge: StatementItem | null,
+};
+
+/**
+ *  Interest earned or a service charge from the statement, entered as a
+ *  transaction when the session starts (RCN-020).
+ */
+export type StatementItem = {
+	/**  On or before the statement date. */
+	date: string,
+	/**
+	 *  Size of the item, greater than zero. The engine picks the sign:
+	 *  interest raises an asset account and is a charge on a liability;
+	 *  a service charge lowers either.
+	 */
+	amount: string,
+	category: CategoryId,
 };
 
 /**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */

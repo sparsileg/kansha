@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { datePattern } from "../format/date";
   import { untrack } from "svelte";
   import { call, commands } from "../api";
   import { blockNonAmountChar, sanitizeAmountInput } from "../format/money";
@@ -15,7 +16,6 @@
   import { dialogState } from "../state/dialogs.svelte";
   import { listsState } from "../state/lists.svelte";
   import { scheduleState } from "../state/schedule.svelte";
-  import { selectOnFocus } from "../ui/selectOnFocus";
   import type { ScheduleFields, ScheduleId } from "../types/bindings";
   import Modal from "./Modal.svelte";
   import TargetCombo from "./TargetCombo.svelte";
@@ -144,7 +144,7 @@
             class="amt"
             aria-label={`Line ${i + 1} amount`}
             inputmode="decimal"
-            use:selectOnFocus
+           
             value={line.amount}
             onbeforeinput={blockNonAmountChar}
             oninput={(e) => onAmount(line, e)}
@@ -220,7 +220,7 @@
         {/if}
         <label>
           {editing ? "Next due on or after" : "First due on or after"}
-          <input bind:value={d.start} placeholder="MM/DD/YYYY" />
+          <input bind:value={d.start} placeholder={datePattern()} />
         </label>
         <label>
           On a weekend
@@ -245,7 +245,7 @@
           </select>
         </label>
         {#if d.endKind === "on_date"}
-          <label>End date <input bind:value={d.endDate} placeholder="MM/DD/YYYY" /></label>
+          <label>End date <input bind:value={d.endDate} placeholder={datePattern()} /></label>
         {:else if d.endKind === "after_count"}
           <label># left <input inputmode="numeric" bind:value={d.count} /></label>
         {/if}

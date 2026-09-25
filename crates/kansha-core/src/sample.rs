@@ -29,7 +29,8 @@
 
 use std::collections::HashMap;
 
-use chrono::{Datelike, Days};
+use chrono::{Datelike, Days, Months};
+use rusqlite::Connection;
 use rust_decimal::Decimal;
 
 use crate::accounts::{AccountFields, AccountId, AccountType};
@@ -41,7 +42,8 @@ use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::ledger::{self, Cleared, Entry, EntryLine, Target};
 use crate::money::{Money, Rate};
-use crate::persistence::{Tx, accounts, categories, payees, tags};
+use crate::persistence::{self, Tx, accounts, categories, payees, tags};
+use crate::reconcile::{self, Item, StartInput};
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,8 +54,10 @@ pub struct SampleSpec {
     pub start: Date,
     /// Last day with transactions; days after `today` are future-dated.
     pub end: Date,
-    /// The app's today: entries dated after it are unmarked, older ones
-    /// (45+ days) are cleared.
+    /// The app's today. The month before today's is the statement month:
+    /// every account that reconciles has a finished statement for each
+    /// month end before it, so older entries are reconciled and the rest
+    /// are unmarked (RCN-020).
     pub today: Date,
     /// Everyday spending events per day, in percent: 100 is about one a
     /// day. Raise it to build a register of 10,000 rows quickly.
@@ -87,6 +91,29 @@ impl SampleSpec {
         let mut spec = SampleSpec::new(seed, start, today);
         spec.end = end;
         Ok(spec)
+    }
+}
+
+impl SampleSpec {
+    /// First day of the statement month: the month before today's.
+    pub fn statement_month(&self) -> Result<Date> {
+        let today = self.today;
+        let (year, month) = match today.month() {
+            1 => (today.year() - 1, 12),
+            m => (today.year(), m - 1),
+        };
+        Date::from_ymd(year, month, 1)
+    }
+
+    /// Last day of the statement month: the date of the first statement
+    /// left to reconcile.
+    pub fn statement_date(&self) -> Result<Date> {
+        let first = self.statement_month()?.naive();
+        first
+            .checked_add_months(Months::new(1))
+            .and_then(|next| next.pred_opt())
+            .map(Date::from_naive)
+            .ok_or(Error::Overflow("sample statement date"))
     }
 }
 
@@ -349,6 +376,8 @@ const BILLS: &[Bill] = &[
         false,
         false,
     ),
+    // Paid by check late in the month: outstanding at the statement.
+    (27, "Green Lawn Co", "Housing:Repairs", 6500, false, true),
 ];
 
 /// Accounts: (name, type, opening balance in cents, credit limit cents).
@@ -359,6 +388,10 @@ const ACCOUNTS: &[(&str, AccountType, i64, Option<i64>)] = &[
     ("Cash", AccountType::Cash, 30_000, None),
     ("Auto Loan", AccountType::Loan, -1_800_000, None),
 ];
+
+/// Checking's balance after the monthly sweep on the 25th, in cents,
+/// before yearly growth.
+const CUSHION: i64 = 400_000;
 
 const CHECKING: usize = 0;
 const SAVINGS: usize = 1;
@@ -404,6 +437,7 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
     };
     g.setup()?;
     g.run()?;
+    g.reconcile_history()?;
     let count = |table: &str| -> Result<u32> {
         let n: i64 = tx
             .conn()
@@ -451,7 +485,7 @@ impl Gen<'_, '_> {
             let amount = Money::from_cents(*cents);
             let mut entry =
                 Entry::new(id, self.spec.start, amount).line(Target::Category(opening), amount);
-            entry.cleared = Cleared::Cleared;
+            entry.cleared = self.cleared(self.spec.start);
             ledger::create_entry(self.tx, &entry)?;
         }
         // Memorized payees (PAY-020): merchants and bills know their
@@ -500,15 +534,62 @@ impl Gen<'_, '_> {
         self.cats.get(path).copied().unwrap_or(CategoryId(0))
     }
 
-    /// Whether an entry on `date` counts as cleared: at least 45 days
-    /// before today.
+    fn statement_month(&self) -> Result<Date> {
+        self.spec.statement_month()
+    }
+
+    /// Entries before the statement month are cleared here and reconciled
+    /// by [`Gen::reconcile_history`]; the rest are unmarked.
     fn cleared(&self, date: Date) -> Cleared {
-        let cutoff = self.spec.today.naive() - Days::new(45);
-        if date.naive() <= cutoff {
-            Cleared::Cleared
-        } else {
-            Cleared::Unmarked
+        match self.statement_month() {
+            Ok(first) if date < first => Cleared::Cleared,
+            _ => Cleared::Unmarked,
         }
+    }
+
+    /// One finished statement per month end before the statement month,
+    /// for every account that reconciles, each covering every entry up to
+    /// its date (RCN-020, RCN-060).
+    fn reconcile_history(&mut self) -> Result<()> {
+        let first = self.statement_month()?;
+        let mut month_ends = Vec::new();
+        let mut month = Date::from_ymd(self.spec.start.year(), self.spec.start.month(), 1)?;
+        while month < first {
+            let next = month
+                .naive()
+                .checked_add_months(Months::new(1))
+                .ok_or(Error::Overflow("sample statement date"))?;
+            let end = next
+                .pred_opt()
+                .ok_or(Error::Overflow("sample statement date"))?;
+            month_ends.push(Date::from_naive(end));
+            month = Date::from_naive(next);
+        }
+        for &account in &self.accounts {
+            let kind = accounts::get(self.tx.conn(), account)?.fields.account_type;
+            if !reconcile::is_reconcilable(kind) {
+                continue;
+            }
+            let sign = reconcile::Sign::of(self.tx.conn(), account)?;
+            for &statement_date in &month_ends {
+                let rec = reconcile::start(
+                    self.tx,
+                    &StartInput {
+                        account,
+                        statement_date,
+                        statement_balance: sign.apply(ledger::balance(
+                            self.tx.conn(),
+                            account,
+                            Some(statement_date),
+                        )?)?,
+                        interest: None,
+                        service_charge: None,
+                    },
+                )?;
+                reconcile::finish(self.tx, rec.id)?;
+            }
+        }
+        Ok(())
     }
 
     fn post(&mut self, mut entry: Entry, payee: &str) -> Result<()> {
@@ -556,6 +637,12 @@ impl Gen<'_, '_> {
         let spec = self.spec;
         let start_year = spec.start.year();
         let mut tithable: i64 = 0;
+        let statement_month = self.statement_month()?;
+        let after_statement_month = statement_month
+            .naive()
+            .checked_add_months(Months::new(1))
+            .map(Date::from_naive)
+            .ok_or(Error::Overflow("sample statement month"))?;
         let mut day = spec.start.naive();
         let end = spec.end.naive();
         while day <= end {
@@ -567,7 +654,7 @@ impl Gen<'_, '_> {
 
             // Income.
             if dom == 1 || dom == 15 {
-                let pay = grow(265_000);
+                let pay = grow(285_000);
                 let amount = Money::from_cents(pay);
                 let entry = Entry::new(self.accounts[CHECKING], date, amount)
                     .line(Target::Category(self.cat("Income:Salary")), amount);
@@ -591,10 +678,19 @@ impl Gen<'_, '_> {
                 entry.check_num = self.check_num.to_string();
                 self.post(entry, "Landlord")?;
             }
-            for (bill_day, payee, cat, cents, card, _) in BILLS {
+            for (bill_day, payee, cat, cents, card, by_check) in BILLS {
                 if dom == *bill_day {
                     let account = if *card { VISA } else { CHECKING };
-                    self.spend(account, date, payee, cat, grow(*cents))?;
+                    if *by_check {
+                        self.check_num += 1;
+                        let amount = Money::from_cents(-grow(*cents));
+                        let mut entry = Entry::new(self.accounts[account], date, amount)
+                            .line(Target::Category(self.cat(cat)), amount);
+                        entry.check_num = self.check_num.to_string();
+                        self.post(entry, payee)?;
+                    } else {
+                        self.spend(account, date, payee, cat, grow(*cents))?;
+                    }
                 }
             }
             if dom == 9 {
@@ -641,7 +737,18 @@ impl Gen<'_, '_> {
                 self.post(entry, "Church")?;
             }
             if dom == 25 {
-                self.transfer(CHECKING, SAVINGS, date, "Savings Transfer", 50_000)?;
+                // Sweep: keep a cushion in checking so it never runs dry;
+                // the excess goes to savings, a shortfall comes back.
+                let cushion = grow(CUSHION);
+                let balance =
+                    ledger::balance(self.tx.conn(), self.accounts[CHECKING], Some(date))?.cents();
+                if balance > cushion + 10_000 {
+                    let cents = (balance - cushion) / 10_000 * 10_000;
+                    self.transfer(CHECKING, SAVINGS, date, "Savings Transfer", cents)?;
+                } else if balance < cushion {
+                    let cents = (cushion - balance + 9_999) / 10_000 * 10_000;
+                    self.transfer(SAVINGS, CHECKING, date, "Savings Transfer", cents)?;
+                }
             }
             if dom == 28 {
                 let owed =
@@ -684,9 +791,36 @@ impl Gen<'_, '_> {
             for _ in 0..events {
                 self.everyday(date, day.month())?;
             }
+            // A busy month on the card: extra charges in the statement
+            // month, so its Visa statement has plenty to check off.
+            if date >= statement_month && date < after_statement_month {
+                for _ in 0..3 {
+                    if self.rng.chance(400) {
+                        self.card_charge(date)?;
+                    }
+                }
+            }
             day = day + Days::new(1);
         }
         Ok(())
+    }
+
+    /// A charge on the card at a merchant that takes it.
+    fn card_charge(&mut self, date: Date) -> Result<()> {
+        let card: Vec<&Merchant> = MERCHANTS.iter().filter(|m| m.5).collect();
+        let total: u64 = card.iter().map(|m| u64::from(m.4)).sum();
+        let mut pick = self.rng.below(total);
+        let mut merchant = card[0];
+        for m in card {
+            if pick < u64::from(m.4) {
+                merchant = m;
+                break;
+            }
+            pick -= u64::from(m.4);
+        }
+        let (name, cat, lo, hi, ..) = *merchant;
+        let cents = self.rng.between(lo, hi);
+        self.spend(VISA, date, name, cat, cents)
     }
 
     fn everyday(&mut self, date: Date, month: u32) -> Result<()> {
@@ -765,6 +899,75 @@ impl Gen<'_, '_> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Mock bank statements
+// ---------------------------------------------------------------------------
+
+/// A made-up bank statement for a sample account, to reconcile against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Statement {
+    pub account: AccountId,
+    pub statement_date: Date,
+    /// The last finished statement's ending balance (RCN-030). Amounts
+    /// and balances are in statement sign, as the reconcile engine takes
+    /// them: a credit card balance owed is positive.
+    pub opening_balance: Money,
+    pub ending_balance: Money,
+    /// Items the bank posted by the statement date, oldest first.
+    pub posted: Vec<Item>,
+    /// Items in the register on or before the statement date that the
+    /// bank has not posted yet.
+    pub outstanding: Vec<Item>,
+}
+
+/// Days the bank takes to post an item: a check about a week, the bank's
+/// own entries (interest) at once, anything else two days.
+fn posting_lag(item: &Item) -> u64 {
+    if !item.check_num.is_empty() {
+        7
+    } else if item.payee_name == "Bank" {
+        0
+    } else {
+        2
+    }
+}
+
+/// The bank's statement for `account` as of `statement_date`: every item
+/// not yet reconciled that the bank has posted by then, and the balance
+/// they bring it to. Items dated in the last days before the statement are
+/// outstanding, as are checks written in its last week.
+pub fn statement(conn: &Connection, account: AccountId, statement_date: Date) -> Result<Statement> {
+    let sign = reconcile::Sign::of(conn, account)?;
+    let opening_balance = reconcile::opening_check(conn, account)?.expected;
+    let mut posted = Vec::new();
+    let mut outstanding = Vec::new();
+    let mut ending = opening_balance;
+    for item in persistence::reconcile::open_items(conn, account, statement_date)? {
+        let item = sign.item(item)?;
+        let posts_on = item
+            .date
+            .naive()
+            .checked_add_days(Days::new(posting_lag(&item)))
+            .ok_or(Error::Overflow("sample statement"))?;
+        if posts_on <= statement_date.naive() {
+            ending = ending
+                .checked_add(item.amount)
+                .ok_or(Error::Overflow("sample statement"))?;
+            posted.push(item);
+        } else {
+            outstanding.push(item);
+        }
+    }
+    Ok(Statement {
+        account,
+        statement_date,
+        opening_balance,
+        ending_balance: ending,
+        posted,
+        outstanding,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,7 +1044,8 @@ mod tests {
         let (other, _) = load(8, "2024-01-01", "2026-07-21", "2026-06-30", 100);
         assert_ne!(fingerprint(&db), fingerprint(&other));
 
-        // Future-dated entries exist and are unmarked; old ones are cleared.
+        // Future-dated entries exist. Entries before the statement month
+        // (May 2026) are reconciled; the rest are unmarked.
         let future: i64 = db
             .conn()
             .query_row(
@@ -851,17 +1055,32 @@ mod tests {
             )
             .unwrap();
         assert!(future > 0);
-        let cleared_old: i64 = db
-            .conn()
-            .query_row(
-                "SELECT count(*) FROM posting p JOIN txn t ON t.id = p.txn_id
-                 WHERE p.account_id IS NOT NULL AND t.txn_date <= '2026-05-01'
-                   AND p.cleared = 'unmarked'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(cleared_old, 0);
+        let status = |sql: &str| -> i64 {
+            db.conn()
+                .query_row(
+                    &format!(
+                        "SELECT count(*) FROM posting p JOIN txn t ON t.id = p.txn_id
+                         JOIN account a ON a.id = p.account_id WHERE {sql}"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+        let reconciled = "p.cleared = 'reconciled' AND p.reconciliation_id IS NOT NULL";
+        assert!(status(reconciled) > 1000);
+        assert_eq!(
+            status("t.txn_date >= '2026-05-01' AND p.cleared <> 'unmarked'"),
+            0
+        );
+        assert_eq!(
+            status(&format!(
+                "t.txn_date < '2026-05-01' AND a.type <> 'loan' AND NOT ({reconciled})"
+            )),
+            0
+        );
+        // The loan does not reconcile (RCN-010); its old entries stay cleared.
+        assert_eq!(status("p.cleared = 'cleared' AND a.type <> 'loan'"), 0);
 
         // Splits and tags appear.
         let splits: i64 = db
@@ -878,6 +1097,39 @@ mod tests {
             .query_row("SELECT count(*) FROM posting_tag", [], |r| r.get(0))
             .unwrap();
         assert!(tagged > 10, "{tagged}");
+    }
+
+    #[test]
+    fn checking_stays_positive_and_the_card_is_busy_in_the_statement_month() {
+        let today = "2026-09-24";
+        let (db, _) = load(1, "2023-09-01", "2026-10-15", today, 100);
+        let all = accounts::list(db.conn()).unwrap();
+        let id = |name: &str| all.iter().find(|a| a.fields.name == name).unwrap().id;
+        let (checking, visa) = (id("Checking"), id("Visa"));
+
+        let mut day = "2023-09-01".parse::<Date>().unwrap().naive();
+        let today = today.parse::<Date>().unwrap().naive();
+        while day <= today {
+            let balance =
+                ledger::balance(db.conn(), checking, Some(Date::from_naive(day))).unwrap();
+            assert!(!balance.is_negative(), "checking is {balance} on {day}");
+            day = day + Days::new(1);
+        }
+
+        let charges = |from: &str, to: &str| -> i64 {
+            db.conn()
+                .query_row(
+                    "SELECT count(*) FROM posting p JOIN txn t ON t.id = p.txn_id
+                     WHERE p.account_id = ?1 AND p.amount < 0
+                       AND t.txn_date BETWEEN ?2 AND ?3",
+                    rusqlite::params![visa, from, to],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+        let july = charges("2026-07-01", "2026-07-31");
+        let august = charges("2026-08-01", "2026-08-31");
+        assert!(august >= 2 * july, "July {july}, August {august}");
     }
 
     #[test]

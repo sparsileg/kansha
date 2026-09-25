@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { call, commands, withConfirmation } from "../api";
-  import { parseDate } from "../format/date";
+  import { datePattern, parseDate } from "../format/date";
   import { GROUP_LABEL, GROUP_ORDER } from "../state/groups";
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
@@ -18,7 +18,6 @@
     MmfMode,
     TaxTreatment,
   } from "../types/bindings";
-  import { selectOnFocus } from "../ui/selectOnFocus";
   import Modal from "./Modal.svelte";
 
   let { account }: { account: Account | null } = $props();
@@ -195,7 +194,7 @@
           {#each TAX as [v, label] (v)}<option value={v}>{label}</option>{/each}
         </select>
       </label>
-      <label>Opening date <input bind:value={openingDate} placeholder="MM/DD/YYYY" /></label>
+      <label>Opening date <input bind:value={openingDate} placeholder={datePattern()} /></label>
       <label>Institution <input bind:value={f.institution} /></label>
       <label>
         Account number
@@ -215,10 +214,10 @@
       <label>Description <input bind:value={f.description} /></label>
 
       {#if rateType}
-        <label>Interest rate (%) <input bind:value={interest} inputmode="decimal" use:selectOnFocus /></label>
+        <label>Interest rate (%) <input bind:value={interest} inputmode="decimal" /></label>
       {/if}
       {#if f.account_type === "credit_card"}
-        <label>Credit limit <input bind:value={limit} inputmode="decimal" use:selectOnFocus /></label>
+        <label>Credit limit <input bind:value={limit} inputmode="decimal" /></label>
       {/if}
 
       {#if f.investment}

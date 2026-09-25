@@ -1,0 +1,108 @@
+id = "RCN-003"
+description = "The next statement opens at the last statement's ending balance; history lists each session; statement dates never go backwards"
+requirements = ["RCN-030", "RCN-060"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-100.00"
+payee = "Costco"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "pay"
+date = "2026-01-10"
+account = "Checking"
+amount = "500.00"
+payee = "Employer"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "late"
+date = "2026-02-05"
+account = "Checking"
+amount = "-50.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "entry"
+ref = "feb_pay"
+date = "2026-02-10"
+account = "Checking"
+amount = "200.00"
+category = "Salary"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "1400.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["open", "groceries", "pay"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-15"
+statement_balance = "0.00"
+expect_error = "before the last reconciled statement"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-02-28"
+statement_balance = "1550.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["late", "feb_pay"]
+
+[[actions]]
+type = "reconcile_update"
+account = "Checking"
+statement_date = "2026-01-15"
+expect_error = "before the last reconciled statement"
+
+[[actions]]
+type = "reconcile_finish"
+account = "Checking"
+
+[[expect.reconcile_history]]
+account = "Checking"
+rows = [
+    { statement_date = "2026-02-28", statement_balance = "1550.00", opening_balance = "1400.00", status = "finished", items = 2, total = "150.00" },
+    { statement_date = "2026-01-31", statement_balance = "1400.00", opening_balance = "0.00", status = "finished", items = 3, total = "1400.00" },
+]

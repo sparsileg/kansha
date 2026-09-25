@@ -1,0 +1,65 @@
+id = "RCN-010"
+description = "An abandoned session stays in the history; its check marks stay, so a new session starts where it left off"
+requirements = ["RCN-050", "RCN-060"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[categories]]
+path = "Food:Groceries"
+kind = "expense"
+
+[[categories]]
+path = "Salary"
+kind = "income"
+
+[[actions]]
+type = "entry"
+ref = "open"
+date = "2026-01-01"
+account = "Checking"
+amount = "1000.00"
+category = "Salary"
+
+[[actions]]
+type = "entry"
+ref = "groceries"
+date = "2026-01-05"
+account = "Checking"
+amount = "-100.00"
+category = "Food:Groceries"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "900.00"
+
+[[actions]]
+type = "reconcile_check"
+account = "Checking"
+refs = ["groceries"]
+
+[[actions]]
+type = "reconcile_abandon"
+account = "Checking"
+
+[[actions]]
+type = "reconcile_start"
+account = "Checking"
+statement_date = "2026-01-31"
+statement_balance = "900.00"
+
+[[expect.reconcile]]
+account = "Checking"
+cleared_balance = "-100.00"
+difference = "1000.00"
+
+[[expect.reconcile_history]]
+account = "Checking"
+rows = [
+    { statement_date = "2026-01-31", statement_balance = "900.00", opening_balance = "0.00", status = "in_progress", items = 0 },
+    { statement_date = "2026-01-31", statement_balance = "900.00", opening_balance = "0.00", status = "abandoned", items = 0 },
+]

@@ -7,6 +7,7 @@ use kansha_core::categories::{CategoryFields, CategoryKind};
 use kansha_core::ledger::{Cleared, TxnStatus};
 use kansha_core::persistence::audit::{AuditAction, AuditEntity};
 use kansha_core::persistence::{accounts, categories};
+use kansha_core::reconcile::ReconStatus;
 use kansha_core::{Db, Error, Origin};
 use rusqlite::params;
 
@@ -318,6 +319,24 @@ fn every_rust_enum_value_is_accepted_by_the_schema() {
             )
             .unwrap_or_else(|err| panic!("{cl}: {err}"));
         }
+    }
+}
+
+#[test]
+fn every_reconciliation_status_is_accepted_by_the_schema() {
+    let db = db();
+    let (acct, _) = seed(&db);
+    for s in ReconStatus::ALL {
+        let finished = (*s == ReconStatus::Finished).then_some(T);
+        db.conn()
+            .execute(
+                "INSERT INTO reconciliation
+                     (account_id, statement_date, opening_balance, statement_balance,
+                      status, started_at, finished_at)
+                 VALUES (?1, '2026-01-31', 0, 0, ?2, ?3, ?4)",
+                params![acct, s, T, finished],
+            )
+            .unwrap_or_else(|err| panic!("{s}: {err}"));
     }
 }
 
