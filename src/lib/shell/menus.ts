@@ -53,6 +53,7 @@ export const MENUS: Menu[] = [
       { id: "tools.payees", label: "Payees", divider: true },
       { id: "tools.categories", label: "Categories" },
       { id: "tools.tags", label: "Tags" },
+      { id: "tools.securities", label: "Securities" },
       { id: "tools.reconcile", label: "Reconcile", divider: true },
     ],
   },

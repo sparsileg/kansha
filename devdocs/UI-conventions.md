@@ -72,6 +72,12 @@ section records what was decided about it.
   list are views of Reminders.)
 - **Tools > Payees, Categories, Tags:** each opens the existing Manage
   view on that tab.
+- **Tools > Securities** (Phase 6): the Manage view's Securities tab:
+  securities, their prices, price import, and lot seeding from CSV.
+- **Investments** (navigation bar, Phase 6): every investment account's
+  value and the asset allocation across them. An investment account
+  itself opens on its tabs: Overview, Transactions, Holdings, Lots,
+  Income, Performance (POS-040).
 - **Tools > Accounts:** opens a list of accounts with management
   functions: New, Edit, Close and reopen, Delete, and so on.
 - **Edit > Renaming:** kept in the menu, greyed out. Deferred: define

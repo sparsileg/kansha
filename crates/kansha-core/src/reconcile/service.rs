@@ -10,6 +10,7 @@ use crate::accounts::AccountId;
 use crate::categories::SystemCategory;
 use crate::date::Date;
 use crate::error::{Error, Result};
+use crate::invest::{self, InvAction, InvInput};
 use crate::ledger::{
     self, Cleared, PostingInput, Target, Txn, TxnId, TxnInput, TxnSource, create_with_source,
 };
@@ -113,7 +114,9 @@ fn negate(amount: Money) -> Result<Money> {
 }
 
 /// A cleared transaction between `account` and a category, from the
-/// statement. `amount` is the account's posting.
+/// statement. `amount` is the account's posting. In an investment
+/// account it is an investment transaction: interest or a fee in their
+/// built-in categories, misc income or expense in any other.
 fn statement_txn(
     tx: &Tx<'_>,
     account: AccountId,
@@ -121,6 +124,33 @@ fn statement_txn(
     amount: Money,
     memo: &str,
 ) -> Result<Txn> {
+    if accounts::get(tx.conn(), account)?
+        .fields
+        .account_type
+        .is_investment()
+    {
+        let conn = tx.conn();
+        let is =
+            |which| -> Result<bool> { Ok(categories::system(conn, which)?.id == item.category) };
+        let income = !amount.is_negative();
+        let action = if income && is(SystemCategory::Interest)? {
+            InvAction::Interest
+        } else if !income && is(SystemCategory::InvestmentFees)? {
+            InvAction::Fee
+        } else if income {
+            InvAction::MiscIncome
+        } else {
+            InvAction::MiscExpense
+        };
+        let mut input = InvInput::new(account, action, item.date);
+        input.amount = Some(if income { amount } else { negate(amount)? });
+        if matches!(action, InvAction::MiscIncome | InvAction::MiscExpense) {
+            input.counterpart = Some(Target::Category(item.category));
+        }
+        input.memo = memo.into();
+        let t = invest::create(tx, &input)?;
+        return ledger::set_cleared(tx, t.txn.id, account, Cleared::Cleared, false);
+    }
     let mut main = PostingInput::new(Target::Account(account), amount);
     main.cleared = Cleared::Cleared;
     let input = TxnInput {

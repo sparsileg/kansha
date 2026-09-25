@@ -51,7 +51,7 @@ export async function exitApp(): Promise<void> {
 export async function openReconcile(id?: AccountId): Promise<void> {
   const usable = (a: AccountId | null | undefined): a is AccountId => {
     const acct = a == null ? undefined : listsState.account(a);
-    return acct !== undefined && acct.status === "open" && isReconcilable(acct.account_type);
+    return acct !== undefined && acct.status === "open" && isReconcilable(acct);
   };
   const first = listsState.accounts.find((a) => usable(a.id))?.id;
   const target = [id, registerState.accountId, reconcileState.accountId, first].find(usable) ?? null;

@@ -7,15 +7,18 @@
 pub mod accounts;
 pub mod audit;
 pub mod categories;
+pub mod csv;
 pub mod date;
 pub mod error;
 pub mod integrity;
+pub mod invest;
 pub mod ledger;
 pub mod money;
 pub mod persistence;
 pub mod reconcile;
 pub mod sample;
 pub mod schedule;
+pub mod securities;
 mod serde_impls;
 pub mod testkit;
 mod text_enum;

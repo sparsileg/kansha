@@ -13,7 +13,7 @@ describe("navCatalog", () => {
 
   it("holds Home, the investments view, every menu item, and every account", () => {
     expect(byId("home")?.label).toBe("Home");
-    expect(byId("view.investments")?.disabled).toBe("Planned: Phase 6");
+    expect(byId("view.investments")?.disabled).toBeUndefined();
     for (const m of MENUS) for (const i of m.items) expect(byId(i.id), i.id).toBeTruthy();
     expect(byId("account:2")).toMatchObject({ label: "Savings", group: "Accounts" });
     expect(new Set(catalog.map((e) => e.id)).size).toBe(catalog.length);
@@ -24,7 +24,7 @@ describe("navCatalog", () => {
     expect(byId("file.open")?.label).toBe("Open book");
     expect(byId("edit.settings")?.label).toBe("Settings");
     expect(byId("tools.reconcile")?.disabled).toBeUndefined();
-    expect(byId("view.investments")?.disabled).toBe("Planned: Phase 6");
+    expect(byId("view.investments")?.disabled).toBeUndefined();
     expect(byId("tools.calendar")?.disabled).toBeUndefined();
   });
 

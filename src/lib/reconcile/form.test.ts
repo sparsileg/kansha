@@ -70,12 +70,17 @@ describe("buildStart", () => {
 });
 
 describe("isReconcilable", () => {
-  it("matches the engine's account types", () => {
+  const acct = (account_type: string, cash_mode?: string) =>
+    ({ account_type, investment: cash_mode ? { cash_mode } : null }) as never;
+  it("matches the engine's rule", () => {
     for (const t of ["checking", "savings", "cash", "money_market", "credit_card"]) {
-      expect(isReconcilable(t)).toBe(true);
+      expect(isReconcilable(acct(t))).toBe(true);
     }
-    for (const t of ["brokerage", "loan", "other_asset", "other_liability", "roth_ira"]) {
-      expect(isReconcilable(t)).toBe(false);
+    for (const t of ["loan", "other_asset", "other_liability"]) {
+      expect(isReconcilable(acct(t))).toBe(false);
     }
+    // Investment accounts: their own cash only (RCN-010).
+    expect(isReconcilable(acct("brokerage", "internal"))).toBe(true);
+    expect(isReconcilable(acct("roth_ira", "linked"))).toBe(false);
   });
 });

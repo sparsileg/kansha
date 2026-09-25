@@ -1,0 +1,147 @@
+id = "INV-011"
+description = "Prices: latest on or before the date, stale flag, no price, money market at $1.00; CSV import replaces, skips unknown securities, takes files without a header, and is all or nothing"
+requirements = ["PRC-010", "PRC-020", "PRC-030", "PRC-050", "INV-050", "POS-010"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+mmf_mode = "security"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[securities]]
+name = "No Price Fund"
+ticker = "NOPR"
+type = "mutual_fund"
+
+[[securities]]
+name = "Vanguard Federal Money Market"
+ticker = "VMFXX"
+type = "money_market"
+
+[[securities]]
+name = "Nasdaq Composite"
+ticker = "^IXIC"
+type = "other"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[prices]]
+security = "VTI"
+date = "2026-06-01"
+price = "300"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "10000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "10"
+price = "200"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "NOPR"
+quantity = "5"
+amount = "500.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "VMFXX"
+quantity = "1000"
+price = "1"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "VTI"
+quantity = "10"
+price = "250"
+
+[[actions]]
+type = "import_prices"
+expect_count = 4
+csv = """
+Symbol,Date,Close
+VTI,2026-06-20,310
+AAPL,6/29/2026,215
+VTI,2026-06-01,305
+VTI,2026-07-05,999
+"""
+
+# A security not in the book is skipped, not an error.
+[[actions]]
+type = "import_prices"
+expect_count = 1
+csv = """
+ticker,date,price
+ZZZZ,2026-06-25,1
+^IXIC,2026-06-25, 26967.0254
+"""
+
+# No header line: ticker, date, price in that order.
+[[actions]]
+type = "import_prices"
+expect_count = 1
+csv = """
+^IXIC,6/26/2026, 26970.5
+ZZZZ,6/26/2026,2
+"""
+
+# A bad row still stops the whole import.
+[[actions]]
+type = "import_prices"
+csv = """
+VTI,2026-06-25,320
+AAPL,2026-06-25,abc
+"""
+expect_error = "nothing was imported"
+
+[[actions]]
+type = "import_prices"
+csv = """
+ticker,date,price
+VTI,2026-06-26,320
+VTI,2026-06-26,321
+"""
+expect_error = "appears twice"
+
+# VTI's 2026-06-20 price is 10 days old: stale. The July price is after
+# the valuation date. NOPR has none: no market value, left out of totals.
+[[expect.holdings]]
+account = "Brokerage"
+total_value = "10250.00"
+rows = [
+    { security = "AAPL", shares = "10", basis = "2000.00", market_value = "2150.00", price = "215", stale = false },
+    { security = "NOPR", shares = "5", basis = "500.00", market_value = "none", price = "none" },
+    { security = "VMFXX", shares = "1000", basis = "1000.00", market_value = "1000.00", price = "1", stale = false },
+    { security = "VTI", shares = "10", basis = "2500.00", market_value = "3100.00", price = "310", stale = true },
+]
+
+# The account list counts a holding with no price at cost.
+[expect.account_values]
+"Brokerage" = "10750.00"

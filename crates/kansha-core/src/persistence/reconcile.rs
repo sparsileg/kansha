@@ -82,7 +82,7 @@ pub fn reconciled_balance(conn: &Connection, account: AccountId) -> Result<Money
     Ok(conn
         .prepare_cached(
             "SELECT ifnull(sum(amount), 0) FROM posting
-             WHERE account_id = ?1 AND cleared = 'reconciled'",
+             WHERE account_id = ?1 AND security_id IS NULL AND cleared = 'reconciled'",
         )?
         .query_row([account], |r| r.get(0))?)
 }
@@ -100,7 +100,8 @@ pub fn checked_totals(
             .prepare_cached(
                 "SELECT ifnull(sum(p.amount), 0), count(*)
                  FROM posting p JOIN txn t ON t.id = p.txn_id
-                 WHERE p.account_id = :account AND p.cleared = 'cleared'
+                 WHERE p.account_id = :account AND p.security_id IS NULL
+                   AND p.cleared = 'cleared'
                    AND t.txn_date <= :as_of AND t.status = 'normal'
                    AND ((p.amount < 0) = :negative)",
             )?
@@ -124,8 +125,11 @@ fn item_from_row(r: &Row<'_>) -> rusqlite::Result<Item> {
     })
 }
 
+// An investment transaction has no payee; its action names it.
 const ITEM_SELECT: &str = "SELECT t.id AS txn_id, t.txn_date, t.check_num, t.memo,
-           ifnull(py.name, '') AS payee_name, p.amount, p.cleared
+           coalesce(py.name, (SELECT replace(i.action, '_', ' ') FROM investment_txn i
+                              WHERE i.txn_id = t.id), '') AS payee_name,
+           p.amount, p.cleared
     FROM posting p JOIN txn t ON t.id = p.txn_id LEFT JOIN payee py ON py.id = t.payee_id";
 
 /// Postings still to be reconciled (unmarked or cleared) dated on or before
@@ -133,7 +137,8 @@ const ITEM_SELECT: &str = "SELECT t.id AS txn_id, t.txn_date, t.check_num, t.mem
 pub fn open_items(conn: &Connection, account: AccountId, as_of: Date) -> Result<Vec<Item>> {
     let sql = format!(
         "{ITEM_SELECT}
-         WHERE p.account_id = :account AND p.cleared IN ('unmarked', 'cleared')
+         WHERE p.account_id = :account AND p.security_id IS NULL
+           AND p.cleared IN ('unmarked', 'cleared')
            AND t.txn_date <= :as_of AND t.status = 'normal'
          ORDER BY t.txn_date, t.id"
     );
@@ -293,7 +298,7 @@ pub fn finish(tx: &Tx<'_>, id: ReconciliationId) -> Result<Reconciliation> {
     let before = get(tx.conn(), id)?;
     tx.conn().execute(
         "UPDATE posting SET cleared = 'reconciled', reconciliation_id = :id
-         WHERE account_id = :account AND cleared = 'cleared'
+         WHERE account_id = :account AND security_id IS NULL AND cleared = 'cleared'
            AND txn_id IN (SELECT id FROM txn
                           WHERE txn_date <= :as_of AND status = 'normal')",
         named_params! {":id": id, ":account": before.account, ":as_of": before.statement_date},

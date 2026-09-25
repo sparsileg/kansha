@@ -1,0 +1,146 @@
+id = "INV-012"
+description = "Across accounts: gains in a tax-deferred account are kept but not taxable; asset allocation; simple performance"
+requirements = ["LOT-160", "POS-020", "POS-030", "POS-010", "ACCT-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "IRA"
+type = "traditional_ira"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[securities]]
+name = "Vanguard Total International Stock ETF"
+ticker = "VXUS"
+type = "etf"
+asset_class = "intl_equity"
+
+[[securities]]
+name = "Vanguard Total Bond Market ETF"
+ticker = "BND"
+type = "etf"
+asset_class = "bond"
+
+[[prices]]
+security = "VTI"
+date = "2026-06-30"
+price = "130"
+
+[[prices]]
+security = "VXUS"
+date = "2026-06-30"
+price = "55"
+
+[[prices]]
+security = "BND"
+date = "2026-06-30"
+price = "26"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "10000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "VTI"
+quantity = "20"
+price = "100"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "VXUS"
+quantity = "10"
+price = "50"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-03-31"
+security = "VTI"
+amount = "30.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-05-01"
+security = "VTI"
+quantity = "10"
+price = "120"
+
+[[actions]]
+type = "invest"
+account = "IRA"
+action = "cash_in"
+date = "2026-01-02"
+amount = "5000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "IRA"
+action = "buy"
+date = "2026-01-10"
+security = "BND"
+quantity = "40"
+price = "25"
+
+[[actions]]
+type = "invest"
+account = "IRA"
+action = "sell"
+date = "2026-05-15"
+security = "BND"
+quantity = "10"
+price = "30"
+
+[[expect.gains]]
+rows = [
+    { date = "2026-05-01", security = "VTI", proceeds = "1200.00", basis = "1000.00", gain = "200.00", term = "short", taxable = true },
+    { date = "2026-05-15", security = "BND", proceeds = "300.00", basis = "250.00", gain = "50.00", term = "short", taxable = false },
+]
+
+[[expect.allocation]]
+total = "15660.00"
+rows = [
+    { class = "cash", value = "13030.00", percent = "83.21" },
+    { class = "us_equity", value = "1300.00", percent = "8.30" },
+    { class = "bond", value = "780.00", percent = "4.98" },
+    { class = "intl_equity", value = "550.00", percent = "3.51" },
+]
+
+[[expect.allocation]]
+accounts = ["Brokerage"]
+total = "10580.00"
+rows = [
+    { class = "cash", value = "8730.00", percent = "82.51" },
+    { class = "us_equity", value = "1300.00", percent = "12.29" },
+    { class = "intl_equity", value = "550.00", percent = "5.20" },
+]
+
+# Unrealized 300 + 50, realized 200, income 30: 580 on 2500 invested.
+[[expect.performance]]
+account = "Brokerage"
+realized = "200.00"
+income = "30.00"
+unrealized = "350.00"
+total_gain = "580.00"
+total_return = "23.20"

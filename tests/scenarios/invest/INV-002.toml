@@ -1,0 +1,178 @@
+id = "INV-002"
+description = "Specific identification: chosen lots, per-sale override of the account's FIFO default, the security's own default"
+requirements = ["LOT-100", "LOT-020", "LOT-030", "LOT-040", "SEC-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[securities]]
+name = "Microsoft Corp"
+ticker = "MSFT"
+type = "stock"
+lot_method = "specific"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2025-01-02"
+amount = "50000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+ref = "a1"
+account = "Brokerage"
+action = "buy"
+date = "2025-01-10"
+security = "AAPL"
+quantity = "30"
+amount = "3000.00"
+
+[[actions]]
+type = "invest"
+ref = "a2"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-10"
+security = "AAPL"
+quantity = "10"
+amount = "2000.00"
+
+[[actions]]
+type = "invest"
+ref = "a3"
+account = "Brokerage"
+action = "buy"
+date = "2025-09-10"
+security = "AAPL"
+quantity = "10"
+amount = "1500.00"
+
+# Specific lots on a FIFO account: 5 from a2, 4 from a3. Proceeds 2700.00
+# divide 5:4 as 1500.00 + 1200.00.
+[[actions]]
+type = "invest"
+ref = "s1"
+account = "Brokerage"
+action = "sell"
+date = "2026-01-15"
+security = "AAPL"
+quantity = "9"
+amount = "2700.00"
+lots = [
+    { from = "a2", quantity = "5" },
+    { from = "a3", quantity = "4" },
+]
+
+# Picks that don't add up, or overdraw a lot, are refused.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-01-20"
+security = "AAPL"
+quantity = "3"
+amount = "900.00"
+lots = [{ from = "a2", quantity = "2" }]
+expect_error = "add up to 2 shares, not 3"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-01-20"
+security = "AAPL"
+quantity = "6"
+amount = "900.00"
+lots = [{ from = "a2", quantity = "6" }]
+expect_error = "holds 5 shares"
+
+# Lots only with specific identification.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-01-20"
+security = "AAPL"
+quantity = "1"
+amount = "300.00"
+lot_method = "fifo"
+lots = [{ from = "a3", quantity = "1" }]
+expect_error = "only with specific identification"
+
+# MSFT defaults to specific: a sale with no lots chosen is refused, and
+# lot_method = "fifo" overrides the security's default.
+[[actions]]
+type = "invest"
+ref = "m1"
+account = "Brokerage"
+action = "buy"
+date = "2025-03-01"
+security = "MSFT"
+quantity = "10"
+amount = "4000.00"
+
+[[actions]]
+type = "invest"
+ref = "m2"
+account = "Brokerage"
+action = "buy"
+date = "2025-04-01"
+security = "MSFT"
+quantity = "10"
+amount = "3000.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-02-01"
+security = "MSFT"
+quantity = "5"
+amount = "2500.00"
+expect_error = "choose the lots"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-02-01"
+security = "MSFT"
+quantity = "5"
+amount = "2500.00"
+lot_method = "fifo"
+
+[expect.cash_balances]
+"Brokerage" = "41700.00"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "AAPL"
+rows = [
+    { acquired = "2025-01-10", quantity = "30", basis = "3000.00" },
+    { acquired = "2025-02-10", quantity = "5", basis = "1000.00" },
+    { acquired = "2025-09-10", quantity = "6", basis = "900.00" },
+]
+
+[[expect.lots]]
+account = "Brokerage"
+security = "MSFT"
+rows = [
+    { acquired = "2025-03-01", quantity = "5", basis = "2000.00" },
+    { acquired = "2025-04-01", quantity = "10", basis = "3000.00" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-01-15", security = "AAPL", acquired = "2025-02-10", quantity = "5", proceeds = "1500.00", basis = "1000.00", gain = "500.00", term = "short" },
+    { date = "2026-01-15", security = "AAPL", acquired = "2025-09-10", quantity = "4", proceeds = "1200.00", basis = "600.00", gain = "600.00", term = "short" },
+    { date = "2026-02-01", security = "MSFT", acquired = "2025-03-01", quantity = "5", proceeds = "2500.00", basis = "2000.00", gain = "500.00", term = "short" },
+]

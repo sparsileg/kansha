@@ -8,12 +8,15 @@
 pub mod accounts;
 pub mod audit;
 pub mod categories;
+pub mod imports;
 pub mod integrity;
+pub mod invest;
 pub mod ledger;
 pub mod migrate;
 pub mod payees;
 pub mod reconcile;
 pub mod schedules;
+pub mod securities;
 pub mod settings;
 pub mod tags;
 mod values;

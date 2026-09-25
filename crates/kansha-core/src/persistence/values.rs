@@ -83,5 +83,7 @@ id_sql!(
     crate::categories::TagId,
     crate::ledger::TxnId,
     crate::reconcile::ReconciliationId,
-    crate::schedule::ScheduleId
+    crate::schedule::ScheduleId,
+    crate::securities::SecurityId,
+    crate::invest::LotId
 );

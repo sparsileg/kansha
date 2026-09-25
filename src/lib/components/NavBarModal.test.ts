@@ -61,7 +61,7 @@ describe("Navigation bar dialog", () => {
   it("Reset to default restores the standard bar", async () => {
     render(NavBarModal);
     await fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
-    expect(shown()).toEqual(["Home", "Reminders", "Calendar", "Reconcile", "Investments (Planned: Phase 6)"]);
+    expect(shown()).toEqual(["Home", "Reminders", "Calendar", "Reconcile", "Investments"]);
   });
 
   it("Up and Down need a selection; a deleted account is dropped on Save", async () => {

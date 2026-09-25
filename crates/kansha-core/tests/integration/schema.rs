@@ -266,12 +266,13 @@ fn every_rust_enum_value_is_accepted_by_the_schema() {
         for (i, t) in AccountType::ALL.iter().enumerate() {
             let brk = accounts::insert(tx, &AccountFields::new(format!("A{i}"), *t))?;
             if t.is_investment() {
+                // The repository takes only the methods the engine has
+                // (fifo, specific); the schema takes them all (D-60).
                 for m in LotMethod::ALL {
-                    let mut f = brk.fields.clone();
-                    if let Some(inv) = f.investment.as_mut() {
-                        inv.default_lot_method = *m;
-                    }
-                    accounts::update(tx, brk.id, &f)?;
+                    tx.conn().execute(
+                        "UPDATE account SET default_lot_method = ?1 WHERE id = ?2",
+                        params![m, brk.id.0],
+                    )?;
                 }
             }
         }

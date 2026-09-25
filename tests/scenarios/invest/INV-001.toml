@@ -1,0 +1,128 @@
+id = "INV-001"
+description = "Buy twice, sell part FIFO: basis and proceeds split to the cent, short- and long-term gains, cash balance"
+requirements = ["INV-010", "INV-030", "INV-040", "LOT-010", "LOT-020", "LOT-030", "LOT-040", "LOT-100", "POS-010"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "20000.00"
+opening_date = "2025-01-01"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[prices]]
+security = "VTI"
+date = "2026-06-30"
+price = "320"
+
+[[actions]]
+type = "invest"
+ref = "fund"
+account = "Brokerage"
+action = "cash_in"
+date = "2025-01-02"
+amount = "10000.00"
+transfer = "Checking"
+
+[[actions]]
+type = "invest"
+ref = "buy1"
+account = "Brokerage"
+action = "buy"
+date = "2025-01-10"
+security = "VTI"
+quantity = "10"
+price = "200"
+commission = "5.00"
+
+[[actions]]
+type = "invest"
+ref = "buy2"
+account = "Brokerage"
+action = "buy"
+date = "2025-06-01"
+security = "VTI"
+quantity = "10"
+price = "250"
+commission = "5.00"
+
+# 15 shares: all of buy1 (long-term) and 5 of buy2 (short-term).
+# Proceeds 4495.00 divide 10:5 as 2996.67 + 1498.33.
+[[actions]]
+type = "invest"
+ref = "sell"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-01"
+security = "VTI"
+quantity = "15"
+price = "300"
+commission = "5.00"
+
+# A general-ledger edit from the checking side is refused.
+[[actions]]
+type = "edit"
+ref = "fund"
+date = "2025-01-02"
+account = "Checking"
+amount = "-9000.00"
+transfer = "Brokerage"
+expect_error = "investment register"
+
+[expect.balances]
+"Checking" = "10000.00"
+
+[expect.cash_balances]
+"Brokerage" = "9985.00"
+
+[expect.account_values]
+"Brokerage" = "11585.00"
+"Checking" = "10000.00"
+
+[expect.category_totals]
+"Realized Gain/Loss" = "-1237.50"
+
+[[expect.holdings]]
+account = "Brokerage"
+total_value = "11585.00"
+rows = [
+    { security = "VTI", shares = "5", basis = "1252.50", market_value = "1600.00", price = "320" },
+]
+
+[[expect.lots]]
+account = "Brokerage"
+security = "VTI"
+rows = [
+    { acquired = "2025-06-01", quantity = "5", basis = "1252.50", per_share = "250.5", term = "long" },
+]
+
+[[expect.gains]]
+account = "Brokerage"
+rows = [
+    { date = "2026-03-01", security = "VTI", acquired = "2025-01-10", quantity = "10", proceeds = "2996.67", basis = "2005.00", gain = "991.67", term = "long", taxable = true },
+    { date = "2026-03-01", security = "VTI", acquired = "2025-06-01", quantity = "5", proceeds = "1498.33", basis = "1252.50", gain = "245.83", term = "short" },
+]
+
+[[expect.inv_register]]
+account = "Brokerage"
+rows = [
+    { date = "2025-01-02", action = "Cash In", amount = "10000.00", cash_balance = "10000.00", ref = "fund" },
+    { date = "2025-01-10", action = "Buy", amount = "-2005.00", cash_balance = "7995.00", security = "VTI", quantity = "10" },
+    { date = "2025-06-01", action = "Buy", amount = "-2505.00", cash_balance = "5490.00" },
+    { date = "2026-03-01", action = "Sell", amount = "4495.00", cash_balance = "9985.00", ref = "sell" },
+]
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2025-01-01", amount = "20000.00", balance = "20000.00" },
+    { date = "2025-01-02", amount = "-10000.00", balance = "10000.00", ref = "fund", counterpart = "[Brokerage]" },
+]

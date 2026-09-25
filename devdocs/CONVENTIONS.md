@@ -99,6 +99,7 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - **No business logic or money arithmetic in TypeScript.** Throwaway prototype UI follows these rules too.
 - **Colors come from theme variables** set on `.app` in `App.svelte` (`--bg`, `--bad`, `--good`, `--focus-*`, `--sel-*`, `--opt-*`); components do not hard-code colors. Every pair is readable in every theme, and color is never the only cue: Stan is red-green colorblind.
 - **Focus (NFR-080):** one app-wide look for every field, dropdown, and keyboard-focused button: the theme's focus background and text color plus a ring drawn inside the edge. A focused field's selected text keeps the focus text color. Do not add per-component focus styles.
+- **Fixed window:** the window itself never scrolls. The shell (`.app`) is pinned to it (`position: fixed; inset: 0`); a view that can outgrow its space scrolls inside its own area (`min-height: 0` plus `overflow: auto` on the flex child). Do not size anything with `100vh`.
 - **Select on focus:** every text field selects its contents on focus, installed once on `document` by `App.svelte` (`src/lib/ui/selectOnFocus.ts`). Do not add it per field.
 
 ## 7. Testing

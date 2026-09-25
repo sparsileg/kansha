@@ -2,11 +2,13 @@
 //!
 //! A deterministic, realistic multi-year dataset for the prototype UI,
 //! report snapshots, and performance checks (NFR-040, NFR-050): five
-//! accounts, about 40 categories, memorized payees, paychecks, bills,
-//! card spending with splits and tags, cash, a card payment each month,
-//! savings interest, a loan, tithing, and a few future-dated entries. The
-//! same seed always produces the same data. No real financial data is ever
-//! used before 1.0 (D-130).
+//! banking accounts, about 40 categories, memorized payees, paychecks,
+//! bills, card spending with splits and tags, cash, a card payment each
+//! month, savings interest, a loan, tithing, and a few future-dated
+//! entries; and (Phase 6) a brokerage and a Roth IRA with five securities,
+//! monthly prices, buys, sales, dividends, reinvestments, a split, and
+//! opening lots. The same seed always produces the same data. No real
+//! financial data is ever used before 1.0 (D-130).
 //!
 //! Everything goes through the real engine, so the result passes the
 //! integrity check. Run it inside one [`Db::write`] so it commits as a
@@ -40,10 +42,14 @@ use crate::categories::{
 };
 use crate::date::Date;
 use crate::error::{Error, Result};
+use crate::invest::{self, InvAction, InvInput, SplitRatio};
 use crate::ledger::{self, Cleared, Entry, EntryLine, Target};
-use crate::money::{Money, Rate};
-use crate::persistence::{self, Tx, accounts, categories, payees, tags};
+use crate::money::{Money, Price, Quantity, Rate, mul_div};
+use crate::persistence::{self, Tx, accounts, categories, payees, securities, tags};
 use crate::reconcile::{self, Item, StartInput};
+use crate::securities::{
+    AssetClass, PricePoint, PriceSource, SecurityFields, SecurityId, SecurityType,
+};
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -438,6 +444,7 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
     g.setup()?;
     g.run()?;
     g.reconcile_history()?;
+    let investment_accounts = investments(tx, spec)?;
     let count = |table: &str| -> Result<u32> {
         let n: i64 = tx
             .conn()
@@ -446,7 +453,7 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
     };
     let len = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     Ok(SampleSummary {
-        accounts: len(g.accounts.len()),
+        accounts: len(g.accounts.len() + investment_accounts),
         categories: len(CATEGORIES.len()),
         payees: len(g.payees.len()),
         txns: count("txn")?.saturating_sub(len(ACCOUNTS.len())),
@@ -566,8 +573,7 @@ impl Gen<'_, '_> {
             month = Date::from_naive(next);
         }
         for &account in &self.accounts {
-            let kind = accounts::get(self.tx.conn(), account)?.fields.account_type;
-            if !reconcile::is_reconcilable(kind) {
+            if !reconcile::is_reconcilable(&accounts::get(self.tx.conn(), account)?) {
                 continue;
             }
             let sign = reconcile::Sign::of(self.tx.conn(), account)?;
@@ -903,6 +909,372 @@ impl Gen<'_, '_> {
 // Mock bank statements
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Investments (Phase 6)
+// ---------------------------------------------------------------------------
+
+/// A sample security and how its price and dividend behave.
+struct SampleSecurity {
+    name: &'static str,
+    ticker: &'static str,
+    kind: SecurityType,
+    class: AssetClass,
+    /// Opening price, cents.
+    cents: i64,
+    /// Monthly drift and swing, tenths of a percent.
+    drift: i64,
+    swing: i64,
+    /// Yearly dividend per share, cents.
+    dividend: i64,
+}
+
+const fn sec(
+    name: &'static str,
+    ticker: &'static str,
+    kind: SecurityType,
+    class: AssetClass,
+    [cents, drift, swing, dividend]: [i64; 4],
+) -> SampleSecurity {
+    SampleSecurity {
+        name,
+        ticker,
+        kind,
+        class,
+        cents,
+        drift,
+        swing,
+        dividend,
+    }
+}
+
+const SECURITIES: &[SampleSecurity] = &[
+    sec(
+        "Vanguard Total Stock Market ETF",
+        "VTI",
+        SecurityType::Etf,
+        AssetClass::UsEquity,
+        [22_000, 8, 45, 340],
+    ),
+    sec(
+        "Vanguard Total International Stock ETF",
+        "VXUS",
+        SecurityType::Etf,
+        AssetClass::IntlEquity,
+        [5_500, 5, 50, 160],
+    ),
+    sec(
+        "Vanguard Total Bond Market ETF",
+        "BND",
+        SecurityType::Etf,
+        AssetClass::Bond,
+        [7_200, 1, 12, 240],
+    ),
+    sec(
+        "Apple Inc",
+        "AAPL",
+        SecurityType::Stock,
+        AssetClass::UsEquity,
+        [18_000, 12, 80, 100],
+    ),
+    sec(
+        "Vanguard Wellington Fund Investor",
+        "VWELX",
+        SecurityType::MutualFund,
+        AssetClass::UsEquity,
+        [4_000, 6, 30, 140],
+    ),
+];
+const VTI: usize = 0;
+const VXUS: usize = 1;
+const BND: usize = 2;
+const AAPL: usize = 3;
+const VWELX: usize = 4;
+
+/// Shares in raw units (×10⁻⁶) that `dollars` buys at `price`, rounded
+/// down to a thousandth of a share.
+fn shares_for(dollars: i64, price: Price) -> Result<Quantity> {
+    let raw = mul_div(dollars * 1_000_000, 1_000_000, price.raw().max(1))?;
+    Ok(Quantity::from_raw(raw - raw % 1000))
+}
+
+struct InvGen<'a, 'c> {
+    tx: &'a Tx<'c>,
+    rng: Rng,
+    securities: Vec<SecurityId>,
+    /// Current price of each security.
+    prices: Vec<Price>,
+}
+
+impl InvGen<'_, '_> {
+    fn post(&mut self, input: &InvInput) -> Result<()> {
+        invest::create(self.tx, input).map(|_| ())
+    }
+
+    fn input(&self, account: AccountId, action: InvAction, date: Date, sec: usize) -> InvInput {
+        let mut i = InvInput::new(account, action, date);
+        i.security = Some(self.securities[sec]);
+        i
+    }
+
+    fn buy(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        sec: usize,
+        shares: Quantity,
+        commission: i64,
+    ) -> Result<()> {
+        let mut i = self.input(account, InvAction::Buy, date, sec);
+        i.quantity = Some(shares);
+        i.price = Some(self.prices[sec]);
+        i.commission = Money::from_cents(commission);
+        self.post(&i)
+    }
+
+    fn held(&self, account: AccountId, sec: usize, date: Date) -> Result<Quantity> {
+        Ok(persistence::invest::open_lots(
+            self.tx.conn(),
+            Some(account),
+            Some(self.securities[sec]),
+            date,
+        )?
+        .iter()
+        .map(|l| l.open_quantity)
+        .sum())
+    }
+
+    /// Quarterly cash dividend on everything held.
+    fn dividend(&mut self, account: AccountId, date: Date, sec: usize) -> Result<()> {
+        let held = self.held(account, sec, date)?;
+        let per_share = Price::from_raw(SECURITIES[sec].dividend * 10_000 / 4);
+        let amount = crate::money::extended_value(held, per_share)?;
+        if amount.cents() <= 0 {
+            return Ok(());
+        }
+        let mut i = self.input(account, InvAction::Dividend, date, sec);
+        i.amount = Some(amount);
+        self.post(&i)
+    }
+
+    /// Reinvest `per_share` cents a share into more shares.
+    fn reinvest(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        sec: usize,
+        action: InvAction,
+        per_share: i64,
+    ) -> Result<()> {
+        let held = self.held(account, sec, date)?;
+        let amount = crate::money::extended_value(held, Price::from_raw(per_share * 10_000))?;
+        let shares = mul_div(
+            amount.cents(),
+            10_i64.pow(10),
+            self.prices[sec].raw().max(1),
+        )?;
+        let shares = Quantity::from_raw(shares - shares % 1000);
+        if amount.cents() <= 0 || shares.raw() <= 0 {
+            return Ok(());
+        }
+        let mut i = self.input(account, action, date, sec);
+        i.quantity = Some(shares);
+        i.price = Some(self.prices[sec]);
+        i.amount = Some(amount);
+        self.post(&i)
+    }
+
+    /// Move every price one month along its random walk; record it.
+    fn step_prices(&mut self, date: Date, skip: Option<usize>) -> Result<()> {
+        for (k, sec) in SECURITIES.iter().enumerate() {
+            let change = sec.drift + self.rng.between(-sec.swing, sec.swing);
+            let next = mul_div(self.prices[k].raw(), 1000 + change, 1000)?;
+            self.prices[k] = Price::from_raw((next + 5_000) / 10_000 * 10_000);
+            if Some(k) == skip {
+                continue;
+            }
+            securities::set_price(
+                self.tx,
+                &PricePoint {
+                    security: self.securities[k],
+                    date,
+                    price: self.prices[k],
+                    source: PriceSource::Manual,
+                },
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// A brokerage and a Roth IRA with trades, income, and prices from
+/// `spec.start` to today (or `spec.end`, if earlier). Returns how many
+/// accounts it made.
+fn investments(tx: &Tx<'_>, spec: &SampleSpec) -> Result<usize> {
+    let opening = categories::system(tx.conn(), SystemCategory::OpeningBalance)?.id;
+    let mut g = InvGen {
+        tx,
+        rng: Rng(spec.seed ^ 0x1D1E_57ED),
+        securities: Vec::new(),
+        prices: Vec::new(),
+    };
+    for s in SECURITIES {
+        let mut f = SecurityFields::new(s.name, s.kind);
+        f.ticker = Some(s.ticker.to_string());
+        f.asset_class = s.class;
+        g.securities.push(securities::insert(tx, &f)?.id);
+        g.prices.push(Price::from_raw(s.cents * 10_000));
+    }
+    let mut f = AccountFields::new("Brokerage", AccountType::Brokerage);
+    f.opening_date = Some(spec.start);
+    f.institution = "Vanguard".into();
+    let brokerage = accounts::insert(tx, &f)?.id;
+    let mut f = AccountFields::new("Roth IRA", AccountType::RothIra);
+    f.opening_date = Some(spec.start);
+    let roth = accounts::insert(tx, &f)?.id;
+
+    let last = spec.end.min(spec.today);
+    let day = |d: chrono::NaiveDate| Date::from_naive(d);
+    let start = spec.start.naive();
+
+    // Opening cash and opening lots (held for years already).
+    let mut cash = InvInput::new(brokerage, InvAction::CashIn, spec.start);
+    cash.amount = Some(Money::from_cents(6_000_000));
+    cash.counterpart = Some(Target::Category(opening));
+    cash.memo = "Opening Balance".into();
+    g.post(&cash)?;
+    for (sec, shares, basis, years) in [(VWELX, 800, 2_400_000, 5), (VTI, 50, 750_000, 3)] {
+        let mut i = g.input(roth, InvAction::SharesAdded, spec.start, sec);
+        i.quantity = Some(Quantity::from_raw(shares * 1_000_000));
+        i.amount = Some(Money::from_cents(basis));
+        i.acquired = start.checked_sub_months(Months::new(12 * years)).map(day);
+        i.memo = "Opening position".into();
+        g.post(&i)?;
+    }
+
+    // First purchases a few days in.
+    let first = day(start + Days::new(5));
+    if first <= last {
+        for (sec, shares, commission) in [
+            (VTI, 100, 0),
+            (VXUS, 200, 0),
+            (BND, 150, 0),
+            (AAPL, 40, 495),
+        ] {
+            g.buy(
+                brokerage,
+                first,
+                sec,
+                Quantity::from_raw(shares * 1_000_000),
+                commission,
+            )?;
+        }
+    }
+
+    let mut split_done = false;
+    let mut month = start
+        .checked_add_months(Months::new(1))
+        .and_then(|m| m.with_day(1))
+        .ok_or(Error::Overflow("sample month"))?;
+    while day(month) <= last {
+        let on = |d: u32| month.with_day(d).map(day);
+        // Monthly purchase of VTI on the 10th.
+        if let Some(d) = on(10).filter(|d| *d <= last) {
+            let shares = shares_for(500, g.prices[VTI])?;
+            g.buy(brokerage, d, VTI, shares, 0)?;
+        }
+        // Quarterly income on the 20th.
+        if month.month() % 3 == 0 {
+            if let Some(d) = on(20).filter(|d| *d <= last) {
+                for sec in [VTI, VXUS, BND, AAPL] {
+                    g.dividend(brokerage, d, sec)?;
+                }
+                g.dividend(roth, d, VTI)?;
+                g.reinvest(
+                    roth,
+                    d,
+                    VWELX,
+                    InvAction::ReinvestDividend,
+                    SECURITIES[VWELX].dividend / 4,
+                )?;
+            }
+        }
+        // Year-end capital gain distribution, reinvested.
+        if month.month() == 12 {
+            if let Some(d) = on(18).filter(|d| *d <= last) {
+                g.reinvest(roth, d, VWELX, InvAction::ReinvestCgLong, 120)?;
+            }
+        }
+        // Each January after the first year, sell a fifth of the Apple
+        // shares (FIFO), and some international shares by specific lot.
+        if month.month() == 1 && month.year() > spec.start.year() {
+            if let Some(d) = on(15).filter(|d| *d <= last) {
+                let held = g.held(brokerage, AAPL, d)?;
+                let fifth = Quantity::from_raw(held.raw() / 5 - (held.raw() / 5) % 1_000_000);
+                if fifth.raw() > 0 {
+                    let mut i = g.input(brokerage, InvAction::Sell, d, AAPL);
+                    i.quantity = Some(fifth);
+                    i.price = Some(g.prices[AAPL]);
+                    i.commission = Money::from_cents(495);
+                    g.post(&i)?;
+                }
+                let lots = persistence::invest::open_lots(
+                    tx.conn(),
+                    Some(brokerage),
+                    Some(g.securities[VXUS]),
+                    d,
+                )?;
+                if let Some(lot) = lots.first() {
+                    let take = Quantity::from_raw(lot.open_quantity.raw().min(25_000_000));
+                    let mut i = g.input(brokerage, InvAction::Sell, d, VXUS);
+                    i.quantity = Some(take);
+                    i.price = Some(g.prices[VXUS]);
+                    i.lots = vec![invest::LotPick {
+                        lot: lot.lot.id,
+                        quantity: take,
+                    }];
+                    g.post(&i)?;
+                }
+            }
+        }
+        // Apple splits 4-for-1 the first August.
+        if month.month() == 8 && !split_done {
+            if let Some(d) = on(28).filter(|d| *d <= last) {
+                let mut i = g.input(brokerage, InvAction::Split, d, AAPL);
+                i.split = Some(SplitRatio { new: 4, old: 1 });
+                g.post(&i)?;
+                g.prices[AAPL] = Price::from_raw(g.prices[AAPL].raw() / 4);
+                split_done = true;
+            }
+        }
+        // Month-end: interest on cash, then new prices.
+        let end = month
+            .checked_add_months(Months::new(1))
+            .and_then(|m| m.pred_opt())
+            .ok_or(Error::Overflow("sample month"))?;
+        if day(end) <= last {
+            let balance = persistence::invest::cash_balance(tx.conn(), brokerage, Some(day(end)))?;
+            let interest = mul_div(balance.cents(), 25, 12_000)?;
+            if interest > 0 {
+                let mut i = InvInput::new(brokerage, InvAction::Interest, day(end));
+                i.amount = Some(Money::from_cents(interest));
+                g.post(&i)?;
+            }
+            if day(end) < last {
+                g.step_prices(day(end), None)?;
+            }
+        }
+        month = month
+            .checked_add_months(Months::new(1))
+            .ok_or(Error::Overflow("sample month"))?;
+    }
+    // Prices on the last day; the bond fund's stays three weeks old, so
+    // the Holdings tab shows a stale price.
+    if last > spec.start {
+        g.step_prices(last, Some(BND))?;
+    }
+    Ok(2)
+}
+
 /// A made-up bank statement for a sample account, to reconcile against.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -1022,7 +1394,7 @@ mod tests {
     #[test]
     fn dataset_is_realistic_deterministic_and_consistent() {
         let (db, summary) = load(7, "2024-01-01", "2026-07-21", "2026-06-30", 100);
-        assert_eq!(summary.accounts, 5);
+        assert_eq!(summary.accounts, 7);
         assert_eq!(summary.categories, 41);
         assert!(summary.payees > 40);
         assert!(summary.txns > 1500, "{summary:?}");
@@ -1075,7 +1447,8 @@ mod tests {
         );
         assert_eq!(
             status(&format!(
-                "t.txn_date < '2026-05-01' AND a.type <> 'loan' AND NOT ({reconciled})"
+                "t.txn_date < '2026-05-01' AND a.type NOT IN ('loan', 'brokerage', 'roth_ira')
+                 AND NOT ({reconciled})"
             )),
             0
         );
@@ -1097,6 +1470,28 @@ mod tests {
             .query_row("SELECT count(*) FROM posting_tag", [], |r| r.get(0))
             .unwrap();
         assert!(tagged > 10, "{tagged}");
+
+        // Investments: trades, income, a split, sales with gains, prices.
+        let count = |sql: &str| -> i64 { db.conn().query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert!(count("SELECT count(*) FROM investment_txn") > 100);
+        assert_eq!(
+            count("SELECT count(*) FROM investment_txn WHERE action = 'split'"),
+            1
+        );
+        assert!(count("SELECT count(*) FROM lot_disposal WHERE kind = 'sale'") >= 4);
+        assert!(count("SELECT count(*) FROM price") > 100);
+        let brokerage = accounts::list(db.conn())
+            .unwrap()
+            .into_iter()
+            .find(|a| a.fields.name == "Brokerage")
+            .unwrap()
+            .id;
+        let h = crate::invest::holdings(db.conn(), brokerage, "2026-06-30".parse().unwrap(), None)
+            .unwrap();
+        assert_eq!(h.positions.len(), 4);
+        assert!(!h.missing_prices);
+        assert!(h.stale_prices);
+        assert!(!h.cash.unwrap().is_negative());
     }
 
     #[test]

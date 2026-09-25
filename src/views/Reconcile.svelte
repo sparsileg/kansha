@@ -9,7 +9,7 @@
   import type { Item, OpeningCheck, ReconciliationId } from "../lib/types/bindings";
 
   const accounts = $derived(
-    listsState.accounts.filter((a) => a.status === "open" && isReconcilable(a.account_type)),
+    listsState.accounts.filter((a) => a.status === "open" && isReconcilable(a)),
   );
   const account = $derived(
     reconcileState.accountId === null ? undefined : listsState.account(reconcileState.accountId),

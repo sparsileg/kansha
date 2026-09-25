@@ -10,7 +10,7 @@ use super::{Cleared, Entry, Target, Txn, TxnId, TxnInput, TxnSource, TxnStatus, 
 use crate::accounts::{Account, AccountId, AccountStatus};
 use crate::date::Date;
 use crate::error::{Error, Result};
-use crate::persistence::{Origin, Tx, accounts, categories, ledger as repo, payees};
+use crate::persistence::{Origin, Tx, accounts, categories, invest, ledger as repo, payees};
 
 /// Create a transaction. Its source follows the write's origin: UI →
 /// manual, import → that batch, system → system. Scheduled entries go
@@ -119,9 +119,9 @@ pub fn set_cleared(
 }
 
 /// Close an account as of `date` (ACCT-210). No transaction may be dated
-/// after `date`; a non-zero balance needs `confirmed`. Closed accounts
-/// take no new or changed transactions until reopened. Open investment
-/// positions are checked with the investments engine (Phase 6).
+/// after `date`; a non-zero balance, or for an investment account cash or
+/// shares still held, needs `confirmed`. Closed accounts take no new or
+/// changed transactions until reopened.
 pub fn close_account(
     tx: &Tx<'_>,
     account: AccountId,
@@ -142,6 +142,17 @@ pub fn close_account(
                 acct.fields.name
             )));
         }
+    }
+    if acct.fields.account_type.is_investment() {
+        let cash = invest::cash_balance(tx.conn(), account, None)?;
+        let held = invest::open_position_count(tx.conn(), account, date)?;
+        if (!cash.is_zero() || held > 0) && !confirmed {
+            return Err(Error::ConfirmationRequired(format!(
+                "account {:?} still holds {held} securities and {cash} in cash",
+                acct.fields.name
+            )));
+        }
+        return accounts::close(tx, account, date);
     }
     let balance = repo::account_balance(tx.conn(), account, None, false)?;
     if !balance.is_zero() && !confirmed {
@@ -213,6 +224,11 @@ fn validate(
     }
     let mut seen = HashSet::new();
     for p in &input.postings {
+        if p.security.is_some() {
+            return Err(Error::Invalid(
+                "holdings change only through investment transactions".into(),
+            ));
+        }
         match p.target {
             Target::Account(a) => {
                 if !seen.insert(a) {

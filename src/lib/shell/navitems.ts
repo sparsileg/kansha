@@ -43,7 +43,7 @@ const plain = (label: string) => label.replace(/…$/, "");
 export function navCatalog(accounts: Account[]): NavEntry[] {
   const out: NavEntry[] = [
     { id: HOME_ID, label: "Home", group: "General" },
-    { id: INVESTMENTS_ID, label: "Investments", group: "General", disabled: "Planned: Phase 6" },
+    { id: INVESTMENTS_ID, label: "Investments", group: "General" },
   ];
   for (const menu of MENUS) {
     for (const item of menu.items) {

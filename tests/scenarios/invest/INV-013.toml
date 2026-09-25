@@ -1,0 +1,90 @@
+id = "INV-013"
+description = "Closing an investment account needs confirmation while it holds shares or cash"
+requirements = ["ACCT-210", "INV-300"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "Old IRA"
+type = "traditional_ira"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "1000.00"
+transfer = "Checking"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "4"
+price = "200"
+
+[[actions]]
+type = "close_account"
+account = "Brokerage"
+date = "2026-06-30"
+expect_error = "still holds 1 securities and 200.00 in cash"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-01"
+security = "AAPL"
+quantity = "4"
+price = "210"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_out"
+date = "2026-03-02"
+amount = "1040.00"
+transfer = "Checking"
+
+[[actions]]
+type = "close_account"
+account = "Brokerage"
+date = "2026-03-01"
+expect_error = "has transactions after"
+
+[[actions]]
+type = "close_account"
+account = "Brokerage"
+date = "2026-06-30"
+
+# An empty account closes without confirmation.
+[[actions]]
+type = "close_account"
+account = "Old IRA"
+date = "2026-06-30"
+
+[expect.account_status]
+"Brokerage" = "closed"
+"Old IRA" = "closed"
+
+[expect.balances]
+"Checking" = "5040.00"
+
+[expect.category_totals]
+"Realized Gain/Loss" = "-40.00"

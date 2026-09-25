@@ -1,0 +1,93 @@
+id = "INV-005"
+description = "Return of capital lowers basis pro rata by shares; past zero basis the excess is a capital gain"
+requirements = ["LOT-130", "LOT-030", "INV-010", "INV-040"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Real Estate Trust"
+ticker = "REIT"
+type = "stock"
+asset_class = "real_estate"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2025-01-02"
+amount = "5000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-01-10"
+security = "REIT"
+quantity = "10"
+amount = "50.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-10"
+security = "REIT"
+quantity = "20"
+amount = "1000.00"
+
+# 90.00 by shares 10:20 = 30.00 + 60.00: both lots have the basis.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "return_of_capital"
+date = "2025-06-30"
+security = "REIT"
+amount = "90.00"
+
+# 60.00 = 20.00 + 40.00: lot 1 has only 20.00 left, so no excess yet;
+# then 30.00 = 10.00 + 20.00: lot 1 is at zero, its 10.00 is a gain.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "return_of_capital"
+date = "2025-12-31"
+security = "REIT"
+amount = "60.00"
+
+[[actions]]
+type = "invest"
+ref = "roc3"
+account = "Brokerage"
+action = "return_of_capital"
+date = "2026-06-30"
+security = "REIT"
+amount = "30.00"
+
+[expect.cash_balances]
+"Brokerage" = "4130.00"
+
+[expect.category_totals]
+"Realized Gain/Loss" = "-10.00"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "REIT"
+rows = [
+    { acquired = "2025-01-10", quantity = "10", basis = "0.00", per_share = "0" },
+    { acquired = "2025-02-10", quantity = "20", basis = "880.00" },
+]
+
+[[expect.holdings]]
+account = "Brokerage"
+rows = [
+    { security = "REIT", shares = "30", basis = "880.00" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-06-30", security = "REIT", acquired = "none", quantity = "none", proceeds = "10.00", basis = "0.00", gain = "10.00", term = "none" },
+]

@@ -1,5 +1,6 @@
 <script lang="ts">
   import RegisterGrid from "../lib/components/RegisterGrid.svelte";
+  import InvestmentAccount from "../lib/components/invest/InvestmentAccount.svelte";
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { registerState } from "../lib/state/register.svelte";
@@ -18,14 +19,18 @@
     <header>
       <h1>{account.name}{account.status === "closed" ? " (closed)" : ""}</h1>
       <button type="button" onclick={() => dialogState.editAccount(account)}>Edit account</button>
-      {#if account.status === "open" && isReconcilable(account.account_type)}
+      {#if account.status === "open" && isReconcilable(account)}
         <button type="button" onclick={() => void openReconcile(account.id)}>Reconcile</button>
       {/if}
     </header>
-    {#if registerState.error}<p class="err">{registerState.error}</p>{/if}
-    {#key account.id}
-      <RegisterGrid account={account.id} />
-    {/key}
+    {#if account.investment}
+      {#key account.id}<InvestmentAccount {account} />{/key}
+    {:else}
+      {#if registerState.error}<p class="err">{registerState.error}</p>{/if}
+      {#key account.id}
+        <RegisterGrid account={account.id} />
+      {/key}
+    {/if}
   </section>
 {:else}
   <p>Select an account.</p>

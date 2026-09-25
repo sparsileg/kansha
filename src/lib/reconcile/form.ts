@@ -4,7 +4,7 @@
 
 import { dateExample, parseDate } from "../format/date";
 import { parseMoney } from "../format/money";
-import type { AccountId, CategoryId, StartInput, StatementItem } from "../types/bindings";
+import type { Account, AccountId, CategoryId, StartInput, StatementItem } from "../types/bindings";
 
 /** Interest earned or a service charge, as typed. Blank amount = none. */
 export interface ItemForm {
@@ -77,8 +77,11 @@ export function buildStart(
   };
 }
 
-/** Accounts a statement can be reconciled against. The engine has the
- * same list (`reconcile::is_reconcilable`) and refuses any other. */
+/** Accounts a statement can be reconciled against: banking and credit
+ * card accounts, and investment accounts that keep their own cash. The
+ * engine has the same rule (`reconcile::is_reconcilable`) and refuses any
+ * other. */
 const RECONCILABLE = new Set(["checking", "savings", "cash", "money_market", "credit_card"]);
 
-export const isReconcilable = (accountType: string): boolean => RECONCILABLE.has(accountType);
+export const isReconcilable = (a: Pick<Account, "account_type" | "investment">): boolean =>
+  RECONCILABLE.has(a.account_type) || a.investment?.cash_mode === "internal";

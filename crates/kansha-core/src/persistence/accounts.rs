@@ -5,7 +5,8 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
 use crate::accounts::{
-    Account, AccountFields, AccountId, AccountStatus, InvestmentSettings, OtherAssetSettings,
+    Account, AccountFields, AccountId, AccountStatus, InvestmentSettings, LotMethod,
+    OtherAssetSettings,
 };
 use crate::date::Date;
 use crate::error::{Error, Result};
@@ -86,6 +87,12 @@ fn validate(f: &AccountFields) -> Result<()> {
     if linked_mismatch {
         return Err(Error::Invalid(
             "a linked cash account is required exactly when cash mode is linked".into(),
+        ));
+    }
+    let method = f.investment.as_ref().map(|i| i.default_lot_method);
+    if method.is_some_and(|m| !matches!(m, LotMethod::Fifo | LotMethod::Specific)) {
+        return Err(Error::Invalid(
+            "only fifo and specific lot selection are available yet".into(),
         ));
     }
     if (t == T::OtherAsset) != f.other_asset.is_some() {
@@ -243,6 +250,19 @@ pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> 
         return Err(Error::Invalid(format!(
             "account type cannot change ({} to {})",
             before.fields.account_type, f.account_type
+        )));
+    }
+    // Where an investment account's cash went is part of its history
+    // (INV-300): fixed once it has investment transactions.
+    let cash_of = |a: &AccountFields| {
+        a.investment
+            .as_ref()
+            .map(|i| (i.cash_mode, i.linked_cash_account))
+    };
+    if cash_of(&before.fields) != cash_of(f) && super::invest::has_transactions(tx.conn(), id)? {
+        return Err(Error::Invalid(format!(
+            "{:?} has investment transactions; its cash handling cannot change",
+            before.fields.name
         )));
     }
     let inv = f.investment.as_ref();

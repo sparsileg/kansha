@@ -66,6 +66,12 @@ fn investment_account_round_trip() {
         inv.mmf_mode = MmfMode::Security;
         inv.default_lot_method = LotMethod::MinTax;
     }
+    // Not available yet (LOT-115).
+    let err = write(&mut db, |tx| accounts::insert(tx, &f)).unwrap_err();
+    assert!(err.to_string().contains("only fifo and specific"), "{err}");
+    if let Some(inv) = f.investment.as_mut() {
+        inv.default_lot_method = LotMethod::Specific;
+    }
     let roth = write(&mut db, |tx| accounts::insert(tx, &f)).unwrap();
     assert_eq!(roth.fields, f);
     assert_eq!(roth.fields.tax_treatment, TaxTreatment::TaxExempt);

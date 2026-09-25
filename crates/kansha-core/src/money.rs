@@ -240,6 +240,64 @@ pub fn extended_value(quantity: Quantity, price: Price) -> Result<Money> {
         .map_err(|_| Error::Overflow("extended_value"))
 }
 
+/// `value × num ÷ den`, rounded half-even, without intermediate overflow.
+/// `den` must be positive.
+pub fn mul_div(value: i64, num: i64, den: i64) -> Result<i64> {
+    if den <= 0 {
+        return Err(Error::Invalid("division by a non-positive number".into()));
+    }
+    let q = div_round_half_even(i128::from(value) * i128::from(num), i128::from(den));
+    i64::try_from(q).map_err(|_| Error::Overflow("mul_div"))
+}
+
+/// Split `total` into parts proportional to `weights` that add up to
+/// `total` exactly (spec §19, LOT-030). Each part is first rounded down;
+/// the units left over go one each to the parts with the largest
+/// remainders, ties to the earlier part. `total` and every weight must be
+/// zero or more, and the weights must not all be zero.
+pub fn allocate(total: i64, weights: &[i64]) -> Result<Vec<i64>> {
+    if total < 0 || weights.iter().any(|w| *w < 0) {
+        return Err(Error::Invalid(
+            "allocation needs non-negative numbers".into(),
+        ));
+    }
+    let sum: i128 = weights.iter().map(|w| i128::from(*w)).sum();
+    if sum == 0 {
+        return Err(Error::Invalid("allocation needs a non-zero weight".into()));
+    }
+    let mut parts = Vec::with_capacity(weights.len());
+    let mut remainders = Vec::with_capacity(weights.len());
+    for (i, w) in weights.iter().enumerate() {
+        let n = i128::from(total) * i128::from(*w);
+        parts.push(n / sum);
+        remainders.push((n % sum, i));
+    }
+    let given: i128 = parts.iter().sum();
+    let left =
+        usize::try_from(i128::from(total) - given).map_err(|_| Error::Overflow("allocate"))?;
+    // Largest remainder first; equal remainders keep their order.
+    remainders.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    for (_, i) in remainders.into_iter().take(left) {
+        parts[i] += 1;
+    }
+    parts
+        .into_iter()
+        .map(|p| i64::try_from(p).map_err(|_| Error::Overflow("allocate")))
+        .collect()
+}
+
+impl Price {
+    /// Cost per share: `basis ÷ quantity`, rounded half-even to 6 decimal
+    /// places. `None` for no shares.
+    pub fn per_share(basis: Money, quantity: Quantity) -> Result<Option<Price>> {
+        if quantity.raw() <= 0 {
+            return Ok(None);
+        }
+        // cents × 10^10 / (shares × 10^6) = dollars × 10^6 per share.
+        mul_div(basis.cents(), 10_i64.pow(10), quantity.raw()).map(|p| Some(Price(p)))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -442,6 +500,41 @@ mod tests {
         assert_eq!(extended_value(q("2.5"), p("0.01")).unwrap(), m("0.02"));
         assert_eq!(extended_value(q("-2.5"), p("0.01")).unwrap(), m("-0.02"));
         assert!(extended_value(Quantity::from_raw(i64::MAX), Price::from_raw(i64::MAX)).is_err());
+    }
+
+    #[test]
+    fn mul_div_rounds_half_even() {
+        assert_eq!(mul_div(10000, 1, 3).unwrap(), 3333);
+        assert_eq!(mul_div(5, 1, 2).unwrap(), 2);
+        assert_eq!(mul_div(7, 1, 2).unwrap(), 4);
+        assert_eq!(mul_div(i64::MAX, 2, 2).unwrap(), i64::MAX);
+        assert!(mul_div(i64::MAX, 3, 1).is_err());
+        assert!(mul_div(1, 1, 0).is_err());
+    }
+
+    #[test]
+    fn allocate_sums_exactly_and_is_deterministic() {
+        assert_eq!(allocate(100, &[1, 1, 1]).unwrap(), vec![34, 33, 33]);
+        assert_eq!(allocate(1001, &[3, 3, 4]).unwrap(), vec![300, 300, 401]);
+        assert_eq!(allocate(2, &[1, 1, 1]).unwrap(), vec![1, 1, 0]);
+        assert_eq!(allocate(0, &[5, 0]).unwrap(), vec![0, 0]);
+        assert_eq!(allocate(7, &[0, 2]).unwrap(), vec![0, 7]);
+        assert!(allocate(1, &[0, 0]).is_err());
+        assert!(allocate(-1, &[1]).is_err());
+        assert!(allocate(1, &[-1, 2]).is_err());
+    }
+
+    #[test]
+    fn per_share_cost() {
+        assert_eq!(
+            Price::per_share(m("1000.00"), q("3")).unwrap(),
+            Some(p("333.333333"))
+        );
+        assert_eq!(
+            Price::per_share(m("10.00"), q("4")).unwrap(),
+            Some(p("2.5"))
+        );
+        assert_eq!(Price::per_share(m("10.00"), Quantity::ZERO).unwrap(), None);
     }
 
     #[test]

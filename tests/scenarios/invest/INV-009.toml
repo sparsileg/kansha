@@ -1,0 +1,129 @@
+id = "INV-009"
+description = "Opening positions: shares added with original acquisition dates, lot seeding from CSV as one import, shares removed"
+requirements = ["MIG-120", "INV-010", "LOT-010", "LOT-040", "MIG-080"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "Roth"
+type = "roth_ira"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[securities]]
+name = "Vanguard Total Bond Market"
+ticker = "BND"
+type = "etf"
+asset_class = "bond"
+
+[[actions]]
+type = "invest"
+ref = "added"
+account = "Brokerage"
+action = "shares_added"
+date = "2026-01-01"
+security = "VTI"
+quantity = "10"
+amount = "1500.00"
+acquired = "2019-03-15"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "shares_added"
+date = "2026-01-01"
+security = "VTI"
+quantity = "1"
+amount = "100.00"
+acquired = "2026-01-02"
+expect_error = "after the transaction date"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "shares_added"
+date = "2026-01-01"
+security = "VTI"
+quantity = "1"
+expect_error = "cost basis"
+
+# Quoted fields, a $ and thousands comma, US dates: as a brokerage exports.
+[[actions]]
+type = "seed_lots"
+date = "2026-01-01"
+csv = """
+Account,Security,Acquired Date,Quantity,Cost Basis
+Brokerage,BND,1/5/2020,"1,000","$75,000.00"
+Roth,VTI,2021-06-30,20.5,4100.25
+Roth,VTI,2025-12-01,4,1200
+"""
+
+# A bad row: nothing is imported.
+[[actions]]
+type = "seed_lots"
+date = "2026-01-01"
+csv = """
+account,ticker,acquired,shares,basis
+Roth,BND,2020-01-01,5,300
+Roth,NOPE,2020-01-01,5,300
+"""
+expect_error = "unknown security"
+
+[[actions]]
+type = "invest"
+account = "Roth"
+action = "shares_removed"
+date = "2026-02-01"
+security = "VTI"
+quantity = "0.5"
+
+[[actions]]
+type = "invest"
+account = "Roth"
+action = "sell"
+date = "2026-03-01"
+security = "VTI"
+quantity = "24"
+amount = "7200.00"
+
+[expect]
+txn_count = 6
+
+[expect.category_totals]
+"Opening Balance" = "-81700.24"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "VTI"
+rows = [
+    { acquired = "2019-03-15", quantity = "10", basis = "1500.00", term = "long" },
+]
+
+[[expect.lots]]
+account = "Brokerage"
+security = "BND"
+rows = [
+    { acquired = "2020-01-05", quantity = "1000", basis = "75000.00" },
+]
+
+[[expect.lots]]
+account = "Roth"
+security = "VTI"
+rows = []
+
+# Removed: 0.5 of the 2021 lot (basis 100.01). Sold 20 + 4, proceeds 7200
+# by 20:4 = 6000 + 1200. Roth is tax-exempt: kept, not taxable.
+[[expect.gains]]
+rows = [
+    { date = "2026-03-01", security = "VTI", acquired = "2021-06-30", quantity = "20", proceeds = "6000.00", basis = "4000.24", gain = "1999.76", term = "long", taxable = false },
+    { date = "2026-03-01", security = "VTI", acquired = "2025-12-01", quantity = "4", proceeds = "1200.00", basis = "1200.00", gain = "0.00", term = "short", taxable = false },
+]
+
+[expect.cash_balances]
+"Roth" = "7200.00"

@@ -1,0 +1,190 @@
+id = "INV-003"
+description = "Income: cash and reinvested dividends, capital gain distributions, interest, fees, withholding, misc; categories and the income tab agree"
+requirements = ["INV-010", "INV-040", "POS-010", "POS-040", "LOT-010"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[categories]]
+path = "Investment:Rebates"
+kind = "income"
+
+[[securities]]
+name = "Vanguard Wellington Fund"
+ticker = "VWELX"
+type = "mutual_fund"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "10000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-05"
+security = "VWELX"
+quantity = "100"
+price = "40"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-05"
+security = "AAPL"
+quantity = "10"
+price = "200"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-03-15"
+security = "AAPL"
+amount = "2.60"
+
+[[actions]]
+type = "invest"
+ref = "rd"
+account = "Brokerage"
+action = "reinvest_dividend"
+date = "2026-03-31"
+security = "VWELX"
+quantity = "1.234"
+price = "41.25"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "reinvest_cg_long"
+date = "2026-03-31"
+security = "VWELX"
+quantity = "2"
+amount = "82.50"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "reinvest_cg_short"
+date = "2026-03-31"
+security = "VWELX"
+quantity = "0.5"
+amount = "20.63"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cg_dist_long"
+date = "2026-06-15"
+security = "AAPL"
+amount = "10.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cg_dist_short"
+date = "2026-06-15"
+security = "AAPL"
+amount = "1.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "interest"
+date = "2026-04-30"
+amount = "3.21"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "fee"
+date = "2026-05-01"
+amount = "25.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "tax_withholding"
+date = "2026-03-15"
+security = "AAPL"
+amount = "0.39"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "misc_income"
+date = "2026-05-15"
+amount = "5.00"
+category = "Investment:Rebates"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "misc_expense"
+date = "2026-05-16"
+amount = "1.00"
+
+# A commission belongs to trades only; a dividend needs an amount.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-05-20"
+security = "AAPL"
+amount = "1.00"
+commission = "1.00"
+expect_error = "takes no commission"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-05-20"
+security = "AAPL"
+expect_error = "needs an amount"
+
+# 10000 - 4000 - 2000 + 2.60 + 10 + 1 + 3.21 - 25 - 0.39 + 5 - 1
+[expect.cash_balances]
+"Brokerage" = "3995.42"
+
+[expect.category_totals]
+"Dividends" = "-53.50"
+"Capital Gains Distribution LT" = "-92.50"
+"Capital Gains Distribution ST" = "-21.63"
+"Interest" = "-3.21"
+"Investment Fees" = "25.00"
+"Tax Withheld" = "0.39"
+"Investment:Rebates" = "-5.00"
+"Investment Misc Expense" = "1.00"
+
+# Reinvested dividend: 1.234 × 41.25 = 50.9025 → 50.90.
+[[expect.lots]]
+account = "Brokerage"
+security = "VWELX"
+rows = [
+    { acquired = "2026-01-05", quantity = "100", basis = "4000.00" },
+    { acquired = "2026-03-31", quantity = "1.234", basis = "50.90" },
+    { acquired = "2026-03-31", quantity = "2", basis = "82.50" },
+    { acquired = "2026-03-31", quantity = "0.5", basis = "20.63" },
+]
+
+[[expect.income]]
+account = "Brokerage"
+total = "175.84"
+rows = [
+    { security = "AAPL", dividends = "2.60", cg_short = "1.00", cg_long = "10.00", total = "13.60" },
+    { security = "VWELX", dividends = "50.90", cg_short = "20.63", cg_long = "82.50", total = "154.03" },
+    { security = "", interest = "3.21", other = "5.00", total = "8.21" },
+]

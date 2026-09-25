@@ -10,7 +10,7 @@ describe("menu definitions", () => {
       "New…", "Open…", "Backup…", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
     ]);
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
-      "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Reconcile",
+      "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Reconcile",
     ]);
     expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved", "Investing", "Balances", "Spending", "Taxes"]);
   });
@@ -25,7 +25,7 @@ describe("menu definitions", () => {
 
   it("what works today is not greyed", () => {
     const on = (id: string) => items.find((i) => i.id === id)?.disabled;
-    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.payees", "tools.categories", "tools.tags"]) {
+    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.payees", "tools.categories", "tools.tags", "tools.securities"]) {
       expect(on(id), id).toBeUndefined();
     }
   });

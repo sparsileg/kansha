@@ -1,8 +1,9 @@
 //! Integrity check v1 (INT-030, INT-040, SECU-050).
 //!
 //! Read-only. Every issue names the failing check and the specific
-//! record; nothing is repaired. Checks that need investment data (share
-//! balances vs. open lots, lot basis conservation) arrive with Phase 6.
+//! record; nothing is repaired. Investment checks (Phase 6): share
+//! balances equal open lots, lot basis is conserved, lots are never
+//! overdrawn.
 //!
 //! "Both sides of every transfer exist and match" holds by construction:
 //! a transfer is one transaction with a posting in each account, so it is
@@ -42,6 +43,18 @@ pub enum Check {
     CategoryCycle,
     /// A subcategory's kind differs from its parent's.
     CategoryKindMismatch,
+    /// A lot's open shares or basis is below zero, or it has basis left
+    /// with no shares.
+    LotOverdrawn,
+    /// A holding's shares from its transactions (bought, sold, split,
+    /// moved) differ from the sum of its open lots (POS-050).
+    ShareBalanceMismatch,
+    /// A holding's cost basis in the ledger (its postings) differs from
+    /// the sum of its open lots' basis (INT-030 lot basis totals).
+    LotBasisMismatch,
+    /// A transaction's shares differ from the lots it created or the
+    /// shares it took out of lots.
+    LotQuantityMismatch,
 }
 
 /// One failed invariant on one record.

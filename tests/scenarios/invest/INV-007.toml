@@ -1,0 +1,105 @@
+id = "INV-007"
+description = "Linked cash: trades and income post to the linked checking account; the investment account has no cash of its own"
+requirements = ["INV-300", "INV-040", "INV-030", "LOT-010"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "10000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+cash_mode = "linked"
+linked_cash = "Checking"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[prices]]
+security = "AAPL"
+date = "2026-06-01"
+price = "210"
+
+[[actions]]
+type = "invest"
+ref = "buy"
+account = "Brokerage"
+action = "buy"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "10"
+price = "200"
+commission = "4.95"
+
+[[actions]]
+type = "invest"
+ref = "div"
+account = "Brokerage"
+action = "dividend"
+date = "2026-05-15"
+security = "AAPL"
+amount = "2.60"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-06-01"
+security = "AAPL"
+quantity = "4"
+price = "210"
+commission = "4.95"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-06-01"
+amount = "100.00"
+transfer = "Checking"
+expect_error = "keeps its cash in"
+
+# 10000 - 2004.95 + 2.60 + 835.05
+[expect.balances]
+"Checking" = "8832.70"
+
+[expect.cash_balances]
+"Brokerage" = "none"
+
+# 6 shares × 210
+[expect.account_values]
+"Brokerage" = "1260.00"
+
+[[expect.holdings]]
+account = "Brokerage"
+total_value = "1260.00"
+rows = [
+    { security = "AAPL", shares = "6", basis = "1202.97", market_value = "1260.00" },
+]
+
+[[expect.inv_register]]
+account = "Brokerage"
+rows = [
+    { date = "2026-02-01", action = "Buy", amount = "-2004.95", cash_balance = "none" },
+    { date = "2026-05-15", action = "Dividend", amount = "2.60", cash_balance = "none" },
+    { date = "2026-06-01", action = "Sell", amount = "835.05", cash_balance = "none" },
+]
+
+[[expect.register]]
+account = "Checking"
+rows = [
+    { date = "2026-01-01", amount = "10000.00", balance = "10000.00" },
+    { date = "2026-02-01", amount = "-2004.95", balance = "7995.05", ref = "buy", counterpart = "[Brokerage]" },
+    { date = "2026-05-15", amount = "2.60", balance = "7997.65", ref = "div", counterpart = "Dividends" },
+    { date = "2026-06-01", amount = "835.05", balance = "8832.70", counterpart = "--Split--" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-06-01", security = "AAPL", acquired = "2026-02-01", quantity = "4", proceeds = "835.05", basis = "801.98", gain = "33.07", term = "short" },
+]

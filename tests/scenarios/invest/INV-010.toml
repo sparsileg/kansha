@@ -1,0 +1,231 @@
+id = "INV-010"
+description = "Investment entry rules: what each action needs and refuses"
+requirements = ["INV-010", "INV-020", "INV-050", "INV-300", "LOT-100", "LOT-115", "ACCT-210"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "5000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "Other Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "MMF Brokerage"
+type = "brokerage"
+mmf_mode = "security"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[securities]]
+name = "Vanguard Federal Money Market"
+ticker = "VMFXX"
+type = "money_market"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "3000.00"
+transfer = "Checking"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "10"
+price = "200"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "10.5"
+price = "210"
+expect_error = "only 10 shares are held"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "1"
+expect_error = "needs a price or an amount"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-02-01"
+security = "AAPL"
+amount = "-1.00"
+expect_error = "positive number"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "1"
+price = "210"
+lot_method = "hifo"
+expect_error = "not available yet"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "1"
+price = "1"
+commission = "5.00"
+expect_error = "commission is more than"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-02-01"
+security = "VMFXX"
+quantity = "100"
+price = "1"
+expect_error = "keeps money market funds as cash"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-02-01"
+amount = "10.00"
+expect_error = "choose the account or category"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-02-01"
+amount = "10.00"
+transfer = "Other Brokerage"
+expect_error = "is an investment account"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-02-01"
+amount = "10.00"
+security = "AAPL"
+transfer = "Checking"
+expect_error = "takes no security"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-02-01"
+amount = "10.00"
+expect_error = "needs a security"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "dividend"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "1"
+amount = "10.00"
+expect_error = "takes no shares"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-02-01"
+settle_date = "2026-01-31"
+security = "AAPL"
+quantity = "1"
+price = "200"
+expect_error = "settlement date"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "fee"
+date = "2026-02-01"
+amount = "10.00"
+category = "Opening Balance"
+expect_error = "takes no transfer account or category"
+
+[[actions]]
+type = "entry"
+date = "2026-02-01"
+account = "Checking"
+amount = "-100.00"
+transfer = "Brokerage"
+expect_error = "use the investment register"
+
+# Money market funds are securities in this account.
+[[actions]]
+type = "invest"
+account = "MMF Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "1000.00"
+transfer = "Checking"
+
+[[actions]]
+type = "invest"
+account = "MMF Brokerage"
+action = "buy"
+date = "2026-02-01"
+settle_date = "2026-02-02"
+security = "VMFXX"
+quantity = "1000"
+price = "1"
+
+# A closed account takes no new transactions.
+[[actions]]
+type = "close_account"
+account = "Other Brokerage"
+date = "2026-01-31"
+
+[[actions]]
+type = "invest"
+account = "Other Brokerage"
+action = "buy"
+date = "2026-02-01"
+security = "AAPL"
+quantity = "1"
+price = "200"
+expect_error = "is closed"
+
+[expect.balances]
+"Checking" = "1000.00"
+
+[expect.cash_balances]
+"Brokerage" = "1000.00"
+"MMF Brokerage" = "0.00"
+
+[[expect.holdings]]
+account = "MMF Brokerage"
+rows = [
+    { security = "VMFXX", shares = "1000", basis = "1000.00", market_value = "1000.00", price = "1", stale = false },
+]

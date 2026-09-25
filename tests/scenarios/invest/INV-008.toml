@@ -1,0 +1,170 @@
+id = "INV-008"
+description = "A holding's history stays in date order: backdated trades after a sale are refused; a trade changes or goes only while nothing follows it; memo edits always work"
+requirements = ["LOT-020", "INV-010", "INT-020", "AUD-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Apple Inc"
+ticker = "AAPL"
+type = "stock"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "10000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+ref = "b1"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "10"
+amount = "1000.00"
+
+[[actions]]
+type = "invest"
+ref = "b2"
+account = "Brokerage"
+action = "buy"
+date = "2026-02-10"
+security = "AAPL"
+quantity = "10"
+amount = "1200.00"
+
+[[actions]]
+type = "invest"
+ref = "s1"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-10"
+security = "AAPL"
+quantity = "5"
+amount = "700.00"
+
+# Backdated after the sale: FIFO would have been different, so refused.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-03-01"
+security = "AAPL"
+quantity = "1"
+amount = "100.00"
+expect_error = "date order"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-09"
+security = "AAPL"
+quantity = "1"
+amount = "100.00"
+expect_error = "date order"
+
+# The same day is fine: it comes after in entry order.
+[[actions]]
+type = "invest"
+ref = "s2"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-10"
+security = "AAPL"
+quantity = "1"
+amount = "150.00"
+
+# b1's shares were sold later: it cannot change or go.
+[[actions]]
+type = "invest_edit"
+ref = "b1"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "10"
+amount = "999.00"
+expect_error = "date order"
+
+[[actions]]
+type = "invest_delete"
+ref = "b1"
+expect_error = "date order"
+
+# s1 has s2 after it (same date, entered later).
+[[actions]]
+type = "invest_delete"
+ref = "s1"
+expect_error = "date order"
+
+# The memo can always change.
+[[actions]]
+type = "invest_edit"
+ref = "b1"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "AAPL"
+quantity = "10"
+amount = "1000.00"
+memo = "first purchase"
+
+# The last sale can change: 2 shares instead of 1.
+[[actions]]
+type = "invest_edit"
+ref = "s2"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-10"
+security = "AAPL"
+quantity = "2"
+amount = "300.00"
+lot_method = "fifo"
+
+# Take it back out, then s1, then b1 can go.
+[[actions]]
+type = "invest_delete"
+ref = "s2"
+
+[[actions]]
+type = "invest_delete"
+ref = "s1"
+
+[[actions]]
+type = "invest_edit"
+ref = "b1"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-12"
+security = "AAPL"
+quantity = "12"
+amount = "1188.00"
+memo = "first purchase"
+
+[expect]
+txn_count = 3
+
+[expect.cash_balances]
+"Brokerage" = "7612.00"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "AAPL"
+rows = [
+    { acquired = "2026-01-12", quantity = "12", basis = "1188.00" },
+    { acquired = "2026-02-10", quantity = "10", basis = "1200.00" },
+]
+
+[[expect.gains]]
+rows = []
+
+[expect.category_totals]
+"Realized Gain/Loss" = "0.00"

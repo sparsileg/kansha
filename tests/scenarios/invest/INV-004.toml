@@ -1,0 +1,154 @@
+id = "INV-004"
+description = "Splits: 2:1 then 1:3 reverse; shares change, basis and acquisition dates stay; rounding kept to the position; later buys are not split"
+requirements = ["LOT-120", "LOT-030", "INV-010", "POS-050"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "XYZ Corp"
+ticker = "XYZ"
+type = "stock"
+
+[[securities]]
+name = "ABC Corp"
+ticker = "ABC"
+type = "stock"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2025-01-02"
+amount = "5000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-01-10"
+security = "XYZ"
+quantity = "10"
+amount = "1000.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-10"
+security = "XYZ"
+quantity = "5"
+amount = "600.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-03-10"
+security = "XYZ"
+quantity = "1"
+amount = "100.00"
+
+[[actions]]
+type = "invest"
+ref = "split"
+account = "Brokerage"
+action = "split"
+date = "2025-06-01"
+security = "XYZ"
+split = "2:1"
+
+# Bought after the split, entered before the next one: split only once.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-07-01"
+security = "XYZ"
+quantity = "4"
+amount = "240.00"
+
+# 36 shares become 12: 6.666667 + 3.333333 + 0.666667 + 1.333333.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "split"
+date = "2026-01-15"
+security = "XYZ"
+split = "1:3"
+
+# FIFO: the first two lots, all of them.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-01"
+security = "XYZ"
+quantity = "10"
+amount = "1000.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "split"
+date = "2025-12-01"
+security = "XYZ"
+split = "3:2"
+expect_error = "date order"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "split"
+date = "2026-03-01"
+security = "ABC"
+split = "2:1"
+expect_error = "no shares are held"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "split"
+date = "2026-03-01"
+security = "XYZ"
+split = "2:2"
+expect_error = "two different positive numbers"
+
+[expect.cash_balances]
+"Brokerage" = "4060.00"
+
+[[expect.holdings]]
+account = "Brokerage"
+rows = [
+    { security = "XYZ", shares = "2", basis = "340.00", market_value = "none" },
+]
+
+[[expect.lots]]
+account = "Brokerage"
+security = "XYZ"
+rows = [
+    { acquired = "2025-03-10", quantity = "0.666667", basis = "100.00", per_share = "149.999925" },
+    { acquired = "2025-07-01", quantity = "1.333333", basis = "240.00", per_share = "180.000045" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-03-01", security = "XYZ", acquired = "2025-01-10", quantity = "6.666667", proceeds = "666.67", basis = "1000.00", gain = "-333.33", term = "long" },
+    { date = "2026-03-01", security = "XYZ", acquired = "2025-02-10", quantity = "3.333333", proceeds = "333.33", basis = "600.00", gain = "-266.67", term = "long" },
+]
+
+[[expect.inv_register]]
+account = "Brokerage"
+rows = [
+    { date = "2025-01-02", action = "Cash In", amount = "5000.00" },
+    { date = "2025-01-10", action = "Buy", amount = "-1000.00" },
+    { date = "2025-02-10", action = "Buy", amount = "-600.00" },
+    { date = "2025-03-10", action = "Buy", amount = "-100.00" },
+    { date = "2025-06-01", action = "Split", amount = "0.00", ref = "split", security = "XYZ" },
+    { date = "2025-07-01", action = "Buy", amount = "-240.00" },
+    { date = "2026-01-15", action = "Split", amount = "0.00" },
+    { date = "2026-03-01", action = "Sell", amount = "1000.00", cash_balance = "4060.00" },
+]

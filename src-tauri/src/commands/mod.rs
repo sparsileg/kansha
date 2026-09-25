@@ -2,6 +2,7 @@
 //! financial logic lives here (spec §17.1, CONVENTIONS §3).
 
 pub mod accounts;
+pub mod invest;
 pub mod ledger;
 pub mod lists;
 pub mod reconcile;

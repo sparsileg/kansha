@@ -131,6 +131,99 @@ const QUERIES: &[(Check, &str, &str)] = &[
          WHERE cur = start ORDER BY start",
     ),
     (
+        Check::LotOverdrawn,
+        "lot",
+        "SELECT id, 'open shares ' || open_q || ' (×10⁻⁶), open basis ' || open_b || ' cents'
+         FROM (SELECT l.id,
+                      l.quantity
+                        + ifnull((SELECT sum(quantity_delta) FROM lot_adjustment WHERE lot_id = l.id), 0)
+                        - ifnull((SELECT sum(quantity) FROM lot_disposal WHERE lot_id = l.id), 0) AS open_q,
+                      l.cost_basis
+                        + ifnull((SELECT sum(basis_delta) FROM lot_adjustment WHERE lot_id = l.id), 0)
+                        - ifnull((SELECT sum(basis) FROM lot_disposal WHERE lot_id = l.id), 0) AS open_b
+               FROM lot l)
+         WHERE open_q < 0 OR open_b < 0 OR (open_q = 0 AND open_b <> 0)
+         ORDER BY id",
+    ),
+    (
+        Check::ShareBalanceMismatch,
+        "account",
+        "WITH moves (account_id, security_id, q) AS (
+             SELECT account_id, security_id,
+                    CASE WHEN action IN ('buy', 'reinvest_dividend', 'reinvest_cg_short',
+                                         'reinvest_cg_long', 'shares_added') THEN quantity
+                         ELSE -quantity END
+             FROM investment_txn
+             WHERE action IN ('buy', 'reinvest_dividend', 'reinvest_cg_short', 'reinvest_cg_long',
+                              'shares_added', 'sell', 'shares_removed', 'transfer_shares')
+             UNION ALL
+             SELECT to_account_id, security_id, quantity FROM investment_txn
+             WHERE action = 'transfer_shares'
+             UNION ALL
+             SELECT l.account_id, l.security_id, a.quantity_delta
+             FROM lot_adjustment a JOIN lot l ON l.id = a.lot_id
+         ),
+         held (account_id, security_id, q) AS (
+             SELECT l.account_id, l.security_id,
+                    l.quantity
+                      + ifnull((SELECT sum(quantity_delta) FROM lot_adjustment WHERE lot_id = l.id), 0)
+                      - ifnull((SELECT sum(quantity) FROM lot_disposal WHERE lot_id = l.id), 0)
+             FROM lot l
+         ),
+         a AS (SELECT account_id, security_id, sum(q) AS q FROM moves GROUP BY 1, 2),
+         b AS (SELECT account_id, security_id, sum(q) AS q FROM held GROUP BY 1, 2),
+         k AS (SELECT account_id, security_id FROM a UNION SELECT account_id, security_id FROM b)
+         SELECT k.account_id, 'security ' || k.security_id || ': transactions give '
+                || ifnull(a.q, 0) || ', open lots hold ' || ifnull(b.q, 0) || ' (shares ×10⁻⁶)'
+         FROM k
+         LEFT JOIN a ON a.account_id = k.account_id AND a.security_id = k.security_id
+         LEFT JOIN b ON b.account_id = k.account_id AND b.security_id = k.security_id
+         WHERE ifnull(a.q, 0) <> ifnull(b.q, 0)
+         ORDER BY k.account_id, k.security_id",
+    ),
+    (
+        Check::LotBasisMismatch,
+        "account",
+        "WITH ledger (account_id, security_id, b) AS (
+             SELECT account_id, security_id, sum(amount) FROM posting
+             WHERE security_id IS NOT NULL GROUP BY 1, 2
+         ),
+         held (account_id, security_id, b) AS (
+             SELECT l.account_id, l.security_id,
+                    sum(l.cost_basis
+                        + ifnull((SELECT sum(basis_delta) FROM lot_adjustment WHERE lot_id = l.id), 0)
+                        - ifnull((SELECT sum(basis) FROM lot_disposal WHERE lot_id = l.id), 0))
+             FROM lot l GROUP BY 1, 2
+         ),
+         k AS (SELECT account_id, security_id FROM ledger
+               UNION SELECT account_id, security_id FROM held)
+         SELECT k.account_id, 'security ' || k.security_id || ': postings carry '
+                || ifnull(ledger.b, 0) || ' cents of basis, open lots '
+                || ifnull(held.b, 0) || ' cents'
+         FROM k
+         LEFT JOIN ledger ON ledger.account_id = k.account_id AND ledger.security_id = k.security_id
+         LEFT JOIN held ON held.account_id = k.account_id AND held.security_id = k.security_id
+         WHERE ifnull(ledger.b, 0) <> ifnull(held.b, 0)
+         ORDER BY k.account_id, k.security_id",
+    ),
+    (
+        Check::LotQuantityMismatch,
+        "txn",
+        "SELECT i.txn_id, i.action || ' of ' || i.quantity || ' shares; lot records show '
+                || CASE WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares')
+                        THEN ifnull((SELECT sum(quantity) FROM lot_disposal WHERE txn_id = i.txn_id), 0)
+                        ELSE ifnull((SELECT sum(quantity) FROM lot WHERE origin_txn_id = i.txn_id), 0)
+                   END
+         FROM investment_txn i
+         WHERE i.quantity IS NOT NULL
+           AND i.quantity <> CASE
+                 WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares')
+                   THEN ifnull((SELECT sum(quantity) FROM lot_disposal WHERE txn_id = i.txn_id), 0)
+                 ELSE ifnull((SELECT sum(quantity) FROM lot WHERE origin_txn_id = i.txn_id), 0)
+               END
+         ORDER BY i.txn_id",
+    ),
+    (
         Check::CategoryKindMismatch,
         "category",
         "SELECT c.id, c.kind || ' category under ' || p.kind || ' category ' || p.id

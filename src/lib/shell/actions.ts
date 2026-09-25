@@ -5,7 +5,7 @@ import { dialogState } from "../state/dialogs.svelte";
 import { registerState } from "../state/register.svelte";
 import { viewState } from "../state/view.svelte";
 import { exitApp, goHome, openAccount, openReconcile } from "./nav";
-import { HOME_ID } from "./navitems";
+import { HOME_ID, INVESTMENTS_ID } from "./navitems";
 
 export function runAction(id: string): void {
   if (id === HOME_ID) {
@@ -47,6 +47,12 @@ export function runAction(id: string): void {
       case "tools.tags":
         viewState.navigate("manage", { tab: "tags" });
         break;
+      case "tools.securities":
+        viewState.navigate("manage", { tab: "securities" });
+        break;
+      case INVESTMENTS_ID:
+        viewState.navigate("investments");
+        break;
     }
   }
 }
@@ -70,7 +76,10 @@ export function isCurrent(id: string): boolean {
     case "tools.payees":
     case "tools.categories":
     case "tools.tags":
+    case "tools.securities":
       return view === "manage" && viewState.params.tab === id.slice("tools.".length);
+    case INVESTMENTS_ID:
+      return view === "investments";
     default:
       return false;
   }

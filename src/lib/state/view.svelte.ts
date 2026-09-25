@@ -15,9 +15,10 @@ export type ViewId =
   | "reports"
   | "manage"
   | "search"
+  | "investments"
   | "settings";
 
-export type ManageTab = "payees" | "categories" | "tags";
+export type ManageTab = "payees" | "categories" | "tags" | "securities";
 
 export interface ViewParams {
   /** The Manage view's tab. */

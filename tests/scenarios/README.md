@@ -29,10 +29,17 @@ as_of = "2026-03-15"              # "today" for the engine
 [[accounts]]
 name = "Visa"
 type = "credit_card"              # checking, savings, credit_card, cash, money_market,
-                                  # other_asset, other_liability, loan (investment types: Phase 6)
+                                  # other_asset, other_liability, loan, brokerage,
+                                  # traditional_ira, roth_ira, hsa, retirement_401k
 credit_limit = "5000.00"          # optional, credit cards only
 opening_balance = "-500.00"       # optional, ledger sign (negative = owed)
 opening_date = "2026-01-01"       # required with opening_balance
+tax_treatment = "tax_deferred"    # optional; defaults by type
+# Investment accounts only, all optional:
+cash_mode = "linked"              # internal (default) or linked
+linked_cash = "Checking"          # with linked: a cash account listed earlier
+mmf_mode = "security"             # cash (default) or security
+lot_method = "specific"           # fifo (default) or specific
 
 [[categories]]
 path = "Food:Groceries"           # parents are created too
@@ -40,6 +47,21 @@ kind = "expense"                  # expense or income
 ```
 
 Payees and tags are created the first time an action names them.
+
+```toml
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"                    # optional; actions name a security by ticker or name
+type = "etf"                      # stock, etf, mutual_fund, bond, money_market, cd, other
+asset_class = "us_equity"         # optional: us_equity, intl_equity, bond, cash,
+                                  # real_estate, commodity, other (default by type)
+lot_method = "specific"           # optional: overrides the account's default
+
+[[prices]]
+security = "VTI"
+date = "2026-06-30"
+price = "320"
+```
 
 ## Signs
 
@@ -205,6 +227,51 @@ To keep a transaction reconciled when editing it, give the `edit` action
 Interest and service charge amounts are positive; the engine picks the
 sign.
 
+### Investments (Phase 6)
+
+```toml
+[[actions]]
+type = "invest"
+ref = "buy1"                      # optional name for later actions
+account = "Brokerage"
+action = "buy"                    # buy, sell, dividend, interest, reinvest_dividend,
+                                  # reinvest_cg_short, reinvest_cg_long, cg_dist_short,
+                                  # cg_dist_long, return_of_capital, split,
+                                  # transfer_shares, shares_added, shares_removed,
+                                  # cash_in, cash_out, fee, tax_withholding,
+                                  # misc_income, misc_expense
+date = "2025-01-10"               # trade date
+settle_date = "2025-01-13"        # optional
+security = "VTI"                  # ticker or name
+quantity = "10"
+price = "200"
+commission = "5.00"               # buy and sell only
+amount = "2005.00"                # positive; the action gives the direction.
+                                  # Buy: total cost. Sell: net proceeds. Optional
+                                  # for buy/sell/reinvest (shares × price ± commission).
+split = "2:1"                     # split only: new:old
+to_account = "IRA"                # transfer_shares only
+lot_method = "fifo"               # sell, transfer, remove: override the default
+lots = [                          # specific identification
+    { from = "buy1", quantity = "5" },            # lot made by that ref
+    { from = "move", index = 2, quantity = "1" }, # its 2nd lot in this account
+]
+acquired = "2019-03-15"           # shares_added: original acquisition date
+transfer = "Checking"             # cash_in/cash_out: the other account
+category = "Opening Balance"      # cash_in/cash_out, misc: a category instead
+memo = "..."
+```
+
+`invest_edit` takes the same fields with `ref` (and `confirm` for a
+reconciled cash posting); `invest_delete` takes `ref`. `price` records a
+price (`security`, `date`, `price`). `import_prices` takes `csv` text
+(optional `expect_count`); `seed_lots` takes `date` and `csv` text (MIG-120).
+Multi-line CSV goes in a `"""` string.
+
+A holding's sales, transfers, removals, splits, and returns of capital
+stay in date order: anything dated before the latest of them is refused,
+and a transaction changes or goes only while nothing follows it.
+
 ## Expectations
 
 ```toml
@@ -270,6 +337,63 @@ rows = [
 
 [expect]
 integrity = ["reconciled_balance_mismatch"]   # checks expected to fail
+```
+
+```toml
+[expect.cash_balances]            # investment cash as of as_of; "none" when linked
+"Brokerage" = "9985.00"
+
+[expect.account_values]           # what the account list shows (market value)
+"Brokerage" = "11585.00"
+
+[[expect.holdings]]               # every position, by security name
+account = "Brokerage"
+total_value = "11585.00"          # optional: priced holdings + cash
+rows = [
+    { security = "VTI", shares = "5", basis = "1252.50", market_value = "1600.00", price = "320", stale = false },
+]                                 # market_value and price may be "none"
+
+[[expect.lots]]                   # open lots, oldest acquisition first
+account = "Brokerage"
+security = "VTI"
+rows = [
+    { acquired = "2025-06-01", quantity = "5", basis = "1252.50", per_share = "250.5", term = "long" },
+]
+
+[[expect.gains]]                  # every realized gain row, by date
+account = "Brokerage"             # optional; all accounts when left out
+rows = [
+    { date = "2026-03-01", security = "VTI", acquired = "2025-01-10", quantity = "10", proceeds = "2996.67", basis = "2005.00", gain = "991.67", term = "long", taxable = true },
+]                                 # return of capital beyond basis: acquired,
+                                  # quantity, term = "none"
+
+[[expect.income]]
+account = "Brokerage"
+total = "175.84"                  # optional
+rows = [                          # security "" = income with no security
+    { security = "AAPL", dividends = "2.60", cg_short = "1.00", cg_long = "10.00", total = "13.60" },
+]                                 # also interest, other
+
+[[expect.inv_register]]
+account = "Brokerage"
+rows = [
+    { date = "2025-01-10", action = "Buy", amount = "-2005.00", cash_balance = "7995.00", security = "VTI", quantity = "10", ref = "buy1" },
+]                                 # action as the register shows it ("Transfer In")
+
+[[expect.allocation]]
+accounts = ["Brokerage"]          # optional; every open investment account
+total = "10580.00"
+rows = [
+    { class = "cash", value = "8730.00", percent = "82.51" },
+]                                 # by value, largest first
+
+[[expect.performance]]            # account totals; each field optional
+account = "Brokerage"
+realized = "200.00"
+income = "30.00"
+unrealized = "350.00"
+total_gain = "580.00"
+total_return = "23.20"            # percent
 ```
 
 `expect.integrity` lists integrity checks (snake_case) that must fail, and

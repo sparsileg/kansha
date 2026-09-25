@@ -27,6 +27,7 @@
   import { viewState } from "./lib/state/view.svelte";
   import Calendar from "./views/Calendar.svelte";
   import Dashboard from "./views/Dashboard.svelte";
+  import Investments from "./views/Investments.svelte";
   import EmptyBook from "./views/EmptyBook.svelte";
   import Manage from "./views/Manage.svelte";
   import Reconcile from "./views/Reconcile.svelte";
@@ -53,6 +54,7 @@
     calendar: Calendar,
     reconcile: Reconcile,
     search: Search,
+    investments: Investments,
   };
   const View = $derived(views[viewState.current]);
 </script>
@@ -99,8 +101,13 @@
 </div>
 
 <style>
+  /* The window itself never scrolls: the shell is pinned to it, and only
+     areas inside (views, lists, the account panel) scroll. */
+  :global(html),
   :global(body) {
     margin: 0;
+    height: 100%;
+    overflow: hidden;
   }
   /* The field being typed in must be unmistakable (keyboard entry): its
      background and text take the theme's focus colors. Buttons reached by
@@ -138,7 +145,8 @@
     color: var(--sel-fg);
   }
   .app {
-    height: 100vh;
+    position: fixed;
+    inset: 0;
     display: flex;
     flex-direction: column;
     --bg: #fff;

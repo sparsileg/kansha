@@ -1,0 +1,155 @@
+id = "INV-006"
+description = "Share transfer carries lots intact: original dates and basis; FIFO in the receiving account uses the original dates"
+requirements = ["LOT-140", "LOT-020", "LOT-040", "INV-010", "INV-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+
+[[accounts]]
+name = "Old Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "New Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[actions]]
+type = "invest"
+account = "Old Brokerage"
+action = "cash_in"
+date = "2023-05-01"
+amount = "3000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "New Brokerage"
+action = "cash_in"
+date = "2023-05-01"
+amount = "1000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Old Brokerage"
+action = "buy"
+date = "2023-05-01"
+security = "VTI"
+quantity = "10"
+amount = "1000.00"
+
+[[actions]]
+type = "invest"
+account = "New Brokerage"
+action = "buy"
+date = "2024-01-01"
+security = "VTI"
+quantity = "5"
+amount = "700.00"
+
+[[actions]]
+type = "invest"
+account = "Old Brokerage"
+action = "buy"
+date = "2024-05-01"
+security = "VTI"
+quantity = "10"
+amount = "1500.00"
+
+# FIFO: all of the 2023 lot and half of the 2024-05 lot.
+[[actions]]
+type = "invest"
+ref = "move"
+account = "Old Brokerage"
+action = "transfer_shares"
+date = "2025-01-15"
+security = "VTI"
+quantity = "15"
+to_account = "New Brokerage"
+
+[[actions]]
+type = "invest"
+account = "Old Brokerage"
+action = "transfer_shares"
+date = "2025-01-15"
+security = "VTI"
+quantity = "1"
+to_account = "Old Brokerage"
+expect_error = "different account"
+
+[[actions]]
+type = "invest"
+account = "Old Brokerage"
+action = "transfer_shares"
+date = "2025-01-15"
+security = "VTI"
+quantity = "1"
+to_account = "Checking"
+expect_error = "not an investment account"
+
+# Oldest first by acquisition date: the transferred 2023 lot, then 2 of
+# the 2024-01 lot (basis 700 × 2/5 = 280.00).
+[[actions]]
+type = "invest"
+account = "New Brokerage"
+action = "sell"
+date = "2025-03-01"
+security = "VTI"
+quantity = "12"
+amount = "2400.00"
+
+# The transfer's shares were sold since: it cannot be undone now.
+[[actions]]
+type = "invest_delete"
+ref = "move"
+expect_error = "date order"
+
+[expect.cash_balances]
+"Old Brokerage" = "500.00"
+"New Brokerage" = "2700.00"
+
+[[expect.lots]]
+account = "Old Brokerage"
+security = "VTI"
+rows = [
+    { acquired = "2024-05-01", quantity = "5", basis = "750.00" },
+]
+
+[[expect.lots]]
+account = "New Brokerage"
+security = "VTI"
+rows = [
+    { acquired = "2024-01-01", quantity = "3", basis = "420.00" },
+    { acquired = "2024-05-01", quantity = "5", basis = "750.00" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2025-03-01", security = "VTI", acquired = "2023-05-01", quantity = "10", proceeds = "2000.00", basis = "1000.00", gain = "1000.00", term = "long" },
+    { date = "2025-03-01", security = "VTI", acquired = "2024-01-01", quantity = "2", proceeds = "400.00", basis = "280.00", gain = "120.00", term = "long" },
+]
+
+[[expect.inv_register]]
+account = "Old Brokerage"
+rows = [
+    { date = "2023-05-01", action = "Cash In", amount = "3000.00" },
+    { date = "2023-05-01", action = "Buy", amount = "-1000.00" },
+    { date = "2024-05-01", action = "Buy", amount = "-1500.00" },
+    { date = "2025-01-15", action = "Transfer Out", amount = "0.00", quantity = "15", cash_balance = "500.00", ref = "move" },
+]
+
+[[expect.inv_register]]
+account = "New Brokerage"
+rows = [
+    { date = "2023-05-01", action = "Cash In", amount = "1000.00" },
+    { date = "2024-01-01", action = "Buy", amount = "-700.00" },
+    { date = "2025-01-15", action = "Transfer In", amount = "0.00", quantity = "15", cash_balance = "300.00", ref = "move" },
+    { date = "2025-03-01", action = "Sell", amount = "2400.00", cash_balance = "2700.00" },
+]

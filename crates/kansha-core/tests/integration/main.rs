@@ -8,6 +8,7 @@
 
 mod fixture;
 mod integrity;
+mod invest;
 mod ipc_json;
 mod ledger;
 mod migrations;

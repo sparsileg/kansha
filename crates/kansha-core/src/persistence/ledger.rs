@@ -79,7 +79,8 @@ pub fn find(conn: &Connection, id: TxnId) -> Result<Option<Txn>> {
     }
 
     let mut stmt = conn.prepare_cached(
-        "SELECT id, line_no, account_id, category_id, amount, memo, cleared, reconciliation_id
+        "SELECT id, line_no, account_id, category_id, amount, memo, cleared, reconciliation_id,
+                security_id
          FROM posting WHERE txn_id = ?1 ORDER BY line_no",
     )?;
     let rows = stmt.query_map([id], |r| {
@@ -98,6 +99,7 @@ pub fn find(conn: &Connection, id: TxnId) -> Result<Option<Txn>> {
             cleared: r.get("cleared")?,
             reconciliation_id: r.get("reconciliation_id")?,
             tags: Vec::new(),
+            security: r.get("security_id")?,
         })
     })?;
     for row in rows {
@@ -454,6 +456,22 @@ pub fn account_balances(conn: &Connection, today: Date) -> Result<Vec<AccountBal
 
 /// Create a transaction (TXN-070: immutable ID, creation timestamp, origin).
 pub fn insert(tx: &Tx<'_>, source: TxnSource, input: &TxnInput) -> Result<Txn> {
+    let id = insert_header(tx, source, input)?;
+    insert_postings(tx, id, &input.postings, &HashMap::new())?;
+    let txn = get(tx.conn(), id)?;
+    audit::record::<(), _>(
+        tx,
+        AuditEntity::Txn,
+        id.0,
+        AuditAction::Create,
+        None,
+        Some(&txn),
+    )?;
+    Ok(txn)
+}
+
+/// Insert the `txn` row only (no postings, no audit entry).
+pub(super) fn insert_header(tx: &Tx<'_>, source: TxnSource, input: &TxnInput) -> Result<TxnId> {
     let (origin, batch, schedule) = match source {
         TxnSource::Manual => ("manual", None, None),
         TxnSource::Import { batch } => ("import", Some(batch), None),
@@ -477,18 +495,7 @@ pub fn insert(tx: &Tx<'_>, source: TxnSource, input: &TxnInput) -> Result<Txn> {
             ":created_at": tx.now(),
         },
     )?;
-    let id = TxnId(tx.conn().last_insert_rowid());
-    insert_postings(tx, id, &input.postings, &HashMap::new())?;
-    let txn = get(tx.conn(), id)?;
-    audit::record::<(), _>(
-        tx,
-        AuditEntity::Txn,
-        id.0,
-        AuditAction::Create,
-        None,
-        Some(&txn),
-    )?;
-    Ok(txn)
+    Ok(TxnId(tx.conn().last_insert_rowid()))
 }
 
 /// Replace a transaction's header and postings. An account posting that
@@ -534,7 +541,9 @@ pub fn update(tx: &Tx<'_>, id: TxnId, input: &TxnInput) -> Result<Txn> {
     Ok(after)
 }
 
-fn insert_postings(
+/// Write `postings` as the transaction's lines 1, 2, …. A reconciled
+/// account posting takes its reconciliation link from `links`.
+pub(super) fn insert_postings(
     tx: &Tx<'_>,
     id: TxnId,
     postings: &[PostingInput],
@@ -542,8 +551,8 @@ fn insert_postings(
 ) -> Result<()> {
     let mut insert = tx.conn().prepare_cached(
         "INSERT INTO posting (txn_id, line_no, account_id, category_id, amount, memo, cleared,
-             reconciliation_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             reconciliation_id, security_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )?;
     let mut insert_tag = tx
         .conn()
@@ -559,7 +568,7 @@ fn insert_postings(
         };
         let line_no = i64::try_from(i + 1).map_err(|_| Error::Overflow("posting line_no"))?;
         insert.execute(params![
-            id, line_no, account, category, p.amount, p.memo, p.cleared, link
+            id, line_no, account, category, p.amount, p.memo, p.cleared, link, p.security
         ])?;
         let posting_id = tx.conn().last_insert_rowid();
         let mut tags = p.tags.clone();
@@ -617,7 +626,7 @@ pub fn set_cleared(tx: &Tx<'_>, id: TxnId, account: AccountId, cleared: Cleared)
     let changed = tx.conn().execute(
         "UPDATE posting SET cleared = ?3,
              reconciliation_id = CASE WHEN ?3 = 'reconciled' THEN reconciliation_id END
-         WHERE txn_id = ?1 AND account_id = ?2",
+         WHERE txn_id = ?1 AND account_id = ?2 AND security_id IS NULL",
         params![id, account, cleared],
     )?;
     if changed == 0 {

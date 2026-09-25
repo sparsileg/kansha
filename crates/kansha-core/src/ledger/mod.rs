@@ -36,6 +36,7 @@ use crate::date::{Date, Timestamp};
 use crate::error::{Error, Result};
 use crate::money::Money;
 use crate::persistence::ledger as repo;
+use crate::securities::SecurityId;
 use crate::text_enum::text_enum;
 
 /// Row ID of a transaction. Immutable (TXN-070).
@@ -108,6 +109,9 @@ pub struct PostingInput {
     /// Account postings only; category postings are always unmarked.
     pub cleared: Cleared,
     pub tags: Vec<TagId>,
+    /// Investment accounts: the holding whose cost basis this posting
+    /// carries. Written only by the investments engine.
+    pub security: Option<SecurityId>,
 }
 
 impl PostingInput {
@@ -118,6 +122,7 @@ impl PostingInput {
             memo: String::new(),
             cleared: Cleared::Unmarked,
             tags: Vec::new(),
+            security: None,
         }
     }
 }
@@ -148,6 +153,9 @@ pub struct Posting {
     pub reconciliation_id: Option<i64>,
     /// Sorted by ID.
     pub tags: Vec<TagId>,
+    /// Investment accounts: the holding whose cost basis this posting
+    /// carries; `None` for cash and for every other account.
+    pub security: Option<SecurityId>,
 }
 
 /// A stored transaction with its postings in line order.
@@ -167,11 +175,15 @@ pub struct Txn {
 }
 
 impl Txn {
-    /// The posting to `account`, if any.
+    /// The posting to `account`, if any. In an investment account that
+    /// is the cash posting, not a holding's.
     pub fn posting_for(&self, account: AccountId) -> Option<&Posting> {
+        let mine = |p: &&Posting| p.target == Target::Account(account);
         self.postings
             .iter()
-            .find(|p| p.target == Target::Account(account))
+            .filter(mine)
+            .find(|p| p.security.is_none())
+            .or_else(|| self.postings.iter().find(mine))
     }
 
     /// Any posting reconciled (TXN-050)?
@@ -290,6 +302,7 @@ impl Entry {
             memo: String::new(),
             cleared: self.cleared,
             tags: self.tags.clone(),
+            security: None,
         });
         for line in &self.lines {
             postings.push(PostingInput {
@@ -301,6 +314,7 @@ impl Entry {
                 memo: line.memo.clone(),
                 cleared: line.cleared,
                 tags: line.tags.clone(),
+                security: None,
             });
         }
         Ok(TxnInput {
@@ -597,8 +611,23 @@ pub struct AccountBalance {
 
 /// Balances of every account, for the account list. Accounts without
 /// postings show zero.
+///
+/// An investment account shows its value: cash plus the market value of
+/// its holdings on `today` (a holding with no price at cost), for both
+/// figures.
 pub fn account_balances(conn: &Connection, today: Date) -> Result<Vec<AccountBalance>> {
-    repo::account_balances(conn, today)
+    let mut out = repo::account_balances(conn, today)?;
+    let investment: Vec<AccountId> = crate::persistence::accounts::list(conn)?
+        .into_iter()
+        .filter(|a| a.fields.account_type.is_investment())
+        .map(|a| a.id)
+        .collect();
+    for b in out.iter_mut().filter(|b| investment.contains(&b.account)) {
+        let value = crate::invest::account_value(conn, b.account, today)?;
+        b.current = value;
+        b.ending = value;
+    }
+    Ok(out)
 }
 
 /// Register footer figures (REG-060).
@@ -744,6 +773,7 @@ mod tests {
                     cleared: p.cleared,
                     reconciliation_id: None,
                     tags: p.tags.clone(),
+                    security: p.security,
                 })
                 .collect(),
         }

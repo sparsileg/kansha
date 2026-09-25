@@ -37,9 +37,11 @@ use crate::categories::{
 };
 use crate::date::{Date, FixedClock};
 use crate::error::{Error, Result};
+use crate::invest::{self, InvInput, InvTxn};
 use crate::ledger::{self, Cleared, Entry, EntryLine, Target, Txn, TxnId};
-use crate::money::Money;
-use crate::persistence::{Db, Origin, Tx, accounts, categories, payees, tags};
+use crate::money::{Money, Price};
+use crate::persistence::{Db, Origin, Tx, accounts, categories, imports, payees, securities, tags};
+use crate::securities::{PricePoint, PriceSource, SecurityFields, SecurityId, SecurityType};
 
 /// An in-memory book of accounts with a fixed clock.
 #[derive(Debug)]
@@ -200,6 +202,50 @@ impl Book {
 
     pub fn txn(&self, id: TxnId) -> Result<Txn> {
         ledger::get(self.conn(), id)
+    }
+
+    /// Create a security; `ticker` may be empty.
+    pub fn security(
+        &mut self,
+        name: &str,
+        ticker: &str,
+        security_type: SecurityType,
+    ) -> Result<SecurityId> {
+        let mut f = SecurityFields::new(name, security_type);
+        f.ticker = (!ticker.is_empty()).then(|| ticker.to_string());
+        self.security_with(&f)
+    }
+
+    pub fn security_with(&mut self, fields: &SecurityFields) -> Result<SecurityId> {
+        self.write(|tx| securities::insert(tx, fields).map(|s| s.id))
+    }
+
+    /// Record a manual closing price.
+    pub fn price(&mut self, security: SecurityId, date: Date, price: Price) -> Result<()> {
+        let p = PricePoint {
+            security,
+            date,
+            price,
+            source: PriceSource::Manual,
+        };
+        self.write(|tx| securities::set_price(tx, &p).map(|_| ()))
+    }
+
+    /// Enter an investment transaction.
+    pub fn invest(&mut self, input: &InvInput) -> Result<InvTxn> {
+        self.write(|tx| invest::create(tx, input))
+    }
+
+    /// Seed lots from CSV text as one import (MIG-120). Returns the
+    /// number of lots created.
+    pub fn seed_lots(&mut self, text: &str, date: Date) -> Result<i64> {
+        let clock = self.clock;
+        let batch = self.write(|tx| imports::stage(tx, "seed.csv", imports::ImportFormat::Csv))?;
+        self.db.write(&clock, Origin::Import(batch.id), |tx| {
+            let n = invest::commit_seed(tx, text, date)?;
+            imports::commit(tx, batch.id)?;
+            Ok(n)
+        })
     }
 }
 

@@ -18,15 +18,17 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use kansha_core::accounts::{AccountFields, AccountId, AccountType};
+use kansha_core::accounts::{AccountFields, AccountId, AccountType, CashMode, LotMethod, MmfMode};
 use kansha_core::categories::{CategoryId, CategoryKind};
+use kansha_core::invest::{self, InvAction, InvInput, LotPick, SplitRatio};
 use kansha_core::ledger::{self, Cleared, Counterpart, EntryLine, Target, TxnId};
-use kansha_core::persistence::{accounts, categories, payees, schedules, tags};
+use kansha_core::persistence::{accounts, categories, payees, schedules, securities, tags};
 use kansha_core::reconcile::{self, StartInput, StatementItem};
 use kansha_core::schedule::{
     self, AmountType, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
     ScheduleId, ScheduleLine, WeekendRule,
 };
+use kansha_core::securities::{AssetClass, PricePoint, PriceSource, SecurityFields, SecurityId};
 use kansha_core::testkit::Book;
 use kansha_core::{Clock, Date, FixedClock, Money, integrity};
 use serde::Deserialize;
@@ -48,6 +50,10 @@ struct Scenario {
     #[serde(default)]
     categories: Vec<CategorySpec>,
     #[serde(default)]
+    securities: Vec<SecuritySpec>,
+    #[serde(default)]
+    prices: Vec<PriceSpec>,
+    #[serde(default)]
     actions: Vec<Action>,
     #[serde(default)]
     expect: Expect,
@@ -63,6 +69,36 @@ struct AccountSpec {
     opening_balance: Option<String>,
     opening_date: Option<String>,
     credit_limit: Option<String>,
+    /// Investment accounts: internal (default) or linked.
+    cash_mode: Option<String>,
+    /// With cash_mode = "linked": the cash account (listed earlier).
+    linked_cash: Option<String>,
+    /// Investment accounts: cash (default) or security.
+    mmf_mode: Option<String>,
+    /// Investment accounts: fifo (default) or specific.
+    lot_method: Option<String>,
+    /// taxable, tax_deferred, tax_exempt; defaults by type.
+    tax_treatment: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SecuritySpec {
+    name: String,
+    ticker: Option<String>,
+    #[serde(rename = "type")]
+    security_type: String,
+    asset_class: Option<String>,
+    lot_method: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PriceSpec {
+    /// Ticker or name.
+    security: String,
+    date: String,
+    price: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -194,6 +230,75 @@ enum Action {
         account: String,
         expect_error: Option<String>,
     },
+    /// Enter an investment transaction (Phase 6).
+    Invest(InvSpec),
+    /// Replace the investment transaction named by `ref`.
+    InvestEdit(InvSpec),
+    InvestDelete(RefSpec),
+    /// Record a price mid-scenario.
+    Price {
+        security: String,
+        date: String,
+        price: String,
+        expect_error: Option<String>,
+    },
+    /// Import prices from CSV text.
+    ImportPrices {
+        csv: String,
+        expect_count: Option<i64>,
+        expect_error: Option<String>,
+    },
+    /// Seed lots from CSV text (MIG-120), dated `date`.
+    SeedLots {
+        date: String,
+        csv: String,
+        expect_error: Option<String>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvSpec {
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+    account: String,
+    action: String,
+    date: String,
+    settle_date: Option<String>,
+    /// Ticker or name.
+    security: Option<String>,
+    quantity: Option<String>,
+    price: Option<String>,
+    commission: Option<String>,
+    /// Positive; the action gives the direction.
+    amount: Option<String>,
+    /// "new:old", e.g. "2:1".
+    split: Option<String>,
+    to_account: Option<String>,
+    lot_method: Option<String>,
+    /// Specific identification.
+    #[serde(default)]
+    lots: Vec<LotPickSpec>,
+    acquired: Option<String>,
+    /// Cash in/out: the other account.
+    transfer: Option<String>,
+    /// Cash in/out, misc income/expense: a category.
+    category: Option<String>,
+    #[serde(default)]
+    memo: String,
+    #[serde(default)]
+    confirm: bool,
+    expect_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LotPickSpec {
+    /// Ref of the transaction that created the lot.
+    from: String,
+    /// Which of its lots in the selling account, 1-based (default 1).
+    index: Option<usize>,
+    quantity: String,
 }
 
 fn yes() -> bool {
@@ -336,6 +441,12 @@ impl Action {
             Action::ReconcileAdjust { .. } => "reconcile_adjust",
             Action::ReconcileFinish { .. } => "reconcile_finish",
             Action::ReconcileAbandon { .. } => "reconcile_abandon",
+            Action::Invest(_) => "invest",
+            Action::InvestEdit(_) => "invest_edit",
+            Action::InvestDelete(_) => "invest_delete",
+            Action::Price { .. } => "price",
+            Action::ImportPrices { .. } => "import_prices",
+            Action::SeedLots { .. } => "seed_lots",
         }
     }
 
@@ -343,7 +454,10 @@ impl Action {
         match self {
             Action::Add { .. } | Action::Subtract { .. } => None,
             Action::Entry(e) | Action::Edit(e) => e.expect_error.as_deref(),
-            Action::Void(r) | Action::Delete(r) => r.expect_error.as_deref(),
+            Action::Void(r) | Action::Delete(r) | Action::InvestDelete(r) => {
+                r.expect_error.as_deref()
+            }
+            Action::Invest(i) | Action::InvestEdit(i) => i.expect_error.as_deref(),
             Action::MergeCategories(m) | Action::MergePayees(m) | Action::MergeTags(m) => {
                 m.expect_error.as_deref()
             }
@@ -359,6 +473,9 @@ impl Action {
             | Action::ReconcileAdjust { expect_error, .. }
             | Action::ReconcileFinish { expect_error, .. }
             | Action::ReconcileAbandon { expect_error, .. }
+            | Action::Price { expect_error, .. }
+            | Action::ImportPrices { expect_error, .. }
+            | Action::SeedLots { expect_error, .. }
             | Action::CloseAccount { expect_error, .. }
             | Action::ReopenAccount { expect_error, .. }
             | Action::DeleteAccount { expect_error, .. } => expect_error.as_deref(),
@@ -411,6 +528,167 @@ struct Expect {
     /// the integrity check must be clean.
     #[serde(default)]
     integrity: Vec<String>,
+    /// Investment accounts: cash as of `as_of`.
+    #[serde(default)]
+    cash_balances: BTreeMap<String, String>,
+    /// What the account list shows (investment accounts: market value).
+    #[serde(default)]
+    account_values: BTreeMap<String, String>,
+    /// Every position of an account on `as_of`.
+    #[serde(default)]
+    holdings: Vec<HoldingsExpect>,
+    /// Open lots of one holding on `as_of`, oldest first.
+    #[serde(default)]
+    lots: Vec<LotsExpect>,
+    /// Realized gains, every row, by date.
+    #[serde(default)]
+    gains: Vec<GainsExpect>,
+    /// Investment income by security.
+    #[serde(default)]
+    income: Vec<IncomeExpect>,
+    /// Investment register rows.
+    #[serde(default)]
+    inv_register: Vec<InvRegisterExpect>,
+    /// Asset allocation.
+    #[serde(default)]
+    allocation: Vec<AllocationExpect>,
+    /// Simple performance totals.
+    #[serde(default)]
+    performance: Vec<PerformanceExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HoldingsExpect {
+    account: String,
+    rows: Vec<PositionExpect>,
+    total_value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PositionExpect {
+    security: String,
+    shares: String,
+    basis: String,
+    /// "none" when there is no price.
+    market_value: Option<String>,
+    price: Option<String>,
+    stale: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LotsExpect {
+    account: String,
+    security: String,
+    rows: Vec<LotExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LotExpect {
+    acquired: String,
+    quantity: String,
+    basis: String,
+    per_share: Option<String>,
+    term: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GainsExpect {
+    /// Leave out for every account.
+    account: Option<String>,
+    rows: Vec<GainExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GainExpect {
+    date: String,
+    security: String,
+    /// "none" for return of capital beyond basis.
+    acquired: Option<String>,
+    quantity: Option<String>,
+    proceeds: String,
+    basis: String,
+    gain: String,
+    /// short, long, or none.
+    term: Option<String>,
+    taxable: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IncomeExpect {
+    account: String,
+    rows: Vec<IncomeRowExpect>,
+    total: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IncomeRowExpect {
+    /// Ticker or name; "" for income with no security.
+    security: String,
+    dividends: Option<String>,
+    interest: Option<String>,
+    cg_short: Option<String>,
+    cg_long: Option<String>,
+    other: Option<String>,
+    total: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvRegisterExpect {
+    account: String,
+    rows: Vec<InvRowExpect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvRowExpect {
+    date: String,
+    /// The Action column ("Buy", "Transfer In", ...).
+    action: String,
+    amount: String,
+    /// "none" with linked cash.
+    cash_balance: Option<String>,
+    security: Option<String>,
+    quantity: Option<String>,
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AllocationExpect {
+    /// Empty for every open investment account.
+    #[serde(default)]
+    accounts: Vec<String>,
+    rows: Vec<AllocationRowExpect>,
+    total: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AllocationRowExpect {
+    class: String,
+    value: String,
+    percent: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PerformanceExpect {
+    account: String,
+    realized: Option<String>,
+    income: Option<String>,
+    unrealized: Option<String>,
+    total_gain: Option<String>,
+    total_return: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -681,6 +959,13 @@ where
         .map_err(|e| ActErr::Harness(format!("{what}: {e}")))
 }
 
+fn opt_parse<T>(what: &str, v: &Option<String>) -> Result<Option<T>, ActErr>
+where
+    T: std::str::FromStr<Err = kansha_core::Error>,
+{
+    v.as_deref().map(|x| parse(what, x)).transpose()
+}
+
 fn money(step: &str, s: &str) -> Result<Money, Failure> {
     s.parse().map_err(|e| Failure::error(step, e))
 }
@@ -699,14 +984,15 @@ impl From<kansha_core::Error> for ActErr {
 }
 
 /// State while a scenario runs.
-struct Ctx {
+struct Ctx<'s> {
+    expect: &'s Expect,
     book: Book,
     total: Money,
     refs: BTreeMap<String, TxnId>,
     schedules: BTreeMap<String, ScheduleId>,
 }
 
-impl Ctx {
+impl Ctx<'_> {
     fn account(&self, name: &str) -> Result<AccountId, ActErr> {
         accounts::list(self.book.conn())?
             .into_iter()
@@ -892,6 +1178,70 @@ impl Ctx {
         if let Some(r) = reference {
             self.refs.insert(r.clone(), id);
         }
+    }
+
+    fn security(&self, label: &str) -> Result<SecurityId, ActErr> {
+        securities::find_by_label(self.book.conn(), label)?
+            .map(|s| s.id)
+            .ok_or_else(|| ActErr::Harness(format!("unknown security {label:?}")))
+    }
+
+    fn inv_input(&self, spec: &InvSpec) -> Result<InvInput, ActErr> {
+        let account = self.account(&spec.account)?;
+        let action: InvAction = parse("action", &spec.action)?;
+        let mut i = InvInput::new(account, action, parse("date", &spec.date)?);
+        i.settle_date = opt_parse("settle_date", &spec.settle_date)?;
+        i.security = spec
+            .security
+            .as_deref()
+            .map(|s| self.security(s))
+            .transpose()?;
+        i.quantity = opt_parse("quantity", &spec.quantity)?;
+        i.price = opt_parse("price", &spec.price)?;
+        if let Some(c) = &spec.commission {
+            i.commission = parse("commission", c)?;
+        }
+        i.amount = opt_parse("amount", &spec.amount)?;
+        if let Some(r) = &spec.split {
+            let (new, old) = r
+                .split_once(':')
+                .ok_or_else(|| ActErr::Harness(format!("split {r:?}: expected new:old")))?;
+            let num = |t: &str| {
+                t.trim()
+                    .parse::<i64>()
+                    .map_err(|e| ActErr::Harness(format!("split {r:?}: {e}")))
+            };
+            i.split = Some(SplitRatio {
+                new: num(new)?,
+                old: num(old)?,
+            });
+        }
+        i.to_account = spec
+            .to_account
+            .as_deref()
+            .map(|a| self.account(a))
+            .transpose()?;
+        i.lot_method = opt_parse("lot_method", &spec.lot_method)?;
+        for pick in &spec.lots {
+            let origin = self.txn(&pick.from)?;
+            let t = invest::get(self.book.conn(), origin)?;
+            let mine: Vec<_> = t.lots.iter().filter(|l| l.account == account).collect();
+            let n = pick.index.unwrap_or(1);
+            let lot = mine.get(n.wrapping_sub(1)).ok_or_else(|| {
+                ActErr::Harness(format!(
+                    "{:?} made no lot {n} in {:?}",
+                    pick.from, spec.account
+                ))
+            })?;
+            i.lots.push(LotPick {
+                lot: lot.id,
+                quantity: parse("quantity", &pick.quantity)?,
+            });
+        }
+        i.acquired = opt_parse("acquired", &spec.acquired)?;
+        i.counterpart = self.target(&spec.category, &spec.transfer)?;
+        i.memo = spec.memo.clone();
+        Ok(i)
     }
 
     fn run(&mut self, action: &Action) -> Result<(), ActErr> {
@@ -1099,6 +1449,57 @@ impl Ctx {
                 let rec = self.open_reconciliation(account)?;
                 self.book.write(|tx| reconcile::abandon(tx, rec.id))?;
             }
+            Action::Invest(spec) => {
+                let input = self.inv_input(spec)?;
+                let t = self.book.write(|tx| invest::create(tx, &input))?;
+                self.remember(&spec.reference, t.txn.id);
+            }
+            Action::InvestEdit(spec) => {
+                let reference = spec
+                    .reference
+                    .as_deref()
+                    .ok_or_else(|| ActErr::Harness("invest_edit needs a ref".into()))?;
+                let id = self.txn(reference)?;
+                let input = self.inv_input(spec)?;
+                self.book
+                    .write(|tx| invest::update(tx, id, &input, spec.confirm))?;
+            }
+            Action::InvestDelete(r) => {
+                let id = self.txn(&r.reference)?;
+                self.book.write(|tx| invest::delete(tx, id, r.confirm))?;
+            }
+            Action::Price {
+                security,
+                date,
+                price,
+                ..
+            } => {
+                let p = PricePoint {
+                    security: self.security(security)?,
+                    date: parse("date", date)?,
+                    price: parse("price", price)?,
+                    source: PriceSource::Manual,
+                };
+                self.book.write(|tx| securities::set_price(tx, &p))?;
+            }
+            Action::ImportPrices {
+                csv, expect_count, ..
+            } => {
+                let n = self
+                    .book
+                    .write(|tx| kansha_core::securities::commit_prices(tx, csv))?;
+                if let Some(want) = expect_count {
+                    if n != *want {
+                        return Err(ActErr::Harness(format!(
+                            "import_prices wrote {n}, expected {want}"
+                        )));
+                    }
+                }
+            }
+            Action::SeedLots { date, csv, .. } => {
+                let date: Date = parse("date", date)?;
+                self.book.seed_lots(csv, date)?;
+            }
             Action::MergeTags(m) => {
                 let all = tags::list(self.book.conn())?;
                 let find = |name: &str| {
@@ -1143,9 +1544,10 @@ impl Ctx {
     }
 }
 
-fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx, Failure> {
+fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx<'_>, Failure> {
     let book = Book::with_clock(clock).map_err(|e| Failure::error("setup", e))?;
     let mut ctx = Ctx {
+        expect: &s.expect,
         book,
         total: Money::ZERO,
         refs: BTreeMap::new(),
@@ -1158,6 +1560,36 @@ fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx, Failure> {
             let mut f = AccountFields::new(a.name.clone(), t);
             if let Some(limit) = &a.credit_limit {
                 f.credit_limit = Some(parse("credit_limit", limit)?);
+            }
+            if let Some(tt) = &a.tax_treatment {
+                f.tax_treatment = parse("tax_treatment", tt)?;
+            }
+            let investment_only = a.cash_mode.is_some()
+                || a.linked_cash.is_some()
+                || a.mmf_mode.is_some()
+                || a.lot_method.is_some();
+            match f.investment.as_mut() {
+                Some(inv) => {
+                    if let Some(m) = &a.cash_mode {
+                        inv.cash_mode = parse::<CashMode>("cash_mode", m)?;
+                    }
+                    if let Some(l) = &a.linked_cash {
+                        inv.linked_cash_account = Some(ctx.account(l)?);
+                    }
+                    if let Some(m) = &a.mmf_mode {
+                        inv.mmf_mode = parse::<MmfMode>("mmf_mode", m)?;
+                    }
+                    if let Some(m) = &a.lot_method {
+                        inv.default_lot_method = parse::<LotMethod>("lot_method", m)?;
+                    }
+                }
+                None if investment_only => {
+                    return Err(ActErr::Harness(format!(
+                        "{} is not an investment account",
+                        a.name
+                    )));
+                }
+                None => {}
             }
             let id = ctx.book.account_with(&f)?;
             match (&a.opening_balance, &a.opening_date) {
@@ -1184,6 +1616,32 @@ fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx, Failure> {
         let r = (|| -> Result<(), ActErr> {
             let kind: CategoryKind = parse("kind", &c.kind)?;
             ctx.book.category(&c.path, kind)?;
+            Ok(())
+        })();
+        r.map_err(|e| act_failure(&step, e))?;
+    }
+    for (i, sp) in s.securities.iter().enumerate() {
+        let step = format!("securities[{}] ({})", i + 1, sp.name);
+        let r = (|| -> Result<(), ActErr> {
+            let mut f = SecurityFields::new(sp.name.clone(), parse("type", &sp.security_type)?);
+            f.ticker = sp.ticker.clone();
+            if let Some(c) = &sp.asset_class {
+                f.asset_class = parse::<AssetClass>("asset_class", c)?;
+            }
+            if let Some(m) = &sp.lot_method {
+                f.default_lot_method = Some(parse::<LotMethod>("lot_method", m)?);
+            }
+            ctx.book.security_with(&f)?;
+            Ok(())
+        })();
+        r.map_err(|e| act_failure(&step, e))?;
+    }
+    for (i, pr) in s.prices.iter().enumerate() {
+        let step = format!("prices[{}] ({} {})", i + 1, pr.security, pr.date);
+        let r = (|| -> Result<(), ActErr> {
+            let id = ctx.security(&pr.security)?;
+            ctx.book
+                .price(id, parse("date", &pr.date)?, parse("price", &pr.price)?)?;
             Ok(())
         })();
         r.map_err(|e| act_failure(&step, e))?;
@@ -1595,6 +2053,374 @@ fn check_expectations(
             if let Some(n) = &want.check_num {
                 compare(&step, &field("check_num"), n, &got.check_num)?;
             }
+        }
+    }
+    check_investments(ctx, as_of)
+}
+
+/// Normalize an expected quantity or price ("10.50" → "10.5").
+fn norm_scaled<T>(step: &str, s: &str) -> Result<String, Checked>
+where
+    T: std::str::FromStr<Err = kansha_core::Error> + std::fmt::Display,
+{
+    s.parse::<T>()
+        .map(|v| v.to_string())
+        .map_err(|e| Checked::Err(step.into(), ActErr::Harness(e.to_string())))
+}
+
+fn opt_money(m: Option<Money>) -> String {
+    m.map_or("none".into(), |m| m.to_string())
+}
+
+fn want_money(step: &str, s: &str) -> Result<String, Checked> {
+    if s == "none" {
+        Ok(s.into())
+    } else {
+        norm_money(step, s)
+    }
+}
+
+fn check_investments(ctx: &Ctx, as_of: Date) -> Result<(), Checked> {
+    let e = &ctx.expect;
+    let conn = ctx.book.conn();
+    for (name, want) in &e.cash_balances {
+        let step = "expect.cash_balances";
+        let err = |e| Checked::Err(step.to_string(), e);
+        let id = ctx.account(name).map_err(err)?;
+        let got = invest::holdings(conn, id, as_of, None).map_err(|e| err(e.into()))?;
+        compare(step, name, &want_money(step, want)?, &opt_money(got.cash))?;
+    }
+    if !e.account_values.is_empty() {
+        let step = "expect.account_values";
+        let err = |e| Checked::Err(step.to_string(), e);
+        let all = ledger::account_balances(conn, as_of).map_err(|e| err(e.into()))?;
+        for (name, want) in &e.account_values {
+            let id = ctx.account(name).map_err(err)?;
+            let got = all
+                .iter()
+                .find(|b| b.account == id)
+                .map_or("missing".to_string(), |b| b.current.to_string());
+            compare(step, name, &norm_money(step, want)?, &got)?;
+        }
+    }
+    for hx in &e.holdings {
+        let step = format!("expect.holdings ({})", hx.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&hx.account).map_err(err)?;
+        let h = invest::holdings(conn, id, as_of, None).map_err(|e| err(e.into()))?;
+        let names: Vec<String> = h
+            .positions
+            .iter()
+            .map(|p| p.ticker.clone().unwrap_or(p.name.clone()))
+            .collect();
+        let wanted: Vec<String> = hx.rows.iter().map(|r| r.security.clone()).collect();
+        compare(&step, "securities", &wanted.join(", "), &names.join(", "))?;
+        for (want, got) in hx.rows.iter().zip(&h.positions) {
+            let f = |n: &str| format!("{} {n}", want.security);
+            compare(
+                &step,
+                &f("shares"),
+                &norm_scaled::<kansha_core::Quantity>(&step, &want.shares)?,
+                &got.shares.to_string(),
+            )?;
+            compare(
+                &step,
+                &f("basis"),
+                &norm_money(&step, &want.basis)?,
+                &got.basis.to_string(),
+            )?;
+            if let Some(mv) = &want.market_value {
+                compare(
+                    &step,
+                    &f("market_value"),
+                    &want_money(&step, mv)?,
+                    &opt_money(got.market_value),
+                )?;
+            }
+            if let Some(p) = &want.price {
+                let got_p = got.price.map_or("none".into(), |p| p.to_string());
+                let want_p = if p == "none" {
+                    p.clone()
+                } else {
+                    norm_scaled::<kansha_core::Price>(&step, p)?
+                };
+                compare(&step, &f("price"), &want_p, &got_p)?;
+            }
+            if let Some(st) = want.stale {
+                compare(&step, &f("stale"), &st.to_string(), &got.stale.to_string())?;
+            }
+        }
+        if let Some(t) = &hx.total_value {
+            compare(
+                &step,
+                "total_value",
+                &norm_money(&step, t)?,
+                &h.total_value.to_string(),
+            )?;
+        }
+    }
+    for lx in &e.lots {
+        let step = format!("expect.lots ({} {})", lx.account, lx.security);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&lx.account).map_err(err)?;
+        let sec = ctx.security(&lx.security).map_err(err)?;
+        let lots = invest::open_lots(conn, id, Some(sec), as_of).map_err(|e| err(e.into()))?;
+        compare(
+            &step,
+            "lot count",
+            &lx.rows.len().to_string(),
+            &lots.len().to_string(),
+        )?;
+        for (i, (want, got)) in lx.rows.iter().zip(&lots).enumerate() {
+            let f = |n: &str| format!("lot {} {n}", i + 1);
+            compare(
+                &step,
+                &f("acquired"),
+                &want.acquired,
+                &got.lot.acquired.to_string(),
+            )?;
+            compare(
+                &step,
+                &f("quantity"),
+                &norm_scaled::<kansha_core::Quantity>(&step, &want.quantity)?,
+                &got.open_quantity.to_string(),
+            )?;
+            compare(
+                &step,
+                &f("basis"),
+                &norm_money(&step, &want.basis)?,
+                &got.open_basis.to_string(),
+            )?;
+            if let Some(ps) = &want.per_share {
+                compare(
+                    &step,
+                    &f("per_share"),
+                    &norm_scaled::<kansha_core::Price>(&step, ps)?,
+                    &got.per_share.map_or("none".into(), |p| p.to_string()),
+                )?;
+            }
+            if let Some(t) = &want.term {
+                compare(&step, &f("term"), t, got.term.as_str())?;
+            }
+        }
+    }
+    for gx in &e.gains {
+        let step = format!(
+            "expect.gains ({})",
+            gx.account.as_deref().unwrap_or("all accounts")
+        );
+        let err = |e| Checked::Err(step.clone(), e);
+        let account = gx
+            .account
+            .as_deref()
+            .map(|a| ctx.account(a))
+            .transpose()
+            .map_err(err)?;
+        let gains = invest::realized_gains(conn, account, None, None).map_err(|e| err(e.into()))?;
+        compare(
+            &step,
+            "row count",
+            &gx.rows.len().to_string(),
+            &gains.len().to_string(),
+        )?;
+        for (i, (want, got)) in gx.rows.iter().zip(&gains).enumerate() {
+            let f = |n: &str| format!("row {} {n}", i + 1);
+            compare(&step, &f("date"), &want.date, &got.sale_date.to_string())?;
+            compare(&step, &f("security"), &want.security, &got.security_label)?;
+            if let Some(a) = &want.acquired {
+                compare(
+                    &step,
+                    &f("acquired"),
+                    a,
+                    &got.acquired.map_or("none".into(), |d| d.to_string()),
+                )?;
+            }
+            if let Some(q) = &want.quantity {
+                let want_q = if q == "none" {
+                    q.clone()
+                } else {
+                    norm_scaled::<kansha_core::Quantity>(&step, q)?
+                };
+                compare(
+                    &step,
+                    &f("quantity"),
+                    &want_q,
+                    &got.quantity.map_or("none".into(), |q| q.to_string()),
+                )?;
+            }
+            for (n, w, g) in [
+                ("proceeds", &want.proceeds, got.proceeds),
+                ("basis", &want.basis, got.basis),
+                ("gain", &want.gain, got.gain),
+            ] {
+                compare(&step, &f(n), &norm_money(&step, w)?, &g.to_string())?;
+            }
+            if let Some(t) = &want.term {
+                compare(
+                    &step,
+                    &f("term"),
+                    t,
+                    got.term.map_or("none", |t| t.as_str()),
+                )?;
+            }
+            if let Some(t) = want.taxable {
+                compare(
+                    &step,
+                    &f("taxable"),
+                    &t.to_string(),
+                    &got.taxable.to_string(),
+                )?;
+            }
+        }
+    }
+    for ix in &e.income {
+        let step = format!("expect.income ({})", ix.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&ix.account).map_err(err)?;
+        let report = invest::income(conn, id, None, None).map_err(|e| err(e.into()))?;
+        let names: Vec<&str> = report
+            .rows
+            .iter()
+            .map(|r| r.security_label.as_str())
+            .collect();
+        let wanted: Vec<&str> = ix.rows.iter().map(|r| r.security.as_str()).collect();
+        compare(&step, "securities", &wanted.join(", "), &names.join(", "))?;
+        for (want, got) in ix.rows.iter().zip(&report.rows) {
+            for (n, w, g) in [
+                ("dividends", &want.dividends, got.dividends),
+                ("interest", &want.interest, got.interest),
+                ("cg_short", &want.cg_short, got.cg_short),
+                ("cg_long", &want.cg_long, got.cg_long),
+                ("other", &want.other, got.other),
+                ("total", &Some(want.total.clone()), got.total),
+            ] {
+                if let Some(w) = w {
+                    compare(
+                        &step,
+                        &format!("{} {n}", want.security),
+                        &norm_money(&step, w)?,
+                        &g.to_string(),
+                    )?;
+                }
+            }
+        }
+        if let Some(t) = &ix.total {
+            compare(
+                &step,
+                "total",
+                &norm_money(&step, t)?,
+                &report.total.total.to_string(),
+            )?;
+        }
+    }
+    for rx in &e.inv_register {
+        let step = format!("expect.inv_register ({})", rx.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&rx.account).map_err(err)?;
+        let reg = invest::register(conn, id, as_of).map_err(|e| err(e.into()))?;
+        compare(
+            &step,
+            "row count",
+            &rx.rows.len().to_string(),
+            &reg.rows.len().to_string(),
+        )?;
+        for (i, (want, got)) in rx.rows.iter().zip(&reg.rows).enumerate() {
+            let f = |n: &str| format!("row {} {n}", i + 1);
+            compare(&step, &f("date"), &want.date, &got.date.to_string())?;
+            compare(&step, &f("action"), &want.action, &got.action_label)?;
+            compare(
+                &step,
+                &f("amount"),
+                &norm_money(&step, &want.amount)?,
+                &got.amount.to_string(),
+            )?;
+            if let Some(c) = &want.cash_balance {
+                compare(
+                    &step,
+                    &f("cash_balance"),
+                    &want_money(&step, c)?,
+                    &opt_money(got.cash_balance),
+                )?;
+            }
+            if let Some(sx) = &want.security {
+                compare(&step, &f("security"), sx, &got.security_label)?;
+            }
+            if let Some(q) = &want.quantity {
+                compare(
+                    &step,
+                    &f("quantity"),
+                    &norm_scaled::<kansha_core::Quantity>(&step, q)?,
+                    &got.quantity.map_or("none".into(), |q| q.to_string()),
+                )?;
+            }
+            if let Some(r) = &want.reference {
+                let tid = ctx.txn(r).map_err(err)?;
+                let actual = if got.txn_id == tid {
+                    r.clone()
+                } else {
+                    format!("txn {}", got.txn_id.0)
+                };
+                compare(&step, &f("ref"), r, &actual)?;
+            }
+        }
+    }
+    for ax in &e.allocation {
+        let step = "expect.allocation".to_string();
+        let err = |e| Checked::Err(step.clone(), e);
+        let ids = ax
+            .accounts
+            .iter()
+            .map(|a| ctx.account(a))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(err)?;
+        let alloc = invest::allocation(conn, &ids, as_of).map_err(|e| err(e.into()))?;
+        let got: Vec<String> = alloc
+            .rows
+            .iter()
+            .map(|r| format!("{} {} {}%", r.asset_class, r.market_value, r.percent))
+            .collect();
+        let mut want = Vec::new();
+        for r in &ax.rows {
+            want.push(format!(
+                "{} {} {}%",
+                r.class,
+                norm_money(&step, &r.value)?,
+                r.percent
+            ));
+        }
+        compare(&step, "rows", &want.join(", "), &got.join(", "))?;
+        if let Some(t) = &ax.total {
+            compare(
+                &step,
+                "total",
+                &norm_money(&step, t)?,
+                &alloc.total.to_string(),
+            )?;
+        }
+    }
+    for px in &e.performance {
+        let step = format!("expect.performance ({})", px.account);
+        let err = |e| Checked::Err(step.clone(), e);
+        let id = ctx.account(&px.account).map_err(err)?;
+        let perf = invest::performance(conn, id, as_of).map_err(|e| err(e.into()))?;
+        let t = &perf.total;
+        for (n, w, g) in [
+            ("realized", &px.realized, Some(t.realized)),
+            ("income", &px.income, Some(t.income)),
+            ("unrealized", &px.unrealized, t.unrealized),
+            ("total_gain", &px.total_gain, t.total_gain),
+        ] {
+            if let Some(w) = w {
+                compare(&step, n, &want_money(&step, w)?, &opt_money(g))?;
+            }
+        }
+        if let Some(r) = &px.total_return {
+            compare(
+                &step,
+                "total_return",
+                r,
+                t.total_return.as_deref().unwrap_or("none"),
+            )?;
         }
     }
     Ok(())

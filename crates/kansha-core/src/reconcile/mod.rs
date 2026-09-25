@@ -183,10 +183,18 @@ pub struct HistoryRow {
     pub items_total: Money,
 }
 
-/// Account types that reconcile against a statement (RCN-010).
-/// Investment accounts reconcile with the investments engine (Phase 6).
-pub(crate) fn is_reconcilable(t: AccountType) -> bool {
-    t.is_cash_bearing() || t == AccountType::CreditCard
+/// Accounts that reconcile against a statement (RCN-010): banking and
+/// credit card accounts, and investment accounts that keep their own cash
+/// (their cash postings; holdings are not reconciled, RCN-070).
+pub(crate) fn is_reconcilable(acct: &crate::accounts::Account) -> bool {
+    let t = acct.fields.account_type;
+    t.is_cash_bearing()
+        || t == AccountType::CreditCard
+        || acct
+            .fields
+            .investment
+            .as_ref()
+            .is_some_and(|i| i.cash_mode == crate::accounts::CashMode::Internal)
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +458,7 @@ fn changed_since(conn: &Connection, account: AccountId, since: i64) -> Result<Ve
 /// Fail unless the account can be reconciled (RCN-010) and is open.
 pub(crate) fn check_account(conn: &Connection, account: AccountId) -> Result<()> {
     let acct = accounts::get(conn, account)?;
-    if !is_reconcilable(acct.fields.account_type) {
+    if !is_reconcilable(&acct) {
         return Err(Error::Invalid(format!(
             "{:?} cannot be reconciled",
             acct.fields.name

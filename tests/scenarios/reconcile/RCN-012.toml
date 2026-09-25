@@ -1,0 +1,129 @@
+id = "RCN-012"
+description = "An investment account's cash reconciles: holdings are left out, statement interest and fees become investment transactions; linked cash does not reconcile"
+requirements = ["RCN-010", "RCN-020", "RCN-040", "INV-040"]
+as_of = "2026-03-15"
+
+[[accounts]]
+name = "Checking"
+type = "checking"
+opening_balance = "20000.00"
+opening_date = "2026-01-01"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[accounts]]
+name = "Linked"
+type = "brokerage"
+cash_mode = "linked"
+linked_cash = "Checking"
+
+[[categories]]
+path = "Bank Fees"
+kind = "expense"
+
+[[securities]]
+name = "Vanguard Total Stock Market ETF"
+ticker = "VTI"
+type = "etf"
+
+[[actions]]
+type = "invest"
+ref = "fund"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "10000.00"
+transfer = "Checking"
+
+[[actions]]
+type = "invest"
+ref = "buy"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "VTI"
+quantity = "10"
+price = "300"
+
+[[actions]]
+type = "invest"
+ref = "split"
+account = "Brokerage"
+action = "split"
+date = "2026-01-20"
+security = "VTI"
+split = "2:1"
+
+[[actions]]
+type = "invest"
+ref = "div"
+account = "Brokerage"
+action = "dividend"
+date = "2026-01-25"
+security = "VTI"
+amount = "12.34"
+
+[[actions]]
+type = "invest"
+ref = "late"
+account = "Brokerage"
+action = "dividend"
+date = "2026-02-05"
+security = "VTI"
+amount = "1.00"
+
+# Interest in the built-in category is an Interest transaction; the
+# statement's other fee is a misc expense.
+[[actions]]
+type = "reconcile_start"
+account = "Brokerage"
+statement_date = "2026-01-31"
+statement_balance = "7009.84"
+interest = { date = "2026-01-31", amount = "2.50", category = "Interest" }
+service_charge = { date = "2026-01-31", amount = "5.00", category = "Bank Fees" }
+
+[[actions]]
+type = "reconcile_check"
+account = "Brokerage"
+refs = ["fund", "buy", "div"]
+
+[[actions]]
+type = "reconcile_finish"
+account = "Brokerage"
+
+[[actions]]
+type = "reconcile_start"
+account = "Linked"
+statement_date = "2026-01-31"
+statement_balance = "0.00"
+expect_error = "cannot be reconciled"
+
+[expect.cash_balances]
+"Brokerage" = "7010.84"
+
+[expect.cleared_balances]
+"Brokerage" = "7009.84"
+
+[expect.category_totals]
+"Interest" = "-2.50"
+"Bank Fees" = "5.00"
+
+[[expect.reconcile_history]]
+account = "Brokerage"
+rows = [
+    { statement_date = "2026-01-31", statement_balance = "7009.84", opening_balance = "0.00", status = "finished", items = 5, total = "7009.84" },
+]
+
+[[expect.inv_register]]
+account = "Brokerage"
+rows = [
+    { date = "2026-01-02", action = "Cash In", amount = "10000.00", cash_balance = "10000.00" },
+    { date = "2026-01-10", action = "Buy", amount = "-3000.00", cash_balance = "7000.00" },
+    { date = "2026-01-20", action = "Split", amount = "0.00", cash_balance = "7000.00" },
+    { date = "2026-01-25", action = "Dividend", amount = "12.34", cash_balance = "7012.34" },
+    { date = "2026-01-31", action = "Interest", amount = "2.50", cash_balance = "7014.84" },
+    { date = "2026-01-31", action = "Misc Expense", amount = "-5.00", cash_balance = "7009.84" },
+    { date = "2026-02-05", action = "Dividend", amount = "1.00", cash_balance = "7010.84" },
+]

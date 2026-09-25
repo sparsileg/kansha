@@ -237,6 +237,64 @@ export const commands = {
 	reconcileHistory: (account: AccountId) => typedError<HistoryRow[], IpcError>(__TAURI_INVOKE("reconcile_history", { account })),
 	/**  What one reconciliation reconciled (RCN-060). */
 	reconcileHistoryItems: (id: ReconciliationId) => typedError<Item[], IpcError>(__TAURI_INVOKE("reconcile_history_items", { id })),
+	/**  Every security, hidden ones included, by name. */
+	securityList: () => typedError<Security[], IpcError>(__TAURI_INVOKE("security_list")),
+	/**  A new security's fields with the type's default asset class. */
+	securityDefaults: (name: string, securityType: SecurityType) => __TAURI_INVOKE<SecurityFields>("security_defaults", { name, securityType }),
+	securityCreate: (fields: SecurityFields) => typedError<Security, IpcError>(__TAURI_INVOKE("security_create", { fields })),
+	securityUpdate: (id: SecurityId, fields: SecurityFields) => typedError<Security, IpcError>(__TAURI_INVOKE("security_update", { id, fields })),
+	/**  Only a security no transaction uses can be deleted (SEC-040). */
+	securityDelete: (id: SecurityId) => typedError<null, IpcError>(__TAURI_INVOKE("security_delete", { id })),
+	/**  A security's prices, newest first. */
+	priceList: (security: SecurityId) => typedError<PricePoint[], IpcError>(__TAURI_INVOKE("price_list", { security })),
+	/**  Enter or replace the closing price on a date (PRC-020). */
+	priceSet: (security: SecurityId, date: string, price: string) => typedError<null, IpcError>(__TAURI_INVOKE("price_set", { security, date, price })),
+	priceDelete: (security: SecurityId, date: string) => typedError<null, IpcError>(__TAURI_INVOKE("price_delete", { security, date })),
+	/**  Check a price CSV without writing anything (PRC-030). */
+	priceImportPreview: (text: string) => typedError<PriceImportPreview, IpcError>(__TAURI_INVOKE("price_import_preview", { text })),
+	/**  Import a price CSV, all or nothing. Returns the number of prices. */
+	priceImport: (text: string) => typedError<number, IpcError>(__TAURI_INVOKE("price_import", { text })),
+	/**  An investment account's register (INV-030). */
+	invRegister: (account: AccountId) => typedError<InvRegister, IpcError>(__TAURI_INVOKE("inv_register", { account })),
+	invGet: (txn: TxnId) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("inv_get", { txn })),
+	/**  The stored transaction as an input, to edit and send back. */
+	invInput: (txn: TxnId) => typedError<InvInput, IpcError>(__TAURI_INVOKE("inv_input", { txn })),
+	invCreate: (input: InvInput) => typedError<TxnId, IpcError>(__TAURI_INVOKE("inv_create", { input })),
+	/**
+	 *  Replace an investment transaction; a reconciled cash posting fails
+	 *  with `confirmation_required` until `confirmed`.
+	 */
+	invUpdate: (txn: TxnId, input: InvInput, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("inv_update", { txn, input, confirmed })),
+	invDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("inv_delete", { txn, confirmed })),
+	/**
+	 *  Shares × price ± commission for the entry form; the UI does no money
+	 *  arithmetic.
+	 */
+	invTradeAmount: (action: InvAction, quantity: string, price: string, commission: string) => typedError<string, IpcError>(__TAURI_INVOKE("inv_trade_amount", { action, quantity, price, commission })),
+	/**  Holdings on `as_of` (today when left out) (POS-010). */
+	invHoldings: (account: AccountId, asOf: string | null) => typedError<Holdings, IpcError>(__TAURI_INVOKE("inv_holdings", { account, asOf })),
+	/**
+	 *  Open lots on `as_of` (today when left out), one security or all
+	 *  (LOT-150; the lot picker for specific identification).
+	 */
+	invLots: (account: AccountId, security: number | null, asOf: string | null) => typedError<LotView[], IpcError>(__TAURI_INVOKE("inv_lots", { account, security, asOf })),
+	/**  Realized gains in one account or all, between two dates (LOT-040). */
+	invGains: (account: number | null, from: string | null, to: string | null) => typedError<RealizedGain[], IpcError>(__TAURI_INVOKE("inv_gains", { account, from, to })),
+	invIncome: (account: AccountId, from: string | null, to: string | null) => typedError<IncomeReport, IpcError>(__TAURI_INVOKE("inv_income", { account, from, to })),
+	/**  Simple performance as of today (POS-030). */
+	invPerformance: (account: AccountId) => typedError<Performance, IpcError>(__TAURI_INVOKE("inv_performance", { account })),
+	/**
+	 *  Asset allocation today across `accounts` (every open investment
+	 *  account when empty) (POS-020).
+	 */
+	invAllocation: (accounts: AccountId[]) => typedError<Allocation, IpcError>(__TAURI_INVOKE("inv_allocation", { accounts })),
+	/**  Check a lot-seeding CSV without writing anything. */
+	lotSeedPreview: (text: string, date: string) => typedError<SeedPreview, IpcError>(__TAURI_INVOKE("lot_seed_preview", { text, date })),
+	/**
+	 *  Seed lots from a CSV as one import batch, all or nothing. Returns the
+	 *  number of lots created.
+	 */
+	lotSeed: (fileName: string, text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("lot_seed", { fileName, text, date })),
 };
 
 /* Types */
@@ -302,11 +360,41 @@ export type AccountType = "checking" | "savings" | "credit_card" | "cash" | "mon
 /**  Loan or mortgage; balance tracking only in 1.0. */
 "loan";
 
+/**  A split or return of capital on one lot (LOT-120, LOT-130). */
+export type Adjustment = {
+	lot: LotId,
+	kind: AdjustmentKind,
+	quantity_delta: string,
+	basis_delta: string,
+};
+
+/**  A change to an open lot that is not a disposal. */
+export type AdjustmentKind = "split" | "return_of_capital";
+
+export type Allocation = {
+	as_of: string,
+	accounts: AccountId[],
+	rows: AllocationRow[],
+	total: string,
+	/**  Holdings with no price are left out. */
+	missing_prices: boolean,
+};
+
+export type AllocationRow = {
+	asset_class: AssetClass,
+	market_value: string,
+	/**  Share of the total, percent with two decimals. */
+	percent: string,
+};
+
 /**
  *  Fixed amounts enter as scheduled; estimated ones are confirmed on
  *  entry (REC-060).
  */
 export type AmountType = "fixed" | "estimated";
+
+/**  Asset class for allocation (SEC-010, POS-020). */
+export type AssetClass = "us_equity" | "intl_equity" | "bond" | "cash" | "real_estate" | "commodity" | "other";
 
 /**  Kind of an Other Asset account (ACCT-140). */
 export type AssetSubtype = "house" | "vehicle" | "other";
@@ -420,7 +508,27 @@ export type Check =
 /**  Following parents from a category leads back to it. */
 "category_cycle" | 
 /**  A subcategory's kind differs from its parent's. */
-"category_kind_mismatch";
+"category_kind_mismatch" | 
+/**
+ *  A lot's open shares or basis is below zero, or it has basis left
+ *  with no shares.
+ */
+"lot_overdrawn" | 
+/**
+ *  A holding's shares from its transactions (bought, sold, split,
+ *  moved) differ from the sum of its open lots (POS-050).
+ */
+"share_balance_mismatch" | 
+/**
+ *  A holding's cost basis in the ledger (its postings) differs from
+ *  the sum of its open lots' basis (INT-030 lot basis totals).
+ */
+"lot_basis_mismatch" | 
+/**
+ *  A transaction's shares differ from the lots it created or the
+ *  shares it took out of lots.
+ */
+"lot_quantity_mismatch";
 
 /**  Cleared status of an account posting (glossary; RCN-020). */
 export type Cleared = "unmarked" | "cleared" | 
@@ -439,6 +547,20 @@ export type DayBalance = {
 	date: string,
 	balance: string,
 };
+
+/**  Shares leaving a lot. A sale is a realized gain record (LOT-040). */
+export type Disposal = {
+	lot: LotId,
+	kind: DisposalKind,
+	quantity: string,
+	basis: string,
+	proceeds: string | null,
+	gain: string | null,
+	term: Term | null,
+};
+
+/**  Why shares left a lot. */
+export type DisposalKind = "sale" | "transfer_out" | "removed";
 
 /**  When a schedule stops (REC-030). */
 export type End = { kind: "never" } | 
@@ -553,10 +675,173 @@ export type HistoryRow = {
 	items_total: string,
 };
 
+/**  An investment account's holdings (POS-010, POS-040 Holdings tab). */
+export type Holdings = {
+	account: AccountId,
+	as_of: string,
+	positions: Position[],
+	/**  `None` with linked cash. */
+	cash: string | null,
+	/**  Σ cost basis of the positions. */
+	basis: string,
+	/**  Σ market value of the positions that have a price. */
+	market_value: string,
+	/**  Market value plus cash. */
+	total_value: string,
+	/**  Σ unrealized gain of the positions that have a price. */
+	unrealized: string,
+	/**  Some position has no price, so the totals leave it out. */
+	missing_prices: boolean,
+	stale_prices: boolean,
+};
+
+/**  Income by security, with totals. */
+export type IncomeReport = {
+	rows: IncomeRow[],
+	total: IncomeRow,
+};
+
+/**
+ *  Investment income from one security (or none: interest and other
+ *  income not tied to a security).
+ */
+export type IncomeRow = {
+	security: SecurityId | null,
+	security_label: string,
+	/**  Cash and reinvested dividends. */
+	dividends: string,
+	interest: string,
+	cg_short: string,
+	cg_long: string,
+	/**  Miscellaneous income. */
+	other: string,
+	total: string,
+};
+
 /**  Result of an integrity check. */
 export type IntegrityReport = {
 	issues: Issue[],
 };
+
+/**  Investment transaction types (INV-010). */
+export type InvAction = "buy" | "sell" | "dividend" | "interest" | "reinvest_dividend" | "reinvest_cg_short" | "reinvest_cg_long" | "cg_dist_short" | "cg_dist_long" | "return_of_capital" | "split" | "transfer_shares" | "shares_added" | "shares_removed" | "cash_in" | "cash_out" | "fee" | "tax_withholding" | "misc_income" | "misc_expense";
+
+/**
+ *  An investment transaction to be written (INV-010, INV-020). Fields an
+ *  action does not use must be left empty; the engine says which.
+ */
+export type InvInput = {
+	account: AccountId,
+	action: InvAction,
+	/**  Trade date. */
+	date: string,
+	settle_date: string | null,
+	security: SecurityId | null,
+	quantity: string | null,
+	price: string | null,
+	/**  Buy and sell only. */
+	commission: string,
+	/**
+	 *  Always positive; the engine gives it its sign. Buy: total cost
+	 *  with commission. Sell: proceeds after commission. Reinvest: the
+	 *  amount reinvested. Shares added: their cost basis. Otherwise the
+	 *  amount paid or received. For buy, sell, and reinvest it may be
+	 *  left out and is then shares × price (± commission).
+	 */
+	amount: string | null,
+	split: SplitRatio | null,
+	/**  Share transfers: the investment account receiving the shares. */
+	to_account: AccountId | null,
+	/**  Overrides the security's and account's lot selection method. */
+	lot_method: LotMethod | null,
+	/**  Specific identification: shares from each lot (LOT-100). */
+	lots: LotPick[],
+	/**
+	 *  Shares added: the original acquisition date (MIG-120); the trade
+	 *  date when left out.
+	 */
+	acquired: string | null,
+	/**
+	 *  Cash in/out: the other account or a category. Misc income or
+	 *  expense: a category instead of the built-in one.
+	 */
+	counterpart: Target | null,
+	memo: string,
+};
+
+/**  An investment account's register. */
+export type InvRegister = {
+	account: AccountId,
+	rows: InvRegisterRow[],
+	/**  Cash as of today; `None` with linked cash (INV-300). */
+	cash: string | null,
+	/**  Cash below zero is allowed but flagged (INV-310). */
+	negative_cash: boolean,
+	today: string,
+};
+
+/**  One row of an investment account's register. */
+export type InvRegisterRow = {
+	txn_id: TxnId,
+	date: string,
+	settle_date: string | null,
+	action: InvAction,
+	/**
+	 *  For display: "Buy", "Reinvest Div", ... ("Transfer In" for shares
+	 *  arriving from another account).
+	 */
+	action_label: string,
+	security: SecurityId | null,
+	/**  Ticker, or name if none. */
+	security_label: string,
+	quantity: string | null,
+	price: string | null,
+	commission: string,
+	split: SplitRatio | null,
+	/**
+	 *  Cash in (+) or out (−) of the account's cash (or its linked cash
+	 *  account); zero when none moves.
+	 */
+	amount: string,
+	/**  Running cash balance, in date order; `None` with linked cash. */
+	cash_balance: string | null,
+	memo: string,
+	/**  The cash posting's status; `None` when there is none. */
+	cleared: Cleared | null,
+	/**  The other account: share transfers, and cash in/out. */
+	other_account: AccountId | null,
+	/**  A category the cash came from or went to (cash in/out, misc). */
+	other_category: CategoryId | null,
+	/**  Shares arriving here from another account. */
+	incoming: boolean,
+	/**  Dated after today (REG-070). */
+	future: boolean,
+};
+
+/**
+ *  A stored investment transaction: the ledger transaction with its
+ *  trade detail and lot records.
+ */
+export type InvTxn = {
+	account: AccountId,
+	action: InvAction,
+	security: SecurityId | null,
+	quantity: string | null,
+	price: string | null,
+	commission: string,
+	split: SplitRatio | null,
+	to_account: AccountId | null,
+	lot_method: LotMethod | null,
+	settle_date: string | null,
+	/**
+	 *  The cash posting, as the cash account sees it (+ in, − out);
+	 *  zero when the action moves no cash.
+	 */
+	cash: string,
+	lots: Lot[],
+	disposals: Disposal[],
+	adjustments: Adjustment[],
+} & Txn;
 
 /**  Settings only investment accounts have (ACCT-130, INV-300, D-50). */
 export type InvestmentSettings = {
@@ -603,6 +888,22 @@ export type Item = {
 	checked: boolean,
 };
 
+/**  A lot as recorded at acquisition (LOT-010). */
+export type Lot = {
+	id: LotId,
+	account: AccountId,
+	security: SecurityId,
+	acquired: string,
+	quantity: string,
+	basis: string,
+	origin_txn: TxnId,
+	/**  The lot it came from, for shares transferred in (LOT-140). */
+	source_lot: LotId | null,
+};
+
+/**  Row ID of a lot. */
+export type LotId = number;
+
 /**
  *  Lot selection methods (LOT-100, LOT-110, D-60). The prototype
  *  engine implements `Fifo` and `Specific`; the others are stored so
@@ -616,6 +917,25 @@ export type LotMethod = "fifo" | "specific" | "average" |
  *  gains (smallest first), short-term gains (smallest first).
  */
 "min_tax";
+
+/**  Shares to take from one lot (specific identification, LOT-100). */
+export type LotPick = {
+	lot: LotId,
+	quantity: string,
+};
+
+/**  An open lot, valued (LOT-150). */
+export type LotView = {
+	security_label: string,
+	open_quantity: string,
+	open_basis: string,
+	/**  Open basis ÷ open shares. */
+	per_share: string | null,
+	market_value: string | null,
+	unrealized: string | null,
+	/**  Holding period if sold on the valuation date. */
+	term: Term,
+} & Lot;
 
 /**
  *  What a merge moved from the source to the target (CAT-020, PAY-030,
@@ -727,6 +1047,150 @@ export type PayeeFields = {
 
 /**  Row ID of a payee. */
 export type PayeeId = number;
+
+/**
+ *  Simple performance of one security in an account, or the account's
+ *  total (`security` `None`).
+ */
+export type PerfRow = {
+	security: SecurityId | null,
+	security_label: string,
+	/**  Open cost basis. */
+	basis: string,
+	market_value: string | null,
+	unrealized: string | null,
+	realized: string,
+	income: string,
+	/**  Unrealized + realized + income. */
+	total_gain: string | null,
+	/**
+	 *  Total gain ÷ (open basis + basis of shares sold), in percent, two
+	 *  decimals.
+	 */
+	total_return: string | null,
+};
+
+export type Performance = {
+	account: AccountId,
+	as_of: string,
+	rows: PerfRow[],
+	total: PerfRow,
+};
+
+/**  One security held in one account (POS-010). */
+export type Position = {
+	account: AccountId,
+	security: SecurityId,
+	name: string,
+	ticker: string | null,
+	security_type: SecurityType,
+	asset_class: AssetClass,
+	shares: string,
+	basis: string,
+	/**
+	 *  Latest price on or before the valuation date; `None` if there is
+	 *  none.
+	 */
+	price: string | null,
+	/**  `None` for a money market fund valued at $1.00 without a price. */
+	price_date: string | null,
+	/**  The price is older than the stale threshold (PRC-050). */
+	stale: boolean,
+	market_value: string | null,
+	unrealized: string | null,
+};
+
+/**  A stored posting. */
+export type Posting = {
+	id: PostingId,
+	line_no: number,
+	target: Target,
+	amount: string,
+	memo: string,
+	cleared: Cleared,
+	/**
+	 *  The reconciliation that marked this posting reconciled; `None` for
+	 *  imported reconciled status (MIG-090).
+	 */
+	reconciliation_id: number | null,
+	/**  Sorted by ID. */
+	tags: TagId[],
+	/**
+	 *  Investment accounts: the holding whose cost basis this posting
+	 *  carries; `None` for cash and for every other account.
+	 */
+	security: SecurityId | null,
+};
+
+/**
+ *  Row ID of a posting. Not stable across edits: an edit replaces a
+ *  transaction's postings.
+ */
+export type PostingId = number;
+
+/**  What an import would do (MIG-050 style preview). */
+export type PriceImportPreview = {
+	rows: PriceImportRow[],
+	good: number,
+	errors: number,
+	replaces: number,
+	/**  Rows left out because their security is not in the book. */
+	skipped: number,
+};
+
+/**  One line of the file, checked. */
+export type PriceImportRow = {
+	/**  Line in the file (1-based). */
+	line: number,
+	/**  The security as written in the file. */
+	label: string,
+	security: SecurityId | null,
+	date: string | null,
+	price: string | null,
+	/**  A price is already stored for this date and will be replaced. */
+	replaces: boolean,
+	/**  The security is not in the book: the row is left out. */
+	skipped: boolean,
+	/**  Why the row cannot be imported. */
+	error: string | null,
+};
+
+/**  One closing price (PRC-010). */
+export type PricePoint = {
+	security: SecurityId,
+	date: string,
+	price: string,
+	source: PriceSource,
+};
+
+/**  Where a price came from (PRC-010 … PRC-040). */
+export type PriceSource = "manual" | "csv" | "qif" | "download";
+
+/**  One realized gain or loss. */
+export type RealizedGain = {
+	txn_id: TxnId,
+	account: AccountId,
+	security: SecurityId,
+	security_label: string,
+	/**
+	 *  `None` for return of capital beyond basis (LOT-130), which has no
+	 *  lot record.
+	 */
+	lot: LotId | null,
+	sale_date: string,
+	acquired: string | null,
+	quantity: string | null,
+	proceeds: string,
+	basis: string,
+	gain: string,
+	/**  `None` for return of capital beyond basis. */
+	term: Term | null,
+	/**
+	 *  From a taxable account; gains in tax-deferred and tax-exempt
+	 *  accounts are kept but left out of taxable totals (LOT-160).
+	 */
+	taxable: boolean,
+};
 
 /**  Where a reconciliation stands. */
 export type ReconStatus = "in_progress" | "finished" | "abandoned";
@@ -966,6 +1430,65 @@ export type SearchQuery = {
 	limit: number,
 };
 
+/**  A stored security. */
+export type Security = {
+	id: SecurityId,
+	created_at: string,
+} & SecurityFields;
+
+/**  Editable attributes of a security (SEC-010 … SEC-030). */
+export type SecurityFields = {
+	name: string,
+	/**  Unique when present; CDs and some bonds have none. */
+	ticker: string | null,
+	security_type: SecurityType,
+	asset_class: AssetClass,
+	/**  Nine characters (SEC-020). */
+	cusip: string | null,
+	/**  Overrides the account's default lot selection (SEC-030, LOT-100). */
+	default_lot_method: LotMethod | null,
+	/**  Hidden securities stay in history but leave pick lists (SEC-040). */
+	hidden: boolean,
+	notes: string,
+};
+
+/**  Row ID of a security. */
+export type SecurityId = number;
+
+/**  Kind of security (SEC-010). */
+export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "other";
+
+export type SeedPreview = {
+	/**  The date the Shares Added transactions get. */
+	date: string,
+	rows: SeedRow[],
+	totals: SeedTotal[],
+	good: number,
+	errors: number,
+};
+
+/**  One line of the file, checked. */
+export type SeedRow = {
+	line: number,
+	account_label: string,
+	account: AccountId | null,
+	security_label: string,
+	security: SecurityId | null,
+	acquired: string | null,
+	quantity: string | null,
+	basis: string | null,
+	error: string | null,
+};
+
+/**  Lots, shares, and basis per account and security (MIG-050 totals). */
+export type SeedTotal = {
+	account: AccountId,
+	security: SecurityId,
+	lots: number,
+	quantity: string,
+	basis: string,
+};
+
 /**  An in-progress reconciliation, worked out for display (RCN-020 step 3). */
 export type Session = {
 	reconciliation: Reconciliation,
@@ -987,6 +1510,12 @@ export type Session = {
 	/**  `statement balance − cleared balance`. Zero lets the user finish. */
 	difference: string,
 	opening_check: OpeningCheck,
+};
+
+/**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */
+export type SplitRatio = {
+	new: number,
+	old: number,
 };
 
 /**  What starting a reconciliation needs (RCN-020 step 1). */
@@ -1042,8 +1571,28 @@ export type Target = { kind: "account"; id: AccountId } | { kind: "category"; id
 /**  Tax treatment (ACCT-030). */
 export type TaxTreatment = "taxable" | "tax_deferred" | "tax_exempt";
 
+/**  Holding period (LOT-040): one year or less is short. */
+export type Term = "short" | "long";
+
+/**  A stored transaction with its postings in line order. */
+export type Txn = {
+	id: TxnId,
+	date: string,
+	payee: PayeeId | null,
+	check_num: string,
+	memo: string,
+	notes: string,
+	status: TxnStatus,
+	source: TxnSource,
+	created_at: string,
+	postings: Posting[],
+};
+
 /**  Row ID of a transaction. Immutable (TXN-070). */
 export type TxnId = number;
+
+/**  Where a transaction came from (TXN-070, REC-160, MIG-080). */
+export type TxnSource = { kind: "manual" } | { kind: "import"; batch: number } | { kind: "schedule"; schedule: number } | { kind: "reconcile" } | { kind: "system" };
 
 /**  Normal or voided (TXN-040). */
 export type TxnStatus = "normal" | "void";

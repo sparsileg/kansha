@@ -42,7 +42,8 @@
     ["tax_deferred", "Tax-deferred"],
     ["tax_exempt", "Tax-exempt"],
   ];
-  const LOT: LotMethod[] = ["fifo", "specific", "average", "hifo", "min_tax"];
+  // Average cost, HIFO, and minimum tax are not available yet (LOT-110, LOT-115).
+  const LOT: LotMethod[] = ["fifo", "specific"];
 
   // Fields are seeded once from the prop; the modal is remounted per open.
   const initial = untrack(() => account);
