@@ -23,18 +23,6 @@ const register = {
   negative_cash: false,
   today: "2026-06-30",
 };
-const holdings = {
-  account: 2, as_of: "2026-06-30", cash: "7995.00", basis: "2005.00", market_value: "3200.00",
-  total_value: "11195.00", unrealized: "1195.00", missing_prices: false, stale_prices: true,
-  positions: [
-    {
-      account: 2, security: 1, name: "Total Stock Market", ticker: "VTI", security_type: "etf",
-      asset_class: "us_equity", shares: "10", basis: "2005.00", price: "320", price_date: "2026-06-01",
-      stale: true, market_value: "3200.00", unrealized: "1195.00",
-    },
-  ],
-};
-
 vi.mock("../../api", async (orig) => {
   const real = await orig<typeof import("../../api")>();
   return {
@@ -42,12 +30,6 @@ vi.mock("../../api", async (orig) => {
     commands: {
       securityList: () => ok([{ id: 1, name: "Total Stock Market", ticker: "VTI", hidden: false }]),
       invRegister: () => ok(register),
-      invHoldings: () => ok(holdings),
-      invLots: () => ok([]),
-      invIncome: () => ok({ rows: [], total: { security: null, security_label: "", dividends: "0.00", interest: "0.00", cg_short: "0.00", cg_long: "0.00", other: "0.00", total: "0.00" } }),
-      invPerformance: () => ok({ account: 2, as_of: "2026-06-30", rows: [], total: { security: null, security_label: "Total", basis: "2005.00", market_value: "3200.00", unrealized: "1195.00", realized: "0.00", income: "0.00", total_gain: "1195.00", total_return: "59.60" } }),
-      invGains: () => ok([]),
-      invAllocation: () => ok({ as_of: "2026-06-30", accounts: [2], rows: [], total: "0.00", missing_prices: false }),
       invInput: () => new Promise(() => {}),
       invTradeAmount: () => ok("2005.00"),
     },
@@ -68,32 +50,31 @@ beforeEach(() => {
   listsState.today = "2026-06-30";
   listsState.accounts = [account, { id: 3, name: "IRA", status: "open", account_type: "traditional_ira", investment: {} }] as never;
   investState.accountId = null;
-  investState.tab = "transactions";
 });
 
-describe("Investment account view (POS-040)", () => {
-  it("has the six tabs and lists the register with its cash balance", async () => {
+describe("Investment account register (INV-030)", () => {
+  it("lists the register with its cash balance and has no tabs", async () => {
     render(InvestmentAccount, { account });
-    for (const t of ["Overview", "Transactions", "Holdings", "Lots", "Income", "Performance"]) {
-      expect(screen.getByRole("tab", { name: t })).toBeTruthy();
-    }
     await waitFor(() => expect(screen.getByText("-2,005.00")).toBeTruthy());
     expect(screen.getAllByText("7,995.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Transfer In")).toBeTruthy();
     expect(screen.getByText(/from IRA/)).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("button", { name: "New transaction…" })).toBeNull();
   });
 
-  it("holdings flag a stale price in words, not only color", async () => {
+  it("opens the entry dialog when typing in the empty line", async () => {
     render(InvestmentAccount, { account });
-    await fireEvent.click(screen.getByRole("tab", { name: "Holdings" }));
-    await waitFor(() => expect(screen.getByText("3,200.00", { selector: "td" })).toBeTruthy());
-    expect(screen.getByText(/stale/)).toBeTruthy();
-    expect(screen.getByText("320.00")).toBeTruthy();
-  });
-
-  it("opens the entry dialog for a new transaction", async () => {
-    render(InvestmentAccount, { account });
-    await fireEvent.click(screen.getByRole("button", { name: "New transaction…" }));
+    const blank = await screen.findByLabelText("New transaction");
+    await fireEvent.keyDown(blank, { key: "Tab" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await fireEvent.keyDown(blank, { key: "b" });
     expect(screen.getByRole("dialog", { name: /New transaction/ })).toBeTruthy();
+  });
+
+  it("has no empty line in a closed account", async () => {
+    render(InvestmentAccount, { account: { ...(account as object), status: "closed" } as never });
+    await waitFor(() => expect(screen.getByText("-2,005.00")).toBeTruthy());
+    expect(screen.queryByLabelText("New transaction")).toBeNull();
   });
 });

@@ -1,0 +1,94 @@
+// The Investments screen: its named views, the as-of date, and the
+// overview Rust works out (POS-010, LOT-150). Views live in localStorage
+// until the `settings` module stores them with the book (SET-070); see
+// prefs.ts. Which rows are expanded is kept while the app runs.
+
+import { call, commands } from "../api";
+import {
+  defaultView,
+  parseViews,
+  serializeViews,
+  shownAccounts,
+  shownSecurities,
+  type ViewDef,
+  type ViewsState,
+} from "../invest/views";
+import type { Portfolio } from "../types/bindings";
+import { listsState } from "./lists.svelte";
+import { investState } from "./invest.svelte";
+import { loadPref, savePref } from "./prefs";
+
+const KEY = "investViews";
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+class InvestViewState {
+  #stored = parseViews(loadPref<string>(KEY, ""));
+  views = $state<ViewDef[]>(this.#stored.views);
+  selected = $state(this.#stored.selected);
+  /** The valuation date (ISO). */
+  asOf = $state("");
+  portfolio = $state<Portfolio | null>(null);
+  error = $state<string | null>(null);
+  /** Keys of expanded rows: "a<account>" and "p<account>:<security>". */
+  expanded = $state<Set<string>>(new Set());
+
+  #seq = 0;
+
+  view = $derived(this.views[this.selected]);
+  /** Open investment accounts, in the account list's order. */
+  available = $derived(
+    listsState.accounts.filter((a) => a.investment && a.status === "open").map((a) => a.id),
+  );
+
+  #save() {
+    const s: ViewsState = { views: this.views, selected: this.selected };
+    savePref(KEY, serializeViews(s));
+  }
+
+  select(slot: number) {
+    if (slot < 0 || slot >= this.views.length) return;
+    this.selected = slot;
+    this.#save();
+    void this.load();
+  }
+
+  /** Replace the selected view (Customize > OK). */
+  update(view: ViewDef) {
+    this.views = this.views.map((v, i) => (i === this.selected ? view : v));
+    this.#save();
+    void this.load();
+  }
+
+  /** The selected slot's original view, for Reset View. */
+  fresh(): ViewDef {
+    return defaultView(this.selected);
+  }
+
+  toggle(key: string) {
+    const next = new Set(this.expanded);
+    if (!next.delete(key)) next.add(key);
+    this.expanded = next;
+  }
+
+  /** Load the overview for the selected view and date. */
+  async load(): Promise<void> {
+    if (this.asOf === "") this.asOf = listsState.today;
+    const seq = ++this.#seq;
+    try {
+      const accounts = shownAccounts(this.view, this.available);
+      if (investState.securities.length === 0) await investState.loadSecurities();
+      const securities = shownSecurities(
+        this.view,
+        investState.securities.map((s) => s.id),
+      );
+      const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null));
+      if (seq !== this.#seq) return;
+      this.portfolio = p;
+      this.error = null;
+    } catch (e) {
+      if (seq === this.#seq) this.error = message(e);
+    }
+  }
+}
+
+export const investViewState = new InvestViewState();

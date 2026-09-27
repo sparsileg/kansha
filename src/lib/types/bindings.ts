@@ -288,6 +288,12 @@ export const commands = {
 	 *  account when empty) (POS-020).
 	 */
 	invAllocation: (accounts: AccountId[]) => typedError<Allocation, IpcError>(__TAURI_INVOKE("inv_allocation", { accounts })),
+	/**
+	 *  The investments overview on `as_of` (today when left out): `accounts`
+	 *  in the order given, their positions and lots, day changes, and totals;
+	 *  `securities` limits it to those (all when left out) (POS-010, LOT-150).
+	 */
+	invPortfolio: (accounts: AccountId[], securities: SecurityId[] | null, asOf: string | null) => typedError<Portfolio, IpcError>(__TAURI_INVOKE("inv_portfolio", { accounts, securities, asOf })),
 	/**  Check a lot-seeding CSV without writing anything. */
 	lotSeedPreview: (text: string, date: string) => typedError<SeedPreview, IpcError>(__TAURI_INVOKE("lot_seed_preview", { text, date })),
 	/**
@@ -1075,6 +1081,68 @@ export type Performance = {
 	as_of: string,
 	rows: PerfRow[],
 	total: PerfRow,
+};
+
+export type Portfolio = {
+	as_of: string,
+	/**  In the order asked for. */
+	accounts: PortfolioAccount[],
+	total: PortfolioTotals,
+};
+
+export type PortfolioAccount = {
+	account: AccountId,
+	/**  `None` with linked cash. */
+	cash: string | null,
+	positions: PortfolioPosition[],
+	totals: PortfolioTotals,
+};
+
+/**  One open lot on the overview. */
+export type PortfolioLot = {
+	lot: LotId,
+	acquired: string,
+	shares: string,
+	basis: string,
+	market_value: string | null,
+	gain: string | null,
+	day_gain: string | null,
+};
+
+/**  One security held in one account, with its lots. */
+export type PortfolioPosition = {
+	security: SecurityId,
+	name: string,
+	ticker: string | null,
+	shares: string,
+	basis: string,
+	price: string | null,
+	/**  `None` for a money market fund valued at $1.00 without a price. */
+	price_date: string | null,
+	/**  The price is older than the stale threshold (PRC-050). */
+	stale: boolean,
+	market_value: string | null,
+	gain: string | null,
+	day_gain: string | null,
+	/**  The price's change since the previous price, in percent. */
+	day_percent: string | null,
+	lots: PortfolioLot[],
+};
+
+/**  Rolled-up figures for an account or for everything shown. */
+export type PortfolioTotals = {
+	basis: string,
+	/**  Market value of the priced positions plus cash. */
+	market_value: string,
+	/**  Σ gain of the priced positions. */
+	gain: string,
+	/**  `None` when no position has a day change. */
+	day_gain: string | null,
+	/**  Day gain ÷ the value of those positions the day before. */
+	day_percent: string | null,
+	/**  Some position has no price, so the totals leave it out. */
+	missing_prices: boolean,
+	stale_prices: boolean,
 };
 
 /**  One security held in one account (POS-010). */

@@ -19,7 +19,7 @@
     <header>
       <h1>{account.name}{account.status === "closed" ? " (closed)" : ""}</h1>
       <button type="button" onclick={() => dialogState.editAccount(account)}>Edit account</button>
-      {#if account.status === "open" && isReconcilable(account)}
+      {#if account.status === "open" && !account.investment && isReconcilable(account)}
         <button type="button" onclick={() => void openReconcile(account.id)}>Reconcile</button>
       {/if}
     </header>

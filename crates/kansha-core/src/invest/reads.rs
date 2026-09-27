@@ -77,7 +77,7 @@ pub struct InvRegister {
     pub today: Date,
 }
 
-fn internal_cash(conn: &Connection, account: AccountId) -> Result<bool> {
+pub(super) fn internal_cash(conn: &Connection, account: AccountId) -> Result<bool> {
     let acct = investment_account(conn, account)?;
     Ok(acct
         .fields
@@ -86,7 +86,7 @@ fn internal_cash(conn: &Connection, account: AccountId) -> Result<bool> {
         .is_some_and(|i| i.cash_mode == CashMode::Internal))
 }
 
-fn labels(conn: &Connection) -> Result<BTreeMap<SecurityId, Security>> {
+pub(super) fn labels(conn: &Connection) -> Result<BTreeMap<SecurityId, Security>> {
     Ok(securities::list(conn)?
         .into_iter()
         .map(|s| (s.id, s))
@@ -186,7 +186,7 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
 // ---------------------------------------------------------------------------
 
 /// The price a holding is valued at: (price, price date, stale).
-fn valuation(
+pub(super) fn valuation(
     conn: &Connection,
     s: &Security,
     as_of: Date,
@@ -629,13 +629,22 @@ pub struct Performance {
 
 /// `part ÷ whole` in percent, two decimals, half-even.
 fn percent(part: Money, whole: Money) -> Option<String> {
-    if whole.cents() <= 0 {
+    ratio_percent(part.to_decimal(), whole.to_decimal())
+}
+
+/// `part ÷ whole` in percent, two decimals, half-even; `None` unless
+/// `whole` is positive. Never "-0.00".
+pub(super) fn ratio_percent(part: Decimal, whole: Decimal) -> Option<String> {
+    if whole <= Decimal::ZERO {
         return None;
     }
-    let p = (part.to_decimal() * Decimal::ONE_HUNDRED)
-        .checked_div(whole.to_decimal())?
+    let p = (part * Decimal::ONE_HUNDRED)
+        .checked_div(whole)?
         .round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven);
-    Some(format!("{p:.2}"))
+    Some(format!(
+        "{:.2}",
+        if p.is_zero() { Decimal::ZERO } else { p }
+    ))
 }
 
 #[derive(Default)]

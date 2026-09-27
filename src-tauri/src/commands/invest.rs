@@ -4,7 +4,7 @@
 use kansha_core::accounts::AccountId;
 use kansha_core::invest::{
     self, Allocation, Holdings, IncomeReport, InvAction, InvInput, InvRegister, InvTxn, LotView,
-    Performance, RealizedGain, SeedPreview,
+    Performance, Portfolio, RealizedGain, SeedPreview,
 };
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
@@ -221,6 +221,27 @@ pub fn inv_income(
 #[specta::specta]
 pub fn inv_performance(state: State<'_, AppState>, account: AccountId) -> CmdResult<Performance> {
     state.read(|db, today| invest::performance(db.conn(), account, today))
+}
+
+/// The investments overview on `as_of` (today when left out): `accounts`
+/// in the order given, their positions and lots, day changes, and totals;
+/// `securities` limits it to those (all when left out) (POS-010, LOT-150).
+#[tauri::command]
+#[specta::specta]
+pub fn inv_portfolio(
+    state: State<'_, AppState>,
+    accounts: Vec<AccountId>,
+    securities: Option<Vec<SecurityId>>,
+    as_of: Option<Date>,
+) -> CmdResult<Portfolio> {
+    state.read(|db, today| {
+        invest::portfolio(
+            db.conn(),
+            &accounts,
+            securities.as_deref(),
+            as_of.unwrap_or(today),
+        )
+    })
 }
 
 /// Asset allocation today across `accounts` (every open investment

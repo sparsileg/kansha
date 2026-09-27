@@ -74,10 +74,12 @@ section records what was decided about it.
   view on that tab.
 - **Tools > Securities** (Phase 6): the Manage view's Securities tab:
   securities, their prices, price import, and lot seeding from CSV.
-- **Investments** (navigation bar, Phase 6): every investment account's
-  value and the asset allocation across them. An investment account
-  itself opens on its tabs: Overview, Transactions, Holdings, Lots,
-  Income, Performance (POS-040).
+- **Investments** (navigation bar, Phase 6): every chosen investment
+  account with its cash, equities, and lots on one date, in named views
+  (POS-040). Click an account's name to open its register, which looks
+  like a checking account's; typing in the empty line opens the entry
+  dialog. Gain and loss show by sign, not color. Views are kept in
+  localStorage until the settings module lands (SET-070).
 - **Tools > Accounts:** opens a list of accounts with management
   functions: New, Edit, Close and reopen, Delete, and so on.
 - **Edit > Renaming:** kept in the menu, greyed out. Deferred: define

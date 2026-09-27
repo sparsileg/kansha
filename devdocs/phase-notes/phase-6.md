@@ -89,6 +89,31 @@ yet run.
   `invest/form.test.ts`, `InvestmentAccount.test.ts`,
   `InvEntryModal.test.ts`.
 
+## Investments screen rework (2026-09-26, spec 0.3.12)
+
+Stan's review replaced the account tabs. **⚠ API change:** new command
+`inv_portfolio(accounts, securities, as_of)`; bindings regenerated. No
+schema change.
+
+- Rust `invest/portfolio.rs`: `portfolio` builds accounts → cash,
+  positions → lots with day gain, day %, and rolled-up totals. Day
+  change needs a price dated exactly on the date and an earlier one;
+  otherwise blank. Day % of a rollup = day gain ÷ prior-day value of
+  the positions with a day change (cash excluded). A position's day
+  gain is shares × price change, not the sum of its lots, so cents may
+  differ. Cash counts in Market Value, not in gains.
+- UI: `views/Investments.svelte`, `invest/DatePicker.svelte`,
+  `invest/CustomizeViewModal.svelte`, `invest/rows.ts` (row flattening),
+  `invest/views.ts` (ten views), `state/investview.svelte.ts`. An
+  expanded account or equity row shows no figures; its children do.
+  The stale-price mark is ⚠ with a tooltip.
+- `InvestmentAccount.svelte` is now the register only, with an empty
+  line that opens the entry dialog. Overview, Holdings, Lots, Income,
+  Performance, and realized-gains views, the allocation section, and the
+  Reconcile button (investment accounts) are gone from the UI; the
+  engine reads and commands stay for Phase 7 reports.
+- Views persist in localStorage (`kansha.investViews`).
+
 ## Decisions
 
 - Postings per action, rounding, lot selection, holding period, splits,

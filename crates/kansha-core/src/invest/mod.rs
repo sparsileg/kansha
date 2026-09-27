@@ -29,10 +29,14 @@
 //! transfers) have no such limit.
 
 mod lots;
+mod portfolio;
 mod reads;
 mod seed;
 mod service;
 
+pub use portfolio::{
+    Portfolio, PortfolioAccount, PortfolioLot, PortfolioPosition, PortfolioTotals, portfolio,
+};
 pub use reads::{
     Allocation, AllocationRow, Holdings, IncomeReport, IncomeRow, InvRegister, InvRegisterRow,
     LotView, PerfRow, Performance, Position, RealizedGain, account_value, allocation, holdings,

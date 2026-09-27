@@ -567,3 +567,81 @@ fn trade_amount_is_computed_in_rust() {
     );
     assert!(invest::trade_amount(InvAction::Dividend, q("1"), p("1"), Money::ZERO).is_err());
 }
+
+#[test]
+fn portfolio_rolls_up_lots_and_day_change() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let other = b
+        .security("Other Fund", "OTH", SecurityType::MutualFund)
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-03-01", "5", "1100.00"))
+        .unwrap();
+    b.price(vti, date("2026-06-29"), p("200")).unwrap();
+    b.price(vti, date("2026-06-30"), p("210")).unwrap();
+
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30")).unwrap();
+    let acct = &pf.accounts[0];
+    assert_eq!(acct.cash, Some(m("6900.00")));
+    let pos = &acct.positions[0];
+    assert_eq!(pos.shares, q("15"));
+    assert_eq!(pos.market_value, Some(m("3150.00")));
+    assert_eq!(pos.gain, Some(m("50.00")));
+    assert_eq!(pos.day_gain, Some(m("150.00")));
+    assert_eq!(pos.day_percent.as_deref(), Some("5.00"));
+    let lots: Vec<_> = pos
+        .lots
+        .iter()
+        .map(|l| (l.market_value, l.gain, l.day_gain))
+        .collect();
+    assert_eq!(
+        lots,
+        vec![
+            (Some(m("2100.00")), Some(m("100.00")), Some(m("100.00"))),
+            (Some(m("1050.00")), Some(m("-50.00")), Some(m("50.00"))),
+        ]
+    );
+    // Account and grand totals: cash counts in market value, not in gain
+    // or the day percent.
+    assert_eq!(acct.totals.market_value, m("10050.00"));
+    assert_eq!(acct.totals.basis, m("3100.00"));
+    assert_eq!(acct.totals.gain, m("50.00"));
+    assert_eq!(acct.totals.day_gain, Some(m("150.00")));
+    assert_eq!(acct.totals.day_percent.as_deref(), Some("5.00"));
+    assert_eq!(pf.total, acct.totals);
+
+    // No price dated exactly that day: valued at the latest, no day change.
+    let later = invest::portfolio(b.conn(), &[brk], None, date("2026-07-05")).unwrap();
+    assert_eq!(
+        later.accounts[0].positions[0].market_value,
+        Some(m("3150.00"))
+    );
+    assert_eq!(later.accounts[0].positions[0].day_gain, None);
+    assert_eq!(later.total.day_gain, None);
+    assert_eq!(later.total.day_percent, None);
+    // A first price has nothing to compare with.
+    let first = invest::portfolio(b.conn(), &[brk], None, date("2026-06-29")).unwrap();
+    assert_eq!(first.accounts[0].positions[0].day_gain, None);
+
+    // Limited to other securities: no positions, cash stays.
+    let none = invest::portfolio(b.conn(), &[brk], Some(&[other]), date("2026-06-30")).unwrap();
+    assert!(none.accounts[0].positions.is_empty());
+    assert_eq!(none.total.market_value, m("6900.00"));
+}
+
+#[test]
+fn portfolio_flags_positions_without_a_price() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
+        .unwrap();
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30")).unwrap();
+    let pos = &pf.accounts[0].positions[0];
+    assert_eq!(pos.market_value, None);
+    assert_eq!(pos.gain, None);
+    assert!(pf.total.missing_prices);
+    assert_eq!(pf.total.basis, m("2000.00"));
+    assert_eq!(pf.total.market_value, m("8000.00"));
+}

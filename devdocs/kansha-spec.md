@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.11 (draft) |
+| **Document version** | 0.3.12 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-24 |
+| **Last updated** | 2026-09-26 |
 | **Owner** | Stan |
 | **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); D-50, D-60, D-100, D-110 decided |
 
@@ -307,7 +307,7 @@ Stan uses this heavily in Quicken; it must be robust and cover all common patter
 - **POS-020** [1.0][S] Asset allocation by asset class, across all or selected accounts.
 - **POS-030** [TBD][S] Investment performance.
   > **Recommendation:** 1.0 includes simple measures (total gain, total return including income) per security and account. Time-weighted and money-weighted (IRR) returns are [Later].
-- **POS-040** [1.0][S] Investment account tabs: Overview | Transactions | Holdings | Lots | Income | Performance.
+- **POS-040** [1.0][S] The Investments screen replaces per-account tabs. It lists the chosen investment accounts as collapsible rows; under each, its cash and current equities; under each equity, its open lots. Columns: Name (always), Ticker Symbol, Quote/Price, Shares, Cost Basis, Market Value, Gain/Loss, Day Gain/Loss, Price Day Change (%). A collapsed account shows rolled-up Cost Basis, Market Value, Gain/Loss, Day Gain/Loss, and Day %; a collapsed equity shows every column it has data for; an expanded row shows its children instead; Totals close the list. An as-of date (default today) sets the valuation; a date with no price uses the latest earlier price, and the day columns are blank unless a price is dated exactly that day and an earlier one exists. Ten named views (Default, Custom 2 to Custom 10, renamable) keep the columns and their order, the accounts and their order, and the equities shown; Reset View restores a view. An investment account opens as a register like a checking account's; typing in its empty line opens the entry dialog. Income, Performance, and realized gains move to the reports (Phase 7).
 - **POS-050** [1.0][R] Share balance per security must equal the sum of open lot quantities at all times (integrity invariant; see INT-030).
 
 ### 11. Data Migration from Quicken (MIG)
@@ -942,6 +942,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.12 | 2026-09-26 | POS-040 rewritten: the Investments screen (account, equity, and lot tree with named views, as-of date, and day change) replaces the six account tabs; an investment account opens as a register. Income, Performance, and realized gains wait for the reports. New IPC command `inv_portfolio`. No schema change. |
 | 0.3.11 | 2026-09-24 | Phase 6 (investments). §18 gains investment rules (postings per action, lot selection and rounding, splits, return of capital, the date-order rule for a holding's history, linked cash, money market funds, stale prices, account list value, investment cash reconciliation, lot seeding as an import, new integrity checks). §18 reconciliation rules: investment accounts with their own cash reconcile. LOT-115: refused until built, not in Phase 6. No schema change. |
 | 0.3.10 | 2026-09-24 | SET-030: three date formats (MM/DD/YYYY default, DD/MM/YYYY, YYYY-MM-DD) for every user-facing date; logs and histories use `YYYY-MM-DDTHH:MM:SSZ`. NFR-080: theme focus colors (background and text) and select-on-focus, app-wide. |
 | 0.3.9 | 2026-09-24 | Reconciliation uses statement sign: a credit card's ending balance is entered and shown as the statement prints it (owed = positive); charges positive, payments negative. Ledger sign unchanged elsewhere. |

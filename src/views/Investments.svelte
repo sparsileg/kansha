@@ -1,89 +1,120 @@
 <script lang="ts">
-  // The investments view: every investment account's value today, and
-  // asset allocation across them (POS-010, POS-020).
-  import { call, commands } from "../lib/api";
-  import { formatMoney } from "../lib/format/money";
+  // The investments view (POS-010, LOT-150): every chosen investment
+  // account with its equities, cash, and lots on one date. Views pick the
+  // columns, accounts, and equities. Every figure comes from Rust.
+  import { untrack } from "svelte";
+  import CustomizeViewModal from "../lib/components/invest/CustomizeViewModal.svelte";
+  import DatePicker from "../lib/components/invest/DatePicker.svelte";
+  import { buildRows } from "../lib/invest/rows";
+  import { columnLabel } from "../lib/invest/views";
   import { openAccount } from "../lib/shell/nav";
+  import { investViewState as st } from "../lib/state/investview.svelte";
   import { listsState } from "../lib/state/lists.svelte";
-  import type { Allocation, AssetClass, Holdings } from "../lib/types/bindings";
 
-  let holdings = $state<Holdings[]>([]);
-  let allocation = $state<Allocation | null>(null);
-  let error = $state<string | null>(null);
+  let customizing = $state(false);
 
-  const accounts = $derived(listsState.accounts.filter((a) => a.investment && a.status === "open"));
-  const CLASS: Record<AssetClass, string> = {
-    us_equity: "US equity",
-    intl_equity: "International equity",
-    bond: "Bonds",
-    cash: "Cash",
-    real_estate: "Real estate",
-    commodity: "Commodities",
-    other: "Other",
-  };
-
+  // Reload when the date, the view, or the account list changes; `load`
+  // reads and writes state, so keep it out of this effect's dependencies.
   $effect(() => {
-    const ids = accounts.map((a) => a.id);
-    void Promise.all([
-      Promise.all(ids.map((id) => call(commands.invHoldings(id, null)))),
-      call(commands.invAllocation([])),
-    ])
-      .then(([h, a]) => {
-        holdings = h;
-        allocation = a;
-        error = null;
-      })
-      .catch((e) => (error = e instanceof Error ? e.message : String(e)));
+    void st.available;
+    void st.view;
+    void st.asOf;
+    untrack(() => void st.load());
   });
 
-  const money = (m: string | null) => (m == null ? "" : formatMoney(m));
+  const rows = $derived(
+    st.portfolio ? buildRows(st.portfolio, st.expanded, (id) => listsState.account(id)?.name ?? `#${id}`) : [],
+  );
+  const columns = $derived(st.view.columns);
+  const NUMERIC = new Set(["price", "shares", "cost_basis", "market_value", "gain", "day_gain", "day_percent"]);
 </script>
 
 <section>
   <h1>Investments</h1>
-  {#if error}<p class="err" role="alert">{error}</p>{/if}
-  {#if accounts.length === 0}
+  <div class="bar">
+    <label>
+      View:
+      <select value={String(st.selected)} onchange={(e) => st.select(Number(e.currentTarget.value))}>
+        {#each st.views as v, i (i)}<option value={String(i)}>{v.name}</option>{/each}
+      </select>
+    </label>
+    <DatePicker value={st.asOf || listsState.today} today={listsState.today} label="As of" onchange={(iso) => (st.asOf = iso)} />
+    <button type="button" onclick={() => (customizing = true)}>Customize</button>
+  </div>
+  {#if st.error}<p class="err" role="alert">{st.error}</p>{/if}
+  {#if st.available.length === 0}
     <p>No investment accounts. Add one with Tools &gt; Accounts.</p>
   {:else}
-    <table>
-      <thead><tr><th>Account</th><th class="num">Cash</th><th class="num">Market value</th><th class="num">Total value</th><th class="num">Cost basis</th><th class="num">Unrealized</th></tr></thead>
-      <tbody>
-        {#each holdings as h (h.account)}
-          <tr onclick={() => void openAccount(h.account)}>
-            <td><button type="button" class="link">{listsState.account(h.account)?.name}</button></td>
-            <td class="num">{h.cash === null ? "linked" : money(h.cash)}</td>
-            <td class="num">{money(h.market_value)}</td>
-            <td class="num">{money(h.total_value)}</td>
-            <td class="num">{money(h.basis)}</td>
-            <td class="num">{money(h.unrealized)}{#if h.missing_prices || h.stale_prices}<span class="flag" title="Some prices are missing or old"> ⚠</span>{/if}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-    {#if allocation}
-      <h2>Asset allocation</h2>
+    <div class="scroll">
       <table>
-        <thead><tr><th>Class</th><th class="num">Value</th><th class="num">Share</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Name</th>
+            {#each columns as c (c)}<th class:num={NUMERIC.has(c)}>{columnLabel(c)}</th>{/each}
+          </tr>
+        </thead>
         <tbody>
-          {#each allocation.rows as row (row.asset_class)}
-            <tr><td>{CLASS[row.asset_class]}</td><td class="num">{money(row.market_value)}</td><td class="num">{row.percent}%</td></tr>
+          {#each rows as row (row.key)}
+            <tr class={row.kind}>
+              <td class="name">
+                {#if row.toggleKey !== undefined}
+                  <button
+                    type="button"
+                    class="tog"
+                    aria-expanded={row.expanded}
+                    aria-label={`${row.expanded ? "Collapse" : "Expand"} ${row.name}`}
+                    onclick={() => st.toggle(row.toggleKey!)}
+                  >{row.kind === "account" ? (row.expanded ? "▾" : "▸") : row.expanded ? "−" : "+"}</button>
+                {/if}
+                {#if row.kind === "account"}
+                  <button type="button" class="link" onclick={() => void openAccount(row.account!)}>{row.name}</button>
+                {:else}
+                  {row.name}
+                {/if}
+              </td>
+              {#each columns as c (c)}
+                <td class:num={NUMERIC.has(c)}>
+                  {row.cells[c] ?? ""}{#if c === "market_value" && row.warn}<span class="flag" title={row.warn}> ⚠</span>{/if}{#if c === "price" && row.priceWarn}<span class="flag" title={row.priceWarn}> ⚠</span>{/if}
+                </td>
+              {/each}
+            </tr>
           {/each}
         </tbody>
-        <tfoot><tr><td>Total</td><td class="num">{money(allocation.total)}</td><td></td></tr></tfoot>
       </table>
-      {#if allocation.missing_prices}<p class="flag">⚠ Holdings without a price are left out.</p>{/if}
-    {/if}
+    </div>
   {/if}
 </section>
+
+{#if customizing}
+  <CustomizeViewModal
+    view={st.view}
+    onsave={(v) => {
+      customizing = false;
+      st.update(v);
+    }}
+    onclose={() => (customizing = false)}
+  />
+{/if}
 
 <style>
   h1 {
     font-size: 1.3em;
     margin: 0 0 0.5rem;
   }
-  h2 {
-    font-size: 1.1em;
-    margin: 1rem 0 0.25rem;
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+  }
+  .bar label {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+  }
+  .scroll {
+    overflow: auto;
   }
   table {
     border-collapse: collapse;
@@ -91,21 +122,42 @@
   th,
   td {
     text-align: left;
-    padding: 0.15rem 0.6rem;
+    padding: 0.15rem 0.7rem;
+    white-space: nowrap;
   }
-  tbody tr {
-    cursor: pointer;
-  }
-  tbody tr:hover {
-    background: rgba(128, 128, 128, 0.2);
-  }
-  tfoot td {
-    border-top: 1px solid rgba(128, 128, 128, 0.5);
-    font-weight: 700;
+  thead th {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
   }
   .num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+  .account td {
+    font-weight: 700;
+  }
+  .cash .name,
+  .position .name {
+    padding-left: 1.6rem;
+  }
+  .lot .name {
+    padding-left: 3.2rem;
+  }
+  .lot td {
+    opacity: 0.9;
+  }
+  .total td {
+    border-top: 1px solid rgba(128, 128, 128, 0.5);
+    font-weight: 700;
+  }
+  .tog {
+    width: 1.4rem;
+    padding: 0;
+    margin-right: 0.2rem;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
   }
   .link {
     background: none;
