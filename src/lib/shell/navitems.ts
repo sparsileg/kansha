@@ -34,6 +34,7 @@ const NAV_LABEL: Record<string, string> = {
   "reports.itemized_categories": "Itemized Categories",
   "reports.itemized_payees": "Itemized Payees",
   "reports.income_expense": "Income/Expense",
+  "reports.income_expense_payee": "Income/Expense by Payee",
   "reports.tax_capital_gains": "Capital Gains (tax)",
   "reports.tax_schedule": "Tax Schedule",
   "reports.tax_summary": "Tax Summary",

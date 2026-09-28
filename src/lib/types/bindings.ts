@@ -652,7 +652,13 @@ export type DayBalance = {
 };
 
 /**  Order of transactions inside a group. */
-export type DetailSort = "date" | "account_date" | "amount";
+export type DetailSort = 
+/**  Date, then account. */
+"date" | 
+/**  Account, then date. */
+"account_date" | "amount" | 
+/**  Check number (numbers in numeric order, then text, then none). */
+"num";
 
 /**  Shares leaving a lot. A sale is a realized gain record (LOT-040). */
 export type Disposal = {
@@ -678,7 +684,12 @@ export type Drill =
  *  A category's transactions for the column's period (an Itemized
  *  Categories report).
  */
-{ kind: "category"; category: CategoryId };
+{ kind: "category"; category: CategoryId } | 
+/**
+ *  A payee's transactions for the column's period (an Itemized Payees
+ *  report); `None` is transactions with no payee.
+ */
+{ kind: "payee"; payee: PayeeId | null };
 
 /**  When a schedule stops (REC-030). */
 export type End = { kind: "never" } | 
@@ -1539,6 +1550,8 @@ export type ReportKind =
 "itemized_payees" | 
 /**  Category totals, optionally by period (RPT-100). */
 "income_expense" | 
+/**  Payee totals, optionally by period. */
+"income_expense_payee" | 
 /**  Tax-line totals and their transactions (CAT-050). */
 "tax_schedule" | 
 /**  Tax-related categories and their transactions (RPT-140). */
@@ -1559,6 +1572,8 @@ export type ReportSettings = {
 	interval?: Interval,
 	/**  Itemized and tax reports. */
 	sort?: DetailSort,
+	/**  Reverse `sort`. */
+	sort_desc?: boolean,
 	/**  Column IDs not shown. */
 	hidden_columns?: string[],
 	/**  Show cents; otherwise amounts round to whole dollars. */

@@ -19,6 +19,7 @@ describe("menu definitions", () => {
       "Spending: Itemized Categories",
       "Spending: Itemized Payees",
       "Spending: Income/Expense by Category",
+      "Spending: Income/Expense by Payee",
       "Tax: Capital Gains",
       "Tax: Tax Schedule",
       "Tax: Tax Summary",

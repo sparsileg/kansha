@@ -368,6 +368,125 @@ fn income_expense_by_month_rolls_up_subcategories() {
 }
 
 #[test]
+fn detail_sorts_by_date_then_account_by_num_and_reversed() {
+    let mut fx = fixture();
+    let dining = fx.book.find_category("Food:Dining").unwrap().unwrap();
+    // Same date, Visa entered before Checking.
+    for (account, num, amount) in [
+        (fx.visa, "", "-7.00"),
+        (fx.checking, "102", "-8.00"),
+        (fx.checking, "99", "-9.00"),
+        (fx.checking, "EFT", "-6.00"),
+    ] {
+        fx.book
+            .entry(account, date("2026-06-10"))
+            .payee("Diner")
+            .check_num(num)
+            .amount(m(amount))
+            .category(dining)
+            .save()
+            .unwrap();
+    }
+    let mut s = settings(ReportKind::ItemizedCategories);
+    s.categories = Some(vec![dining]);
+    s.transfers = false;
+    s.hidden_columns = vec![
+        "description".into(),
+        "memo".into(),
+        "tag".into(),
+        "clr".into(),
+    ];
+    let rows = |s: &ReportSettings| -> Vec<String> {
+        let r = run(&fx, s);
+        r.rows[0].children[0].children[0]
+            .children
+            .iter()
+            .map(|d| d.cells.join(" "))
+            .collect()
+    };
+    assert_eq!(
+        rows(&s),
+        [
+            "2026-02-03 Checking  -20.00",
+            "2026-02-10 Visa  -50.00",
+            "2026-06-10 Checking 102 -8.00",
+            "2026-06-10 Checking 99 -9.00",
+            "2026-06-10 Checking EFT -6.00",
+            "2026-06-10 Visa  -7.00",
+        ]
+    );
+    s.sort_desc = true;
+    assert_eq!(
+        rows(&s),
+        [
+            "2026-06-10 Visa  -7.00",
+            "2026-06-10 Checking 102 -8.00",
+            "2026-06-10 Checking 99 -9.00",
+            "2026-06-10 Checking EFT -6.00",
+            "2026-02-10 Visa  -50.00",
+            "2026-02-03 Checking  -20.00",
+        ]
+    );
+    s.sort = DetailSort::Num;
+    s.sort_desc = false;
+    assert_eq!(
+        rows(&s),
+        [
+            "2026-06-10 Checking 99 -9.00",
+            "2026-06-10 Checking 102 -8.00",
+            "2026-06-10 Checking EFT -6.00",
+            "2026-02-03 Checking  -20.00",
+            "2026-02-10 Visa  -50.00",
+            "2026-06-10 Visa  -7.00",
+        ]
+    );
+    s.sort_desc = true;
+    assert_eq!(
+        rows(&s),
+        [
+            "2026-02-03 Checking  -20.00",
+            "2026-02-10 Visa  -50.00",
+            "2026-06-10 Visa  -7.00",
+            "2026-06-10 Checking EFT -6.00",
+            "2026-06-10 Checking 102 -8.00",
+            "2026-06-10 Checking 99 -9.00",
+        ]
+    );
+}
+
+#[test]
+fn income_expense_by_payee_totals_each_payee() {
+    let mut fx = fixture();
+    let mut s = settings(ReportKind::IncomeExpensePayee);
+    s.interval = Interval::Quarter;
+    let r = run(&fx, &s);
+    assert_eq!(r.title, "Income/Expense by Payee");
+    assert_eq!(
+        text(&r),
+        "\
+# INCOME | 3050.00 | 500.00 | 3550.00
+  - Employer | 3000.00 | 0.00 | 3000.00
+  - (No payee) | 50.00 | 500.00 | 550.00
+# EXPENSES | -1410.00 | 0.00 | -1410.00
+  - Cafe | -50.00 | 0.00 | -50.00
+  - Costco | -160.00 | 0.00 | -160.00
+  - County | -1200.00 | 0.00 | -1200.00
+= OVERALL TOTAL | 1640.00 | 500.00 | 2140.00"
+    );
+    let costco = fx.book.payee("Costco").unwrap();
+    assert_eq!(
+        r.rows[1].children[1].drill,
+        Some(Drill::Payee {
+            payee: Some(costco)
+        })
+    );
+    assert_eq!(
+        r.rows[0].children[1].drill,
+        Some(Drill::Payee { payee: None })
+    );
+}
+
+#[test]
 fn capital_gains_by_term_from_taxable_accounts() {
     let fx = fixture();
     let r = run(&fx, &settings(ReportKind::CapitalGains));
@@ -655,7 +774,10 @@ fn every_report_runs_on_the_sample_book_and_balances() {
     for kind in ReportKind::ALL {
         let mut s = ReportSettings::defaults(*kind);
         s.range.preset = DatePreset::AllDates;
-        if *kind == ReportKind::NetWorth || *kind == ReportKind::IncomeExpense {
+        if matches!(
+            kind,
+            ReportKind::NetWorth | ReportKind::IncomeExpense | ReportKind::IncomeExpensePayee
+        ) {
             s.interval = Interval::Quarter;
         }
         let started = std::time::Instant::now();

@@ -67,7 +67,7 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
         let Some(mut ls) = by_line.remove(&tl.id.0) else {
             continue;
         };
-        facts::sort_lines(&mut ls, s.sort, &lk);
+        facts::sort_lines(&mut ls, s.sort, s.sort_desc, &lk);
         let form_order = lk
             .tax_lines
             .iter()

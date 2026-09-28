@@ -109,7 +109,7 @@ fn grouped(
         )
     };
     let details = |mut ls: Vec<&Line>| -> Vec<Row> {
-        facts::sort_lines(&mut ls, s.sort, lk);
+        facts::sort_lines(&mut ls, s.sort, s.sort_desc, lk);
         ls.into_iter().map(to_row).collect()
     };
 

@@ -2,13 +2,14 @@
 //! with its postings and the names they need, plus the lines a report
 //! lists (a category posting, or one side of a transfer).
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use rusqlite::Connection;
 
 use super::{DetailSort, Drill, ReportSettings, ResolvedRange};
 use crate::accounts::{Account, AccountId, TaxTreatment};
-use crate::categories::{Category, CategoryId, CategoryKind, TagId, TaxLine, TaxLineId};
+use crate::categories::{Category, CategoryId, CategoryKind, PayeeId, TagId, TaxLine, TaxLineId};
 use crate::date::Date;
 use crate::error::Result;
 use crate::invest::InvAction;
@@ -340,6 +341,7 @@ pub(super) struct Line {
     pub line_no: i64,
     pub date: Date,
     pub account: AccountId,
+    pub payee: Option<PayeeId>,
     pub payee_name: String,
     pub num: String,
     pub description: String,
@@ -401,6 +403,7 @@ pub(super) fn lines(
             line_no: p.line_no,
             date: t.date,
             account,
+            payee: t.payee,
             payee_name: t.payee_name.clone(),
             num: num.clone(),
             description: description.clone(),
@@ -540,13 +543,35 @@ pub(super) fn lines(
 }
 
 /// Order lines inside a group.
-pub(super) fn sort_lines(lines: &mut [&Line], sort: DetailSort, lk: &Lookups) {
-    match sort {
-        DetailSort::Date => lines.sort_by_key(|l| (l.date, l.txn, l.line_no)),
-        DetailSort::AccountDate => {
-            lines.sort_by_key(|l| (lk.account_order(l.account), l.date, l.txn, l.line_no));
+/// Order lines by `sort`, reversed when `desc`; ties stay in date and
+/// entry order either way.
+pub(super) fn sort_lines(lines: &mut [&Line], sort: DetailSort, desc: bool, lk: &Lookups) {
+    let primary = |a: &Line, b: &Line| -> Ordering {
+        let account = |l: &Line| lk.account_order(l.account);
+        match sort {
+            DetailSort::Date => (a.date, account(a)).cmp(&(b.date, account(b))),
+            DetailSort::AccountDate => (account(a), a.date).cmp(&(account(b), b.date)),
+            DetailSort::Amount => a.amount.cmp(&b.amount),
+            DetailSort::Num => num_key(&a.num).cmp(&num_key(&b.num)),
         }
-        DetailSort::Amount => lines.sort_by_key(|l| (l.amount, l.date, l.txn, l.line_no)),
+    };
+    lines.sort_by(|a, b| {
+        let first = primary(a, b);
+        let first = if desc { first.reverse() } else { first };
+        first.then_with(|| (a.date, a.txn, a.line_no).cmp(&(b.date, b.txn, b.line_no)))
+    });
+}
+
+/// Check numbers sort as numbers, then other text (ignoring case), then
+/// empty.
+fn num_key(num: &str) -> (u8, u64, String) {
+    let num = num.trim();
+    if num.is_empty() {
+        return (2, 0, String::new());
+    }
+    match num.parse::<u64>() {
+        Ok(n) => (0, n, String::new()),
+        Err(_) => (1, 0, num.to_lowercase()),
     }
 }
 

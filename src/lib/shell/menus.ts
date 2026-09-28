@@ -67,6 +67,7 @@ export const MENUS: Menu[] = [
       { id: "reports.itemized_categories", label: "Spending: Itemized Categories", divider: true },
       { id: "reports.itemized_payees", label: "Spending: Itemized Payees" },
       { id: "reports.income_expense", label: "Spending: Income/Expense by Category" },
+      { id: "reports.income_expense_payee", label: "Spending: Income/Expense by Payee" },
       { id: "reports.tax_capital_gains", label: "Tax: Capital Gains", divider: true },
       { id: "reports.tax_schedule", label: "Tax: Tax Schedule" },
       { id: "reports.tax_summary", label: "Tax: Tax Summary" },

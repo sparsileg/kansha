@@ -66,6 +66,13 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     interval: true,
     totalsOnly: true,
   },
+  income_expense_payee: {
+    kind: "income_expense_payee",
+    name: "Income/Expense by Payee",
+    tabs: SPENDING,
+    interval: true,
+    totalsOnly: true,
+  },
   tax_schedule: {
     kind: "tax_schedule",
     name: "Tax Schedule",
@@ -121,20 +128,30 @@ export const INTERVALS: [Interval, string][] = [
 ];
 
 export const SUBTOTALS: [Subtotal, string][] = [
-  ["none", "Don't subtotal"],
   ["term", "Short vs. long-term"],
   ["month", "Month"],
   ["quarter", "Quarter"],
   ["year", "Year"],
   ["account", "Account"],
   ["security", "Security"],
+  ["none", "Don't subtotal"],
 ];
 
 export const SORTS: [DetailSort, string][] = [
-  ["date", "Date"],
+  ["date", "Date/Account"],
   ["account_date", "Account/Date"],
   ["amount", "Amount"],
 ];
+
+/** Column headings that sort an itemized report when clicked. */
+export const COLUMN_SORTS: Record<string, DetailSort> = {
+  date: "date",
+  account: "account_date",
+  num: "num",
+};
+
+/** Reports with a "Sort by" dropdown and sortable column headings. */
+export const SORTABLE: ReportKind[] = ["itemized_categories", "itemized_payees"];
 
 /** The Reports menu: item id → report kind. Capital Gains is listed under
  * Investing and again under Tax. */
@@ -144,6 +161,7 @@ export const MENU_REPORTS: Record<string, ReportKind> = {
   "reports.itemized_categories": "itemized_categories",
   "reports.itemized_payees": "itemized_payees",
   "reports.income_expense": "income_expense",
+  "reports.income_expense_payee": "income_expense_payee",
   "reports.tax_capital_gains": "capital_gains",
   "reports.tax_schedule": "tax_schedule",
   "reports.tax_summary": "tax_summary",

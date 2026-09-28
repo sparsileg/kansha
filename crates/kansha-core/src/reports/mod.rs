@@ -58,6 +58,8 @@ text_enum! {
         ItemizedPayees = "itemized_payees",
         /// Category totals, optionally by period (RPT-100).
         IncomeExpense = "income_expense",
+        /// Payee totals, optionally by period.
+        IncomeExpensePayee = "income_expense_payee",
         /// Tax-line totals and their transactions (CAT-050).
         TaxSchedule = "tax_schedule",
         /// Tax-related categories and their transactions (RPT-140).
@@ -114,9 +116,13 @@ text_enum! {
 text_enum! {
     /// Order of transactions inside a group.
     pub enum DetailSort {
+        /// Date, then account.
         Date = "date",
+        /// Account, then date.
         AccountDate = "account_date",
         Amount = "amount",
+        /// Check number (numbers in numeric order, then text, then none).
+        Num = "num",
     }
 }
 
@@ -158,6 +164,9 @@ pub struct ReportSettings {
     /// Itemized and tax reports.
     #[serde(default = "default_sort")]
     pub sort: DetailSort,
+    /// Reverse `sort`.
+    #[serde(default)]
+    pub sort_desc: bool,
     /// Column IDs not shown.
     #[serde(default)]
     pub hidden_columns: Vec<String>,
@@ -211,6 +220,7 @@ impl ReportSettings {
             K::ItemizedCategories => ("Itemized Categories", DatePreset::YearToDate),
             K::ItemizedPayees => ("Itemized Payees", DatePreset::YearToDate),
             K::IncomeExpense => ("Income/Expense by Category", DatePreset::YearToDate),
+            K::IncomeExpensePayee => ("Income/Expense by Payee", DatePreset::YearToDate),
             K::TaxSchedule => ("Tax Schedule", DatePreset::LastYear),
             K::TaxSummary => ("Tax Summary", DatePreset::YearToDate),
         };
@@ -233,6 +243,7 @@ impl ReportSettings {
             } else {
                 DetailSort::Date
             },
+            sort_desc: false,
             hidden_columns: Vec::new(),
             cents: true,
             totals_only: false,
@@ -317,6 +328,9 @@ pub enum Drill {
     /// A category's transactions for the column's period (an Itemized
     /// Categories report).
     Category { category: CategoryId },
+    /// A payee's transactions for the column's period (an Itemized Payees
+    /// report); `None` is transactions with no payee.
+    Payee { payee: Option<PayeeId> },
 }
 
 /// One row. `cells` line up with the report's columns; empty text is an
@@ -361,7 +375,12 @@ pub fn run(conn: &Connection, settings: &ReportSettings, today: Date) -> Result<
         }
         ReportKind::ItemizedPayees => itemized::build(conn, settings, range, itemized::By::Payee)?,
         ReportKind::TaxSummary => itemized::build(conn, settings, range, itemized::By::TaxSummary)?,
-        ReportKind::IncomeExpense => income_expense::build(conn, settings, range)?,
+        ReportKind::IncomeExpense => {
+            income_expense::build(conn, settings, range, income_expense::By::Category)?
+        }
+        ReportKind::IncomeExpensePayee => {
+            income_expense::build(conn, settings, range, income_expense::By::Payee)?
+        }
         ReportKind::TaxSchedule => tax::build(conn, settings, range)?,
     };
     tree::hide_columns(&mut report, &settings.hidden_columns);
@@ -381,6 +400,8 @@ pub fn columns(kind: ReportKind) -> Vec<Column> {
         ReportKind::ItemizedPayees => itemized::columns(itemized::By::Payee),
         ReportKind::TaxSummary => itemized::columns(itemized::By::TaxSummary),
         ReportKind::TaxSchedule => tax::columns(),
-        ReportKind::NetWorth | ReportKind::IncomeExpense => Vec::new(),
+        ReportKind::NetWorth | ReportKind::IncomeExpense | ReportKind::IncomeExpensePayee => {
+            Vec::new()
+        }
     }
 }

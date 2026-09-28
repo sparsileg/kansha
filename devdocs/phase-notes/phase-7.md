@@ -1,6 +1,6 @@
 # Phase 7 — Reports and dashboard
 
-Spec: 0.3.13. Engine, IPC, and UI in one pass. `just check` green.
+Spec: 0.3.14 (0.3.13 for the first pass). Engine, IPC, and UI in one pass. `just check` green.
 Built from `devdocs/reports.md`, Stan's Quicken samples in
 `report-samples/`, and the scope agreed in chat.
 
@@ -107,6 +107,31 @@ holdings, allocation, cash flow, transaction report, account balances
   transactions over 60 days old, integrity problems).
 - Menu: flat Reports menu with "Investing:", "Spending:", "Tax:"
   prefixes (no submenus yet); Capital Gains appears twice.
+
+## Toolbar follow-up (spec 0.3.14)
+
+Stan's six items, 2026-09-27:
+
+- Itemized Categories and Payees: "Sort by:" dropdown (Date/Account,
+  Account/Date, Amount). `DetailSort::Date` now breaks date ties by
+  account order.
+- Same reports: Date, Account, and Num headings sort; a second click
+  reverses. New `DetailSort::Num` (numbers numerically, then text, then
+  blank) and `ReportSettings.sort_desc`. Reversing flips the chosen
+  key only; ties stay in date and entry order.
+- Capital Gains: "Subtotal by:" dropdown; "Don't subtotal" last.
+- Income/Expense by Category and by Payee: "Interval:" dropdown.
+- New report Income/Expense by Payee (`ReportKind::IncomeExpensePayee`):
+  INCOME and EXPENSES, one row per payee (names ignoring case, no payee
+  last), no transfers. `Drill::Payee` opens Itemized Payees for that
+  payee and period; "(No payee)" opens it with the report's payee filter.
+  Menu: "Spending: Income/Expense by Payee".
+- Date Range dropdown always lists "Custom dates…": opens a From/To
+  dialog; "Change Dates…" reopens it while a custom range is shown.
+
+**⚠ API change:** `ReportKind` `income_expense_payee`, `DetailSort`
+`num`, `ReportSettings.sort_desc`, `Drill` `payee`; `just bindings` run.
+No schema change (settings JSON gains a defaulted field).
 
 ## Known gaps
 

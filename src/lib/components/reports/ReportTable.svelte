@@ -1,12 +1,26 @@
 <script lang="ts">
   // A report's table: the label column, then the report's columns.
   // Groups collapse and expand; a figure with a source opens it (RPT-030).
+  // With `sort`, the Date, Account, and Num headings sort the report.
   import { columnHeading, formatCell } from "../../format/report";
+  import { COLUMN_SORTS } from "../../reports/meta";
   import { flatten, type Line } from "../../reports/rows";
   import { reportState } from "../../state/reports.svelte";
-  import type { Column, Report } from "../../types/bindings";
+  import type { Column, DetailSort, Report } from "../../types/bindings";
 
-  let { report, ondrill }: { report: Report; ondrill: (line: Line, column: Column | null) => void } = $props();
+  let {
+    report,
+    ondrill,
+    sort = null,
+    onsort,
+  }: {
+    report: Report;
+    ondrill: (line: Line, column: Column | null) => void;
+    sort?: { by: DetailSort; desc: boolean } | null;
+    onsort?: (by: DetailSort) => void;
+  } = $props();
+
+  const sortOf = (c: Column): DetailSort | null => (sort && onsort ? (COLUMN_SORTS[c.id] ?? null) : null);
 
   const lines = $derived(flatten(report.rows, (p) => reportState.isCollapsed(p)));
   const numeric = (c: Column) => c.kind === "money" || c.kind === "quantity";
@@ -17,8 +31,19 @@
     <tr>
       <th class="label"></th>
       {#each report.columns as c (c.id)}
-        <th class:num={numeric(c)}>
-          {#each columnHeading(c) as part, i (i)}{#if i > 0}<br />{/if}{part}{/each}
+        {@const by = sortOf(c)}
+        {@const on = by !== null && sort?.by === by}
+        <th class:num={numeric(c)} aria-sort={on ? (sort?.desc ? "descending" : "ascending") : undefined}>
+          {#if by !== null}
+            <button
+              type="button"
+              class="sort"
+              title={on && !sort?.desc ? `Sort by ${c.label}, descending` : `Sort by ${c.label}, ascending`}
+              onclick={() => onsort?.(by)}
+            >{c.label}<span class="dir no-print" aria-hidden="true">{on ? (sort?.desc ? " ▼" : " ▲") : " ⇅"}</span></button>
+          {:else}
+            {#each columnHeading(c) as part, i (i)}{#if i > 0}<br />{/if}{part}{/each}
+          {/if}
         </th>
       {/each}
     </tr>
@@ -106,6 +131,20 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
+  }
+  .sort {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .sort:hover {
+    text-decoration: underline;
+  }
+  .dir {
+    font-size: 0.8em;
   }
   .fig {
     background: none;

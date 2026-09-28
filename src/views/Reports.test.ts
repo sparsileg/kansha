@@ -13,6 +13,7 @@ const defaults = (kind: string) => ({
   subtotal: "term",
   interval: "none",
   sort: "date",
+  sort_desc: false,
   hidden_columns: [],
   cents: true,
   totals_only: false,
@@ -138,5 +139,79 @@ describe("Reports view", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(create).toHaveBeenCalledWith("My gains", expect.objectContaining({ kind: "capital_gains" })));
     expect(reportState.saved?.name).toBe("My gains");
+  });
+  it("capital gains subtotals from the toolbar", async () => {
+    render(Reports);
+    const select = await screen.findByRole("combobox", { name: "Subtotal by:" });
+    const labels = Array.from((select as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual(["Short vs. long-term", "Month", "Quarter", "Year", "Account", "Security", "Don't subtotal"]);
+    await fireEvent.change(select, { target: { value: "security" } });
+    await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ subtotal: "security" })));
+    expect(screen.queryByRole("combobox", { name: "Sort by:" })).toBeNull();
+  });
+
+  it("custom dates open a dialog and apply its range", async () => {
+    render(Reports);
+    const select = await screen.findByRole("combobox", { name: "Date range" });
+    await fireEvent.change(select, { target: { value: "custom" } });
+    expect((select as HTMLSelectElement).value).toBe("last_year");
+    const from = screen.getByRole("textbox", { name: "From" });
+    const to = screen.getByRole("textbox", { name: "To" });
+    await fireEvent.input(from, { target: { value: "03/01/2025" } });
+    await fireEvent.change(from);
+    await fireEvent.input(to, { target: { value: "02/01/2025" } });
+    await fireEvent.change(to);
+    await fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.getByRole("alert").textContent).toContain("From must be on or before To");
+    await fireEvent.input(to, { target: { value: "06/30/2025" } });
+    await fireEvent.change(to);
+    await fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(
+        expect.objectContaining({ range: { preset: "custom", from: "2025-03-01", to: "2025-06-30" } }),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Change Dates…" })).toBeTruthy();
+  });
+});
+
+describe("Itemized report toolbar", () => {
+  const itemized = {
+    ...report,
+    kind: "itemized_categories",
+    title: "Itemized Categories",
+    columns: [
+      { id: "date", label: "Date", kind: "date", from: null, to: null },
+      { id: "account", label: "Account", kind: "text", from: null, to: null },
+      { id: "num", label: "Num", kind: "text", from: null, to: null },
+      { id: "amount", label: "Amount", kind: "money", from: null, to: null },
+    ],
+    rows: [],
+  };
+
+  beforeEach(async () => {
+    run.mockImplementation(() => ok(itemized));
+    await reportState.open("itemized_categories");
+  });
+
+  it("sorts from the Sort by dropdown", async () => {
+    render(Reports);
+    const select = await screen.findByRole("combobox", { name: "Sort by:" });
+    const labels = Array.from((select as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual(["Date/Account", "Account/Date", "Amount"]);
+    await fireEvent.change(select, { target: { value: "account_date" } });
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "account_date", sort_desc: false })),
+    );
+  });
+
+  it("column headings sort, and a second click reverses", async () => {
+    render(Reports);
+    await fireEvent.click(await screen.findByRole("button", { name: /^Num/ }));
+    await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "num", sort_desc: false })));
+    await fireEvent.click(await screen.findByRole("button", { name: /^Num/ }));
+    await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "num", sort_desc: true })));
+    expect(screen.getByRole("columnheader", { name: /Num/ }).getAttribute("aria-sort")).toBe("descending");
+    expect(screen.queryByRole("button", { name: /^Amount/ })).toBeNull();
   });
 });

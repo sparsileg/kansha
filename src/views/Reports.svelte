@@ -7,23 +7,42 @@
   import ReportTable from "../lib/components/reports/ReportTable.svelte";
   import SavedReportsModal from "../lib/components/reports/SavedReportsModal.svelte";
   import Modal from "../lib/components/Modal.svelte";
+  import DatePicker from "../lib/components/invest/DatePicker.svelte";
   import { commands } from "../lib/api";
   import { displayDate } from "../lib/format/date";
-  import { PRESETS, REPORTS, presetLabel } from "../lib/reports/meta";
+  import { INTERVALS, PRESETS, REPORTS, SORTABLE, SORTS, SUBTOTALS, presetLabel } from "../lib/reports/meta";
   import type { Line } from "../lib/reports/rows";
   import { openAccount } from "../lib/shell/nav";
   import { listsState } from "../lib/state/lists.svelte";
   import { registerState } from "../lib/state/register.svelte";
   import { reportState as st } from "../lib/state/reports.svelte";
   import { viewState } from "../lib/state/view.svelte";
-  import type { CategoryId, Column, DatePreset, ReportKind, SavedReport } from "../lib/types/bindings";
+  import type {
+    CategoryId,
+    Column,
+    DatePreset,
+    DetailSort,
+    Interval,
+    ReportKind,
+    ReportSettings,
+    SavedReport,
+    Subtotal,
+  } from "../lib/types/bindings";
 
   let customizing = $state(false);
   let saving = $state<null | "save" | "as">(null);
   let saveName = $state("");
   let saveError = $state<string | null>(null);
+  /** The Custom dates dialog's fields (ISO; empty From is the first
+   * transaction). */
+  let custom = $state<null | { from: string; to: string }>(null);
+  let customError = $state<string | null>(null);
 
   const report = $derived(st.report);
+  /** Sortable column headings: itemized reports only. */
+  const tableSort = $derived(
+    st.settings && SORTABLE.includes(st.settings.kind) ? { by: st.settings.sort ?? "date", desc: st.settings.sort_desc ?? false } : null,
+  );
   const heading = $derived.by(() => {
     if (!st.settings) return "";
     const p = st.settings.range.preset;
@@ -37,9 +56,48 @@
       : `Through ${displayDate(report.to)}`;
   });
 
-  async function quickRange(preset: string) {
+  /** Apply one toolbar change to the open report. */
+  async function change(patch: Partial<ReportSettings>) {
     if (!st.settings) return;
-    await st.apply({ ...$state.snapshot(st.settings), range: { preset: preset as DatePreset, from: null, to: null } });
+    await st.apply({ ...$state.snapshot(st.settings), ...patch });
+  }
+
+  async function quickRange(select: HTMLSelectElement) {
+    if (!st.settings) return;
+    if (select.value === "custom") {
+      // The select shows the current range until the dialog is confirmed.
+      select.value = st.settings.range.preset;
+      openCustom();
+      return;
+    }
+    await change({ range: { preset: select.value as DatePreset, from: null, to: null } });
+  }
+
+  function openCustom() {
+    customError = null;
+    custom = { from: report?.from ?? "", to: report?.to ?? listsState.today };
+  }
+
+  async function applyCustom(e: Event) {
+    e.preventDefault();
+    if (!custom) return;
+    if (!custom.to) {
+      customError = "Enter the To date.";
+      return;
+    }
+    if (custom.from && custom.from > custom.to) {
+      customError = "From must be on or before To.";
+      return;
+    }
+    const range = { preset: "custom" as DatePreset, from: custom.from || null, to: custom.to };
+    custom = null;
+    await change({ range });
+  }
+
+  /** A sortable heading was clicked: sort on it, or reverse its order. */
+  async function sortBy(by: DetailSort) {
+    if (!st.settings) return;
+    await change(st.settings.sort === by ? { sort_desc: !st.settings.sort_desc } : { sort: by, sort_desc: false });
   }
 
   function startSave(mode: "save" | "as") {
@@ -103,6 +161,23 @@
         });
         break;
       }
+      case "payee": {
+        const from = column?.from ?? report.from;
+        const to = column?.to ?? report.to;
+        const base = $state.snapshot(st.settings);
+        const s = await commands.reportDefaults("itemized_payees");
+        await st.openWith({
+          ...s,
+          range: { preset: "custom", from, to },
+          accounts: base.accounts,
+          categories: base.categories,
+          tags: base.tags,
+          payees: d.payee === null ? base.payees : [d.payee],
+          transfers: false,
+          title: `Itemized Payees: ${line.label}`,
+        });
+        break;
+      }
     }
   }
 
@@ -117,6 +192,7 @@
     "itemized_categories",
     "itemized_payees",
     "income_expense",
+    "income_expense_payee",
     "tax_schedule",
     "tax_summary",
   ];
@@ -127,10 +203,36 @@
     <div class="bar no-print">
       <label>
         Date range
-        <select value={st.settings.range.preset} onchange={(e) => quickRange(e.currentTarget.value)}>
-          {#each PRESETS as [v, label] (v)}{#if v !== "custom" || st.settings.range.preset === "custom"}<option value={v}>{label}</option>{/if}{/each}
+        <select value={st.settings.range.preset} onchange={(e) => quickRange(e.currentTarget)}>
+          {#each PRESETS as [v, label] (v)}<option value={v}>{v === "custom" ? `${label}…` : label}</option>{/each}
         </select>
       </label>
+      {#if st.settings.range.preset === "custom"}<button type="button" onclick={openCustom}>Change Dates…</button>{/if}
+      {#if SORTABLE.includes(st.settings.kind)}
+        <label>
+          Sort by:
+          <select value={st.settings.sort} onchange={(e) => change({ sort: e.currentTarget.value as DetailSort, sort_desc: false })}>
+            {#each SORTS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+            {#if st.settings.sort === "num"}<option value="num">Num</option>{/if}
+          </select>
+        </label>
+      {/if}
+      {#if st.settings.kind === "capital_gains"}
+        <label>
+          Subtotal by:
+          <select value={st.settings.subtotal} onchange={(e) => change({ subtotal: e.currentTarget.value as Subtotal })}>
+            {#each SUBTOTALS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+          </select>
+        </label>
+      {/if}
+      {#if st.settings.kind === "income_expense" || st.settings.kind === "income_expense_payee"}
+        <label>
+          Interval:
+          <select value={st.settings.interval} onchange={(e) => change({ interval: e.currentTarget.value as Interval })}>
+            {#each INTERVALS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+          </select>
+        </label>
+      {/if}
       <button type="button" onclick={() => (customizing = true)}>Customize…</button>
       <button type="button" onclick={() => startSave("save")}>{st.saved ? "Save" : "Save…"}</button>
       {#if st.saved}<button type="button" onclick={() => startSave("as")}>Save As…</button>{/if}
@@ -157,7 +259,12 @@
       {#if report}
         {#if report.chart}<ReportChart chart={report.chart} />{/if}
         <div class="table">
-          <ReportTable {report} ondrill={drill} />
+          <ReportTable
+            {report}
+            ondrill={drill}
+            sort={tableSort}
+            onsort={sortBy}
+          />
         </div>
       {/if}
     </div>
@@ -183,6 +290,24 @@
 {/if}
 {#if st.savedOpen}
   <SavedReportsModal onopen={openSaved} onclose={() => (st.savedOpen = false)} />
+{/if}
+{#if custom}
+  <Modal title="Custom dates" onclose={() => (custom = null)}>
+    <form class="save" onsubmit={applyCustom}>
+      <div class="dates">
+        <span>From:</span>
+        <DatePicker label="From" value={custom.from} today={listsState.today} onchange={(d) => custom && (custom.from = d)} />
+        <span>To:</span>
+        <DatePicker label="To" value={custom.to} today={listsState.today} onchange={(d) => custom && (custom.to = d)} />
+      </div>
+      {#if customError}<p class="err" role="alert">{customError}</p>{/if}
+      <div class="buttons">
+        <span class="grow"></span>
+        <button type="button" onclick={() => (custom = null)}>Cancel</button>
+        <button type="submit">OK</button>
+      </div>
+    </form>
+  </Modal>
 {/if}
 {#if saving}
   <Modal title={saving === "as" ? "Save report as" : "Save report"} onclose={() => (saving = null)}>
@@ -272,6 +397,13 @@
   .save label {
     display: grid;
     gap: 0.15rem;
+  }
+  .dates {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 0.4rem 0.5rem;
+    align-items: center;
+    justify-content: start;
   }
   .buttons {
     display: flex;

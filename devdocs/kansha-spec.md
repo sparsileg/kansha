@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.13 (draft) |
+| **Document version** | 0.3.14 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-27 |
 | **Owner** | Stan |
@@ -357,19 +357,19 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 
 #### 12.2 Reports in 1.0
 
-- **RPT-100** [1.0][S] **Spending/Income by category** — for a period, with subcategory rollup; optionally by month (columns) to show trends.
+- **RPT-100** [1.0][S] **Spending/Income by category** — for a period, with subcategory rollup; optionally by period (columns: week, two weeks, half month, month, quarter, half year, year) to show trends. The same report **by payee** totals each payee.
 - **RPT-110** [1.0][S] **Net worth** — as of a date and over time (graph), by account group.
 - **RPT-120** [1.0][S] **Account balances/status** — all or selected accounts as of a date.
 - **RPT-130** [1.0][S] **Tithing report** — tithable income (CAT-040 flagged categories) × configurable percentage, versus giving recorded, with balance, for a chosen period.
 - **RPT-140** [1.0][S] **Tax summary** — totals of tax-related categories, investment income (dividends, interest, capital gain distributions), taxable realized gains (short/long-term), and withholdings, for a tax year. This supports tax estimation; it does not compute tax (planning is out of scope).
 - **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line (CAT-050) with their transactions, from taxable accounts; Schedule D by holding period from lot disposals. No overall total.
-- **RPT-150** [1.0][S] **Realized gains detail** (Capital Gains) — lot-level sales for a period, suitable for checking against broker Form 1099-B.
+- **RPT-150** [1.0][S] **Realized gains detail** (Capital Gains) — lot-level sales for a period, suitable for checking against broker Form 1099-B. Subtotal by short vs. long-term, month, quarter, year, account, or security, or none.
 - **RPT-160** [1.0][R] **Investment income** — by security and account, for a period.
 - **RPT-170** [1.0][R] **Holdings/portfolio value** — positions, market value, basis, unrealized gain, as of a date.
 - **RPT-180** [1.0][S] **Asset allocation** — table and chart.
 - **RPT-190** [1.0][R] **Cash flow** — inflows vs. outflows by month, excluding transfers between own accounts.
 - **RPT-200** [1.0][R] **Transaction report** — filtered list of transactions (general-purpose query tool).
-- **RPT-205** [1.0][S] **Itemized Categories** and **Itemized Payees** — transactions grouped under INCOME, EXPENSES, and TRANSFERS by category (with subcategories) or by payee, with totals.
+- **RPT-205** [1.0][S] **Itemized Categories** and **Itemized Payees** — transactions grouped under INCOME, EXPENSES, and TRANSFERS by category (with subcategories) or by payee, with totals. Transactions sort by date then account, account then date, amount, or check number, ascending or descending.
 - **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
 - **RPT-310** [Later][R] Performance reports (TWR/IRR).
 
@@ -945,6 +945,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.14 | 2026-09-27 | Report toolbar: RPT-100 gains Income/Expense by Payee and the full interval list; RPT-150 lists its subtotals; RPT-205 gains sort by check number and descending order. No schema change. |
 | 0.3.13 | 2026-09-27 | Phase 7 (reports and dashboard). CAT-050 moved to 1.0 and built (migration 0003: tax lines; category and account transfer mappings). RPT-020 describes the shared Customize dialog. RPT-050 and RPT-150 accepted. RPT-145 (Tax Schedule) and RPT-205 (Itemized Categories and Payees) added. D-140 decided: hand-drawn SVG graphs. §16.3 PDF export through the print dialog. §18 gains report rules. |
 | 0.3.12 | 2026-09-26 | POS-040 rewritten: the Investments screen (account, equity, and lot tree with named views, as-of date, and day change) replaces the six account tabs; an investment account opens as a register. Income, Performance, and realized gains wait for the reports. New IPC command `inv_portfolio`. No schema change. |
 | 0.3.11 | 2026-09-24 | Phase 6 (investments). §18 gains investment rules (postings per action, lot selection and rounding, splits, return of capital, the date-order rule for a holding's history, linked cash, money market funds, stale prices, account list value, investment cash reconciliation, lot seeding as an import, new integrity checks). §18 reconciliation rules: investment accounts with their own cash reconcile. LOT-115: refused until built, not in Phase 6. No schema change. |
