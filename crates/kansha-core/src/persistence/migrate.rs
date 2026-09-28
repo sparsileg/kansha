@@ -33,6 +33,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description: "occurrence review flag",
         sql: include_str!("migrations/0002_occurrence_review.sql"),
     },
+    Migration {
+        version: 3,
+        description: "tax lines",
+        sql: include_str!("migrations/0003_tax_lines.sql"),
+    },
 ];
 
 /// The newest schema version this build understands.

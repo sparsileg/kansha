@@ -14,8 +14,8 @@ use crate::error::{Error, Result};
 const COLUMNS: &str = "id, name, type, account_group, tax_treatment, description, institution,
     account_number, contact_phone, home_url, notes, opening_date, show_in_bar, show_in_list,
     sort_order, interest_rate, credit_limit, account_subtype, cash_mode, linked_cash_account_id,
-    mmf_mode, default_lot_method, asset_subtype, linked_liability_account_id, status,
-    closed_date, created_at";
+    mmf_mode, default_lot_method, asset_subtype, linked_liability_account_id, tax_line_out_id,
+    tax_line_in_id, status, closed_date, created_at";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Account> {
     let investment = match r.get::<_, Option<crate::accounts::CashMode>>("cash_mode")? {
@@ -56,6 +56,8 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Account> {
             credit_limit: r.get("credit_limit")?,
             investment,
             other_asset,
+            tax_line_out: r.get("tax_line_out_id")?,
+            tax_line_in: r.get("tax_line_in_id")?,
         },
         status: r.get("status")?,
         closed_date: r.get("closed_date")?,
@@ -170,10 +172,12 @@ pub fn insert(tx: &Tx<'_>, f: &AccountFields) -> Result<Account> {
              institution, account_number, contact_phone, home_url, notes, opening_date,
              show_in_bar, show_in_list, sort_order, interest_rate, credit_limit,
              account_subtype, cash_mode, linked_cash_account_id, mmf_mode, default_lot_method,
-             asset_subtype, linked_liability_account_id, created_at)
+             asset_subtype, linked_liability_account_id, tax_line_out_id, tax_line_in_id,
+             created_at)
          VALUES (:name, :type, :grp, :tax, :description, :institution, :number, :phone, :url,
              :notes, :opening, :bar, :list, :sort, :rate, :limit, :subtype, :cash_mode,
-             :linked_cash, :mmf, :lot, :asset_subtype, :linked_liability, :created_at)",
+             :linked_cash, :mmf, :lot, :asset_subtype, :linked_liability, :tax_out, :tax_in,
+             :created_at)",
         named_params! {
             ":name": f.name.trim(),
             ":type": f.account_type,
@@ -198,6 +202,8 @@ pub fn insert(tx: &Tx<'_>, f: &AccountFields) -> Result<Account> {
             ":lot": inv.map(|i| i.default_lot_method),
             ":asset_subtype": oa.map(|o| o.subtype),
             ":linked_liability": oa.and_then(|o| o.linked_liability),
+            ":tax_out": f.tax_line_out,
+            ":tax_in": f.tax_line_in,
             ":created_at": tx.now(),
         },
     )?;
@@ -274,7 +280,8 @@ pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> 
              show_in_bar = :bar, show_in_list = :list, sort_order = :sort, interest_rate = :rate,
              credit_limit = :limit, account_subtype = :subtype, cash_mode = :cash_mode,
              linked_cash_account_id = :linked_cash, mmf_mode = :mmf, default_lot_method = :lot,
-             asset_subtype = :asset_subtype, linked_liability_account_id = :linked_liability
+             asset_subtype = :asset_subtype, linked_liability_account_id = :linked_liability,
+             tax_line_out_id = :tax_out, tax_line_in_id = :tax_in
          WHERE id = :id",
         named_params! {
             ":id": id,
@@ -300,6 +307,8 @@ pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> 
             ":lot": inv.map(|i| i.default_lot_method),
             ":asset_subtype": oa.map(|o| o.subtype),
             ":linked_liability": oa.and_then(|o| o.linked_liability),
+            ":tax_out": f.tax_line_out,
+            ":tax_in": f.tax_line_in,
         },
     )?;
     let after = get(tx.conn(), id)?;

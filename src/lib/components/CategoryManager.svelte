@@ -13,6 +13,7 @@
     tax_related: false,
     tithable: false,
     giving: false,
+    tax_line: null,
     hidden: false,
   });
 
@@ -33,6 +34,7 @@
           tax_related: c.tax_related,
           tithable: c.tithable,
           giving: c.giving,
+          tax_line: c.tax_line,
           hidden: c.hidden,
         }
       : blank();
@@ -99,7 +101,7 @@
           <tr class:sel={selected?.id === c.id} class:dim={c.hidden} onclick={() => pick(c)}>
             <td>{listsState.categoryPath(c.id)}{c.system ? " (built-in)" : ""}</td>
             <td>{c.kind}</td>
-            <td>{[c.tax_related && "tax", c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
+            <td>{[c.tax_related && "tax", c.tax_line !== null && listsState.taxLineLabel(c.tax_line), c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
           </tr>
         {/each}
       </tbody>
@@ -107,7 +109,7 @@
   </div>
   <form onsubmit={save}>
     <h3>{selected ? "Edit category" : "New category"}</h3>
-    {#if locked}<p class="note">Built-in category: it can't be changed.</p>{/if}
+    {#if locked}<p class="note">Built-in category: only its tax settings and Hidden can change.</p>{/if}
     <label>Name <input bind:value={f.name} required disabled={locked} /></label>
     <label>
       Kind
@@ -127,11 +129,21 @@
         {#each parents as p (p.id)}<option value={p.id}>{listsState.categoryPath(p.id)}</option>{/each}
       </select>
     </label>
-    <label class="check"><input type="checkbox" bind:checked={f.tax_related} disabled={locked} /> Tax-related</label>
-    <label class="check"><input type="checkbox" bind:checked={f.hidden} disabled={locked} /> Hidden</label>
+    <label class="check"><input type="checkbox" bind:checked={f.tax_related} /> Tax-related</label>
+    <label>
+      Tax line
+      <select
+        value={f.tax_line ?? ""}
+        onchange={(e) => (f.tax_line = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+      >
+        <option value="">(none)</option>
+        {#each listsState.taxLines as t (t.id)}<option value={t.id}>{t.form}: {t.line}</option>{/each}
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" bind:checked={f.hidden} /> Hidden</label>
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <div class="row">
-      <button type="submit" disabled={locked}>Save</button>
+      <button type="submit">Save</button>
       <button type="button" onclick={() => pick(null)}>New</button>
       {#if selected && !locked}<button type="button" onclick={remove}>Delete</button>{/if}
     </div>

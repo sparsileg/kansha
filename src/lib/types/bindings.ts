@@ -301,6 +301,26 @@ export const commands = {
 	 *  number of lots created.
 	 */
 	lotSeed: (fileName: string, text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("lot_seed", { fileName, text, date })),
+	/**  A report's standard settings. */
+	reportDefaults: (kind: ReportKind) => __TAURI_INVOKE<ReportSettings>("report_defaults", { kind }),
+	/**  The columns a report can show, for the Customize dialog. */
+	reportColumns: (kind: ReportKind) => __TAURI_INVOKE<Column[]>("report_columns", { kind }),
+	/**  A date range's dates today. */
+	reportRange: (range: DateRange) => typedError<ResolvedRange, IpcError>(__TAURI_INVOKE("report_range", { range })),
+	reportRun: (settings: ReportSettings) => typedError<Report, IpcError>(__TAURI_INVOKE("report_run", { settings })),
+	/**
+	 *  Write the report as CSV to the Downloads folder (RPT-050); returns
+	 *  the file's path. An existing file is never overwritten.
+	 */
+	reportExportCsv: (settings: ReportSettings) => typedError<string, IpcError>(__TAURI_INVOKE("report_export_csv", { settings })),
+	savedReportList: () => typedError<SavedReport[], IpcError>(__TAURI_INVOKE("saved_report_list")),
+	savedReportCreate: (name: string, settings: ReportSettings) => typedError<SavedReport, IpcError>(__TAURI_INVOKE("saved_report_create", { name, settings })),
+	savedReportUpdate: (id: SavedReportId, name: string, settings: ReportSettings) => typedError<SavedReport, IpcError>(__TAURI_INVOKE("saved_report_update", { id, name, settings })),
+	savedReportDelete: (id: SavedReportId) => typedError<null, IpcError>(__TAURI_INVOKE("saved_report_delete", { id })),
+	/**  Every tax line, in form and line order (CAT-050). */
+	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
+	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
+	dashboard: (upcomingDays: number) => typedError<Dashboard, IpcError>(__TAURI_INVOKE("dashboard", { upcomingDays })),
 };
 
 /* Types */
@@ -348,6 +368,16 @@ export type AccountFields = {
 	investment: InvestmentSettings | null,
 	/**  Required for Other Asset; absent otherwise. */
 	other_asset: OtherAssetSettings | null,
+	/**
+	 *  CAT-050: tax line for transfers out of this account (money
+	 *  leaving it, e.g. an IRA distribution).
+	 */
+	tax_line_out: TaxLineId | null,
+	/**
+	 *  CAT-050: tax line for transfers into this account (e.g. an HSA
+	 *  contribution).
+	 */
+	tax_line_in: TaxLineId | null,
 };
 
 /**  Account list groups (ACCT-240). */
@@ -466,6 +496,8 @@ export type CategoryFields = {
 	tax_related: boolean,
 	tithable: boolean,
 	giving: boolean,
+	/**  CAT-050: the tax form line this category's amounts belong to. */
+	tax_line: TaxLineId | null,
 	/**  CAT-030: hide instead of delete. */
 	hidden: boolean,
 };
@@ -486,6 +518,15 @@ export type ChangedTxn = {
 	now: string,
 	/**  The latest change: `create`, `update`, `void`, or `delete`. */
 	action: AuditAction,
+};
+
+/**  A graph over dates: bars and lines against one money axis. */
+export type Chart = {
+	dates: string[],
+	series: Series[],
+	ticks: Tick[],
+	/**  Where zero sits: bars grow from here. */
+	zero: number,
 };
 
 /**  Which invariant failed. */
@@ -541,6 +582,22 @@ export type Cleared = "unmarked" | "cleared" |
 /**  Set only by reconciliation (Phase 5) or an import (MIG-090). */
 "reconciled";
 
+/**  One column. The row label column comes first and is not listed. */
+export type Column = {
+	id: string,
+	label: string,
+	kind: ColumnKind,
+	/**
+	 *  Period columns: the dates they cover (a balance column has only
+	 *  `to`), for drilling into one period.
+	 */
+	from: string | null,
+	to: string | null,
+};
+
+/**  How a column's cells read and align. */
+export type ColumnKind = "text" | "date" | "money" | "quantity";
+
 /**  What sits on the other side of a register row. */
 export type Counterpart = 
 /**  No other posting (a zero-amount entry). */
@@ -548,11 +605,54 @@ export type Counterpart =
 /**  More than one other posting (REG-050 "--Split--"). */
 { kind: "split" };
 
+/**  The dashboard's figures. */
+export type Dashboard = {
+	today: string,
+	/**  Assets minus liabilities today (DSH-010). */
+	net_worth: string,
+	/**  Checking, savings, cash, and money market accounts. */
+	cash: string,
+	/**  Investment accounts at market value. */
+	investments: string,
+	/**  Every other asset (houses, vehicles, ...). */
+	other_assets: string,
+	/**  Owed on credit cards, loans, and other liabilities (positive). */
+	liabilities: string,
+	/**  This month so far. */
+	month_from: string,
+	income: string,
+	/**  Spent (positive). */
+	expenses: string,
+	/**  Income minus spending. */
+	net: string,
+	/**  Net worth at each of the last twelve month ends, today last. */
+	trend: Chart,
+	/**  Overdue and upcoming scheduled transactions (DSH-020). */
+	upcoming: OccurrenceView[],
+	upcoming_days: number,
+	warnings: Warning[],
+};
+
+/**  Date range presets (RPT-040). */
+export type DatePreset = "all_dates" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
+
+/**  A date range: a preset, or `Custom` with its own dates. */
+export type DateRange = {
+	preset: DatePreset,
+	/**  `Custom` only; `None` means from the first transaction. */
+	from: string | null,
+	/**  `Custom` only; `None` means today. */
+	to: string | null,
+};
+
 /**  Projected balance at the end of a day (CAL-050). */
 export type DayBalance = {
 	date: string,
 	balance: string,
 };
+
+/**  Order of transactions inside a group. */
+export type DetailSort = "date" | "account_date" | "amount";
 
 /**  Shares leaving a lot. A sale is a realized gain record (LOT-040). */
 export type Disposal = {
@@ -567,6 +667,18 @@ export type Disposal = {
 
 /**  Why shares left a lot. */
 export type DisposalKind = "sale" | "transfer_out" | "removed";
+
+/**  Where a figure comes from (RPT-030). */
+export type Drill = 
+/**  One transaction, shown in this account's register. */
+{ kind: "txn"; account: AccountId; txn: TxnId; date: string } | 
+/**  An account's register up to the column's date. */
+{ kind: "account"; account: AccountId } | 
+/**
+ *  A category's transactions for the column's period (an Itemized
+ *  Categories report).
+ */
+{ kind: "category"; category: CategoryId };
 
 /**  When a schedule stops (REC-030). */
 export type End = { kind: "never" } | 
@@ -728,6 +840,9 @@ export type IncomeRow = {
 export type IntegrityReport = {
 	issues: Issue[],
 };
+
+/**  Column periods (income and expense) and balance dates (net worth). */
+export type Interval = "none" | "week" | "two_weeks" | "half_month" | "month" | "quarter" | "half_year" | "year";
 
 /**  Investment transaction types (INV-010). */
 export type InvAction = "buy" | "sell" | "dividend" | "interest" | "reinvest_dividend" | "reinvest_cg_short" | "reinvest_cg_long" | "cg_dist_short" | "cg_dist_long" | "return_of_capital" | "split" | "transfer_shares" | "shares_added" | "shares_removed" | "cash_in" | "cash_out" | "fee" | "tax_withholding" | "misc_income" | "misc_expense";
@@ -1395,6 +1510,108 @@ export type RegisterSummary = {
 	available_credit: string | null,
 };
 
+/**  A finished report. */
+export type Report = {
+	kind: ReportKind,
+	title: string,
+	/**  A line under the dates, e.g. "(Includes unrealized gains)". */
+	note: string,
+	from: string | null,
+	to: string,
+	/**  Balances as of `to` rather than a period. */
+	as_of: boolean,
+	/**  Money shows cents; otherwise it is already rounded to dollars. */
+	cents: boolean,
+	columns: Column[],
+	rows: Row[],
+	chart: Chart | null,
+};
+
+/**  The reports Kansha builds. */
+export type ReportKind = 
+/**  Realized gains by lot (RPT-150). */
+"capital_gains" | 
+/**  Balances by account over time, with a graph (RPT-110). */
+"net_worth" | 
+/**  Transactions by category (RPT-100, RPT-200). */
+"itemized_categories" | 
+/**  Transactions by payee. */
+"itemized_payees" | 
+/**  Category totals, optionally by period (RPT-100). */
+"income_expense" | 
+/**  Tax-line totals and their transactions (CAT-050). */
+"tax_schedule" | 
+/**  Tax-related categories and their transactions (RPT-140). */
+"tax_summary";
+
+/**
+ *  Everything the Customize dialog sets (RPT-020). Filters are `None` for
+ *  "all"; a list names exactly what is included. Options a report does
+ *  not use are ignored.
+ */
+export type ReportSettings = {
+	kind: ReportKind,
+	title: string,
+	range: DateRange,
+	/**  Capital gains. */
+	subtotal?: Subtotal,
+	/**  Net worth, income and expense. */
+	interval?: Interval,
+	/**  Itemized and tax reports. */
+	sort?: DetailSort,
+	/**  Column IDs not shown. */
+	hidden_columns?: string[],
+	/**  Show cents; otherwise amounts round to whole dollars. */
+	cents?: boolean,
+	/**  Groups and totals only, no transactions. */
+	totals_only?: boolean,
+	/**  Net worth: list accounts whose balances are all zero. */
+	show_zero?: boolean,
+	/**  Itemized reports: include transfers between accounts. */
+	transfers?: boolean,
+	/**
+	 *  `None` is every account, except Capital Gains, where it is every
+	 *  taxable investment account.
+	 */
+	accounts?: AccountId[] | null,
+	categories?: CategoryId[] | null,
+	payees?: PayeeId[] | null,
+	securities?: SecurityId[] | null,
+	tags?: TagId[] | null,
+};
+
+/**
+ *  A range resolved against today: `from` is `None` when no transaction
+ *  exists yet under "all dates".
+ */
+export type ResolvedRange = {
+	from: string | null,
+	to: string,
+};
+
+/**
+ *  One row. `cells` line up with the report's columns; empty text is an
+ *  empty cell. A group's money cells hold its totals.
+ */
+export type Row = {
+	kind: RowKind,
+	label: string,
+	cells: string[],
+	drill: Drill | null,
+	children: Row[],
+};
+
+/**  What a row is. */
+export type RowKind = 
+/**  Top level: INCOME, EXPENSES, ASSETS, a tax form. */
+"section" | 
+/**  A category, payee, account group, or other grouping. */
+"group" | 
+/**  One transaction, lot, or account. */
+"detail" | 
+/**  The closing total of the whole report. */
+"total";
+
 /**  What was generated. */
 export type SampleSummary = {
 	accounts: number,
@@ -1402,6 +1619,16 @@ export type SampleSummary = {
 	payees: number,
 	txns: number,
 };
+
+/**  A saved report (RPT-020). */
+export type SavedReport = {
+	id: SavedReportId,
+	name: string,
+	settings: ReportSettings,
+};
+
+/**  Row ID of a saved report. */
+export type SavedReportId = number;
 
 /**  A stored schedule. */
 export type Schedule = {
@@ -1557,6 +1784,18 @@ export type SeedTotal = {
 	basis: string,
 };
 
+/**  One series: a value per date. */
+export type Series = {
+	name: string,
+	style: SeriesStyle,
+	values: string[],
+	/**  Each value's position, 0 ..= 10 000. */
+	pos: number[],
+};
+
+/**  How a series is drawn. */
+export type SeriesStyle = "bar" | "line";
+
 /**  An in-progress reconciliation, worked out for display (RCN-020 step 3). */
 export type Session = {
 	reconciliation: Reconciliation,
@@ -1615,6 +1854,9 @@ export type StatementItem = {
 	category: CategoryId,
 };
 
+/**  Capital gains grouping ("Subtotal by"). */
+export type Subtotal = "none" | "term" | "month" | "quarter" | "year" | "account" | "security";
+
 /**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
 export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";
 
@@ -1636,11 +1878,33 @@ export type TagId = number;
 /**  What a posting is to. */
 export type Target = { kind: "account"; id: AccountId } | { kind: "category"; id: CategoryId };
 
+/**
+ *  One line of a tax form, e.g. "Schedule A" / "Real estate taxes"
+ *  (CAT-050). The list is built in (migration 0003).
+ */
+export type TaxLine = {
+	id: TaxLineId,
+	form: string,
+	line: string,
+	/**  Forms in return order, lines in form order. */
+	sort_order: number,
+};
+
+/**  Row ID of a tax line (CAT-050). */
+export type TaxLineId = number;
+
 /**  Tax treatment (ACCT-030). */
 export type TaxTreatment = "taxable" | "tax_deferred" | "tax_exempt";
 
 /**  Holding period (LOT-040): one year or less is short. */
 export type Term = "short" | "long";
+
+/**  An axis mark. */
+export type Tick = {
+	/**  "2.5M", "500K", "250". */
+	label: string,
+	pos: number,
+};
 
 /**  A stored transaction with its postings in line order. */
 export type Txn = {
@@ -1664,6 +1928,17 @@ export type TxnSource = { kind: "manual" } | { kind: "import"; batch: number } |
 
 /**  Normal or voided (TXN-040). */
 export type TxnStatus = "normal" | "void";
+
+/**  Something that needs attention. */
+export type Warning = {
+	kind: WarningKind,
+	message: string,
+	/**  The account to open, if any. */
+	account: AccountId | null,
+};
+
+/**  What a warning is about (DSH-030). */
+export type WarningKind = "stale_price" | "missing_price" | "unreconciled" | "integrity";
 
 /**  What to do when a due date falls on a weekend (REC-050). */
 export type WeekendRule = "none" | "previous" | "next";

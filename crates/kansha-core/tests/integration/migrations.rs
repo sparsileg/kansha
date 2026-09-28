@@ -34,6 +34,7 @@ const TABLES: &[&str] = &[
     "security",
     "setting",
     "tag",
+    "tax_line",
     "txn",
 ];
 
@@ -263,5 +264,66 @@ fn migration_0002_adds_the_review_flag_and_keeps_existing_occurrences() {
         db.conn()
             .execute("UPDATE schedule_occurrence SET needs_review = 2", [])
             .is_err()
+    );
+}
+
+#[test]
+fn migration_0003_adds_tax_lines_and_maps_investment_income() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 2).unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO category (kind, name, created_at)
+             VALUES ('expense', 'Property Tax', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let line_of = |key: &str| -> Option<String> {
+        c.query_row(
+            "SELECT t.form || ':' || t.line FROM category c
+             LEFT JOIN tax_line t ON t.id = c.tax_line_id WHERE c.system_key = ?1",
+            [key],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        line_of("interest").as_deref(),
+        Some("Schedule B:Interest income")
+    );
+    assert_eq!(
+        line_of("dividends").as_deref(),
+        Some("Schedule B:Dividend income")
+    );
+    assert_eq!(
+        line_of("cg_dist_short").as_deref(),
+        Some("Schedule B:Dividend income")
+    );
+    assert_eq!(
+        line_of("cg_dist_long").as_deref(),
+        Some("1099-DIV:Total capital gain distr.")
+    );
+    assert_eq!(line_of("realized_gain"), None);
+    // The user's category survives, unmapped.
+    let user: Option<i64> = c
+        .query_row(
+            "SELECT tax_line_id FROM category WHERE name = 'Property Tax'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(user, None);
+    assert!(count(&db, "tax_line") >= 30);
+    // Accounts take transfer lines; a missing line is refused.
+    assert!(
+        c.execute(
+            "INSERT INTO account (name, type, account_group, tax_treatment, tax_line_out_id,
+                 created_at)
+             VALUES ('X', 'checking', 'banking', 'taxable', 9999, '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .is_err()
     );
 }

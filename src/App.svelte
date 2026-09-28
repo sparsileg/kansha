@@ -31,6 +31,7 @@
   import EmptyBook from "./views/EmptyBook.svelte";
   import Manage from "./views/Manage.svelte";
   import Reconcile from "./views/Reconcile.svelte";
+  import Reports from "./views/Reports.svelte";
   import Scheduled from "./views/Scheduled.svelte";
   import Search from "./views/Search.svelte";
 
@@ -55,6 +56,7 @@
     reconcile: Reconcile,
     search: Search,
     investments: Investments,
+    reports: Reports,
   };
   const View = $derived(views[viewState.current]);
 </script>
@@ -169,6 +171,12 @@
     --focus-glow: rgba(31, 111, 235, 0.35);
     --sel-bg: #1f6feb;
     --sel-fg: #fff;
+    /* Graphs: blue and orange stay apart for a red-green colorblind eye;
+       series also differ by pattern and shape. */
+    --chart-1: #1f5fa8;
+    --chart-2: #c25400;
+    --chart-2-light: #f7dcc4;
+    --chart-line: #1a1a1a;
   }
   .app[data-theme="dark"] {
     --bg: #1e1e1e;
@@ -186,6 +194,10 @@
     --focus-glow: rgba(255, 216, 77, 0.35);
     --sel-bg: #7cc0ff;
     --sel-fg: #111;
+    --chart-1: #6fb0ff;
+    --chart-2: #ff9f5a;
+    --chart-2-light: #4d2c12;
+    --chart-line: #f2f2f2;
     background: #1e1e1e;
     color: #eee;
   }
@@ -213,5 +225,31 @@
   .err {
     color: var(--bad, #a83200);
     margin: 0.5rem;
+  }
+  /* Printing (RPT-050) shows only the view: no menus, bars, or account
+     list, and nothing clipped by the fixed window. */
+  @media print {
+    :global(html),
+    :global(body) {
+      height: auto;
+      overflow: visible;
+    }
+    .app {
+      position: static;
+      display: block;
+      background: #fff;
+      color: #000;
+    }
+    .app > :global(:not(.body)),
+    .body > :global(:not(main)),
+    :global(.no-print) {
+      display: none !important;
+    }
+    .body,
+    main {
+      display: block;
+      overflow: visible;
+      padding: 0;
+    }
   }
 </style>

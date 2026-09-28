@@ -312,6 +312,18 @@ const CATEGORIES: &[(&str, CategoryKind, bool, bool, bool)] = &[
     ("Bank Fees", CategoryKind::Expense, false, false, false),
 ];
 
+/// Tax lines of the sample categories (CAT-050): (path, form, line).
+const TAX_LINES: &[(&str, &str, &str)] = &[
+    ("Income:Salary", "W-2", "Salary or wages"),
+    ("Charity:Tithe", "Schedule A", "Cash charity contributions"),
+    (
+        "Charity:Other Giving",
+        "Schedule A",
+        "Cash charity contributions",
+    ),
+    ("Taxes:Property", "Schedule A", "Real estate taxes"),
+];
+
 const TAG_NAMES: &[&str] = &["Vacation", "Business", "Kids", "Deductible"];
 
 /// Everyday merchants: (name, category, lo cents, hi cents, weight, on card).
@@ -463,6 +475,7 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
 impl Gen<'_, '_> {
     fn setup(&mut self) -> Result<()> {
         let opening = categories::system(self.tx.conn(), SystemCategory::OpeningBalance)?.id;
+        let lines = crate::persistence::reports::tax_lines(self.tx.conn())?;
         for (name, kind, tax, tithable, giving) in CATEGORIES {
             let (parent, leaf) = match name.rsplit_once(':') {
                 Some((p, leaf)) => (self.cats.get(p).copied(), leaf),
@@ -473,6 +486,13 @@ impl Gen<'_, '_> {
             f.tax_related = *tax;
             f.tithable = *tithable;
             f.giving = *giving;
+            f.tax_line = TAX_LINES
+                .iter()
+                .find(|(path, _, _)| path == name)
+                .and_then(|(_, form, line)| {
+                    lines.iter().find(|t| t.form == *form && t.line == *line)
+                })
+                .map(|t| t.id);
             let id = categories::insert(self.tx, &f)?.id;
             self.cats.insert(name, id);
         }

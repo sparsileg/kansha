@@ -29,10 +29,14 @@ const NAV_LABEL: Record<string, string> = {
   "file.export": "Export",
   "edit.navbar": "Navigation bar",
   "reports.saved": "Saved reports",
-  "reports.investing": "Investing report",
-  "reports.balances": "Balances report",
-  "reports.spending": "Spending report",
-  "reports.taxes": "Tax report",
+  "reports.capital_gains": "Capital Gains",
+  "reports.net_worth": "Net Worth",
+  "reports.itemized_categories": "Itemized Categories",
+  "reports.itemized_payees": "Itemized Payees",
+  "reports.income_expense": "Income/Expense",
+  "reports.tax_capital_gains": "Capital Gains (tax)",
+  "reports.tax_schedule": "Tax Schedule",
+  "reports.tax_summary": "Tax Summary",
   "help.about": "About",
 };
 

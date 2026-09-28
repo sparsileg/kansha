@@ -24,6 +24,31 @@ pub struct PayeeId(pub i64);
 #[serde(transparent)]
 pub struct TagId(pub i64);
 
+/// Row ID of a tax line (CAT-050).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(transparent)]
+pub struct TaxLineId(pub i64);
+
+/// One line of a tax form, e.g. "Schedule A" / "Real estate taxes"
+/// (CAT-050). The list is built in (migration 0003).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct TaxLine {
+    pub id: TaxLineId,
+    pub form: String,
+    pub line: String,
+    /// Forms in return order, lines in form order.
+    pub sort_order: i64,
+}
+
+impl TaxLine {
+    /// "Form:Line", as the Tax Summary report's Tax Item column shows it.
+    pub fn label(&self) -> String {
+        format!("{}:{}", self.form, self.line)
+    }
+}
+
 text_enum! {
     /// Category kind (CAT-010). `Equity` is system-only (opening balances).
     pub enum CategoryKind {
@@ -61,6 +86,8 @@ pub struct CategoryFields {
     pub tax_related: bool,
     pub tithable: bool,
     pub giving: bool,
+    /// CAT-050: the tax form line this category's amounts belong to.
+    pub tax_line: Option<TaxLineId>,
     /// CAT-030: hide instead of delete.
     pub hidden: bool,
 }
@@ -74,6 +101,7 @@ impl CategoryFields {
             tax_related: false,
             tithable: false,
             giving: false,
+            tax_line: None,
             hidden: false,
         }
     }

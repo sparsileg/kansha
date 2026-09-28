@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::categories::TaxLineId;
 use crate::date::{Date, Timestamp};
 use crate::money::{Money, Rate};
 use crate::text_enum::text_enum;
@@ -217,6 +218,12 @@ pub struct AccountFields {
     pub investment: Option<InvestmentSettings>,
     /// Required for Other Asset; absent otherwise.
     pub other_asset: Option<OtherAssetSettings>,
+    /// CAT-050: tax line for transfers out of this account (money
+    /// leaving it, e.g. an IRA distribution).
+    pub tax_line_out: Option<TaxLineId>,
+    /// CAT-050: tax line for transfers into this account (e.g. an HSA
+    /// contribution).
+    pub tax_line_in: Option<TaxLineId>,
 }
 
 impl AccountFields {
@@ -251,6 +258,8 @@ impl AccountFields {
                 subtype: AssetSubtype::Other,
                 linked_liability: None,
             }),
+            tax_line_out: None,
+            tax_line_in: None,
         }
     }
 }

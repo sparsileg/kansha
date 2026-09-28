@@ -119,6 +119,17 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::invest::inv_portfolio,
             commands::invest::lot_seed_preview,
             commands::invest::lot_seed,
+            commands::reports::report_defaults,
+            commands::reports::report_columns,
+            commands::reports::report_range,
+            commands::reports::report_run,
+            commands::reports::report_export_csv,
+            commands::reports::saved_report_list,
+            commands::reports::saved_report_create,
+            commands::reports::saved_report_update,
+            commands::reports::saved_report_delete,
+            commands::reports::tax_line_list,
+            commands::reports::dashboard,
         ])
 }
 

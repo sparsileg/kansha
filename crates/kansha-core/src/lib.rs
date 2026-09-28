@@ -16,6 +16,7 @@ pub mod ledger;
 pub mod money;
 pub mod persistence;
 pub mod reconcile;
+pub mod reports;
 pub mod sample;
 pub mod schedule;
 pub mod securities;

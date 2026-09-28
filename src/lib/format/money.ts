@@ -94,3 +94,9 @@ export function sanitizeAmountInput(text: string): string {
 export function blockNonAmountChar(e: InputEvent): void {
   if (e.data && /[^0-9.,]/.test(e.data)) e.preventDefault();
 }
+
+/** A whole-dollar canonical amount ("1235.00") as "1,235": for reports
+ * shown without cents, which Rust has already rounded. */
+export function formatMoneyWhole(canonical: string): string {
+  return formatMoney(canonical).replace(/\.\d+$/, "");
+}

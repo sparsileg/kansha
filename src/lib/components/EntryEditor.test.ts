@@ -32,8 +32,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   listsState.today = "2026-09-24";
   listsState.categories = [
-    { id: 5, parent: null, kind: "expense", name: "Food", system: null, tax_related: false, tithable: false, giving: false, hidden: false, created_at: "" },
-    { id: 6, parent: null, kind: "expense", name: "Fuel", system: null, tax_related: false, tithable: false, giving: false, hidden: false, created_at: "" },
+    { id: 5, parent: null, kind: "expense", name: "Food", system: null, tax_related: false, tithable: false, giving: false, tax_line: null, hidden: false, created_at: "" },
+    { id: 6, parent: null, kind: "expense", name: "Fuel", system: null, tax_related: false, tithable: false, giving: false, tax_line: null, hidden: false, created_at: "" },
   ];
   listsState.accounts = [
     { id: 1, name: "Savings", account_type: "savings", group: "banking", status: "open", investment: null },

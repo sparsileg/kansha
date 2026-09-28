@@ -11,7 +11,8 @@ use crate::categories::{
 use crate::error::{Error, Result};
 
 const COLUMNS: &str =
-    "id, parent_id, kind, name, system_key, tax_related, tithable, giving, hidden, created_at";
+    "id, parent_id, kind, name, system_key, tax_related, tithable, giving, tax_line_id, hidden,
+     created_at";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Category> {
     Ok(Category {
@@ -23,6 +24,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Category> {
             tax_related: r.get("tax_related")?,
             tithable: r.get("tithable")?,
             giving: r.get("giving")?,
+            tax_line: r.get("tax_line_id")?,
             hidden: r.get("hidden")?,
         },
         system: r.get("system_key")?,
@@ -79,8 +81,10 @@ fn validate(conn: &Connection, id: Option<CategoryId>, f: &CategoryFields) -> Re
 pub fn insert(tx: &Tx<'_>, f: &CategoryFields) -> Result<Category> {
     validate(tx.conn(), None, f)?;
     tx.conn().execute(
-        "INSERT INTO category (parent_id, kind, name, tax_related, tithable, giving, hidden, created_at)
-         VALUES (:parent, :kind, :name, :tax, :tithable, :giving, :hidden, :created_at)",
+        "INSERT INTO category (parent_id, kind, name, tax_related, tithable, giving, tax_line_id,
+             hidden, created_at)
+         VALUES (:parent, :kind, :name, :tax, :tithable, :giving, :tax_line, :hidden,
+             :created_at)",
         named_params! {
             ":parent": f.parent,
             ":kind": f.kind,
@@ -88,6 +92,7 @@ pub fn insert(tx: &Tx<'_>, f: &CategoryFields) -> Result<Category> {
             ":tax": f.tax_related,
             ":tithable": f.tithable,
             ":giving": f.giving,
+            ":tax_line": f.tax_line,
             ":hidden": f.hidden,
             ":created_at": tx.now(),
         },
@@ -208,7 +213,7 @@ pub fn update(tx: &Tx<'_>, id: CategoryId, f: &CategoryFields) -> Result<Categor
     }
     tx.conn().execute(
         "UPDATE category SET parent_id = :parent, name = :name, tax_related = :tax,
-             tithable = :tithable, giving = :giving, hidden = :hidden
+             tithable = :tithable, giving = :giving, tax_line_id = :tax_line, hidden = :hidden
          WHERE id = :id",
         named_params! {
             ":id": id,
@@ -217,6 +222,7 @@ pub fn update(tx: &Tx<'_>, id: CategoryId, f: &CategoryFields) -> Result<Categor
             ":tax": f.tax_related,
             ":tithable": f.tithable,
             ":giving": f.giving,
+            ":tax_line": f.tax_line,
             ":hidden": f.hidden,
         },
     )?;

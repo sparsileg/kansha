@@ -173,3 +173,8 @@ export function monthGrid(iso: string): string[] {
   const start = addDays(first, -weekdayOf(first));
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
 }
+
+/** "Sep 2026" for the month containing `iso` (graph axes). */
+export function monthShort(iso: string): string {
+  return monthLabel(iso).replace(/^(\w{3})\w*/, "$1");
+}

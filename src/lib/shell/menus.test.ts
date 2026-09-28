@@ -12,7 +12,17 @@ describe("menu definitions", () => {
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
       "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Reconcile",
     ]);
-    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved", "Investing", "Balances", "Spending", "Taxes"]);
+    expect(MENUS[3].items.map((i) => i.label)).toEqual([
+      "Saved Reports…",
+      "Investing: Capital Gains",
+      "Net Worth",
+      "Spending: Itemized Categories",
+      "Spending: Itemized Payees",
+      "Spending: Income/Expense by Category",
+      "Tax: Capital Gains",
+      "Tax: Tax Schedule",
+      "Tax: Tax Summary",
+    ]);
   });
 
   it("ids are unique and every greyed item says why", () => {
@@ -25,7 +35,7 @@ describe("menu definitions", () => {
 
   it("what works today is not greyed", () => {
     const on = (id: string) => items.find((i) => i.id === id)?.disabled;
-    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.payees", "tools.categories", "tools.tags", "tools.securities"]) {
+    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.payees", "tools.categories", "tools.tags", "tools.securities", "reports.saved", "reports.net_worth", "reports.tax_summary"]) {
       expect(on(id), id).toBeUndefined();
     }
   });

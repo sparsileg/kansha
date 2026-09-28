@@ -11,6 +11,8 @@ import type {
   Payee,
   Tag,
   TagId,
+  TaxLine,
+  TaxLineId,
 } from "../types/bindings";
 
 class ListsState {
@@ -21,6 +23,8 @@ class ListsState {
   categories = $state<Category[]>([]);
   tags = $state<Tag[]>([]);
   payees = $state<Payee[]>([]);
+  /** Tax form lines (CAT-050): built in, loaded once. */
+  taxLines = $state<TaxLine[]>([]);
   loaded = $state(false);
   error = $state<string | null>(null);
 
@@ -50,6 +54,12 @@ class ListsState {
     return this.payeeById.get(id);
   }
 
+  /** "Form: Line" for a tax line. */
+  taxLineLabel(id: TaxLineId): string {
+    const t = this.taxLines.find((x) => x.id === id);
+    return t ? `${t.form}: ${t.line}` : "";
+  }
+
   /** "Parent:Child" path, as the register's Category column shows it. */
   categoryPath(id: CategoryId): string {
     const names: string[] = [];
@@ -62,13 +72,14 @@ class ListsState {
 
   async loadAll(): Promise<void> {
     try {
-      const [today, accounts, balances, categories, tags, payees] = await Promise.all([
+      const [today, accounts, balances, categories, tags, payees, taxLines] = await Promise.all([
         call(commands.today()),
         call(commands.accountList()),
         call(commands.accountBalances()),
         call(commands.categoryList()),
         call(commands.tagList()),
         call(commands.payeeList()),
+        call(commands.taxLineList()),
       ]);
       this.today = today;
       this.accounts = accounts;
@@ -76,6 +87,7 @@ class ListsState {
       this.categories = categories;
       this.tags = tags;
       this.payees = payees;
+      this.taxLines = taxLines;
       this.error = null;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);

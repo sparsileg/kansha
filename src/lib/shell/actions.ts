@@ -1,7 +1,9 @@
 // What running a menu item or navigation-bar button does, by id. Items
 // marked `disabled` never get here (the callers check).
 
+import { MENU_REPORTS } from "../reports/meta";
 import { dialogState } from "../state/dialogs.svelte";
+import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
 import { viewState } from "../state/view.svelte";
 import { exitApp, goHome, openAccount, openReconcile } from "./nav";
@@ -12,6 +14,9 @@ export function runAction(id: string): void {
     void goHome();
   } else if (id.startsWith("account:")) {
     void openAccount(Number(id.slice("account:".length)));
+  } else if (id in MENU_REPORTS) {
+    viewState.navigate("reports");
+    void reportState.open(MENU_REPORTS[id]);
   } else {
     switch (id) {
       case "file.integrity":
@@ -53,6 +58,10 @@ export function runAction(id: string): void {
       case INVESTMENTS_ID:
         viewState.navigate("investments");
         break;
+      case "reports.saved":
+        viewState.navigate("reports");
+        reportState.savedOpen = true;
+        break;
     }
   }
 }
@@ -81,6 +90,7 @@ export function isCurrent(id: string): boolean {
     case INVESTMENTS_ID:
       return view === "investments";
     default:
+      if (id in MENU_REPORTS) return view === "reports" && reportState.kind === MENU_REPORTS[id];
       return false;
   }
 }

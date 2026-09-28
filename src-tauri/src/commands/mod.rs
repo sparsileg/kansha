@@ -6,6 +6,7 @@ pub mod invest;
 pub mod ledger;
 pub mod lists;
 pub mod reconcile;
+pub mod reports;
 pub mod sample;
 pub mod schedule;
 

@@ -195,6 +195,26 @@
           {#each TAX as [v, label] (v)}<option value={v}>{label}</option>{/each}
         </select>
       </label>
+      <label>
+        Tax line, transfers out
+        <select
+          value={f.tax_line_out ?? ""}
+          onchange={(e) => (f!.tax_line_out = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+        >
+          <option value="">(none)</option>
+          {#each listsState.taxLines as t (t.id)}<option value={t.id}>{t.form}: {t.line}</option>{/each}
+        </select>
+      </label>
+      <label>
+        Tax line, transfers in
+        <select
+          value={f.tax_line_in ?? ""}
+          onchange={(e) => (f!.tax_line_in = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+        >
+          <option value="">(none)</option>
+          {#each listsState.taxLines as t (t.id)}<option value={t.id}>{t.form}: {t.line}</option>{/each}
+        </select>
+      </label>
       <label>Opening date <input bind:value={openingDate} placeholder={datePattern()} /></label>
       <label>Institution <input bind:value={f.institution} /></label>
       <label>

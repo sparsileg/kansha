@@ -20,7 +20,8 @@ describe("navCatalog", () => {
   });
 
   it("gives ambiguous menu items a clear button label and keeps the greyed reason", () => {
-    expect(byId("reports.investing")?.label).toBe("Investing report");
+    expect(byId("reports.capital_gains")?.label).toBe("Capital Gains");
+    expect(byId("reports.tax_capital_gains")?.label).toBe("Capital Gains (tax)");
     expect(byId("file.open")?.label).toBe("Open book");
     expect(byId("edit.settings")?.label).toBe("Settings");
     expect(byId("tools.reconcile")?.disabled).toBeUndefined();

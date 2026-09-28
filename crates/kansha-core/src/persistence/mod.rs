@@ -15,6 +15,7 @@ pub mod ledger;
 pub mod migrate;
 pub mod payees;
 pub mod reconcile;
+pub mod reports;
 pub mod schedules;
 pub mod securities;
 pub mod settings;

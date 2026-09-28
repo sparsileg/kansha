@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.12 (draft) |
+| **Document version** | 0.3.13 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-26 |
+| **Last updated** | 2026-09-27 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); D-50, D-60, D-100, D-110 decided |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); D-50, D-60, D-100, D-110, D-140 decided |
 
 ---
 
@@ -127,7 +127,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   - **Tax-related** (used by tax summary reports)
   - **Tithable income** (income counted for tithing calculation)
   - **Charitable giving / tithe** (giving counted against tithing)
-- **CAT-050** [Later][R] Map categories to tax form lines (Schedule A, B, D, etc.).
+- **CAT-050** [1.0][S] Map categories to tax form lines (W-2, 1099-R, Schedule A, B, …; built-in list, migration 0003). An account maps transfers out of it and transfers into it to a line each (an IRA distribution to 1099-R). Schedule D comes from lot disposals, not a category.
 - **CAT-060** [1.0][R] Built-in system categories for investment income and transfers (Dividends, Interest, Capital Gains Distributions, Realized Gain/Loss, Investment Fees) that cannot be deleted.
 
 #### 6.2 Payees
@@ -350,10 +350,10 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 #### 12.1 General report features
 
 - **RPT-010** [1.0][S] Reports offer both tables and graphs where meaningful.
-- **RPT-020** [1.0][S] Report settings (date range, accounts, categories, tags, grouping, columns) can be saved as named reports and rerun.
+- **RPT-020** [1.0][S] Report settings (date range, accounts, categories, tags, grouping, columns) can be saved as named reports and rerun. Every report has one Customize dialog: date range, a Display tab (title, grouping, show options, columns with Reset Columns), and a tab per filter (Accounts, Categories, Payees, Securities, Tags as the report uses them), each with Select All and Clear All.
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month, YTD, last year, last 12 months, custom; plus comparison to a prior period.
-- **RPT-050** [1.0][R] Export to CSV and PDF; print.
+- **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the Downloads folder, every group expanded; printing (and PDF, through the system print dialog) shows only the report.
 
 #### 12.2 Reports in 1.0
 
@@ -362,12 +362,14 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 - **RPT-120** [1.0][S] **Account balances/status** — all or selected accounts as of a date.
 - **RPT-130** [1.0][S] **Tithing report** — tithable income (CAT-040 flagged categories) × configurable percentage, versus giving recorded, with balance, for a chosen period.
 - **RPT-140** [1.0][S] **Tax summary** — totals of tax-related categories, investment income (dividends, interest, capital gain distributions), taxable realized gains (short/long-term), and withholdings, for a tax year. This supports tax estimation; it does not compute tax (planning is out of scope).
-- **RPT-150** [1.0][R] **Realized gains detail** — lot-level sales for a period, suitable for checking against broker Form 1099-B.
+- **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line (CAT-050) with their transactions, from taxable accounts; Schedule D by holding period from lot disposals. No overall total.
+- **RPT-150** [1.0][S] **Realized gains detail** (Capital Gains) — lot-level sales for a period, suitable for checking against broker Form 1099-B.
 - **RPT-160** [1.0][R] **Investment income** — by security and account, for a period.
 - **RPT-170** [1.0][R] **Holdings/portfolio value** — positions, market value, basis, unrealized gain, as of a date.
 - **RPT-180** [1.0][S] **Asset allocation** — table and chart.
 - **RPT-190** [1.0][R] **Cash flow** — inflows vs. outflows by month, excluding transfers between own accounts.
 - **RPT-200** [1.0][R] **Transaction report** — filtered list of transactions (general-purpose query tool).
+- **RPT-205** [1.0][S] **Itemized Categories** and **Itemized Payees** — transactions grouped under INCOME, EXPENSES, and TRANSFERS by category (with subcategories) or by payee, with totals.
 - **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
 - **RPT-310** [Later][R] Performance reports (TWR/IRR).
 
@@ -551,8 +553,8 @@ Rationale:
 **R4 — Supporting libraries (candidates).**
 - Decimal math: `rust_decimal`. Errors: `thiserror`. Serialization: `serde`.
 - Dates: `time` or `chrono` date-only types in Rust; ISO `YYYY-MM-DD` strings in TypeScript. The JavaScript `Date` object is not used for financial dates.
-- Charts: Chart.js, uPlot, or ECharts (D-140).
-- PDF export: webview print-to-PDF of report HTML, or a Rust PDF crate (evaluate in Phase 7).
+- Charts: hand-drawn SVG, no library (D-140, decided Phase 7).
+- PDF export: the webview's print dialog (print to PDF); no PDF crate.
 - Keyring: `keyring` crate (KWallet/Secret Service, Windows Credential Manager).
 - Testing: see Section 20.
 
@@ -682,6 +684,7 @@ Modeling choices that affect other sections:
 - **Schedule rules (Phase 4a):** the recurrence engine generates *nominal* dates from the rule alone; the weekend rule (REC-050) shifts the due date but the nominal date identifies the occurrence. `schedule.next_due` holds the next nominal date. Occurrences are handled in order: only `next_due` can be entered or skipped. Entering and skipping both use up one of "# left" (REC-030). Editing a schedule is "this and all future" (REC-120): entered and skipped history stays, the series continues after the last occurrence acted on, and pending one-time overrides are dropped. "This occurrence only" is a pending `schedule_occurrence` row with `override_date` and/or `override_amount` (amount on single-line schedules only). Estimated amounts need confirmation on entry and are never auto-entered (REC-060). Auto-enter (REC-070) enters every due occurrence, missed ones included, with origin `scheduler`, and flags each for review (`needs_review`, migration 0002) until dismissed. A schedule with entered or skipped occurrences is soft-deleted (`status = deleted`) so REC-160 links survive; an unused one is removed. The projected balance (CAL-050) counts pending occurrences on their due dates, overdue ones on today.
 - **Reconciliation rules (Phase 5):** a session's check marks are the postings' own `cleared` status, so save and resume (RCN-050) need nothing beyond the `reconciliation` row. Checking an item marks its posting `cleared`; Finish turns every cleared posting dated on or before the statement into `reconciled`, linked to the session, and needs a zero difference: `statement balance − (Σ reconciled postings + Σ checked postings ≤ statement date)`. Reconciliation takes and shows every amount in statement sign, as the statement prints it: for a credit card (any liability) the balance owed is positive, a charge positive, a payment negative. The engine converts at its boundary; storage and the register stay in ledger sign. Items dated after the statement are never listed or reconciled, even if marked cleared in the register. One session in progress per account; a new statement date may not precede the last finished one. Checking, savings, cash, money market, and credit card accounts reconcile (RCN-010), and (Phase 6) investment accounts that keep their own cash. The opening balance is the last finished statement's ending balance (Σ reconciled postings if none). If reconciled postings no longer add up to it, the session still runs and the change list (RCN-030) comes from the audit log: transactions whose reconciled amount on the account differs from what it was when the last statement finished (an edit that leaves the amount alone is not listed). Interest earned and a service charge (RCN-020) are created with the session as cleared transactions with source `reconcile`; on a liability, interest is a charge. A Balance Adjustment (RCN-040) is one cleared transaction for the current difference, dated the statement date, in the built-in Balance Adjustment category, created only with confirmation. Abandoning keeps the session as history and leaves check marks as `cleared`. Finish writes one audit entry on the reconciliation, not one per transaction. Integrity check `reconciled_balance_mismatch` (INT-030) flags an account whose reconciled postings differ from its latest finished statement. No schema change.
 - **Investment rules (Phase 6):** postings per action: buy (cash −cost, holding +cost), sell (cash +net proceeds, holding −basis of the lots taken, Realized Gain/Loss −gain), income (cash +, built-in income category −), reinvest (holding +, income category −), return of capital (cash +, holding −basis reduced, Realized Gain/Loss −excess), split (one zero holding posting), share transfer (holding − here, + there), shares added or removed (holding ± basis against Opening Balance), cash in or out (cash ± against an account or category), fee, withholding, and misc (cash ± against the built-in or a chosen category). With linked cash (INV-300) every cash posting goes to the linked account; cash in and out are refused; cash handling cannot change once the account has investment transactions. Amounts are entered positive and the action gives the sign. Buy amount = shares × price + commission (in the basis); sell = shares × price − commission; half-even to cents. Lot selection: the sale's own method, else the security's default, else the account's. FIFO orders by acquisition date, then entry order; transferred lots keep their original date. Specific identification names lots and shares. Average, HIFO, and minimum tax are refused until built (LOT-110, LOT-115). Part of a lot takes basis in proportion, rounded half-even; a lot's last shares take the rest. Sale proceeds divide among lots by shares, remainder cents to the largest fractions (ties to the earlier lot). Long-term once the sale is after the acquisition's anniversary (29 Feb: after 28 Feb). A split rounds the position's new share count once, then divides it among the lots by shares; a split that would leave a lot with no shares is refused. Return of capital divides by shares; a lot's basis stops at zero and the excess is a realized gain with no lot record and no holding period. Only lots created by a transaction dated on or before the event count. **Date order:** a holding's disposals and adjustments form a history in (date, entry) order. A new or changed transaction that affects a holding's lots must come after every such event already recorded for it, and one can be changed or deleted only while nothing follows it. Memo and settlement date can always change. Investment transactions are deleted, never voided. A reconciled cash posting keeps its status through an edit that leaves it in the same account (with confirmation). In an account that holds money market funds as cash, they cannot be bought, sold, or moved as securities; one with no price is worth $1.00. Market value uses the latest price on or before the date; a price more than 7 days old is stale (the SET-040 setting comes later). The account list shows an investment account's cash plus market value, a holding with no price at cost. Closing an investment account with cash or open positions needs confirmation. An investment account that keeps its own cash reconciles that cash (RCN-010); holdings are never listed; statement interest and fees become investment transactions (Interest, Fee, or misc income or expense for other categories). Lot seeding (MIG-120) is one import batch: each CSV row becomes a Shares Added transaction on the seeding date whose lot keeps its original acquisition date. Integrity checks (INT-030): `lot_overdrawn`, `share_balance_mismatch`, `lot_basis_mismatch`, `lot_quantity_mismatch`. The audit entry of an investment transaction holds the whole transaction with its lot records. No schema change.
+- **Report rules (Phase 7):** every report is built in Rust as one shape: columns and a tree of rows whose groups carry their totals; the table, CSV, and printing read it. Report sign: income and money coming in positive, spending negative (a category or transfer amount is minus its posting). Void transactions and equity (opening balance) postings are left out. A category line belongs to the transaction's investment account, else its first account posting, whichever the account filter includes. Transfers are listed once from each included side. Tax Schedule and Tax Summary take only transactions of taxable accounts; a transfer counts when the account it moves money out of (or into) has a tax line for that direction. Capital Gains with no account filter shows taxable accounts. Net worth values investment accounts at market value (latest price on or before each date, cost when none); its columns are the day before the range, each period end, and the last date. Without cents, amounts round half-even to dollars after totaling. Saved reports store their settings as JSON; settings added later default when an older one loads. Migration 0003 adds `tax_line`, `category.tax_line_id`, `account.tax_line_out_id` and `tax_line_in_id`, and maps the built-in interest, dividend, and capital gain distribution categories.
 - **Audit log** is append-only, enforced by triggers.
 - **Account type** is fixed at creation.
 
@@ -853,7 +856,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; enable encryption in Phase 8 or at 1.0 |
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
-| D-140 | Chart library | Open | Evaluate in Phase 7 (Chart.js, uPlot, ECharts) |
+| D-140 | Chart library | **Decided** (2026-09-27) | None: hand-drawn SVG. Rust places values on the axis; the frontend only scales. Series differ by pattern and shape as well as color (red-green colorblind). |
 
 ### Placeholders
 
@@ -942,6 +945,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.13 | 2026-09-27 | Phase 7 (reports and dashboard). CAT-050 moved to 1.0 and built (migration 0003: tax lines; category and account transfer mappings). RPT-020 describes the shared Customize dialog. RPT-050 and RPT-150 accepted. RPT-145 (Tax Schedule) and RPT-205 (Itemized Categories and Payees) added. D-140 decided: hand-drawn SVG graphs. §16.3 PDF export through the print dialog. §18 gains report rules. |
 | 0.3.12 | 2026-09-26 | POS-040 rewritten: the Investments screen (account, equity, and lot tree with named views, as-of date, and day change) replaces the six account tabs; an investment account opens as a register. Income, Performance, and realized gains wait for the reports. New IPC command `inv_portfolio`. No schema change. |
 | 0.3.11 | 2026-09-24 | Phase 6 (investments). §18 gains investment rules (postings per action, lot selection and rounding, splits, return of capital, the date-order rule for a holding's history, linked cash, money market funds, stale prices, account list value, investment cash reconciliation, lot seeding as an import, new integrity checks). §18 reconciliation rules: investment accounts with their own cash reconcile. LOT-115: refused until built, not in Phase 6. No schema change. |
 | 0.3.10 | 2026-09-24 | SET-030: three date formats (MM/DD/YYYY default, DD/MM/YYYY, YYYY-MM-DD) for every user-facing date; logs and histories use `YYYY-MM-DDTHH:MM:SSZ`. NFR-080: theme focus colors (background and text) and select-on-focus, app-wide. |
