@@ -1,6 +1,8 @@
 <script lang="ts">
-  // A window's frame: its name, Minimize (back to the dock), and Close.
-  // The window fills the view area; what it shows comes from `children`.
+  // A window's frame: its name (the window's heading), Minimize (back to
+  // the dock), and Close. The window fills the view area; what it shows
+  // comes from `children`, which has no heading of its own (a report's
+  // page title is part of the printed page).
   import type { Snippet } from "svelte";
   import { windowState } from "../../state/windows.svelte";
 
@@ -11,7 +13,7 @@
 
 <section class="window" aria-label={label}>
   <div class="frame no-print">
-    <span class="name">{label}</span>
+    <h1 class="name">{label}</h1>
     <button type="button" onclick={() => windowState.minimize()} title="Keep it open in the dock">
       <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 12.5h10" /></svg>
       Minimize
@@ -41,6 +43,8 @@
   }
   .name {
     flex: 1;
+    margin: 0;
+    font-size: 1.3em;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;

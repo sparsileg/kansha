@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.16 (draft) |
+| **Document version** | 0.3.17 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-27 |
 | **Owner** | Stan |
@@ -429,7 +429,7 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 - **UI-010** [1.0][S] Account selector dropdown at the top of the main window; can be toggled to a persistent sidebar alongside the register.
 - **UI-020** [1.0][S] Icon bar with user-configurable shortcuts (Reconcile, Investments, Calendar, Reports, Dashboard, Scheduled, etc.).
 - **UI-030** [1.0][S] Account-centric design: each account opens to its own view with tabs appropriate to its type (banking: Register | Scheduled | Reconcile history; investment: see POS-040).
-- **UI-040** [1.0][R] Several reports can be open at once, each in a window that fills the view area. Windows not on top wait in a dock bar at the bottom of the main window, one text label each; clicking a label brings that window to the top. Going to any other view leaves the open windows in the dock. The dock is generic. The Calendar, Reminders (Scheduled Transactions), Accounts, and Reconcile screens are windows too, one each. File > Exit asks to save each changed report first; Cancel keeps the app open.
+- **UI-040** [1.0][R] Several reports can be open at once, each in a window that fills the view area. Windows not on top wait in a dock bar at the bottom of the main window, one text label each; clicking a label brings that window to the top. Going to any other view leaves the open windows in the dock. The dock is generic. The Calendar, Reminders (Scheduled Transactions), Accounts, and Reconcile screens are windows too, one each. File > Exit and the window's close box ask to save each changed report first; Cancel keeps the app open.
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions; full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent edit in the current session (implemented as an explicit reversing change, recorded in the audit log).
 - **UI-070** [1.0][R] Search box in the navigation bar: finds transactions by payee, category, memo, note, check number, account name, or amount, across all accounts or (from a register) in that account only. Results are a list, newest first, one line each; choosing one opens its account on that transaction.
@@ -945,6 +945,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.17 | 2026-09-28 | UI-040: the window's close box also asks to save changed reports. No schema or API change. |
 | 0.3.16 | 2026-09-28 | UI-040: Calendar, Reminders, Accounts, and Reconcile open as dockable windows; File > Exit asks to save changed reports. CAL-030: day dialog (Enter, Edit, Skip, Close, New Schedule). No schema or API change. |
 | 0.3.15 | 2026-09-28 | UI-040: reports open in windows with a dock bar (replaces tabs). RPT-020: closing a changed report asks to save. RPT-050: white report page, frozen table heading, hide graph or table. Reports menu grouped into Investing, Net Worth, Spending, and Tax submenus. No schema or API change. |
 | 0.3.14 | 2026-09-27 | Report toolbar: RPT-100 gains Income/Expense by Payee and the full interval list; RPT-150 lists its subtotals; RPT-205 gains sort by check number and descending order. No schema change. |

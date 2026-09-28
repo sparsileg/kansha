@@ -21,7 +21,7 @@
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import { runAction } from "./lib/shell/actions";
-  import { goHome } from "./lib/shell/nav";
+  import { goHome, guardWindowClose } from "./lib/shell/nav";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
   import { MENUS } from "./lib/shell/menus";
   import { dialogState } from "./lib/state/dialogs.svelte";
@@ -43,6 +43,8 @@
 
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
+  // The close box asks to save changed reports, like File > Exit.
+  onMount(() => void guardWindowClose());
 
   onMount(() => {
     void listsState.loadAll().then(() => {

@@ -87,7 +87,6 @@
 
 <section class="cal">
   <header>
-    <h1>Calendar</h1>
     <button type="button" aria-label="Previous month" onclick={() => (month = addMonths(month, -1))}>‹</button>
     <strong class="label">{monthLabel(month)}</strong>
     <button type="button" aria-label="Next month" onclick={() => (month = addMonths(month, 1))}>›</button>
@@ -206,10 +205,6 @@
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
     align-items: center;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.3em;
   }
   .label {
     min-width: 9rem;

@@ -18,7 +18,6 @@
 
 <section>
   <header>
-    <h1>Reminders</h1>
     <button type="button" onclick={() => dialogState.newSchedule()}>New schedule</button>
     <button type="button" onclick={() => (dialogState.due = true)}>
       Due and overdue{scheduleState.attention > 0 ? ` (${scheduleState.attention})` : ""}
@@ -68,10 +67,6 @@
     display: flex;
     gap: 1rem;
     align-items: baseline;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.3em;
   }
   .wrap {
     overflow: auto;

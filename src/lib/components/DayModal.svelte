@@ -155,12 +155,12 @@
     </div>
   {/if}
   <div class="buttons">
+    <button type="button" onclick={newSchedule}>New Schedule</button>
+    <span class="gap" aria-hidden="true"></span>
     <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={enter}>Enter</button>
     <button type="button" disabled={!sel || busy} title={sel ? "" : why} onclick={() => void edit()}>Edit</button>
     <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={() => void skip()}>Skip</button>
     <button type="button" onclick={onclose}>Close</button>
-    <span class="gap" aria-hidden="true"></span>
-    <button type="button" onclick={newSchedule}>New Schedule</button>
   </div>
 </Modal>
 
@@ -214,13 +214,10 @@
     gap: 0.5rem;
     align-items: center;
   }
-  /* "New Schedule" stands apart from the four that act on the list. */
+  /* "New Schedule" on the left, apart from the four on the right. */
   .gap {
     flex: 1;
     min-width: 2rem;
-    align-self: stretch;
-    border-right: 1px solid rgba(128, 128, 128, 0.5);
-    margin-right: 0.5rem;
   }
   .err {
     color: var(--bad, #a83200);

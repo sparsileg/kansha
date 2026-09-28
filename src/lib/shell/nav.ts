@@ -34,10 +34,28 @@ export async function goHome(): Promise<void> {
   viewState.navigate("dashboard");
 }
 
+/** Set once the user has agreed to quit, so closing does not ask twice. */
+let quitting = false;
+
+/** The title bar's close box asks to save changed reports, as File >
+ * Exit does; cancelling keeps the app open. Tauri waits for this handler
+ * and closes the window unless it prevents that. */
+export async function guardWindowClose(): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().onCloseRequested(async (e) => {
+      if (!quitting && !(await windowState.mayQuit())) e.preventDefault();
+    });
+  } catch {
+    /* not running inside Tauri */
+  }
+}
+
 /** Close the window (File > Exit), after asking to save changed
  * reports; cancelling any of them keeps the app open. */
 export async function exitApp(): Promise<void> {
   if (!(await windowState.mayQuit())) return;
+  quitting = true;
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     await getCurrentWindow().close();

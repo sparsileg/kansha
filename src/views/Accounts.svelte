@@ -19,7 +19,6 @@
 
 <section>
   <header>
-    <h1>Accounts</h1>
     <button type="button" onclick={() => dialogState.newAccount()}>New account</button>
   </header>
   {#if accounts.length === 0}
@@ -56,10 +55,6 @@
     display: flex;
     gap: 1rem;
     align-items: baseline;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.3em;
   }
   .wrap {
     overflow: auto;

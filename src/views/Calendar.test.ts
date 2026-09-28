@@ -90,7 +90,7 @@ describe("Calendar day with more than three items", () => {
       .getAllByRole("button")
       .map((b) => b.textContent?.trim())
       .filter((n) => n !== "×"); // the dialog's own close box
-    expect(names).toEqual(["Enter", "Edit", "Skip", "Close", "New Schedule"]);
+    expect(names).toEqual(["New Schedule", "Enter", "Edit", "Skip", "Close"]);
     // Payee 2 is not its schedule's next one: Enter and Skip are off.
     expect((within(dialog).getByRole("button", { name: "Enter" }) as HTMLButtonElement).disabled).toBe(true);
     await fireEvent.click(options[0]);

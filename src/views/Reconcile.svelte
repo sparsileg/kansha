@@ -184,7 +184,6 @@
 
 <section class="reconcile" class:in-session={session !== null}>
   <header>
-    <h1>Reconcile</h1>
     <label>
       Account
       <select
@@ -365,10 +364,6 @@
     flex-wrap: wrap;
     gap: 0.5rem 1.5rem;
     align-items: baseline;
-  }
-  h1 {
-    margin: 0;
-    font-size: 1.3em;
   }
   h2 {
     margin: 0.25rem 0;

@@ -190,6 +190,17 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
   transaction in its register, otherwise the schedule; double-click or
   Enter on a row does Enter when possible, else Edit.
 
+## Follow-ups (2026-09-28, spec 0.3.17)
+
+- Day dialog buttons: New Schedule on the left; Enter, Edit, Skip,
+  Close on the right.
+- The title bar's close box asks to save changed reports, as File >
+  Exit does (`guardWindowClose` in `shell/nav.ts`, Tauri
+  `onCloseRequested`). Capability `core:window:allow-destroy` added:
+  Tauri closes the window through it once the handler allows.
+- A window's name in its frame is its heading (`h1`); Calendar,
+  Reminders, Accounts, and Reconcile no longer have their own.
+
 ## Known gaps
 
 - Not checked against the Quicken samples by Stan; column widths,
@@ -206,11 +217,8 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
 - The DAF gift of 7/15/2025 will show as a 0-gain sale (charitable
   gift disposal still deferred).
 - Back/Forward history does not restore an earlier report's settings.
-- File > Exit does not ask to save changed reports.
 - A window's scroll position resets each time it is shown (collapsed
   groups and hidden parts are kept).
 - Windows fill the view area; no moving or resizing.
-- Closing the app with the window's own close box (not File > Exit)
-  does not ask to save changed reports.
 - The account list sidebar (AccountPanel) is not a window; "Accounts"
   in the dock is Tools > Accounts.
