@@ -1,0 +1,146 @@
+id = "INV-014"
+description = "Average cost: open lots even out to the average basis before a sale, shares leave oldest first for the holding period; rounding; a later FIFO sale on the same holding"
+requirements = ["LOT-110", "LOT-030", "LOT-040", "SEC-030"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Index Fund"
+ticker = "IDXF"
+type = "mutual_fund"
+lot_method = "average"
+
+[[securities]]
+name = "Round Fund"
+ticker = "RND"
+type = "mutual_fund"
+lot_method = "average"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2025-01-02"
+amount = "50000.00"
+category = "Opening Balance"
+
+# 40 shares for 5100.00: average 127.50.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-01-10"
+security = "IDXF"
+quantity = "10"
+amount = "1000.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-06-10"
+security = "IDXF"
+quantity = "10"
+amount = "1500.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-05"
+security = "IDXF"
+quantity = "20"
+amount = "2600.00"
+
+# Lots even out to 1275.00, 1275.00, 2550.00 (+275.00, -225.00, -50.00).
+# 15 shares leave oldest first: all of the 2025-01-10 lot (long-term)
+# and 5 of the 2025-06-10 lot (short-term: sold before its
+# anniversary). Basis 1275.00 + 637.50 = 15 x 127.50. Proceeds 2100.00
+# divide 10:5.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-01"
+security = "IDXF"
+quantity = "15"
+amount = "2100.00"
+
+# Rounding: 30.01 over 3 shares evens out to 10.01, 10.00, 10.00 (the
+# odd cent to the earliest lot), so the first share sold carries 10.01.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-01"
+security = "RND"
+quantity = "1"
+amount = "10.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-02"
+security = "RND"
+quantity = "1"
+amount = "10.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-02-03"
+security = "RND"
+quantity = "1"
+amount = "10.01"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-01"
+security = "RND"
+quantity = "1"
+amount = "12.00"
+
+# FIFO on the same holding afterwards: the evened-out lots behave as
+# ordinary lots.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-04-01"
+security = "IDXF"
+quantity = "5"
+amount = "700.00"
+lot_method = "fifo"
+
+[expect.cash_balances]
+"Brokerage" = "47681.99"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "IDXF"
+rows = [
+    { acquired = "2026-01-05", quantity = "20", basis = "2550.00" },
+]
+
+[[expect.lots]]
+account = "Brokerage"
+security = "RND"
+rows = [
+    { acquired = "2025-02-02", quantity = "1", basis = "10.00" },
+    { acquired = "2025-02-03", quantity = "1", basis = "10.00" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-03-01", security = "IDXF", acquired = "2025-01-10", quantity = "10", proceeds = "1400.00", basis = "1275.00", gain = "125.00", term = "long" },
+    { date = "2026-03-01", security = "IDXF", acquired = "2025-06-10", quantity = "5", proceeds = "700.00", basis = "637.50", gain = "62.50", term = "short" },
+    { date = "2026-03-01", security = "RND", acquired = "2025-02-01", quantity = "1", proceeds = "12.00", basis = "10.01", gain = "1.99", term = "long" },
+    { date = "2026-04-01", security = "IDXF", acquired = "2025-06-10", quantity = "5", proceeds = "700.00", basis = "637.50", gain = "62.50", term = "short" },
+]

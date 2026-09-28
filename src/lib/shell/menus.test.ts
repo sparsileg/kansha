@@ -16,7 +16,13 @@ describe("menu definitions", () => {
     ]);
     expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports…", "Investing", "Net Worth", "Spending", "Tax"]);
     const sub = (label: string) => MENUS[3].items.find((i) => i.label === label)?.items?.map((i) => i.label);
-    expect(sub("Investing")).toEqual(["Capital Gains"]);
+    expect(sub("Investing")).toEqual([
+      "Capital Gains",
+      "Investment Performance",
+      "Investment Income",
+      "Holdings",
+      "Asset Allocation",
+    ]);
     expect(sub("Net Worth")).toEqual(["Net Worth"]);
     expect(sub("Spending")).toEqual([
       "Itemized Categories",

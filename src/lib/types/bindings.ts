@@ -321,6 +321,11 @@ export const commands = {
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
 	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
 	dashboard: (upcomingDays: number) => typedError<Dashboard, IpcError>(__TAURI_INVOKE("dashboard", { upcomingDays })),
+	/**
+	 *  Save the window's page as a PDF in the Downloads folder and open it
+	 *  in the PDF viewer; returns the file's path.
+	 */
+	reportSavePdf: (title: string, orientation: PageOrientation) => typedError<string, IpcError>(__TAURI_INVOKE("report_save_pdf", { title, orientation })),
 };
 
 /* Types */
@@ -405,7 +410,12 @@ export type Adjustment = {
 };
 
 /**  A change to an open lot that is not a disposal. */
-export type AdjustmentKind = "split" | "return_of_capital";
+export type AdjustmentKind = "split" | "return_of_capital" | 
+/**
+ *  Average cost (LOT-110): a lot's basis evened out to the
+ *  holding's average before a disposal; basis only.
+ */
+"average";
 
 export type Allocation = {
 	as_of: string,
@@ -520,9 +530,18 @@ export type ChangedTxn = {
 	action: AuditAction,
 };
 
-/**  A graph over dates: bars and lines against one money axis. */
+/**
+ *  A graph over dates (or named categories): bars and lines against one
+ *  money axis.
+ */
 export type Chart = {
+	/**  One per value; empty when the graph is by `labels`. */
 	dates: string[],
+	/**
+	 *  Category names instead of dates (an asset class per bar); empty
+	 *  for a graph over dates.
+	 */
+	labels: string[],
 	series: Series[],
 	ticks: Tick[],
 	/**  Where zero sits: bars grow from here. */
@@ -596,7 +615,9 @@ export type Column = {
 };
 
 /**  How a column's cells read and align. */
-export type ColumnKind = "text" | "date" | "money" | "quantity";
+export type ColumnKind = "text" | "date" | "money" | "quantity" | 
+/**  A percent with two decimals, e.g. "12.34". */
+"percent";
 
 /**  What sits on the other side of a register row. */
 export type Counterpart = 
@@ -685,6 +706,8 @@ export type Drill =
  *  Categories report).
  */
 { kind: "category"; category: CategoryId } | 
+/**  The holdings in one asset class (a Holdings report). */
+{ kind: "asset_class"; asset_class: AssetClass } | 
 /**
  *  A payee's transactions for the column's period (an Itemized Payees
  *  report); `None` is transactions with no payee.
@@ -1036,11 +1059,7 @@ export type Lot = {
 /**  Row ID of a lot. */
 export type LotId = number;
 
-/**
- *  Lot selection methods (LOT-100, LOT-110, D-60). The prototype
- *  engine implements `Fifo` and `Specific`; the others are stored so
- *  the schema doesn't change when they arrive.
- */
+/**  Lot selection methods (LOT-100, LOT-110, LOT-115, D-60). */
 export type LotMethod = "fifo" | "specific" | "average" | 
 /**  Highest cost first. */
 "hifo" | 
@@ -1160,6 +1179,8 @@ export type OtherAssetSettings = {
 	subtype: AssetSubtype,
 	linked_liability: AccountId | null,
 };
+
+export type PageOrientation = "portrait" | "landscape";
 
 /**  A stored payee. */
 export type Payee = {
@@ -1552,6 +1573,17 @@ export type ReportKind =
 "income_expense" | 
 /**  Payee totals, optionally by period. */
 "income_expense_payee" | 
+/**
+ *  Value, money in, income, gain, IRR, and time-weighted return
+ *  by account and security for a period (POS-030).
+ */
+"performance" | 
+/**  Investment income by account and security (RPT-160). */
+"investment_income" | 
+/**  Positions as of a date (RPT-170). */
+"holdings" | 
+/**  Market value by asset class, with a graph (RPT-180). */
+"asset_allocation" | 
 /**  Tax-line totals and their transactions (CAT-050). */
 "tax_schedule" | 
 /**  Tax-related categories and their transactions (RPT-140). */

@@ -85,9 +85,7 @@ text_enum! {
 }
 
 text_enum! {
-    /// Lot selection methods (LOT-100, LOT-110, D-60). The prototype
-    /// engine implements `Fifo` and `Specific`; the others are stored so
-    /// the schema doesn't change when they arrive.
+    /// Lot selection methods (LOT-100, LOT-110, LOT-115, D-60).
     pub enum LotMethod {
         Fifo = "fifo",
         Specific = "specific",

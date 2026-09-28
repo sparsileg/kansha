@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod invest;
 pub mod ledger;
 pub mod lists;
+pub mod pdf;
 pub mod reconcile;
 pub mod reports;
 pub mod sample;

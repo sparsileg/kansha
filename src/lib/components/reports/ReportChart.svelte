@@ -18,7 +18,12 @@
   const plotH = $derived(height - TOP - BOTTOM);
   const y = (pos: number) => TOP + plotH - (pos / 10000) * plotH;
 
-  const n = $derived(Math.max(chart.dates.length, 1));
+  // A graph by category (asset class) names its bars; one over dates
+  // shows months.
+  const byLabel = $derived(chart.labels.length > 0);
+  const n = $derived(Math.max(byLabel ? chart.labels.length : chart.dates.length, 1));
+  const xName = (i: number) => (byLabel ? chart.labels[i] : displayDate(chart.dates[i]));
+  const xTick = (i: number) => (byLabel ? chart.labels[i] : monthShort(chart.dates[i]));
   const slot = $derived(plotW / n);
   const bars = $derived(chart.series.filter((s) => s.style === "bar"));
   const lines = $derived(chart.series.filter((s) => s.style === "line"));
@@ -63,7 +68,7 @@
           width={Math.max(barW - 1, 1)}
           height={Math.max(Math.abs(y(p) - y(chart.zero)), 0.5)}
           fill={barFill(b)}
-        ><title>{s.name}, {displayDate(chart.dates[i])}: {formatMoney(s.values[i])}</title></rect>
+        ><title>{s.name}, {xName(i)}: {formatMoney(s.values[i])}</title></rect>
       {/each}
     {/each}
 
@@ -71,14 +76,14 @@
       <polyline class="line" points={s.pos.map((p, i) => `${cx(i)},${y(p)}`).join(" ")} />
       {#each s.pos as p, i (i)}
         <rect class="mark" x={cx(i) - 4} y={y(p) - 4} width="8" height="8"
-          ><title>{s.name}, {displayDate(chart.dates[i])}: {formatMoney(s.values[i])}</title></rect
+          ><title>{s.name}, {xName(i)}: {formatMoney(s.values[i])}</title></rect
         >
       {/each}
     {/each}
 
-    {#each chart.dates as d, i (i)}
-      {#if i % every === 0}
-        <text class="tick" x={cx(i)} y={height - 8} text-anchor="middle">{monthShort(d)}</text>
+    {#each { length: n } as _, i (i)}
+      {#if i % every === 0 && (byLabel ? i < chart.labels.length : i < chart.dates.length)}
+        <text class="tick" x={cx(i)} y={height - 8} text-anchor="middle">{xTick(i)}</text>
       {/if}
     {/each}
   </svg>

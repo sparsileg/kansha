@@ -2,6 +2,8 @@
 //! basis and proceeds divide, splits, return of capital, holding period.
 //! Pure functions over open-lot snapshots; no SQL.
 
+use std::cmp::Ordering;
+
 use super::{LotId, LotPick, Term};
 use crate::date::Date;
 use crate::error::{Error, Result};
@@ -52,14 +54,31 @@ fn short_of(have: Quantity, want: Quantity) -> Error {
     Error::Invalid(format!("only {have} shares are held; cannot take {want}"))
 }
 
-/// First in, first out: oldest acquisition date first, then entry order.
-pub(crate) fn pick_fifo(lots: &[OpenLot], quantity: Quantity) -> Result<Vec<Take>> {
+/// Oldest acquisition first, then entry order.
+fn oldest_first(a: &OpenLot, b: &OpenLot) -> Ordering {
+    (a.acquired, a.id).cmp(&(b.acquired, b.id))
+}
+
+/// Highest basis per share first (compared exactly, without dividing),
+/// then oldest first.
+fn highest_cost_first(a: &OpenLot, b: &OpenLot) -> Ordering {
+    let a_side = i128::from(a.basis.cents()) * i128::from(b.quantity.raw());
+    let b_side = i128::from(b.basis.cents()) * i128::from(a.quantity.raw());
+    b_side.cmp(&a_side).then_with(|| oldest_first(a, b))
+}
+
+/// Take `quantity` shares from lots in the order `cmp` gives.
+fn pick_in_order(
+    lots: &[OpenLot],
+    quantity: Quantity,
+    mut cmp: impl FnMut(&OpenLot, &OpenLot) -> Ordering,
+) -> Result<Vec<Take>> {
     let have = total(lots);
     if quantity > have {
         return Err(short_of(have, quantity));
     }
     let mut ordered: Vec<&OpenLot> = lots.iter().collect();
-    ordered.sort_by_key(|l| (l.acquired, l.id));
+    ordered.sort_by(|a, b| cmp(a, b));
     let mut left = quantity;
     let mut out = Vec::new();
     for lot in ordered {
@@ -71,6 +90,77 @@ pub(crate) fn pick_fifo(lots: &[OpenLot], quantity: Quantity) -> Result<Vec<Take
         left -= q;
     }
     Ok(out)
+}
+
+/// First in, first out: oldest acquisition date first, then entry order.
+pub(crate) fn pick_fifo(lots: &[OpenLot], quantity: Quantity) -> Result<Vec<Take>> {
+    pick_in_order(lots, quantity, oldest_first)
+}
+
+/// Highest cost first (LOT-115): highest basis per share, ties to the
+/// oldest lot.
+pub(crate) fn pick_hifo(lots: &[OpenLot], quantity: Quantity) -> Result<Vec<Take>> {
+    pick_in_order(lots, quantity, highest_cost_first)
+}
+
+/// Minimum tax (LOT-115), without tax rates: short-term losses, then
+/// long-term losses, long-term gains, short-term gains. All shares sell
+/// at one price, so within each group the highest basis per share comes
+/// first: the largest loss, or the smallest gain. A lot sold at its
+/// basis counts as a (zero) gain.
+pub(crate) fn pick_min_tax(
+    lots: &[OpenLot],
+    quantity: Quantity,
+    proceeds: Money,
+    sold: Date,
+) -> Result<Vec<Take>> {
+    // Loss when basis ÷ lot shares > proceeds ÷ shares sold.
+    let group = |l: &OpenLot| -> u8 {
+        let loss = i128::from(l.basis.cents()) * i128::from(quantity.raw())
+            > i128::from(proceeds.cents()) * i128::from(l.quantity.raw());
+        match (loss, term(l.acquired, sold)) {
+            (true, Term::Short) => 0,
+            (true, Term::Long) => 1,
+            (false, Term::Long) => 2,
+            (false, Term::Short) => 3,
+        }
+    };
+    pick_in_order(lots, quantity, |a, b| {
+        group(a)
+            .cmp(&group(b))
+            .then_with(|| highest_cost_first(a, b))
+    })
+}
+
+/// Basis changes to lots, one per lot.
+pub(crate) type BasisChanges = Vec<(LotId, Money)>;
+
+/// Average cost (LOT-110): the holding's total basis divided among its
+/// open lots by shares (half-even; odd cents to the largest fractions,
+/// ties to the older lot), so every share carries the average. Returns
+/// each lot's basis change (non-zero only; they sum to zero) and the lots
+/// as they stand after it. Shares then leave oldest first, which sets the
+/// holding period.
+pub(crate) fn average(lots: &[OpenLot]) -> Result<(BasisChanges, Vec<OpenLot>)> {
+    let mut ordered = lots.to_vec();
+    ordered.sort_by(oldest_first);
+    let basis: i64 = ordered
+        .iter()
+        .try_fold(0i64, |sum, l| sum.checked_add(l.basis.cents()))
+        .ok_or(Error::Overflow("average basis"))?;
+    let weights: Vec<i64> = ordered.iter().map(|l| l.quantity.raw()).collect();
+    let parts = allocate(basis, &weights)?;
+    let mut changes = Vec::new();
+    for (lot, part) in ordered.iter_mut().zip(parts) {
+        let delta = part
+            .checked_sub(lot.basis.cents())
+            .ok_or(Error::Overflow("average basis"))?;
+        if delta != 0 {
+            changes.push((lot.id, Money::from_cents(delta)));
+        }
+        lot.basis = Money::from_cents(part);
+    }
+    Ok((changes, ordered))
 }
 
 /// Specific identification: the user's picks, which must add up to
@@ -244,6 +334,92 @@ mod tests {
             (LotId(1), q("3"), m("300.00"))
         );
         assert!(pick_fifo(&lots, q("15.000001")).is_err());
+    }
+
+    #[test]
+    fn hifo_takes_highest_cost_per_share_first() {
+        let lots = [
+            lot(1, "2024-01-10", "10", "500.00"),  // 50
+            lot(2, "2024-06-10", "10", "1200.00"), // 120
+            lot(3, "2025-11-10", "4", "440.00"),   // 110
+            lot(4, "2025-12-10", "20", "2200.00"), // 110, same as 3: older first
+        ];
+        let t = pick_hifo(&lots, q("16")).unwrap();
+        let got: Vec<(LotId, Quantity, Money)> =
+            t.iter().map(|t| (t.lot, t.quantity, t.basis)).collect();
+        assert_eq!(
+            got,
+            vec![
+                (LotId(2), q("10"), m("1200.00")),
+                (LotId(3), q("4"), m("440.00")),
+                (LotId(4), q("2"), m("220.00")),
+            ]
+        );
+        assert!(pick_hifo(&lots, q("44.000001")).is_err());
+    }
+
+    #[test]
+    fn min_tax_orders_losses_then_gains_by_term() {
+        // Sold 2026-03-03 at 100 a share.
+        let lots = [
+            lot(1, "2024-01-10", "10", "500.00"),  // long gain 50/share
+            lot(2, "2024-06-10", "10", "1300.00"), // long loss 30/share
+            lot(3, "2024-09-10", "10", "800.00"),  // long gain 20/share
+            lot(4, "2025-11-10", "10", "1100.00"), // short loss 10/share
+            lot(5, "2025-12-10", "10", "900.00"),  // short gain 10/share
+            lot(6, "2025-10-10", "10", "1250.00"), // short loss 25/share
+            lot(7, "2024-02-10", "10", "1000.00"), // long, exactly even: a gain of 0
+        ];
+        let order = |n: &str, proceeds: &str| -> Vec<i64> {
+            pick_min_tax(&lots, q(n), m(proceeds), d("2026-03-03"))
+                .unwrap()
+                .iter()
+                .map(|t| t.lot.0)
+                .collect()
+        };
+        // Short losses (largest first), long loss, long gains (smallest
+        // first: the even lot, then 20, then 50), short gain.
+        assert_eq!(order("70", "7000.00"), vec![6, 4, 2, 7, 3, 1, 5]);
+        // At 120 a share: lot 6 (125) is still a short loss, lot 2 (130)
+        // a long loss; lot 4 (110) turns into a short gain, the smaller
+        // of the two, so it comes before lot 5.
+        assert_eq!(order("70", "8400.00"), vec![6, 2, 7, 3, 1, 4, 5]);
+    }
+
+    #[test]
+    fn average_evens_out_basis_and_keeps_the_total() {
+        let lots = [
+            lot(3, "2026-01-05", "20", "2600.00"),
+            lot(1, "2025-01-10", "10", "1000.00"),
+            lot(2, "2025-06-10", "10", "1500.00"),
+        ];
+        let (changes, even) = average(&lots).unwrap();
+        assert_eq!(
+            changes,
+            vec![
+                (LotId(1), m("275.00")),
+                (LotId(2), m("-225.00")),
+                (LotId(3), m("-50.00")),
+            ]
+        );
+        assert_eq!(changes.iter().map(|c| c.1).sum::<Money>(), Money::ZERO);
+        let bases: Vec<Money> = even.iter().map(|l| l.basis).collect();
+        assert_eq!(bases, vec![m("1275.00"), m("1275.00"), m("2550.00")]);
+        // Then oldest first: 10 + 5 shares, basis 15 x 127.50.
+        let t = pick_fifo(&even, q("15")).unwrap();
+        assert_eq!(t.iter().map(|t| t.basis).sum::<Money>(), m("1912.50"));
+        assert_eq!(t[1].acquired, d("2025-06-10"));
+
+        // Already even: nothing changes. An odd cent goes to the oldest.
+        assert!(average(&even).unwrap().0.is_empty());
+        let odd = [
+            lot(1, "2025-02-01", "1", "10.00"),
+            lot(2, "2025-02-02", "1", "10.00"),
+            lot(3, "2025-02-03", "1", "10.01"),
+        ];
+        let (changes, even) = average(&odd).unwrap();
+        assert_eq!(changes, vec![(LotId(1), m("0.01")), (LotId(3), m("-0.01"))]);
+        assert_eq!(even[0].basis, m("10.01"));
     }
 
     #[test]

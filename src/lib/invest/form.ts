@@ -10,10 +10,20 @@ import type {
   AccountId,
   InvAction,
   InvInput,
+  LotMethod,
   LotPick,
   SecurityId,
   Target,
 } from "../types/bindings";
+
+/** Lot selection methods and their names (LOT-100, LOT-110, LOT-115). */
+export const LOT_METHODS: [LotMethod, string][] = [
+  ["fifo", "First in, first out"],
+  ["specific", "Choose lots"],
+  ["average", "Average cost"],
+  ["hifo", "Highest cost first"],
+  ["min_tax", "Minimum tax"],
+];
 
 type Need = "required" | "optional" | "none";
 
@@ -99,7 +109,7 @@ export interface InvForm {
   splitOld: string;
   toAccount: AccountId | null;
   /** "" = the security's or account's default. */
-  lotMethod: "" | "fifo" | "specific";
+  lotMethod: "" | LotMethod;
   /** Specific lots: shares typed per lot ID. */
   picks: Record<number, string>;
   acquired: string;
@@ -148,7 +158,7 @@ export function formFromInput(i: InvInput): InvForm {
     splitNew: i.split ? String(i.split.new) : "",
     splitOld: i.split ? String(i.split.old) : "",
     toAccount: i.to_account,
-    lotMethod: i.lot_method === "fifo" || i.lot_method === "specific" ? i.lot_method : "",
+    lotMethod: i.lot_method ?? "",
     picks,
     acquired: i.acquired ? displayDate(i.acquired) : "",
     counterpart: targetKey(i.counterpart),

@@ -17,6 +17,7 @@ mod csv;
 mod dashboard;
 mod facts;
 mod income_expense;
+mod investing;
 mod itemized;
 mod net_worth;
 mod range;
@@ -36,7 +37,7 @@ use crate::categories::{CategoryId, PayeeId, TagId};
 use crate::date::Date;
 use crate::error::Result;
 use crate::ledger::TxnId;
-use crate::securities::SecurityId;
+use crate::securities::{AssetClass, SecurityId};
 use crate::text_enum::text_enum;
 
 /// Row ID of a saved report.
@@ -60,6 +61,15 @@ text_enum! {
         IncomeExpense = "income_expense",
         /// Payee totals, optionally by period.
         IncomeExpensePayee = "income_expense_payee",
+        /// Value, money in, income, gain, IRR, and time-weighted return
+        /// by account and security for a period (POS-030).
+        Performance = "performance",
+        /// Investment income by account and security (RPT-160).
+        InvestmentIncome = "investment_income",
+        /// Positions as of a date (RPT-170).
+        Holdings = "holdings",
+        /// Market value by asset class, with a graph (RPT-180).
+        AssetAllocation = "asset_allocation",
         /// Tax-line totals and their transactions (CAT-050).
         TaxSchedule = "tax_schedule",
         /// Tax-related categories and their transactions (RPT-140).
@@ -221,6 +231,10 @@ impl ReportSettings {
             K::ItemizedPayees => ("Itemized Payees", DatePreset::YearToDate),
             K::IncomeExpense => ("Income/Expense by Category", DatePreset::YearToDate),
             K::IncomeExpensePayee => ("Income/Expense by Payee", DatePreset::YearToDate),
+            K::Performance => ("Investment Performance", DatePreset::YearToDate),
+            K::InvestmentIncome => ("Investment Income", DatePreset::YearToDate),
+            K::Holdings => ("Holdings", DatePreset::YearToDate),
+            K::AssetAllocation => ("Asset Allocation", DatePreset::YearToDate),
             K::TaxSchedule => ("Tax Schedule", DatePreset::LastYear),
             K::TaxSummary => ("Tax Summary", DatePreset::YearToDate),
         };
@@ -282,6 +296,8 @@ text_enum! {
         Date = "date",
         Money = "money",
         Quantity = "quantity",
+        /// A percent with two decimals, e.g. "12.34".
+        Percent = "percent",
     }
 }
 
@@ -328,6 +344,8 @@ pub enum Drill {
     /// A category's transactions for the column's period (an Itemized
     /// Categories report).
     Category { category: CategoryId },
+    /// The holdings in one asset class (a Holdings report).
+    AssetClass { asset_class: AssetClass },
     /// A payee's transactions for the column's period (an Itemized Payees
     /// report); `None` is transactions with no payee.
     Payee { payee: Option<PayeeId> },
@@ -382,6 +400,10 @@ pub fn run(conn: &Connection, settings: &ReportSettings, today: Date) -> Result<
             income_expense::build(conn, settings, range, income_expense::By::Payee)?
         }
         ReportKind::TaxSchedule => tax::build(conn, settings, range)?,
+        ReportKind::Performance => investing::performance(conn, settings, range)?,
+        ReportKind::InvestmentIncome => investing::income(conn, settings, range)?,
+        ReportKind::Holdings => investing::holdings(conn, settings, range)?,
+        ReportKind::AssetAllocation => investing::allocation(conn, settings, range)?,
     };
     tree::hide_columns(&mut report, &settings.hidden_columns);
     if !settings.cents {
@@ -400,6 +422,10 @@ pub fn columns(kind: ReportKind) -> Vec<Column> {
         ReportKind::ItemizedPayees => itemized::columns(itemized::By::Payee),
         ReportKind::TaxSummary => itemized::columns(itemized::By::TaxSummary),
         ReportKind::TaxSchedule => tax::columns(),
+        ReportKind::Performance => investing::performance_columns(),
+        ReportKind::InvestmentIncome => investing::income_columns(),
+        ReportKind::Holdings => investing::holdings_columns(),
+        ReportKind::AssetAllocation => investing::allocation_columns(),
         ReportKind::NetWorth | ReportKind::IncomeExpense | ReportKind::IncomeExpensePayee => {
             Vec::new()
         }

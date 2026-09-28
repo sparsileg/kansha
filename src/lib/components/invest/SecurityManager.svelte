@@ -5,11 +5,13 @@
   import { call, commands } from "../../api";
   import { dateExample, datePattern, displayDate, parseDate } from "../../format/date";
   import { formatPrice, parsePrice } from "../../format/quantity";
+  import { LOT_METHODS } from "../../invest/form";
   import { confirmState } from "../../state/confirm.svelte";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import type {
     AssetClass,
+    LotMethod,
     PricePoint,
     Security,
     SecurityFields,
@@ -205,10 +207,9 @@
         <label>CUSIP (optional) <input value={f.cusip ?? ""} oninput={(e) => (f!.cusip = e.currentTarget.value || null)} /></label>
         <label>
           Lot selection
-          <select value={f.default_lot_method ?? ""} onchange={(e) => (f!.default_lot_method = e.currentTarget.value ? (e.currentTarget.value as "fifo" | "specific") : null)}>
+          <select value={f.default_lot_method ?? ""} onchange={(e) => (f!.default_lot_method = e.currentTarget.value ? (e.currentTarget.value as LotMethod) : null)}>
             <option value="">The account's default</option>
-            <option value="fifo">First in, first out</option>
-            <option value="specific">Choose lots</option>
+            {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
           </select>
         </label>
         <label>Notes <input bind:value={f.notes} /></label>

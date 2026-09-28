@@ -291,6 +291,29 @@ pub fn cash_balance(conn: &Connection, account: AccountId, as_of: Option<Date>) 
         })?)
 }
 
+/// Money reaching `account`'s own cash from ordinary register entries
+/// (transfers from a bank account, say), not investment transactions,
+/// dated `from ..= to`, summed by day; no zero days.
+pub fn outside_cash(
+    conn: &Connection,
+    account: AccountId,
+    from: Date,
+    to: Date,
+) -> Result<Vec<(Date, Money)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.txn_date, sum(p.amount) FROM posting p JOIN txn t ON t.id = p.txn_id
+         WHERE p.account_id = :account AND p.security_id IS NULL
+           AND t.txn_date BETWEEN :from AND :to
+           AND NOT EXISTS (SELECT 1 FROM investment_txn i WHERE i.txn_id = t.id)
+         GROUP BY t.txn_date HAVING sum(p.amount) <> 0 ORDER BY t.txn_date",
+    )?;
+    let rows = stmt.query_map(
+        named_params! {":account": account, ":from": from, ":to": to},
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// Any investment transactions in or into `account`?
 pub fn has_transactions(conn: &Connection, account: AccountId) -> Result<bool> {
     Ok(conn

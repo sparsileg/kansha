@@ -28,7 +28,7 @@
   const sortOf = (c: Column): DetailSort | null => (sort && onsort ? (COLUMN_SORTS[c.id] ?? null) : null);
 
   const lines = $derived(flatten(report.rows, (p) => inst.isCollapsed(p)));
-  const numeric = (c: Column) => c.kind === "money" || c.kind === "quantity";
+  const numeric = (c: Column) => c.kind === "money" || c.kind === "quantity" || c.kind === "percent";
 </script>
 
 <table class="report">

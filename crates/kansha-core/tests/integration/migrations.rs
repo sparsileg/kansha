@@ -10,7 +10,7 @@ use kansha_core::persistence::migrate::{APPLICATION_ID, LATEST_VERSION, MIGRATIO
 use kansha_core::{Db, Error};
 use rusqlite::Connection;
 
-use crate::fixture::{clock, count, db};
+use crate::fixture::{clock, count, date, db};
 
 const TABLES: &[&str] = &[
     "account",
@@ -326,4 +326,85 @@ fn migration_0003_adds_tax_lines_and_maps_investment_income() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn migration_0004_keeps_lot_adjustments_and_accepts_average() {
+    use kansha_core::accounts::{AccountFields, AccountType};
+    use kansha_core::invest::{self, InvAction, InvInput, SplitRatio};
+    use kansha_core::persistence::{Origin, accounts, securities};
+    use kansha_core::securities::{SecurityFields, SecurityType};
+    use kansha_core::{Money, Quantity};
+
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 3).unwrap();
+    // A split and a return of capital, recorded under schema 3.
+    let ten: Quantity = "10".parse().unwrap();
+    let cost: Money = "1000.00".parse().unwrap();
+    let roc: Money = "50.00".parse().unwrap();
+    db.write(&clock, Origin::Ui, |tx| {
+        let a = accounts::insert(tx, &AccountFields::new("Brokerage", AccountType::Brokerage))?.id;
+        let s = securities::insert(tx, &SecurityFields::new("Fund", SecurityType::MutualFund))?.id;
+        let at = |action, d: &str| {
+            let mut i = InvInput::new(a, action, date(d));
+            i.security = Some(s);
+            i
+        };
+        let mut buy = at(InvAction::Buy, "2025-01-10");
+        buy.quantity = Some(ten);
+        buy.amount = Some(cost);
+        invest::create(tx, &buy)?;
+        let mut split = at(InvAction::Split, "2025-02-10");
+        split.split = Some(SplitRatio { new: 2, old: 1 });
+        invest::create(tx, &split)?;
+        let mut cap = at(InvAction::ReturnOfCapital, "2025-03-10");
+        cap.amount = Some(roc);
+        invest::create(tx, &cap)?;
+        Ok(())
+    })
+    .unwrap();
+    let rows = |db: &Db| -> Vec<(i64, String, i64, i64)> {
+        let mut st = db
+            .conn()
+            .prepare("SELECT id, kind, quantity_delta, basis_delta FROM lot_adjustment ORDER BY id")
+            .unwrap();
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let before = rows(&db);
+    assert_eq!(before.len(), 2);
+
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    assert_eq!(rows(&db), before);
+    let indexes: i64 = db
+        .conn()
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'index'
+             AND name IN ('lot_adjustment_lot', 'lot_adjustment_txn')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(indexes, 2);
+
+    // 'average' changes basis only, and never by zero.
+    let (lot, txn): (i64, i64) = db
+        .conn()
+        .query_row("SELECT id, origin_txn_id FROM lot", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    let insert = |q: i64, b: i64| {
+        db.conn().execute(
+            "INSERT INTO lot_adjustment (lot_id, txn_id, kind, quantity_delta, basis_delta)
+             VALUES (?1, ?2, 'average', ?3, ?4)",
+            rusqlite::params![lot, txn, q, b],
+        )
+    };
+    assert!(insert(0, 0).is_err());
+    assert!(insert(5, 100).is_err());
+    assert!(insert(0, -100).is_ok());
+    assert!(insert(0, 100).is_ok());
 }

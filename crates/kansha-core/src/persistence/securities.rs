@@ -4,7 +4,6 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
 
 use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::accounts::LotMethod;
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::securities::{PricePoint, Security, SecurityFields, SecurityId};
@@ -46,13 +45,6 @@ fn normalize(f: &SecurityFields) -> Result<SecurityFields> {
     f.cusip = clean(&f.cusip);
     if f.cusip.as_ref().is_some_and(|c| c.chars().count() != 9) {
         return Err(Error::Invalid("a CUSIP has 9 characters".into()));
-    }
-    if let Some(m) = f.default_lot_method {
-        if !matches!(m, LotMethod::Fifo | LotMethod::Specific) {
-            return Err(Error::Invalid(format!(
-                "{m} lot selection is not available yet; choose fifo or specific"
-            )));
-        }
     }
     Ok(f)
 }

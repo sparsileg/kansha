@@ -232,7 +232,7 @@ pub struct Position {
 
 /// Positions on `as_of` in `account` (or every account), by account and
 /// security name.
-fn positions(
+pub(super) fn positions(
     conn: &Connection,
     account: Option<AccountId>,
     as_of: Date,
@@ -630,6 +630,12 @@ pub struct Performance {
 /// `part ÷ whole` in percent, two decimals, half-even.
 fn percent(part: Money, whole: Money) -> Option<String> {
     ratio_percent(part.to_decimal(), whole.to_decimal())
+}
+
+/// `part ÷ whole` in percent, two decimals, half-even; `None` unless
+/// `whole` is positive.
+pub fn percent_of(part: Money, whole: Money) -> Option<String> {
+    percent(part, whole)
 }
 
 /// `part ÷ whole` in percent, two decimals, half-even; `None` unless

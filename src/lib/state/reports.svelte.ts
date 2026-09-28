@@ -5,7 +5,13 @@
 
 import { call, commands } from "../api";
 import { presetLabel } from "../reports/meta";
-import type { ReportKind, ReportSettings, Report, SavedReport } from "../types/bindings";
+import type {
+  PageOrientation,
+  ReportKind,
+  ReportSettings,
+  Report,
+  SavedReport,
+} from "../types/bindings";
 import { confirmState } from "./confirm.svelte";
 import { windowState } from "./windows.svelte";
 
@@ -29,7 +35,7 @@ export class ReportInstance {
   collapsed = $state<Set<string>>(new Set());
   loading = $state(false);
   error = $state<string | null>(null);
-  /** Last CSV export's file, to tell the user where it went. */
+  /** Last CSV or PDF file saved, to tell the user where it went. */
   exported = $state<string | null>(null);
   /** The graph or the table folded away (view only, not saved). */
   hideGraph = $state(false);
@@ -37,6 +43,8 @@ export class ReportInstance {
   /** Closing asked to save a new report: the window shows the Save
    * dialog, then closes. */
   saveOnClose = $state(false);
+  /** Page orientation last chosen in the Save PDF dialog. */
+  orientation = $state<PageOrientation>("portrait");
   /** The settings as opened or last saved. */
   #baseline = $state("");
   #seq = 0;
@@ -131,6 +139,11 @@ export class ReportInstance {
 
   async exportCsv(): Promise<void> {
     this.exported = await call(commands.reportExportCsv($state.snapshot(this.settings)));
+  }
+
+  /** Save the page as a PDF (opened in the PDF viewer, which prints). */
+  async savePdf(): Promise<void> {
+    this.exported = await call(commands.reportSavePdf(this.heading, this.orientation));
   }
 }
 

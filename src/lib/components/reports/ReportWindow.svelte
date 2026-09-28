@@ -4,7 +4,7 @@
   // Figures open the transactions behind them (RPT-030); a transaction
   // opens its register and the report waits in the dock. Showing the
   // window again rebuilds the report, so it is never stale.
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import CustomizeReportModal from "./CustomizeReportModal.svelte";
   import ReportChart from "./ReportChart.svelte";
   import ReportTable from "./ReportTable.svelte";
@@ -15,6 +15,7 @@
   import { INTERVALS, PRESETS, SORTABLE, SORTS, SUBTOTALS } from "../../reports/meta";
   import type { Line } from "../../reports/rows";
   import { openAccount } from "../../shell/nav";
+  import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import { registerState } from "../../state/register.svelte";
   import { reportState, type ReportInstance } from "../../state/reports.svelte";
@@ -33,6 +34,8 @@
   let { inst }: { inst: ReportInstance } = $props();
 
   let customizing = $state(false);
+  /** The Save PDF dialog is open. */
+  let pdfOpen = $state(false);
   let saving = $state<null | "save" | "as">(null);
   let saveName = $state("");
   let saveError = $state<string | null>(null);
@@ -136,6 +139,18 @@
     }
   }
 
+  /** Close the Save PDF dialog first so it is not on the page, then
+   * save. */
+  async function savePdf() {
+    pdfOpen = false;
+    await tick();
+    try {
+      await inst.savePdf();
+    } catch (e) {
+      inst.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   /** A category and every category under it. */
   function withSubcategories(id: CategoryId): CategoryId[] {
     const out = [id];
@@ -170,6 +185,19 @@
           tags: base.tags,
           categories: withSubcategories(d.category),
           title: `Itemized Categories: ${listsState.categoryPath(d.category)}`,
+        });
+        break;
+      }
+      case "asset_class": {
+        // The Holdings report, limited to that class's securities.
+        if (investState.securities.length === 0) await investState.loadSecurities();
+        const s = await commands.reportDefaults("holdings");
+        await reportState.openWith({
+          ...s,
+          range: { preset: "custom", from: null, to: report.to },
+          accounts: base.accounts,
+          securities: investState.securities.filter((x) => x.asset_class === d.asset_class).map((x) => x.id),
+          title: `Holdings: ${line.label}`,
         });
         break;
       }
@@ -237,7 +265,7 @@
     <button type="button" onclick={() => inst.collapseAll()}>Collapse All</button>
     <span class="sep"></span>
     <button type="button" onclick={exportCsv} disabled={!report}>Export CSV</button>
-    <button type="button" onclick={() => window.print()} disabled={!report}>Print…</button>
+    <button type="button" onclick={() => (pdfOpen = true)} disabled={!report}>Save PDF…</button>
   </div>
   {#if inst.exported}<p class="note no-print">Saved to {inst.exported}</p>{/if}
   {#if inst.error}<p class="err" role="alert">{inst.error}</p>{/if}
@@ -254,7 +282,8 @@
     {#if inst.loading && !report}<p class="note">Building the report…</p>{/if}
     {#if report}
       {#if report.chart}
-        <div class="part">
+        <!-- The graph is for the screen; paper gets the table only. -->
+        <div class="part no-print">
           <div class="fold no-print">
             <button type="button" aria-expanded={!inst.hideGraph} onclick={() => (inst.hideGraph = !inst.hideGraph)}>
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d={inst.hideGraph ? DOWN : UP} /></svg>
@@ -263,7 +292,7 @@
           </div>
           {#if !inst.hideGraph}<ReportChart chart={report.chart} />{/if}
         </div>
-        <hr class="split" />
+        <hr class="split no-print" />
         <div class="fold no-print">
           <button type="button" aria-expanded={!inst.hideTable} onclick={() => (inst.hideTable = !inst.hideTable)}>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d={inst.hideTable ? DOWN : UP} /></svg>
@@ -304,6 +333,22 @@
         <button type="submit">OK</button>
       </div>
     </form>
+  </Modal>
+{/if}
+{#if pdfOpen}
+  <Modal title="Save PDF" onclose={() => (pdfOpen = false)}>
+    <div class="save">
+      <fieldset class="orient">
+        <legend>Orientation</legend>
+        <label><input type="radio" bind:group={inst.orientation} value="portrait" /> Portrait</label>
+        <label><input type="radio" bind:group={inst.orientation} value="landscape" /> Landscape</label>
+      </fieldset>
+      <div class="buttons">
+        <span class="grow"></span>
+        <button type="button" onclick={() => (pdfOpen = false)}>Cancel</button>
+        <button type="button" onclick={savePdf}>Save PDF</button>
+      </div>
+    </div>
   </Modal>
 {/if}
 {#if saving}
@@ -422,6 +467,18 @@
     display: grid;
     gap: 0.15rem;
   }
+  .orient {
+    display: flex;
+    gap: 1rem;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .orient label {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+  }
   .dates {
     display: grid;
     grid-template-columns: auto auto;
@@ -436,11 +493,23 @@
   .grow {
     flex: 1;
   }
+  /* Paper: a smaller fixed size, whatever the screen setting, so more
+     columns fit on a page. */
   @media print {
     .page {
       overflow: visible;
       border: 0;
       padding: 0;
+      font-size: 9pt;
+    }
+    .title {
+      padding-top: 0;
+    }
+    .title h1 {
+      font-size: 12pt;
+    }
+    .today {
+      top: 0;
     }
   }
 </style>

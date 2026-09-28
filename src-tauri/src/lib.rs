@@ -130,6 +130,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::saved_report_delete,
             commands::reports::tax_line_list,
             commands::reports::dashboard,
+            commands::pdf::report_save_pdf,
         ])
 }
 

@@ -1,0 +1,121 @@
+id = "INV-015"
+description = "HIFO takes the highest cost per share first; minimum tax takes short-term losses, long-term losses, long-term gains (smallest first), short-term gains (smallest first); minimum tax without a price (shares removed) takes FIFO"
+requirements = ["LOT-115", "LOT-030", "LOT-040"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "XYZ Corp"
+ticker = "XYZ"
+type = "stock"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2024-01-02"
+amount = "50000.00"
+category = "Opening Balance"
+
+# Per share: 50, 120, 80 (long-term by March 2026), 110, 90 (short-term).
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2024-01-10"
+security = "XYZ"
+quantity = "10"
+amount = "500.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2024-06-10"
+security = "XYZ"
+quantity = "10"
+amount = "1200.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2024-09-10"
+security = "XYZ"
+quantity = "10"
+amount = "800.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-11-10"
+security = "XYZ"
+quantity = "10"
+amount = "1100.00"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2025-12-10"
+security = "XYZ"
+quantity = "10"
+amount = "900.00"
+
+# HIFO, 15 at 100: all of the 120 lot, then 5 of the 110 lot.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-02"
+security = "XYZ"
+quantity = "15"
+amount = "1500.00"
+lot_method = "hifo"
+
+# Minimum tax, 18 at 100: the short-term loss (5 left of the 110 lot),
+# no long-term losses, long-term gains smallest first (the 80 lot, then
+# 3 of the 50 lot); the short-term gain (90 lot) is left.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "sell"
+date = "2026-03-03"
+security = "XYZ"
+quantity = "18"
+amount = "1800.00"
+lot_method = "min_tax"
+
+# No price: minimum tax takes the oldest lot first.
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "shares_removed"
+date = "2026-03-04"
+security = "XYZ"
+quantity = "5"
+lot_method = "min_tax"
+
+[expect.cash_balances]
+"Brokerage" = "48800.00"
+
+[[expect.lots]]
+account = "Brokerage"
+security = "XYZ"
+rows = [
+    { acquired = "2024-01-10", quantity = "2", basis = "100.00" },
+    { acquired = "2025-12-10", quantity = "10", basis = "900.00" },
+]
+
+[[expect.gains]]
+rows = [
+    { date = "2026-03-02", security = "XYZ", acquired = "2024-06-10", quantity = "10", proceeds = "1000.00", basis = "1200.00", gain = "-200.00", term = "long" },
+    { date = "2026-03-02", security = "XYZ", acquired = "2025-11-10", quantity = "5", proceeds = "500.00", basis = "550.00", gain = "-50.00", term = "short" },
+    { date = "2026-03-03", security = "XYZ", acquired = "2025-11-10", quantity = "5", proceeds = "500.00", basis = "550.00", gain = "-50.00", term = "short" },
+    { date = "2026-03-03", security = "XYZ", acquired = "2024-09-10", quantity = "10", proceeds = "1000.00", basis = "800.00", gain = "200.00", term = "long" },
+    { date = "2026-03-03", security = "XYZ", acquired = "2024-01-10", quantity = "3", proceeds = "300.00", basis = "150.00", gain = "150.00", term = "long" },
+]

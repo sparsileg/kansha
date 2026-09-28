@@ -23,9 +23,11 @@ and `tax_line_in`; 11 new commands (below); `just bindings` run.
 Built: Capital Gains (Investing and Tax menus), Net Worth, Itemized
 Categories, Itemized Payees, Income/Expense by Category, Tax Schedule,
 Tax Summary, saved reports, Customize dialog, drill-down, CSV export,
-printing, the dashboard. Not built (Stan, 2026-09-27): tithing,
-holdings, allocation, cash flow, transaction report, account balances
-(RPT-120, 130, 160, 170, 180, 190, 200).
+printing, the dashboard. Not built (Stan, 2026-09-27): tithing, cash
+flow, transaction report, account balances (RPT-120, 130, 190, 200).
+Investment Performance, Investment Income, Holdings, and Asset
+Allocation (RPT-160, 170, 180, 310) came later with the Phase 6
+follow-up; see `phase-6.md`.
 
 ## Files
 
@@ -97,7 +99,7 @@ holdings, allocation, cash flow, transaction report, account balances
   values on 0–10000; the frontend scales only. Blue solid bars, orange
   hatched bars, and a line with square marks.
 - CSV goes to Downloads (`<title> <date>.csv`, never overwriting);
-  PDF by printing to PDF from the print dialog.
+  PDF likewise through Save PDF… (see "Save PDF" below).
 - Drill-down: a transaction row opens its register on that date; a Net
   Worth account opens its register up to the column date; an
   Income/Expense category opens Itemized Categories for that category
@@ -201,10 +203,52 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
 - A window's name in its frame is its heading (`h1`); Calendar,
   Reminders, Accounts, and Reconcile no longer have their own.
 
+## Printing (2026-09-28, spec 0.3.19)
+
+- Printing leaves the graph (and the rule under it) out; the report is
+  9 pt with a 12 pt title, whatever the screen font size.
+- Checked by printing the app's own markup and built CSS to PDF through
+  WebKitGTK 4.1 (the Linux web view): a 14-column Net Worth fits one
+  landscape page. Stan's blank landscape pages did not reproduce
+  (portrait, landscape, mismatched dialog settings, scrolled report
+  all print).
+- Stan: every report prints blank pages in landscape, light and dark,
+  Print to File (PDF) from the GTK print dialog (which has no preview).
+  Only the dialog path is untested here, so the cause is WebKitGTK's
+  dialog landscape handling or how Tauri starts printing. WebKitGTK
+  ignores CSS `@page { size: landscape }`. Open; next options: a
+  controlled dialog test on Stan's screen, Kansha's own Print/PDF
+  dialog setting orientation in code (needs the `webkit2gtk` crate in
+  `src-tauri`), or a Rust-built PDF.
+
+## Save PDF (2026-09-28, spec 0.3.20)
+
+- Cause found: a standalone WebKitGTK window (no Tauri) with the real
+  report page printed one blank page in landscape through the GTK
+  print dialog, from `window.print()` and from WebKit's own
+  `run_dialog` alike. The same page prints fine when the orientation
+  is set in code.
+- The toolbar's Print… is now **Save PDF…**: Portrait or Landscape
+  (remembered per open report), then the PDF goes to Downloads
+  (`<heading> <date>.pdf`, never overwriting), opens in the PDF viewer
+  (preview; print to paper from there), and "Saved to …" shows.
+- `src-tauri/src/commands/pdf.rs`: `report_save_pdf` gets the
+  `webkit2gtk::WebView` through `with_webview`, prints to GTK's "Print
+  to File" printer with the page setup set in code, and waits for
+  `finished`/`failed`. `download_path` and `internal` moved into
+  `commands/reports.rs` helpers shared with CSV export.
+- Tried and dropped: a Print… button with the GTK dialog preset to
+  landscape still printed blank pages (Stan, 2026-09-28).
+- New Linux-only deps in `src-tauri`: `gtk` 0.18, `webkit2gtk` 2.0 (the
+  versions wry already uses). **⚠ API change:** `report_save_pdf`,
+  `PageOrientation`; `just bindings` run.
+
 ## Known gaps
 
 - Not checked against the Quicken samples by Stan; column widths,
   fonts, and print layout untested on paper.
+- Save PDF is Linux only; Windows and macOS show an error. The file
+  printer name "Print to File" may differ on a non-English GTK.
 - Security Types and Investing Goals tabs (Quicken) not built: Kansha
   has no such concepts.
 - Organization option (Quicken's Itemized Categories) not built; only

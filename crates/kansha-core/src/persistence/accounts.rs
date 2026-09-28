@@ -5,8 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
 use crate::accounts::{
-    Account, AccountFields, AccountId, AccountStatus, InvestmentSettings, LotMethod,
-    OtherAssetSettings,
+    Account, AccountFields, AccountId, AccountStatus, InvestmentSettings, OtherAssetSettings,
 };
 use crate::date::Date;
 use crate::error::{Error, Result};
@@ -89,12 +88,6 @@ fn validate(f: &AccountFields) -> Result<()> {
     if linked_mismatch {
         return Err(Error::Invalid(
             "a linked cash account is required exactly when cash mode is linked".into(),
-        ));
-    }
-    let method = f.investment.as_ref().map(|i| i.default_lot_method);
-    if method.is_some_and(|m| !matches!(m, LotMethod::Fifo | LotMethod::Specific)) {
-        return Err(Error::Invalid(
-            "only fifo and specific lot selection are available yet".into(),
         ));
     }
     if (t == T::OtherAsset) != f.other_asset.is_some() {

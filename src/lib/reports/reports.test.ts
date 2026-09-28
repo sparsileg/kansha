@@ -67,6 +67,8 @@ describe("report cells", () => {
     expect(formatCell("quantity", "1234.5", true)).toBe("1,234.5");
     expect(formatCell("date", "2026-03-05", true)).toBe("03/05/2026");
     expect(formatCell("text", "", true)).toBe("");
+    expect(formatCell("percent", "-12.34", false)).toBe("-12.34%");
+    expect(formatCell("percent", "", true)).toBe("");
   });
   it("balance and period headings show dates", () => {
     expect(columnHeading(col("money", "Balance", null, "2026-01-31"))).toEqual(["01/31/2026", "Balance"]);

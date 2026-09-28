@@ -158,16 +158,59 @@ schema change.
   Added transactions and the batch in one transaction (origin import).
 - CSV dates accept `YYYY-MM-DD` and `M/D/YYYY` (US brokerage order).
 
+## Lot methods, returns, investing reports (2026-09-28, spec 0.3.18)
+
+Stan's follow-up items 5, 7, and 10. **⚠ Schema change:** migration
+0004 rebuilds `lot_adjustment` to allow kind `average` (basis only,
+non-zero). **⚠ API change:** `AdjustmentKind::Average`; `ReportKind`
+`performance`, `investment_income`, `holdings`, `asset_allocation`;
+`ColumnKind::Percent`; `Drill::AssetClass`; `Chart.labels`;
+`just bindings` run.
+
+- `invest/lots.rs`: `pick_hifo`, `pick_min_tax`, `average` (evens lot
+  basis out by shares; changes sum to zero), sharing one ordered-take
+  helper with FIFO. `service::choose_lots` returns the evening-out
+  changes, recorded as `average` adjustments. The "not available yet"
+  refusals (account, security, sale) are gone; pickers in the account
+  dialog, Securities, and the entry dialog list all five methods
+  (`invest/form.ts` `LOT_METHODS`).
+- Minimum tax without a sale price (transfer, shares removed): FIFO
+  (Stan). Groups: short loss, long loss, long gain, short gain; within
+  each, highest basis per share first (largest loss, smallest gain); an
+  even lot is a zero gain.
+- `invest/returns.rs`: `irr` (annual, 365-day years; bisection on a
+  daily rate between about −99.99 % and +10 000 % a year, whole-number
+  powers only, each evaluation kept overflow-free), `twr` (whole period,
+  flows at end of day), `percent_text`.
+- `invest/period.rs`: `account_period` (per security, the rest, the
+  account: start/end values, flows by day, values on flow days, income)
+  and `combined`. Flow rules in the module comment and POS-030.
+- `reports/investing.rs`: Investment Performance, Investment Income,
+  Holdings, Asset Allocation (graph by class via `chart::build_labeled`).
+  Reports > Investing lists them after Capital Gains.
+- Tests: `lots.rs` unit tests (HIFO, min-tax order at two prices,
+  average and rounding); scenarios `INV-014` (average cost, rounding,
+  FIFO afterwards) and `INV-015` (HIFO, min tax, min tax without a
+  price), which failed before the engine change; property test now
+  sells, transfers, and removes under every method and checks average
+  changes sum to zero; migration 0004 test; `returns.rs` unit tests;
+  `tests/integration/performance.rs` (tracks and all four reports, IRR
+  figures checked separately in Python); frontend form, cell, chart, and
+  drill tests.
+
 ## Known gaps
 
 - Stan's review of the lot scenarios (exit criterion) and hands-on UI
   test not done; `just test` on Windows not run.
 - No replay: fixing an old trade after later sales means deleting and
   re-entering the later ones.
-- Average cost (LOT-110), HIFO and minimum tax (LOT-115) not built.
 - Return-of-capital excess gain has no holding period.
 - Stale threshold not a setting (SET-040).
-- Performance is simple only (POS-030); no IRR or time-weighted.
+- IRR is annualized even for periods under a year; time-weighted
+  return is not annualized. Security-level returns leave out account
+  fees not tied to a security.
+- The Investments screen still shows no IRR or time-weighted columns
+  (the report only, per Stan).
 - Price download (PRC-040) and QIF prices (PRC-030 QIF half, MIG-140)
   not built.
 - Investment register loads each transaction separately; fine for the

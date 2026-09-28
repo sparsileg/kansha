@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const run = vi.hoisted(() => vi.fn());
 const create = vi.hoisted(() => vi.fn());
 const update = vi.hoisted(() => vi.fn());
 const goTo = vi.hoisted(() => vi.fn());
+const savePdf = vi.hoisted(() => vi.fn());
 
 const defaults = (kind: string) => ({
   kind,
@@ -39,6 +40,7 @@ vi.mock("../../api", async (orig) => {
       savedReportCreate: (name: string, s: unknown) => create(name, s),
       savedReportUpdate: (id: number, name: string, s: unknown) => update(id, name, s),
       savedReportList: () => ok([]),
+      reportSavePdf: (title: string, orientation: string) => savePdf(title, orientation),
     },
   };
 });
@@ -51,6 +53,7 @@ import { confirmState } from "../../state/confirm.svelte";
 import { listsState } from "../../state/lists.svelte";
 import { reportState, type ReportInstance } from "../../state/reports.svelte";
 import { viewState } from "../../state/view.svelte";
+import { investState } from "../../state/invest.svelte";
 import { windowState } from "../../state/windows.svelte";
 
 let inst: ReportInstance;
@@ -149,6 +152,24 @@ describe("Report window", () => {
     await waitFor(() => expect(create).toHaveBeenCalledWith("My gains", expect.objectContaining({ kind: "capital_gains" })));
     expect(inst.saved?.name).toBe("My gains");
   });
+  it("Save PDF asks the orientation, saves, and says where", async () => {
+    savePdf.mockImplementation(() => ok("/home/u/Downloads/Capital Gains 2026-09-27.pdf"));
+    show();
+    await fireEvent.click(await screen.findByRole("button", { name: "Save PDF…" }));
+    const dialog = screen.getByRole("dialog", { name: "Save PDF" });
+    expect((within(dialog).getByRole("radio", { name: "Portrait" }) as HTMLInputElement).checked).toBe(true);
+    expect(within(dialog).queryByRole("button", { name: /Print/ })).toBeNull();
+    await fireEvent.click(within(dialog).getByRole("radio", { name: "Landscape" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Save PDF" }));
+    await waitFor(() => expect(savePdf).toHaveBeenCalledWith("Capital Gains - Last year", "landscape"));
+    expect(screen.queryByRole("dialog", { name: "Save PDF" })).toBeNull();
+    expect(await screen.findByText(/Saved to .*Capital Gains 2026-09-27\.pdf/)).toBeTruthy();
+    // The choice is remembered for the next PDF.
+    await fireEvent.click(screen.getByRole("button", { name: "Save PDF…" }));
+    const again = screen.getByRole("dialog", { name: "Save PDF" });
+    expect((within(again).getByRole("radio", { name: "Landscape" }) as HTMLInputElement).checked).toBe(true);
+  });
+
   it("capital gains subtotals from the toolbar", async () => {
     show();
     const select = await screen.findByRole("combobox", { name: "Subtotal by:" });
@@ -228,7 +249,7 @@ describe("Itemized report toolbar", () => {
 describe("Report windows", () => {
   const withChart = {
     ...report,
-    chart: { dates: ["2025-12-31"], series: [], ticks: [], zero: 0 },
+    chart: { dates: ["2025-12-31"], labels: [], series: [], ticks: [], zero: 0 },
   };
 
   it("opens in a window on top, and reruns each time it is shown", async () => {
@@ -243,6 +264,10 @@ describe("Report windows", () => {
   it("hides and opens the graph and the report", async () => {
     run.mockImplementation(() => ok(withChart));
     show();
+    // The graph is screen-only: printing leaves it out.
+    const graph = await screen.findByRole("img");
+    expect(graph.closest(".no-print")).not.toBeNull();
+    expect(screen.getByRole("table").closest(".no-print")).toBeNull();
     await fireEvent.click(await screen.findByRole("button", { name: "Hide Graph" }));
     expect(screen.queryByRole("img")).toBeNull();
     expect(screen.getByRole("button", { name: "Open Graph" })).toBeTruthy();
@@ -327,6 +352,61 @@ describe("Report windows", () => {
       kind: "itemized_categories",
       range: { preset: "custom", from: "2025-01-01", to: "2025-03-31" },
       categories: [7],
+    });
+  });
+});
+
+describe("Investing reports", () => {
+  const allocation = {
+    ...report,
+    kind: "asset_allocation",
+    title: "Asset Allocation",
+    as_of: true,
+    columns: [
+      { id: "value", label: "Market Value", kind: "money", from: null, to: null },
+      { id: "percent", label: "Percent", kind: "percent", from: null, to: null },
+    ],
+    rows: [
+      { kind: "detail", label: "Cash", cells: ["12920.00", "78.07"], drill: { kind: "asset_class", asset_class: "cash" }, children: [] },
+      { kind: "detail", label: "US equity", cells: ["3630.00", "21.93"], drill: { kind: "asset_class", asset_class: "us_equity" }, children: [] },
+      { kind: "total", label: "TOTAL", cells: ["16550.00", "100.00"], drill: null, children: [] },
+    ],
+    chart: {
+      dates: [],
+      labels: ["Cash", "US equity"],
+      series: [{ name: "Market Value", style: "bar", values: ["12920.00", "3630.00"], pos: [7807, 2193] }],
+      ticks: [{ label: "0", pos: 0 }, { label: "20K", pos: 10000 }],
+      zero: 0,
+    },
+  };
+
+  beforeEach(async () => {
+    run.mockImplementation(() => ok(allocation));
+    investState.securities = [
+      { id: 1, name: "Total Stock Market", ticker: "VTI", asset_class: "us_equity" },
+      { id: 2, name: "S&P 500", ticker: "VOO", asset_class: "us_equity" },
+      { id: 3, name: "Bond Fund", ticker: "BND", asset_class: "bond" },
+    ] as never;
+    inst = await reportState.open("asset_allocation");
+  });
+
+  it("names the graph's bars by class and shows percents", async () => {
+    show();
+    const graph = await screen.findByRole("img", { name: /Market Value/ });
+    expect(within(graph).getByText("US equity")).toBeTruthy();
+    expect(screen.getByText("21.93%")).toBeTruthy();
+  });
+
+  it("a class opens Holdings limited to that class's securities", async () => {
+    show();
+    const before = windowState.wins.length;
+    await fireEvent.click(await screen.findByRole("button", { name: "3,630.00" }));
+    await waitFor(() => expect(windowState.wins).toHaveLength(before + 1));
+    expect(reportState.current?.settings).toMatchObject({
+      kind: "holdings",
+      range: { preset: "custom", from: null, to: "2025-12-31" },
+      securities: [1, 2],
+      title: "Holdings: US equity",
     });
   });
 });

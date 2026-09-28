@@ -61,6 +61,37 @@ fn file_stem(title: &str) -> String {
     }
 }
 
+/// An internal error with a message.
+pub(crate) fn internal(message: String) -> IpcError {
+    IpcError {
+        kind: ErrorKind::Internal,
+        message,
+    }
+}
+
+/// A new file in the Downloads folder (home if there is none), named
+/// from the title and date. An existing file is never reused.
+pub(crate) fn download_path(
+    app: &tauri::AppHandle,
+    title: &str,
+    date: &str,
+    ext: &str,
+) -> CmdResult<PathBuf> {
+    let dir: PathBuf = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|e| internal(format!("no folder to save into: {e}")))?;
+    let stem = format!("{} {date}", file_stem(title));
+    let mut path = dir.join(format!("{stem}.{ext}"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} ({n}).{ext}"));
+        n += 1;
+    }
+    Ok(path)
+}
+
 /// Write the report as CSV to the Downloads folder (RPT-050); returns
 /// the file's path. An existing file is never overwritten.
 #[tauri::command]
@@ -73,24 +104,9 @@ pub fn report_export_csv(
     let (report, today) =
         state.read(|db, today| Ok((reports::run(db.conn(), &settings, today)?, today)))?;
     let text = reports::to_csv(&report);
-    let io = |message: String| IpcError {
-        kind: ErrorKind::Internal,
-        message,
-    };
-    let dir: PathBuf = app
-        .path()
-        .download_dir()
-        .or_else(|_| app.path().home_dir())
-        .map_err(|e| io(format!("no folder to save into: {e}")))?;
-    let stem = format!("{} {today}", file_stem(&report.title));
-    let mut path = dir.join(format!("{stem}.csv"));
-    let mut n = 2;
-    while path.exists() {
-        path = dir.join(format!("{stem} ({n}).csv"));
-        n += 1;
-    }
+    let path = download_path(&app, &report.title, &today.to_string(), "csv")?;
     std::fs::write(&path, text)
-        .map_err(|e| io(format!("could not write {}: {e}", path.display())))?;
+        .map_err(|e| internal(format!("could not write {}: {e}", path.display())))?;
     Ok(path.display().to_string())
 }
 

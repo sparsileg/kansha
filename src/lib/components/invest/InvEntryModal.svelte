@@ -6,7 +6,7 @@
   import { datePattern, displayDate, parseDate } from "../../format/date";
   import { formatMoney, parseMoney } from "../../format/money";
   import { formatPrice, formatQuantity, parsePrice, parseQuantity } from "../../format/quantity";
-  import { ACTIONS, actionInfo, buildInput, emptyForm, formFromInput, type InvForm } from "../../invest/form";
+  import { ACTIONS, LOT_METHODS, actionInfo, buildInput, emptyForm, formFromInput, type InvForm } from "../../invest/form";
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
@@ -203,8 +203,7 @@
         Lots
         <select bind:value={form.lotMethod}>
           <option value="">Default (security or account)</option>
-          <option value="fifo">First in, first out</option>
-          <option value="specific">Choose lots</option>
+          {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
         </select>
       </label>
       {#if form.lotMethod === "specific"}

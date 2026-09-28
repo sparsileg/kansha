@@ -25,5 +25,11 @@ specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 thiserror.workspace = true
 
+# Saving PDFs with the orientation set in code (RPT-050); the same
+# versions Tauri's wry already uses.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+webkit2gtk = "2.0"
+
 [lints]
 workspace = true

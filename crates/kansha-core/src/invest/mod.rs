@@ -29,19 +29,23 @@
 //! transfers) have no such limit.
 
 mod lots;
+mod period;
 mod portfolio;
 mod reads;
+mod returns;
 mod seed;
 mod service;
 
+pub use period::{AccountPeriod, Track, account_period, combined};
 pub use portfolio::{
     Portfolio, PortfolioAccount, PortfolioLot, PortfolioPosition, PortfolioTotals, portfolio,
 };
 pub use reads::{
     Allocation, AllocationRow, Holdings, IncomeReport, IncomeRow, InvRegister, InvRegisterRow,
     LotView, PerfRow, Performance, Position, RealizedGain, account_value, allocation, holdings,
-    income, open_lots, performance, realized_gains, register,
+    income, open_lots, percent_of, performance, realized_gains, register,
 };
+pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};
 pub use service::{create, delete, trade_amount, update};
 
@@ -115,6 +119,9 @@ text_enum! {
     pub enum AdjustmentKind {
         Split = "split",
         ReturnOfCapital = "return_of_capital",
+        /// Average cost (LOT-110): a lot's basis evened out to the
+        /// holding's average before a disposal; basis only.
+        Average = "average",
     }
 }
 

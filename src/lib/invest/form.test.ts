@@ -55,6 +55,16 @@ describe("buildInput", () => {
     expect(r.ok && r.input.amount).toBe("2700.00");
   });
 
+  it("average cost, HIFO, and minimum tax go through and come back (LOT-110, LOT-115)", () => {
+    for (const m of ["average", "hifo", "min_tax"] as const) {
+      const f = { ...emptyForm("sell", "2026-03-01"), security: 3, quantity: "5", amount: "700", lotMethod: m };
+      const r = buildInput(7, f, today);
+      expect(r.ok && r.input.lot_method).toBe(m);
+      expect(r.ok && r.input.lots).toEqual([]);
+      expect(r.ok && formFromInput(r.input).lotMethod).toBe(m);
+    }
+  });
+
   it("a split, a transfer, cash in, and fields an action does not use are left out", () => {
     const split = buildInput(7, { ...emptyForm("split", "2026-06-01"), security: 3, splitNew: "4", splitOld: "1", amount: "5" }, today);
     expect(split.ok && split.input.split).toEqual({ new: 4, old: 1 });

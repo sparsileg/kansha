@@ -42,11 +42,16 @@ pub struct Tick {
     pub pos: i64,
 }
 
-/// A graph over dates: bars and lines against one money axis.
+/// A graph over dates (or named categories): bars and lines against one
+/// money axis.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Chart {
+    /// One per value; empty when the graph is by `labels`.
     pub dates: Vec<Date>,
+    /// Category names instead of dates (an asset class per bar); empty
+    /// for a graph over dates.
+    pub labels: Vec<String>,
     pub series: Vec<Series>,
     pub ticks: Vec<Tick>,
     /// Where zero sits: bars grow from here.
@@ -90,6 +95,16 @@ fn to_i64(v: i128) -> Result<i64> {
     i64::try_from(v).map_err(|_| Error::Overflow("chart"))
 }
 
+/// A graph over named categories. Every series has one value per label.
+pub fn build_labeled(
+    labels: Vec<String>,
+    series: Vec<(String, SeriesStyle, Vec<Money>)>,
+) -> Result<Chart> {
+    let mut c = build(Vec::new(), series)?;
+    c.labels = labels;
+    Ok(c)
+}
+
 /// Build a graph. Every series has one value per date.
 pub fn build(dates: Vec<Date>, series: Vec<(String, SeriesStyle, Vec<Money>)>) -> Result<Chart> {
     let all = series
@@ -131,6 +146,7 @@ pub fn build(dates: Vec<Date>, series: Vec<(String, SeriesStyle, Vec<Money>)>) -
         .collect::<Result<Vec<_>>>()?;
     Ok(Chart {
         dates,
+        labels: Vec::new(),
         series,
         ticks,
         zero: pos(0)?,

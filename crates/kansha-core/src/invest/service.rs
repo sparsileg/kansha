@@ -520,8 +520,22 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
             let s = security
                 .as_ref()
                 .ok_or(Error::Invalid("no security".into()))?;
-            let (method, takes) = choose_lots(input, s, &settings.default_lot_method, &open(s)?)?;
+            let (method, takes, evened) = choose_lots(
+                input,
+                s,
+                &settings.default_lot_method,
+                &open(s)?,
+                (action == InvAction::Sell).then_some(amount),
+            )?;
             lot_method = Some(method);
+            for (lot, delta) in evened {
+                b.adjustments.push(Adjustment {
+                    lot,
+                    kind: AdjustmentKind::Average,
+                    quantity_delta: Quantity::ZERO,
+                    basis_delta: delta,
+                });
+            }
             let basis: Money = takes.iter().map(|t| t.basis).sum();
             match action {
                 InvAction::Sell => {
@@ -735,13 +749,16 @@ fn resolve_amount(i: &InvInput) -> Result<Money> {
 }
 
 /// Resolve the lot selection method (LOT-100: the sale's own, else the
-/// security's, else the account's) and choose the lots.
+/// security's, else the account's) and choose the lots. `proceeds` is the
+/// sale amount (a sale only). Also returns the basis changes that even
+/// the lots out first under average cost (LOT-110); none otherwise.
 fn choose_lots(
     input: &InvInput,
     s: &Security,
     account_default: &LotMethod,
     open: &[OpenLot],
-) -> Result<(LotMethod, Vec<Take>)> {
+    proceeds: Option<Money>,
+) -> Result<(LotMethod, Vec<Take>, lots::BasisChanges)> {
     let method = if input.lots.is_empty() {
         input
             .lot_method
@@ -760,16 +777,24 @@ fn choose_lots(
     let quantity = input
         .quantity
         .ok_or(Error::Invalid("no number of shares".into()))?;
+    let mut evened = Vec::new();
     let takes = match method {
         LotMethod::Fifo => lots::pick_fifo(open, quantity)?,
         LotMethod::Specific => lots::pick_specific(open, &input.lots, quantity)?,
-        other => {
-            return Err(Error::Invalid(format!(
-                "{other} lot selection is not available yet; choose fifo or specific lots"
-            )));
+        LotMethod::Hifo => lots::pick_hifo(open, quantity)?,
+        // Without a price (a share transfer or shares removed) there is
+        // no gain to minimize: oldest first.
+        LotMethod::MinTax => match proceeds {
+            Some(p) => lots::pick_min_tax(open, quantity, p, input.date)?,
+            None => lots::pick_fifo(open, quantity)?,
+        },
+        LotMethod::Average => {
+            let (changes, even) = lots::average(open)?;
+            evened = changes;
+            lots::pick_fifo(&even, quantity)?
         }
     };
-    Ok((method, takes))
+    Ok((method, takes, evened))
 }
 
 /// Cash in or out: another open account that is not an investment

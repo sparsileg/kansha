@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { call, commands, withConfirmation } from "../api";
   import { datePattern, parseDate } from "../format/date";
+  import { LOT_METHODS } from "../invest/form";
   import { GROUP_LABEL, GROUP_ORDER } from "../state/groups";
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
@@ -14,7 +15,6 @@
     AccountType,
     AssetSubtype,
     CashMode,
-    LotMethod,
     MmfMode,
     TaxTreatment,
   } from "../types/bindings";
@@ -42,8 +42,6 @@
     ["tax_deferred", "Tax-deferred"],
     ["tax_exempt", "Tax-exempt"],
   ];
-  // Average cost, HIFO, and minimum tax are not available yet (LOT-110, LOT-115).
-  const LOT: LotMethod[] = ["fifo", "specific"];
 
   // Fields are seeded once from the prop; the modal is remounted per open.
   const initial = untrack(() => account);
@@ -274,7 +272,7 @@
           <label>
             Default lot method
             <select bind:value={f.investment.default_lot_method}>
-              {#each LOT as m (m)}<option value={m}>{m}</option>{/each}
+              {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
             </select>
           </label>
         </fieldset>

@@ -68,7 +68,13 @@ export const MENUS: Menu[] = [
         id: "reports.investing",
         label: "Investing",
         divider: true,
-        items: [{ id: "reports.capital_gains", label: "Capital Gains" }],
+        items: [
+          { id: "reports.capital_gains", label: "Capital Gains" },
+          { id: "reports.performance", label: "Investment Performance" },
+          { id: "reports.investment_income", label: "Investment Income" },
+          { id: "reports.holdings", label: "Holdings" },
+          { id: "reports.asset_allocation", label: "Asset Allocation" },
+        ],
       },
       { id: "reports.networth", label: "Net Worth", items: [{ id: "reports.net_worth", label: "Net Worth" }] },
       {

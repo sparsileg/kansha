@@ -46,6 +46,21 @@ text_enum! {
     }
 }
 
+impl AssetClass {
+    /// How reports name it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            AssetClass::UsEquity => "US equity",
+            AssetClass::IntlEquity => "International equity",
+            AssetClass::Bond => "Bonds",
+            AssetClass::Cash => "Cash",
+            AssetClass::RealEstate => "Real estate",
+            AssetClass::Commodity => "Commodities",
+            AssetClass::Other => "Other",
+        }
+    }
+}
+
 text_enum! {
     /// Where a price came from (PRC-010 … PRC-040).
     pub enum PriceSource {

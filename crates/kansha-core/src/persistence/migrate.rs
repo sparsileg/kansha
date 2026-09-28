@@ -38,6 +38,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description: "tax lines",
         sql: include_str!("migrations/0003_tax_lines.sql"),
     },
+    Migration {
+        version: 4,
+        description: "average cost lot adjustments",
+        sql: include_str!("migrations/0004_average_cost.sql"),
+    },
 ];
 
 /// The newest schema version this build understands.

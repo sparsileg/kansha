@@ -442,18 +442,20 @@ enum InvOp {
         sec: usize,
         permille: i64,
         cents: i64,
-        specific: bool,
+        method: Method,
     },
     Remove {
         acct: usize,
         sec: usize,
         permille: i64,
+        method: Method,
     },
     Transfer {
         acct: usize,
         sec: usize,
         to: usize,
         permille: i64,
+        method: Method,
     },
     Split {
         acct: usize,
@@ -470,6 +472,52 @@ enum InvOp {
     DeleteLast,
 }
 
+/// How a disposal picks lots. `Specific` takes the newest lots first by
+/// hand (sales only; elsewhere it means FIFO).
+#[derive(Debug, Clone, Copy)]
+enum Method {
+    Fifo,
+    Specific,
+    Hifo,
+    MinTax,
+    Average,
+}
+
+fn method() -> impl Strategy<Value = Method> {
+    prop_oneof![
+        Just(Method::Fifo),
+        Just(Method::Specific),
+        Just(Method::Hifo),
+        Just(Method::MinTax),
+        Just(Method::Average),
+    ]
+}
+
+impl Method {
+    fn lot_method(self) -> Option<kansha_core::accounts::LotMethod> {
+        use kansha_core::accounts::LotMethod as L;
+        match self {
+            Method::Fifo | Method::Specific => None,
+            Method::Hifo => Some(L::Hifo),
+            Method::MinTax => Some(L::MinTax),
+            Method::Average => Some(L::Average),
+        }
+    }
+}
+
+/// Average-cost basis changes in a transaction sum to zero (LOT-110).
+fn evened_out_to_zero(t: &kansha_core::invest::InvTxn) -> Result<(), TestCaseError> {
+    use kansha_core::invest::AdjustmentKind;
+    let sum: i64 = t
+        .adjustments
+        .iter()
+        .filter(|a| a.kind == AdjustmentKind::Average)
+        .map(|a| a.basis_delta.cents())
+        .sum();
+    prop_assert_eq!(sum, 0);
+    Ok(())
+}
+
 const INV_ACCOUNTS: usize = 3;
 const SECURITIES: usize = 2;
 
@@ -481,14 +529,16 @@ fn inv_op() -> impl Strategy<Value = (i64, InvOp)> {
             .prop_map(|(acct, sec, milli, cents)| InvOp::Buy { acct, sec, milli, cents }),
         1 => (a.clone(), s.clone(), 1_i64..5_000, 1_i64..50_000)
             .prop_map(|(acct, sec, milli, cents)| InvOp::Reinvest { acct, sec, milli, cents }),
-        3 => (a.clone(), s.clone(), 1_i64..=1000, 0_i64..5_000_000, any::<bool>())
-            .prop_map(|(acct, sec, permille, cents, specific)| InvOp::Sell {
-                acct, sec, permille, cents, specific,
+        3 => (a.clone(), s.clone(), 1_i64..=1000, 0_i64..5_000_000, method())
+            .prop_map(|(acct, sec, permille, cents, method)| InvOp::Sell {
+                acct, sec, permille, cents, method,
             }),
-        1 => (a.clone(), s.clone(), 1_i64..=1000)
-            .prop_map(|(acct, sec, permille)| InvOp::Remove { acct, sec, permille }),
-        2 => (a.clone(), s.clone(), a.clone(), 1_i64..=1000)
-            .prop_map(|(acct, sec, to, permille)| InvOp::Transfer { acct, sec, to, permille }),
+        1 => (a.clone(), s.clone(), 1_i64..=1000, method())
+            .prop_map(|(acct, sec, permille, method)| InvOp::Remove { acct, sec, permille, method }),
+        2 => (a.clone(), s.clone(), a.clone(), 1_i64..=1000, method())
+            .prop_map(|(acct, sec, to, permille, method)| InvOp::Transfer {
+                acct, sec, to, permille, method,
+            }),
         1 => (a.clone(), s.clone(), 1_i64..6, 1_i64..6)
             .prop_map(|(acct, sec, new, old)| InvOp::Split { acct, sec, new, old }),
         1 => (a, s, 1_i64..500_000)
@@ -590,7 +640,7 @@ impl InvWorld {
                 sec,
                 permille,
                 cents,
-                specific,
+                method,
             } => {
                 let (shares, _) = self.held(acct, sec);
                 let take = shares * permille / 1000;
@@ -600,7 +650,8 @@ impl InvWorld {
                 let mut i = self.input(acct, sec, InvAction::Sell);
                 i.quantity = Some(q(take));
                 i.amount = Some(Money::from_cents(cents));
-                if specific {
+                i.lot_method = method.lot_method();
+                if matches!(method, Method::Specific) {
                     // Newest lots first: the opposite of FIFO.
                     let lots = invest::open_lots(
                         self.book.conn(),
@@ -623,6 +674,7 @@ impl InvWorld {
                     }
                 }
                 let t = self.book.invest(&i).unwrap();
+                evened_out_to_zero(&t)?;
                 let out: i64 = t.disposals.iter().map(|d| d.basis.cents()).sum();
                 let proceeds: i64 = t
                     .disposals
@@ -640,6 +692,7 @@ impl InvWorld {
                 acct,
                 sec,
                 permille,
+                method,
             } => {
                 let (shares, _) = self.held(acct, sec);
                 let take = shares * permille / 1000;
@@ -648,7 +701,9 @@ impl InvWorld {
                 }
                 let mut i = self.input(acct, sec, InvAction::SharesRemoved);
                 i.quantity = Some(q(take));
+                i.lot_method = method.lot_method();
                 let t = self.book.invest(&i).unwrap();
+                evened_out_to_zero(&t)?;
                 let out: i64 = t.disposals.iter().map(|d| d.basis.cents()).sum();
                 let e = self.held.entry((acct, sec)).or_insert((0, 0));
                 e.0 -= take;
@@ -660,6 +715,7 @@ impl InvWorld {
                 sec,
                 to,
                 permille,
+                method,
             } => {
                 let (shares, _) = self.held(acct, sec);
                 let take = shares * permille / 1000;
@@ -669,7 +725,9 @@ impl InvWorld {
                 let mut i = self.input(acct, sec, InvAction::TransferShares);
                 i.quantity = Some(q(take));
                 i.to_account = Some(self.accounts[to]);
+                i.lot_method = method.lot_method();
                 let t = self.book.invest(&i).unwrap();
+                evened_out_to_zero(&t)?;
                 let out: i64 = t.disposals.iter().map(|d| d.basis.cents()).sum();
                 let arrived: i64 = t.lots.iter().map(|l| l.basis.cents()).sum();
                 let arrived_q: i64 = t.lots.iter().map(|l| l.quantity.raw()).sum();
@@ -787,7 +845,8 @@ impl InvWorld {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
-    /// Random buys, sales (FIFO and specific), removals, transfers,
+    /// Random buys, sales (FIFO, specific, HIFO, minimum tax, average
+    /// cost), removals, transfers,
     /// splits, returns of capital, and deletes: open lots always hold
     /// exactly the shares and basis the history says, basis is conserved
     /// through transfers and adjustments, and the integrity check stays

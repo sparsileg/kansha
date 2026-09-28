@@ -22,7 +22,7 @@ vi.mock("../lib/api", async (orig) => {
           income: "5000.00",
           expenses: "1234.56",
           net: "3765.44",
-          trend: { dates: ["2026-08-31", "2026-09-27"], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0 },
+          trend: { dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0 },
           upcoming: [{ schedule: 1, nominal: "2026-09-20", date: "2026-09-20", amount: "-50.00", status: "pending", account: 1, payee: null, estimated: false, mode: "remind", overridden: false, txn: null, needs_review: false, overdue: true, actionable: true }],
           upcoming_days: 14,
           warnings: [{ kind: "unreconciled", message: "Checking has uncleared transactions more than 60 days old.", account: 1 }],

@@ -16,6 +16,8 @@ export function formatCell(kind: ColumnKind, text: string, cents: boolean): stri
       return displayDate(text);
     case "quantity":
       return formatQuantity(text);
+    case "percent":
+      return `${text}%`;
     default:
       return text;
   }

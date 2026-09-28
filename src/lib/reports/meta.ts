@@ -73,6 +73,29 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     interval: true,
     totalsOnly: true,
   },
+  performance: {
+    kind: "performance",
+    name: "Investment Performance",
+    tabs: ["accounts"],
+    totalsOnly: true,
+  },
+  investment_income: {
+    kind: "investment_income",
+    name: "Investment Income",
+    tabs: ["accounts", "securities"],
+    totalsOnly: true,
+  },
+  holdings: {
+    kind: "holdings",
+    name: "Holdings",
+    tabs: ["accounts", "securities"],
+    totalsOnly: true,
+  },
+  asset_allocation: {
+    kind: "asset_allocation",
+    name: "Asset Allocation",
+    tabs: ["accounts"],
+  },
   tax_schedule: {
     kind: "tax_schedule",
     name: "Tax Schedule",
@@ -157,6 +180,10 @@ export const SORTABLE: ReportKind[] = ["itemized_categories", "itemized_payees"]
  * Investing and again under Tax. */
 export const MENU_REPORTS: Record<string, ReportKind> = {
   "reports.capital_gains": "capital_gains",
+  "reports.performance": "performance",
+  "reports.investment_income": "investment_income",
+  "reports.holdings": "holdings",
+  "reports.asset_allocation": "asset_allocation",
   "reports.net_worth": "net_worth",
   "reports.itemized_categories": "itemized_categories",
   "reports.itemized_payees": "itemized_payees",

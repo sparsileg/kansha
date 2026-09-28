@@ -86,14 +86,14 @@ fn securities_are_normalized_unique_and_deleted_only_when_unused() {
             .to_string()
             .contains("9 characters")
     );
+    // Every lot method is available as a security's default (LOT-110,
+    // LOT-115).
     bad.cusip = None;
-    bad.default_lot_method = Some(LotMethod::Average);
-    assert!(
-        b.security_with(&bad)
-            .unwrap_err()
-            .to_string()
-            .contains("not available yet")
-    );
+    for m in [LotMethod::Average, LotMethod::Hifo, LotMethod::MinTax] {
+        bad.name = format!("Fund {m}");
+        bad.default_lot_method = Some(m);
+        b.security_with(&bad).unwrap();
+    }
 
     // Unused: deleted with its prices. Used: InUse, hide it instead.
     b.price(id, date("2026-06-01"), p("200")).unwrap();
@@ -527,6 +527,7 @@ fn every_investment_enum_value_is_accepted_by_the_schema() {
         let (dq, db) = match k {
             AdjustmentKind::Split => (5, 0),
             AdjustmentKind::ReturnOfCapital => (0, -5),
+            AdjustmentKind::Average => (0, 7),
         };
         c.execute(
             "INSERT INTO lot_adjustment (lot_id, txn_id, kind, quantity_delta, basis_delta)
