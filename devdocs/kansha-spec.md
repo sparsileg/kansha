@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.20 (draft) |
+| **Document version** | 0.3.21 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-28 |
 | **Owner** | Stan |
@@ -648,7 +648,7 @@ kansha/
 │       └── ledger/  schedule/  reconcile/  lots/  reports/
 ├── src-tauri/                 # Tauri shell: command handlers + specta builder only
 │   ├── src/lib.rs             # run(), specta_builder()
-│   ├── src/commands.rs        # #[tauri::command] handlers
+│   ├── src/commands/          # #[tauri::command] handlers, one file per area
 │   ├── capabilities/
 │   └── icons/
 ├── src/                       # Svelte frontend (see 17.3)
@@ -945,6 +945,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.21 | 2026-09-28 | §17.4: `src-tauri/src/commands/` is a folder, one file per area (was `commands.rs`). No requirement change. |
 | 0.3.20 | 2026-09-28 | RPT-050: Save PDF… (orientation, then a PDF in Downloads opened in the PDF viewer) replaces Print…; the system print dialog printed blank pages in landscape. Paper printing is from the PDF viewer. §16.3 R4: PDF through WebKitGTK's print operation on Linux (new Linux-only deps `webkit2gtk`, `gtk`). New IPC command `report_save_pdf`. No schema change. |
 | 0.3.19 | 2026-09-28 | RPT-050: printed reports leave out the graph and use 9 pt. |
 | 0.3.18 | 2026-09-28 | LOT-110 (average cost; migration 0004 adds lot adjustment kind `average`) and LOT-115 (HIFO, minimum tax) built and moved to 1.0. POS-030 defined and built (IRR and time-weighted return; Investment Performance report); RPT-310 moved to 1.0. RPT-160, RPT-170, RPT-180 built. D-60 fully decided. |

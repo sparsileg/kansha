@@ -216,10 +216,8 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
   Print to File (PDF) from the GTK print dialog (which has no preview).
   Only the dialog path is untested here, so the cause is WebKitGTK's
   dialog landscape handling or how Tauri starts printing. WebKitGTK
-  ignores CSS `@page { size: landscape }`. Open; next options: a
-  controlled dialog test on Stan's screen, Kansha's own Print/PDF
-  dialog setting orientation in code (needs the `webkit2gtk` crate in
-  `src-tauri`), or a Rust-built PDF.
+  ignores CSS `@page { size: landscape }`. Resolved in 0.3.20; see
+  "Save PDF" below.
 
 ## Save PDF (2026-09-28, spec 0.3.20)
 
