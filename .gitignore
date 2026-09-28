@@ -36,4 +36,4 @@ node_modules/
 /src-tauri/gen/
 
 # samples
-/report-samples/
+/ignored/
