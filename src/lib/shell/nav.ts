@@ -7,6 +7,8 @@ import { reconcileState } from "../state/reconcile.svelte";
 import { registerState } from "../state/register.svelte";
 import { settingsState } from "../state/settings.svelte";
 import { viewState } from "../state/view.svelte";
+import { windowState } from "../state/windows.svelte";
+import { openPanel } from "./panels";
 import type { AccountId } from "../types/bindings";
 
 /** Show an account's register. Coming back to the account already open
@@ -25,18 +27,17 @@ export async function goHome(): Promise<void> {
       await openAccount(id);
       return;
     }
-  } else if (home === "calendar") {
-    viewState.navigate("calendar");
-    return;
-  } else if (home === "scheduled") {
-    viewState.navigate("scheduled");
+  } else if (home === "calendar" || home === "scheduled") {
+    openPanel(home);
     return;
   }
   viewState.navigate("dashboard");
 }
 
-/** Close the window (File > Exit). */
+/** Close the window (File > Exit), after asking to save changed
+ * reports; cancelling any of them keeps the app open. */
 export async function exitApp(): Promise<void> {
+  if (!(await windowState.mayQuit())) return;
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     await getCurrentWindow().close();
@@ -55,7 +56,7 @@ export async function openReconcile(id?: AccountId): Promise<void> {
   };
   const first = listsState.accounts.find((a) => usable(a.id))?.id;
   const target = [id, registerState.accountId, reconcileState.accountId, first].find(usable) ?? null;
-  viewState.navigate("reconcile");
+  openPanel("reconcile");
   if (target !== reconcileState.accountId || reconcileState.session === null) {
     await reconcileState.select(target);
   }

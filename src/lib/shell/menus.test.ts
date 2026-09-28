@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MENUS } from "./menus";
 
-const items = MENUS.flatMap((m) => m.items);
+type Item = (typeof MENUS)[number]["items"][number];
+const all = (xs: Item[]): Item[] => xs.flatMap((i) => [i, ...all(i.items ?? [])]);
+const items = MENUS.flatMap((m) => all(m.items));
 
 describe("menu definitions", () => {
   it("has the agreed menus in order", () => {
@@ -12,18 +14,17 @@ describe("menu definitions", () => {
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
       "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Reconcile",
     ]);
-    expect(MENUS[3].items.map((i) => i.label)).toEqual([
-      "Saved Reports…",
-      "Investing: Capital Gains",
-      "Net Worth",
-      "Spending: Itemized Categories",
-      "Spending: Itemized Payees",
-      "Spending: Income/Expense by Category",
-      "Spending: Income/Expense by Payee",
-      "Tax: Capital Gains",
-      "Tax: Tax Schedule",
-      "Tax: Tax Summary",
+    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports…", "Investing", "Net Worth", "Spending", "Tax"]);
+    const sub = (label: string) => MENUS[3].items.find((i) => i.label === label)?.items?.map((i) => i.label);
+    expect(sub("Investing")).toEqual(["Capital Gains"]);
+    expect(sub("Net Worth")).toEqual(["Net Worth"]);
+    expect(sub("Spending")).toEqual([
+      "Itemized Categories",
+      "Itemized Payees",
+      "Income/Expense by Category",
+      "Income/Expense by Payee",
     ]);
+    expect(sub("Tax")).toEqual(["Capital Gains", "Tax Schedule", "Tax Summary"]);
   });
 
   it("ids are unique and every greyed item says why", () => {

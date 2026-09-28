@@ -6,29 +6,55 @@
    * The menu bar. Click a menu to open it; with one open, moving over
    * another switches to it. Keys: Down or Enter opens, Up/Down move among
    * the enabled items, Left/Right switch menus, Esc closes, Tab leaves.
-   * Greyed items stay visible and say why they are unavailable.
+   * An item marked ▸ opens a submenu (hover, click, Enter, or Right);
+   * Left or Esc goes back to it. Greyed items stay visible and say why
+   * they are unavailable.
    */
   let { menus, onselect }: { menus: Menu[]; onselect: (id: string) => void } = $props();
 
   let open = $state<number | null>(null);
+  /** The open submenu: its item's index in the open menu. */
+  let sub = $state<number | null>(null);
   let root: HTMLElement;
   const buttons = $state<HTMLButtonElement[]>([]);
 
   const enabledItems = (menu: number) =>
     Array.from(
-      root.querySelectorAll<HTMLElement>(`[data-menu="${menu}"] [role="menuitem"]:not([aria-disabled="true"])`),
+      root.querySelectorAll<HTMLElement>(
+        `[data-menu="${menu}"] [role="menuitem"][data-top]:not([aria-disabled="true"])`,
+      ),
     );
+  const subItems = () =>
+    Array.from(root.querySelectorAll<HTMLElement>(`[data-sub] [role="menuitem"]:not([aria-disabled="true"])`));
 
   async function openMenu(i: number, focusItem = false) {
     open = i;
+    sub = null;
     if (!focusItem) return;
     await tick();
     enabledItems(i)[0]?.focus();
   }
 
+  async function openSub(j: number, focusItem = false) {
+    sub = j;
+    if (!focusItem) return;
+    await tick();
+    subItems()[0]?.focus();
+  }
+
+  /** Close the submenu and go back to its item. */
+  function closeSub() {
+    const j = sub;
+    sub = null;
+    if (open !== null && j !== null) {
+      root.querySelector<HTMLElement>(`[data-menu="${open}"] [data-index="${j}"]`)?.focus();
+    }
+  }
+
   function close(refocus = false) {
     const was = open;
     open = null;
+    sub = null;
     if (refocus && was !== null) buttons[was]?.focus();
   }
 
@@ -57,14 +83,20 @@
     const items = enabledItems(i);
     const at = items.indexOf(document.activeElement as HTMLElement);
     const n = menus.length;
+    const here = document.activeElement as HTMLElement | null;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (items.length === 0) return;
+      sub = null;
       const step = e.key === "ArrowDown" ? 1 : -1;
       items[(at + step + items.length) % items.length].focus();
     } else if (e.key === "Home" || e.key === "End") {
       e.preventDefault();
+      sub = null;
       items[e.key === "Home" ? 0 : items.length - 1]?.focus();
+    } else if (e.key === "ArrowRight" && here?.dataset.index !== undefined && here.getAttribute("aria-haspopup")) {
+      e.preventDefault();
+      void openSub(Number(here.dataset.index), true);
     } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
       const next = (i + (e.key === "ArrowRight" ? 1 : n - 1)) % n;
@@ -76,6 +108,32 @@
       close(true);
     } else if (e.key === "Tab") {
       close();
+    }
+  }
+
+  function onSubKey(e: KeyboardEvent, i: number) {
+    const items = subItems();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (items.length === 0) return;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      items[(at + step + items.length) % items.length].focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      e.stopPropagation();
+      items[e.key === "Home" ? 0 : items.length - 1]?.focus();
+    } else if (e.key === "ArrowLeft" || e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeSub();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = (i + 1) % menus.length;
+      buttons[next]?.focus();
+      void openMenu(next, true);
     }
   }
 
@@ -104,19 +162,59 @@
       {#if open === i}
         <!-- svelte-ignore a11y_interactive_supports_focus -->
         <div class="list" role="menu" aria-label={menu.label} data-menu={i} onkeydown={(e) => onMenuKey(e, i)}>
-          {#each menu.items as item (item.id)}
+          {#each menu.items as item, j (item.id)}
             {#if item.divider}<hr />{/if}
-            <button
-              type="button"
-              role="menuitem"
-              class:off={!!item.disabled}
-              aria-disabled={item.disabled ? "true" : undefined}
-              title={item.disabled ?? ""}
-              onclick={() => pick(item)}
-            >
-              <span>{item.label}</span>
-              {#if item.disabled}<span class="hint">{item.disabled}</span>{/if}
-            </button>
+            {#if item.items}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="subwrap" onmouseenter={() => void openSub(j)}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-top
+                  data-index={j}
+                  aria-haspopup="menu"
+                  aria-expanded={sub === j}
+                  class:on={sub === j}
+                  onclick={() => void openSub(j, true)}
+                >
+                  <span>{item.label}</span>
+                  <span class="arrow" aria-hidden="true">▸</span>
+                </button>
+                {#if sub === j}
+                  <!-- svelte-ignore a11y_interactive_supports_focus -->
+                  <div class="list sub" role="menu" aria-label={item.label} data-sub onkeydown={(e) => onSubKey(e, i)}>
+                    {#each item.items as s (s.id)}
+                      {#if s.divider}<hr />{/if}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class:off={!!s.disabled}
+                        aria-disabled={s.disabled ? "true" : undefined}
+                        title={s.disabled ?? ""}
+                        onclick={() => pick(s)}
+                      >
+                        <span>{s.label}</span>
+                        {#if s.disabled}<span class="hint">{s.disabled}</span>{/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                role="menuitem"
+                data-top
+                class:off={!!item.disabled}
+                aria-disabled={item.disabled ? "true" : undefined}
+                title={item.disabled ?? ""}
+                onmouseenter={() => (sub = null)}
+                onclick={() => pick(item)}
+              >
+                <span>{item.label}</span>
+                {#if item.disabled}<span class="hint">{item.disabled}</span>{/if}
+              </button>
+            {/if}
           {/each}
         </div>
       {/if}
@@ -175,6 +273,19 @@
     background: var(--sel-bg, #1f6feb);
     color: var(--sel-fg, #fff);
     outline: none;
+  }
+  .list button.on {
+    background: rgba(128, 128, 128, 0.25);
+  }
+  .subwrap {
+    position: relative;
+  }
+  .list.sub {
+    top: -0.2rem;
+    left: 100%;
+  }
+  .arrow {
+    align-self: center;
   }
   .list button.off {
     cursor: default;

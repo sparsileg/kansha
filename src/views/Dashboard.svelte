@@ -10,7 +10,7 @@
   import { openAccount } from "../lib/shell/nav";
   import { listsState } from "../lib/state/lists.svelte";
   import { reportState } from "../lib/state/reports.svelte";
-  import { viewState } from "../lib/state/view.svelte";
+  import { openPanel } from "../lib/shell/panels";
   import type { Dashboard } from "../lib/types/bindings";
 
   /** Days ahead for upcoming scheduled items (DSH-020). */
@@ -30,7 +30,6 @@
   });
 
   function openReport(kind: "net_worth" | "income_expense") {
-    viewState.navigate("reports");
     void reportState.open(kind);
   }
 
@@ -94,7 +93,7 @@
         {:else}
           <p class="sub">Nothing due.</p>
         {/if}
-        <button type="button" class="link" onclick={() => viewState.navigate("scheduled")}>Reminders</button>
+        <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
       </div>
       <div class="tile">
         <h2>Needs attention</h2>

@@ -14,24 +14,30 @@
   import SettingsModal from "./lib/components/SettingsModal.svelte";
   import AccountBar from "./lib/components/shell/AccountBar.svelte";
   import AccountPanel from "./lib/components/shell/AccountPanel.svelte";
+  import Dock from "./lib/components/shell/Dock.svelte";
+  import WindowFrame from "./lib/components/shell/WindowFrame.svelte";
+  import ReportWindow from "./lib/components/reports/ReportWindow.svelte";
+  import SavedReportsModal from "./lib/components/reports/SavedReportsModal.svelte";
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import { runAction } from "./lib/shell/actions";
   import { goHome } from "./lib/shell/nav";
+  import { isPanel, type PanelKind } from "./lib/shell/panels";
   import { MENUS } from "./lib/shell/menus";
   import { dialogState } from "./lib/state/dialogs.svelte";
   import { listsState } from "./lib/state/lists.svelte";
+  import { REPORT_WINDOW, reportState } from "./lib/state/reports.svelte";
   import { scheduleState } from "./lib/state/schedule.svelte";
   import { settingsState } from "./lib/state/settings.svelte";
   import { themeState } from "./lib/state/theme.svelte";
   import { viewState } from "./lib/state/view.svelte";
+  import { windowState } from "./lib/state/windows.svelte";
   import Calendar from "./views/Calendar.svelte";
   import Dashboard from "./views/Dashboard.svelte";
   import Investments from "./views/Investments.svelte";
   import EmptyBook from "./views/EmptyBook.svelte";
   import Manage from "./views/Manage.svelte";
   import Reconcile from "./views/Reconcile.svelte";
-  import Reports from "./views/Reports.svelte";
   import Scheduled from "./views/Scheduled.svelte";
   import Search from "./views/Search.svelte";
 
@@ -49,16 +55,20 @@
   const views: Record<string, Component> = {
     dashboard: Dashboard,
     account: Account,
-    accounts: Accounts,
     manage: Manage,
-    scheduled: Scheduled,
-    calendar: Calendar,
-    reconcile: Reconcile,
     search: Search,
     investments: Investments,
-    reports: Reports,
   };
   const View = $derived(views[viewState.current]);
+  const panels: Record<PanelKind, Component> = {
+    calendar: Calendar,
+    scheduled: Scheduled,
+    accounts: Accounts,
+    reconcile: Reconcile,
+  };
+  /** The window on top, when one is showing. */
+  const win = $derived(windowState.shown === null ? undefined : windowState.get(windowState.shown));
+  const report = $derived(win?.kind === REPORT_WINDOW ? reportState.get(win.id) : undefined);
 </script>
 
 <div
@@ -87,6 +97,15 @@
       />
     {/key}
   {/if}
+  {#if reportState.savedOpen}
+    <SavedReportsModal
+      onopen={(r) => {
+        reportState.savedOpen = false;
+        void reportState.openSaved(r);
+      }}
+      onclose={() => (reportState.savedOpen = false)}
+    />
+  {/if}
   <ConfirmDialog />
   <div class="body" class:right={settingsState.accountPanelSide === "right"}>
     {#if settingsState.accountPanelOpen && !listsState.isEmptyBook}
@@ -95,11 +114,23 @@
     <main>
       {#if listsState.isEmptyBook}
         <EmptyBook />
+      {:else if win}
+        {#key win.id}
+          <WindowFrame id={win.id}>
+            {#if report}
+              <ReportWindow inst={report} />
+            {:else if isPanel(win.kind)}
+              {@const Panel = panels[win.kind]}
+              <Panel />
+            {/if}
+          </WindowFrame>
+        {/key}
       {:else if View}
         <View />
       {/if}
     </main>
   </div>
+  <Dock />
 </div>
 
 <style>

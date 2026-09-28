@@ -9,7 +9,13 @@ const menus: Menu[] = [
     { id: "a.two", label: "Two", disabled: "Planned: Phase 9", divider: true },
     { id: "a.three", label: "Three" },
   ] },
-  { id: "b", label: "Beta", items: [{ id: "b.one", label: "Bee" }] },
+  { id: "b", label: "Beta", items: [
+    { id: "b.one", label: "Bee" },
+    { id: "b.sub", label: "More", items: [
+      { id: "b.sub.x", label: "Ex" },
+      { id: "b.sub.y", label: "Why" },
+    ] },
+  ] },
 ];
 
 const setup = () => {
@@ -69,5 +75,42 @@ describe("MenuBar", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Alpha" }));
     await fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("a submenu opens on hover or click and runs its items", async () => {
+    const onselect = setup();
+    await fireEvent.click(screen.getByRole("button", { name: "Beta" }));
+    const more = screen.getByRole("menuitem", { name: /More/ });
+    expect(more.getAttribute("aria-haspopup")).toBe("menu");
+    expect(screen.queryByRole("menuitem", { name: "Ex" })).toBeNull();
+    await fireEvent.mouseEnter(more.parentElement!);
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Why" }));
+    expect(onselect).toHaveBeenCalledWith("b.sub.y");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("submenu keys: Right opens on its first item, Down moves, Left goes back", async () => {
+    setup();
+    const beta = screen.getByRole("button", { name: "Beta" });
+    beta.focus();
+    await fireEvent.keyDown(beta, { key: "ArrowDown" });
+    const bee = await screen.findByRole("menuitem", { name: "Bee" });
+    await waitFor(() => expect(document.activeElement).toBe(bee));
+    await fireEvent.keyDown(bee, { key: "ArrowDown" });
+    const more = screen.getByRole("menuitem", { name: /More/ });
+    expect(document.activeElement).toBe(more);
+    await fireEvent.keyDown(more, { key: "ArrowRight" });
+    const ex = await screen.findByRole("menuitem", { name: "Ex" });
+    await waitFor(() => expect(document.activeElement).toBe(ex));
+    await fireEvent.keyDown(ex, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Why" }));
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+    expect(screen.queryByRole("menuitem", { name: "Ex" })).toBeNull();
+    expect(document.activeElement).toBe(more);
+    await fireEvent.keyDown(more, { key: "ArrowRight" });
+    await screen.findByRole("menuitem", { name: "Ex" });
+    await fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menuitem", { name: "Ex" })).toBeNull();
+    expect(screen.getByRole("menu", { name: "Beta" })).toBeTruthy();
   });
 });

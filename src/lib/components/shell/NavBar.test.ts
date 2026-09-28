@@ -6,8 +6,10 @@ import { registerState } from "../../state/register.svelte";
 import { scheduleState } from "../../state/schedule.svelte";
 import { settingsState } from "../../state/settings.svelte";
 import { viewState } from "../../state/view.svelte";
+import { windowState } from "../../state/windows.svelte";
 
 beforeEach(() => {
+  windowState.reset();
   viewState.reset();
   settingsState.setHome("calendar");
   settingsState.setNavItems(["home", "tools.reminders", "tools.calendar", "tools.reconcile", "view.investments"]);
@@ -27,10 +29,10 @@ describe("NavBar", () => {
   it("quick jumps navigate; Home goes to the home screen setting", async () => {
     render(NavBar);
     await fireEvent.click(screen.getByRole("button", { name: "Reminders" }));
-    expect(viewState.current).toBe("scheduled");
+    expect(windowState.shownKind).toBe("scheduled");
     await fireEvent.click(screen.getByRole("button", { name: "Home" }));
     await Promise.resolve();
-    expect(viewState.current).toBe("calendar");
+    expect(windowState.shownKind).toBe("calendar");
   });
 
   it("planned buttons are greyed with a reason and do nothing", async () => {

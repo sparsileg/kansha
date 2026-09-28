@@ -5,12 +5,12 @@ beforeEach(() => viewState.reset());
 
 describe("view history", () => {
   it("navigate records where you have been; back and forward walk it", () => {
-    viewState.navigate("calendar");
+    viewState.navigate("search");
     viewState.navigate("manage", { tab: "tags" });
     expect(viewState.current).toBe("manage");
     expect(viewState.params).toEqual({ tab: "tags" });
     viewState.back();
-    expect(viewState.current).toBe("calendar");
+    expect(viewState.current).toBe("search");
     viewState.back();
     expect(viewState.current).toBe("dashboard");
     expect(viewState.canBack).toBe(false);
@@ -21,8 +21,8 @@ describe("view history", () => {
   });
 
   it("going where you already are adds nothing", () => {
-    viewState.navigate("calendar");
-    viewState.navigate("calendar");
+    viewState.navigate("search");
+    viewState.navigate("search");
     viewState.back();
     expect(viewState.current).toBe("dashboard");
     // A different tab of the same view is a different place.
@@ -33,18 +33,18 @@ describe("view history", () => {
   });
 
   it("going somewhere new drops the forward entries", () => {
-    viewState.navigate("calendar");
-    viewState.navigate("scheduled");
+    viewState.navigate("search");
+    viewState.navigate("manage");
     viewState.back();
-    viewState.navigate("accounts");
+    viewState.navigate("investments");
     expect(viewState.canForward).toBe(false);
     viewState.back();
-    expect(viewState.current).toBe("calendar");
+    expect(viewState.current).toBe("search");
   });
 
   it("untouched until the first navigation", () => {
     expect(viewState.untouched).toBe(true);
-    viewState.navigate("calendar");
+    viewState.navigate("search");
     expect(viewState.untouched).toBe(false);
   });
 });

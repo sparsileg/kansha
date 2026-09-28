@@ -3,21 +3,31 @@
 
 class ConfirmState {
   message = $state<string | null>(null);
-  #resolve: ((ok: boolean) => void) | null = null;
+  /** Buttons for `choose`; empty means OK and Cancel. */
+  choices = $state<string[]>([]);
+  #resolve: ((choice: string | null) => void) | null = null;
 
-  ask = (message: string): Promise<boolean> => {
-    this.#resolve?.(false);
+  ask = async (message: string): Promise<boolean> => (await this.#open(message, [])) === "OK";
+
+  /** One of `choices`, or null for Cancel (Esc, or closing the dialog). */
+  choose = (message: string, choices: string[]): Promise<string | null> => this.#open(message, choices);
+
+  #open(message: string, choices: string[]): Promise<string | null> {
+    this.#resolve?.(null);
     this.message = message;
+    this.choices = choices;
     return new Promise((resolve) => {
       this.#resolve = resolve;
     });
-  };
+  }
 
-  answer(ok: boolean): void {
+  /** `true` is OK, `false` Cancel; a string is one of the choices. */
+  answer(choice: boolean | string): void {
     const r = this.#resolve;
     this.#resolve = null;
     this.message = null;
-    r?.(ok);
+    this.choices = [];
+    r?.(choice === true ? "OK" : choice === false ? null : choice);
   }
 }
 

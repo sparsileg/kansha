@@ -7,7 +7,11 @@
   <Modal title="Confirm" onclose={() => confirmState.answer(false)}>
     <p>{confirmState.message}</p>
     <div class="row">
-      <button type="button" onclick={() => confirmState.answer(true)}>OK</button>
+      {#if confirmState.choices.length}
+        {#each confirmState.choices as c (c)}<button type="button" onclick={() => confirmState.answer(c)}>{c}</button>{/each}
+      {:else}
+        <button type="button" onclick={() => confirmState.answer(true)}>OK</button>
+      {/if}
       <button type="button" onclick={() => confirmState.answer(false)}>Cancel</button>
     </div>
   </Modal>

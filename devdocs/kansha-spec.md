@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.14 (draft) |
+| **Document version** | 0.3.16 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-27 |
 | **Owner** | Stan |
@@ -210,7 +210,7 @@ Stan uses this heavily in Quicken; it must be robust and cover all common patter
 
 - **CAL-010** [1.0][S] Month calendar view showing upcoming scheduled occurrences on their due dates.
 - **CAL-020** [1.0][S] Toggle to also show completed (entered) transactions.
-- **CAL-030** [1.0][R] Click a day to see its items; enter, skip, or edit occurrences directly from the calendar; create a new schedule on a chosen date.
+- **CAL-030** [1.0][R] Click a day to see its items; enter, skip, or edit occurrences directly from the calendar; create a new schedule on a chosen date. Clicking a transaction, or double-clicking a day's blank space, opens a dialog listing that day's scheduled transactions, open and done (entered or skipped), with Enter, Edit, Skip, and Close, and New Schedule set apart. Edit opens an entered transaction in its register, otherwise its schedule.
 - **CAL-040** [1.0][R] Filter the calendar by account(s).
 - **CAL-050** [1.0][R] Optional projected daily balance for a selected account, based on current balance plus scheduled items.
 - **CAL-060** [Later][R] Week and agenda (list) views.
@@ -350,10 +350,10 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 #### 12.1 General report features
 
 - **RPT-010** [1.0][S] Reports offer both tables and graphs where meaningful.
-- **RPT-020** [1.0][S] Report settings (date range, accounts, categories, tags, grouping, columns) can be saved as named reports and rerun. Every report has one Customize dialog: date range, a Display tab (title, grouping, show options, columns with Reset Columns), and a tab per filter (Accounts, Categories, Payees, Securities, Tags as the report uses them), each with Select All and Clear All.
+- **RPT-020** [1.0][S] Report settings (date range, accounts, categories, tags, grouping, columns) can be saved as named reports and rerun. Every report has one Customize dialog: date range, a Display tab (title, grouping, show options, columns with Reset Columns), and a tab per filter (Accounts, Categories, Payees, Securities, Tags as the report uses them), each with Select All and Clear All. Closing a report whose settings changed since it was opened or last saved asks whether to save it.
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month, YTD, last year, last 12 months, custom; plus comparison to a prior period.
-- **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the Downloads folder, every group expanded; printing (and PDF, through the system print dialog) shows only the report.
+- **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the Downloads folder, every group expanded; printing (and PDF, through the system print dialog) shows only the report. On screen and on paper a report is a white page with dark text in every theme; its table's heading row stays in view while the report scrolls and repeats on each printed page. A report with a graph can hide the graph or the table.
 
 #### 12.2 Reports in 1.0
 
@@ -429,7 +429,7 @@ This section is intentionally incomplete until export testing is done (P-01 thro
 - **UI-010** [1.0][S] Account selector dropdown at the top of the main window; can be toggled to a persistent sidebar alongside the register.
 - **UI-020** [1.0][S] Icon bar with user-configurable shortcuts (Reconcile, Investments, Calendar, Reports, Dashboard, Scheduled, etc.).
 - **UI-030** [1.0][S] Account-centric design: each account opens to its own view with tabs appropriate to its type (banking: Register | Scheduled | Reconcile history; investment: see POS-040).
-- **UI-040** [1.0][R] Multiple accounts/reports can be open in tabs within the main window.
+- **UI-040** [1.0][R] Several reports can be open at once, each in a window that fills the view area. Windows not on top wait in a dock bar at the bottom of the main window, one text label each; clicking a label brings that window to the top. Going to any other view leaves the open windows in the dock. The dock is generic. The Calendar, Reminders (Scheduled Transactions), Accounts, and Reconcile screens are windows too, one each. File > Exit asks to save each changed report first; Cancel keeps the app open.
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions; full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent edit in the current session (implemented as an explicit reversing change, recorded in the audit log).
 - **UI-070** [1.0][R] Search box in the navigation bar: finds transactions by payee, category, memo, note, check number, account name, or amount, across all accounts or (from a register) in that account only. Results are a list, newest first, one line each; choosing one opens its account on that transaction.
@@ -945,6 +945,8 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.16 | 2026-09-28 | UI-040: Calendar, Reminders, Accounts, and Reconcile open as dockable windows; File > Exit asks to save changed reports. CAL-030: day dialog (Enter, Edit, Skip, Close, New Schedule). No schema or API change. |
+| 0.3.15 | 2026-09-28 | UI-040: reports open in windows with a dock bar (replaces tabs). RPT-020: closing a changed report asks to save. RPT-050: white report page, frozen table heading, hide graph or table. Reports menu grouped into Investing, Net Worth, Spending, and Tax submenus. No schema or API change. |
 | 0.3.14 | 2026-09-27 | Report toolbar: RPT-100 gains Income/Expense by Payee and the full interval list; RPT-150 lists its subtotals; RPT-205 gains sort by check number and descending order. No schema change. |
 | 0.3.13 | 2026-09-27 | Phase 7 (reports and dashboard). CAT-050 moved to 1.0 and built (migration 0003: tax lines; category and account transfer mappings). RPT-020 describes the shared Customize dialog. RPT-050 and RPT-150 accepted. RPT-145 (Tax Schedule) and RPT-205 (Itemized Categories and Payees) added. D-140 decided: hand-drawn SVG graphs. §16.3 PDF export through the print dialog. §18 gains report rules. |
 | 0.3.12 | 2026-09-26 | POS-040 rewritten: the Investments screen (account, equity, and lot tree with named views, as-of date, and day change) replaces the six account tabs; an investment account opens as a register. Income, Performance, and realized gains wait for the reports. New IPC command `inv_portfolio`. No schema change. |

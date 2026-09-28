@@ -3,7 +3,7 @@
   import { addMonths, displayDate, monthGrid, monthLabel, monthStart } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
-  import OccurrenceModal from "../lib/components/OccurrenceModal.svelte";
+  import DayModal from "../lib/components/DayModal.svelte";
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { scheduleState } from "../lib/state/schedule.svelte";
@@ -16,8 +16,9 @@
   let showDone = $state(false);
   let projection = $state(false);
   let selected = $state<string | null>(null);
-  /** The day-panel item whose details are open (`schedule-nominal`). */
-  let openKey = $state<string | null>(null);
+  /** The day whose transactions are open in a dialog, and the item
+   * clicked to open it (`schedule-nominal`). */
+  let dayOpen = $state<{ day: string; pick: string | null } | null>(null);
   let items = $state<OccurrenceView[]>([]);
   let balances = $state<DayBalance[]>([]);
   let error = $state<string | null>(null);
@@ -33,7 +34,6 @@
   const balanceByDay = $derived(new Map(balances.map((b) => [b.date, b.balance])));
   const dayItems = $derived(selected ? (byDay.get(selected) ?? []) : []);
   const keyOf = (v: OccurrenceView) => `${v.schedule}-${v.nominal}`;
-  const openItem = $derived(openKey === null ? undefined : items.find((v) => keyOf(v) === openKey));
 
   async function load() {
     const mine = ++seq;
@@ -61,16 +61,18 @@
     void load();
   });
 
-  /** A reminder was clicked: the next occurrence of its schedule opens in
-   * the account register, prefilled, cursor on the amount. Later ones and
-   * finished ones just select their day. */
+  /** A transaction was clicked: its day's dialog opens with it chosen. */
   function open(v: OccurrenceView, e: Event) {
     e.stopPropagation();
     selected = v.date;
-    if (v.status !== "pending" || !v.actionable) return;
-    scheduleState.enterOccurrence(v).catch((err) => {
-      error = err instanceof Error ? err.message : String(err);
-    });
+    dayOpen = { day: v.date, pick: keyOf(v) };
+  }
+
+  /** Double-click on a day's blank space: its dialog, nothing chosen. */
+  function openDay(day: string, e: MouseEvent) {
+    if ((e.target as HTMLElement).closest(".chip, .more")) return;
+    selected = day;
+    dayOpen = { day, pick: null };
   }
 
   // On a narrow window the day panel sits below the grid: bring it into view.
@@ -120,6 +122,7 @@
           tabindex="0"
           aria-label={displayDate(day)}
           onclick={() => (selected = day)}
+          ondblclick={(e) => openDay(day, e)}
           onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (selected = day)}
         >
           <span class="num">{Number(day.slice(8, 10))}</span>
@@ -132,7 +135,7 @@
               class:go={v.actionable && v.status === "pending"}
               role="button"
               tabindex="0"
-              title={`${payeeOf(v)} ${formatMoney(v.amount)}${v.actionable && v.status === "pending" ? " (click to enter in the account register)" : ""}`}
+              title={`${payeeOf(v)} ${formatMoney(v.amount)} (click for this day's transactions)`}
               onclick={(e) => open(v, e)}
               onkeydown={(e) => (e.key === "Enter" || e.key === " ") && open(v, e)}
             >
@@ -163,7 +166,7 @@
         <h2>{displayDate(selected)}</h2>
         {#each dayItems as v (keyOf(v))}
           {@const who = `${payeeOf(v)} · ${listsState.account(v.account)?.name ?? ""}`}
-          <button type="button" class="line" title={who} onclick={() => (openKey = keyOf(v))}>
+          <button type="button" class="line" title={who} onclick={() => (dayOpen = { day: v.date, pick: keyOf(v) })}>
             <span class="d">{displayDate(v.date)}</span>
             <span class="who">{who}</span>
             <AccountBalance amount={v.amount} />
@@ -181,8 +184,13 @@
   </div>
 </section>
 
-{#if openItem}
-  <OccurrenceModal view={openItem} onclose={() => (openKey = null)} />
+{#if dayOpen}
+  <DayModal
+    day={dayOpen.day}
+    accounts={account === "" ? null : [Number(account)]}
+    pick={dayOpen.pick}
+    onclose={() => (dayOpen = null)}
+  />
 {/if}
 
 <style>
@@ -261,7 +269,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .chip.go:hover {
+  .chip:hover {
     text-decoration: underline;
   }
   .chip.overdue {

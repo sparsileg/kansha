@@ -9,6 +9,8 @@ export interface MenuItem {
   disabled?: string;
   /** A separator line above this item. */
   divider?: boolean;
+  /** A submenu: the item opens these instead of running. */
+  items?: MenuItem[];
 }
 
 export interface Menu {
@@ -62,15 +64,32 @@ export const MENUS: Menu[] = [
     label: "Reports",
     items: [
       { id: "reports.saved", label: "Saved Reports…" },
-      { id: "reports.capital_gains", label: "Investing: Capital Gains", divider: true },
-      { id: "reports.net_worth", label: "Net Worth", divider: true },
-      { id: "reports.itemized_categories", label: "Spending: Itemized Categories", divider: true },
-      { id: "reports.itemized_payees", label: "Spending: Itemized Payees" },
-      { id: "reports.income_expense", label: "Spending: Income/Expense by Category" },
-      { id: "reports.income_expense_payee", label: "Spending: Income/Expense by Payee" },
-      { id: "reports.tax_capital_gains", label: "Tax: Capital Gains", divider: true },
-      { id: "reports.tax_schedule", label: "Tax: Tax Schedule" },
-      { id: "reports.tax_summary", label: "Tax: Tax Summary" },
+      {
+        id: "reports.investing",
+        label: "Investing",
+        divider: true,
+        items: [{ id: "reports.capital_gains", label: "Capital Gains" }],
+      },
+      { id: "reports.networth", label: "Net Worth", items: [{ id: "reports.net_worth", label: "Net Worth" }] },
+      {
+        id: "reports.spending",
+        label: "Spending",
+        items: [
+          { id: "reports.itemized_categories", label: "Itemized Categories" },
+          { id: "reports.itemized_payees", label: "Itemized Payees" },
+          { id: "reports.income_expense", label: "Income/Expense by Category" },
+          { id: "reports.income_expense_payee", label: "Income/Expense by Payee" },
+        ],
+      },
+      {
+        id: "reports.tax",
+        label: "Tax",
+        items: [
+          { id: "reports.tax_capital_gains", label: "Capital Gains" },
+          { id: "reports.tax_schedule", label: "Tax Schedule" },
+          { id: "reports.tax_summary", label: "Tax Summary" },
+        ],
+      },
     ],
   },
   {
@@ -79,3 +98,8 @@ export const MENUS: Menu[] = [
     items: [{ id: "help.about", label: "About Kansha", disabled: later("Phase 8") }],
   },
 ];
+
+/** Every item that runs something (submenu items, not the submenus). */
+export function leafItems(items: MenuItem[]): MenuItem[] {
+  return items.flatMap((i) => (i.items ? leafItems(i.items) : [i]));
+}

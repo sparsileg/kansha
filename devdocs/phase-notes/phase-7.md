@@ -1,6 +1,7 @@
 # Phase 7 — Reports and dashboard
 
-Spec: 0.3.14 (0.3.13 for the first pass). Engine, IPC, and UI in one pass. `just check` green.
+Spec: 0.3.16 (0.3.13 first pass, 0.3.14 toolbar, 0.3.15 report
+windows). Engine, IPC, and UI in one pass. `just check` green.
 Built from `devdocs/reports.md`, Stan's Quicken samples in
 `report-samples/`, and the scope agreed in chat.
 
@@ -105,8 +106,9 @@ holdings, allocation, cash flow, transaction report, account balances
   and spending, 12-month net worth line, overdue plus next 14 days of
   scheduled items, warnings (missing or stale prices, uncleared
   transactions over 60 days old, integrity problems).
-- Menu: flat Reports menu with "Investing:", "Spending:", "Tax:"
-  prefixes (no submenus yet); Capital Gains appears twice.
+- Menu: Reports menu is Saved Reports…, then Investing, Net Worth,
+  Spending, and Tax submenus (see "Report windows" below); Capital
+  Gains appears under Investing and Tax.
 
 ## Toolbar follow-up (spec 0.3.14)
 
@@ -133,6 +135,61 @@ Stan's six items, 2026-09-27:
 `num`, `ReportSettings.sort_desc`, `Drill` `payee`; `just bindings` run.
 No schema change (settings JSON gains a defaulted field).
 
+## Report windows and page (spec 0.3.15)
+
+Stan's deferred items, built 2026-09-28. No Rust, schema, or API change.
+
+- **Windows and dock (UI-040).** `state/windows.svelte.ts` is generic:
+  a window has an id, a kind, and a live label. Showing one is the
+  `"window"` view (`params.window`), so Back/Forward include it and
+  going to any other view leaves it in the dock. `viewState.base` is
+  the view under the windows (Minimize goes there); `viewState.forget`
+  drops a closed window's history entries. Kinds register close hooks.
+  `components/shell/Dock.svelte` (text labels, repeated names numbered,
+  × closes, clicking the top one minimizes) and `WindowFrame.svelte`
+  (name, Minimize, Close). App maps kind `report` to
+  `components/reports/ReportWindow.svelte` (was `views/Reports.svelte`;
+  the "reports" view and its "Choose a report" list are gone).
+- `state/reports.svelte.ts`: `ReportInstance` per window; `reportState`
+  opens windows and holds `savedOpen` (the Saved Reports dialog is now
+  in App). A category or payee drill-down opens a second window.
+- Showing a window again reruns its report (each show remounts it).
+- **Save prompt (RPT-020).** Closing a report whose settings differ
+  from how it opened or was last saved asks Save / Don't Save / Cancel.
+  Save updates a saved report; a new one shows its Save dialog, then
+  closes. `confirmState.choose` gives the dialog named buttons.
+- **Submenus.** `MenuItem.items`; `MenuBar` opens a submenu on hover,
+  click, Enter, or Right; Left or Esc returns. Item ids unchanged, so
+  navigation bars keep working; `leafItems` feeds the nav catalog.
+- **Hide Graph / Hide Report** buttons (icon plus text) at the upper
+  right of the graph and the table, with a rule between; view state
+  only, not saved, not printed.
+- **Frozen heading row**: `position: sticky` in the page's scroll area;
+  title and graph scroll away. Print repeats it per page.
+- **White page**: the report area uses white paper, dark text, and the
+  light theme's graph colors in every theme; toolbar keeps the theme.
+
+## Panels, Exit, calendar day dialog (spec 0.3.16)
+
+Stan's requests, 2026-09-28. No Rust, schema, or API change.
+
+- Dock labels use the browser's button text size, like the navigation
+  bar.
+- Calendar, Reminders, Accounts (Tools > Accounts), and Reconcile are
+  single windows (`shell/panels.ts`, `windowState.openSingle`); their
+  view ids are gone from `ViewId`. Home = Calendar or Reminders opens
+  that window.
+- File > Exit: `windowState.mayQuit` runs each window's close check
+  without closing anything; a changed report asks to save; Cancel
+  stops the exit. Saving a never-saved report shows its Save dialog and
+  the exit stops; choose Exit again after saving.
+- `components/DayModal.svelte` replaces `OccurrenceModal` in the
+  calendar. It lists the day's occurrences with done ones included
+  (respects the account filter). Enter and Skip only for the schedule's
+  next open one (disabled buttons say why); Edit opens an entered
+  transaction in its register, otherwise the schedule; double-click or
+  Enter on a row does Enter when possible, else Edit.
+
 ## Known gaps
 
 - Not checked against the Quicken samples by Stan; column widths,
@@ -149,3 +206,11 @@ No schema change (settings JSON gains a defaulted field).
 - The DAF gift of 7/15/2025 will show as a 0-gain sale (charitable
   gift disposal still deferred).
 - Back/Forward history does not restore an earlier report's settings.
+- File > Exit does not ask to save changed reports.
+- A window's scroll position resets each time it is shown (collapsed
+  groups and hidden parts are kept).
+- Windows fill the view area; no moving or resizing.
+- Closing the app with the window's own close box (not File > Exit)
+  does not ask to save changed reports.
+- The account list sidebar (AccountPanel) is not a window; "Accounts"
+  in the dock is Tools > Accounts.

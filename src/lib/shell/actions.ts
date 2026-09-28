@@ -7,6 +7,8 @@ import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
 import { viewState } from "../state/view.svelte";
 import { exitApp, goHome, openAccount, openReconcile } from "./nav";
+import { openPanel } from "./panels";
+import { windowState } from "../state/windows.svelte";
 import { HOME_ID, INVESTMENTS_ID } from "./navitems";
 
 export function runAction(id: string): void {
@@ -15,7 +17,6 @@ export function runAction(id: string): void {
   } else if (id.startsWith("account:")) {
     void openAccount(Number(id.slice("account:".length)));
   } else if (id in MENU_REPORTS) {
-    viewState.navigate("reports");
     void reportState.open(MENU_REPORTS[id]);
   } else {
     switch (id) {
@@ -32,13 +33,13 @@ export function runAction(id: string): void {
         dialogState.navbar = true;
         break;
       case "tools.accounts":
-        viewState.navigate("accounts");
+        openPanel("accounts");
         break;
       case "tools.calendar":
-        viewState.navigate("calendar");
+        openPanel("calendar");
         break;
       case "tools.reminders":
-        viewState.navigate("scheduled");
+        openPanel("scheduled");
         break;
       case "tools.reconcile":
         void openReconcile();
@@ -59,7 +60,6 @@ export function runAction(id: string): void {
         viewState.navigate("investments");
         break;
       case "reports.saved":
-        viewState.navigate("reports");
         reportState.savedOpen = true;
         break;
     }
@@ -75,13 +75,13 @@ export function isCurrent(id: string): boolean {
   }
   switch (id) {
     case "tools.accounts":
-      return view === "accounts";
+      return windowState.shownKind === "accounts";
     case "tools.calendar":
-      return view === "calendar";
+      return windowState.shownKind === "calendar";
     case "tools.reminders":
-      return view === "scheduled";
+      return windowState.shownKind === "scheduled";
     case "tools.reconcile":
-      return view === "reconcile";
+      return windowState.shownKind === "reconcile";
     case "tools.payees":
     case "tools.categories":
     case "tools.tags":
@@ -90,7 +90,7 @@ export function isCurrent(id: string): boolean {
     case INVESTMENTS_ID:
       return view === "investments";
     default:
-      if (id in MENU_REPORTS) return view === "reports" && reportState.kind === MENU_REPORTS[id];
+      if (id in MENU_REPORTS) return reportState.current?.kind === MENU_REPORTS[id];
       return false;
   }
 }

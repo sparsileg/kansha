@@ -3,7 +3,7 @@
 // account: everything that can be run has an id (see actions.ts). No I/O.
 
 import type { Account } from "../types/bindings";
-import { MENUS } from "./menus";
+import { MENUS, leafItems } from "./menus";
 
 export interface NavEntry {
   id: string;
@@ -51,7 +51,7 @@ export function navCatalog(accounts: Account[]): NavEntry[] {
     { id: INVESTMENTS_ID, label: "Investments", group: "General" },
   ];
   for (const menu of MENUS) {
-    for (const item of menu.items) {
+    for (const item of leafItems(menu.items)) {
       out.push({
         id: item.id,
         label: NAV_LABEL[item.id] ?? plain(item.label),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_NAV, addNav, moveNav, navCatalog, parseNav, removeNav, resolveNav } from "./navitems";
-import { MENUS } from "./menus";
+import { MENUS, leafItems } from "./menus";
 
 const accounts = [
   { id: 1, name: "Checking" },
@@ -12,9 +12,10 @@ describe("navCatalog", () => {
   const byId = (id: string) => catalog.find((e) => e.id === id);
 
   it("holds Home, the investments view, every menu item, and every account", () => {
+    expect(byId("reports.spending")).toBeUndefined(); // a submenu, not an action
     expect(byId("home")?.label).toBe("Home");
     expect(byId("view.investments")?.disabled).toBeUndefined();
-    for (const m of MENUS) for (const i of m.items) expect(byId(i.id), i.id).toBeTruthy();
+    for (const m of MENUS) for (const i of leafItems(m.items)) expect(byId(i.id), i.id).toBeTruthy();
     expect(byId("account:2")).toMatchObject({ label: "Savings", group: "Accounts" });
     expect(new Set(catalog.map((e) => e.id)).size).toBe(catalog.length);
   });

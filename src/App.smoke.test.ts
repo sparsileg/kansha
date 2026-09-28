@@ -34,6 +34,7 @@ import App from "./App.svelte";
 import { registerState } from "./lib/state/register.svelte";
 import { settingsState } from "./lib/state/settings.svelte";
 import { viewState } from "./lib/state/view.svelte";
+import { windowState } from "./lib/state/windows.svelte";
 
 const account = () => screen.findByRole("button", { name: /Savings/ });
 
@@ -41,6 +42,7 @@ beforeEach(() => {
   settingsState.setAccountPanelOpen(true);
   settingsState.setHome("dashboard");
   registerState.accountId = null;
+  windowState.reset();
   viewState.reset();
 });
 

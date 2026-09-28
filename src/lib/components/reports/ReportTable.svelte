@@ -2,19 +2,24 @@
   // A report's table: the label column, then the report's columns.
   // Groups collapse and expand; a figure with a source opens it (RPT-030).
   // With `sort`, the Date, Account, and Num headings sort the report.
+  // The heading row stays at the top while the page scrolls, and repeats
+  // on every printed page.
   import { columnHeading, formatCell } from "../../format/report";
   import { COLUMN_SORTS } from "../../reports/meta";
   import { flatten, type Line } from "../../reports/rows";
-  import { reportState } from "../../state/reports.svelte";
+  import type { ReportInstance } from "../../state/reports.svelte";
   import type { Column, DetailSort, Report } from "../../types/bindings";
 
   let {
     report,
+    inst,
     ondrill,
     sort = null,
     onsort,
   }: {
     report: Report;
+    /** Which groups are collapsed. */
+    inst: Pick<ReportInstance, "isCollapsed" | "toggle">;
     ondrill: (line: Line, column: Column | null) => void;
     sort?: { by: DetailSort; desc: boolean } | null;
     onsort?: (by: DetailSort) => void;
@@ -22,7 +27,7 @@
 
   const sortOf = (c: Column): DetailSort | null => (sort && onsort ? (COLUMN_SORTS[c.id] ?? null) : null);
 
-  const lines = $derived(flatten(report.rows, (p) => reportState.isCollapsed(p)));
+  const lines = $derived(flatten(report.rows, (p) => inst.isCollapsed(p)));
   const numeric = (c: Column) => c.kind === "money" || c.kind === "quantity";
 </script>
 
@@ -58,7 +63,7 @@
               class="tog no-print"
               aria-expanded={!l.collapsed}
               aria-label={l.collapsed ? `Expand ${l.label}` : `Collapse ${l.label}`}
-              onclick={() => reportState.toggle(l.path!)}
+              onclick={() => inst.toggle(l.path!)}
             >{l.collapsed ? "▸" : "▾"}</button>
           {/if}{l.label}
         </td>
@@ -96,6 +101,18 @@
   thead th {
     border-bottom: 1px solid rgba(128, 128, 128, 0.6);
     font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg, #fff);
+  }
+  @media print {
+    thead {
+      display: table-header-group;
+    }
+    thead th {
+      position: static;
+    }
   }
   .num {
     text-align: right;
