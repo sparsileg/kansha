@@ -1,5 +1,7 @@
 //! Categories, payees, and tags for pickers and QuickFill (CAT, PAY, TAG).
+//! Merges are bulk changes: the book is backed up first (BAK-020).
 
+use kansha_core::backup::BackupKind;
 use kansha_core::categories::{
     Category, CategoryFields, CategoryId, CategoryKind, Merged, Payee, PayeeFields, PayeeId, Tag,
     TagFields, TagId,
@@ -61,6 +63,7 @@ pub fn category_merge(
     source: CategoryId,
     target: CategoryId,
 ) -> CmdResult<Merged> {
+    state.backup(BackupKind::Bulk)?;
     state.write(|tx| categories::merge(tx, source, target))
 }
 
@@ -109,6 +112,7 @@ pub fn payee_merge(
     source: PayeeId,
     target: PayeeId,
 ) -> CmdResult<Merged> {
+    state.backup(BackupKind::Bulk)?;
     state.write(|tx| payees::merge(tx, source, target))
 }
 
@@ -142,5 +146,6 @@ pub fn tag_delete(state: State<'_, AppState>, id: TagId) -> CmdResult<()> {
 #[tauri::command]
 #[specta::specta]
 pub fn tag_merge(state: State<'_, AppState>, source: TagId, target: TagId) -> CmdResult<Merged> {
+    state.backup(BackupKind::Bulk)?;
     state.write(|tx| tags::merge(tx, source, target))
 }

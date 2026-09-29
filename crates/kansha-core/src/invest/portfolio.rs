@@ -19,7 +19,7 @@ use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::money::{Money, Price, Quantity, extended_value};
 use crate::persistence::{invest as repo, securities};
-use crate::securities::{DEFAULT_STALE_DAYS, SecurityId};
+use crate::securities::SecurityId;
 
 /// One open lot on the overview.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -191,6 +191,7 @@ pub fn portfolio(
                 by_security.entry(l.lot.security).or_default().push(l);
             }
         }
+        let stale_days = crate::settings::stale_price_days(conn)?;
         let mut positions = Vec::with_capacity(by_security.len());
         for (id, mut rows) in by_security {
             let s = secs.get(&id).ok_or(Error::NotFound {
@@ -198,7 +199,7 @@ pub fn portfolio(
                 id: id.0,
             })?;
             rows.sort_by_key(|l| (l.lot.acquired, l.lot.id));
-            let val = valuation(conn, s, as_of, DEFAULT_STALE_DAYS)?;
+            let val = valuation(conn, s, as_of, stale_days)?;
             let change = day_change(conn, id, as_of)?;
             let value = |q: Quantity| -> Result<Option<Money>> {
                 val.map(|(p, _, _)| extended_value(q, p)).transpose()

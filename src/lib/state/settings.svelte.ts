@@ -1,41 +1,37 @@
-// Non-visual UI settings. Theme and font size live in theme.svelte.ts.
-// Kept in localStorage until the `settings` module persists them with the
-// book (SET-070); see prefs.ts.
+// Non-visual UI settings, kept in the book (SET-070) through
+// booksettings.svelte.ts. Theme and font size live in theme.svelte.ts.
 
 import { DEFAULT_NAV, parseNav } from "../shell/navitems";
-import { loadPref, savePref } from "./prefs";
+import { bookSettings } from "./booksettings.svelte";
 
 export type PanelSide = "left" | "right";
 
 class SettingsState {
+  /** Session only: the account list's "show closed" toggle. */
   showClosedAccounts = $state(false);
   /** The account list panel: open beside the register, or closed. */
-  accountPanelOpen = $state(loadPref<boolean>("accountPanelOpen", true));
-  accountPanelSide = $state<PanelSide>(
-    loadPref<PanelSide>("accountPanelSide", "left", (v) => v === "left" || v === "right"),
-  );
+  accountPanelOpen = $derived(bookSettings.value.account_panel_open);
+  accountPanelSide = $derived<PanelSide>(bookSettings.value.account_panel_side);
   /** Where the app opens at startup: a view, a panel, or "account:<id>"
-   * (shell/nav.ts `startupChoices`). Saved as "home", its old name. */
-  startup = $state(loadPref<string>("home", "dashboard"));
+   * (shell/nav.ts `startupChoices`). */
+  startup = $derived(bookSettings.value.startup);
+  /** The chosen backup folder; `null` = Downloads (BAK-030). */
+  backupFolder = $derived(bookSettings.value.backup_folder);
 
   /** Navigation bar buttons, left to right (ids from shell/navitems). */
-  navItems = $state<string[]>(parseNav(loadPref<string>("navItems", "")) ?? [...DEFAULT_NAV]);
+  navItems = $derived<string[]>(parseNav(bookSettings.value.nav_items ?? "") ?? [...DEFAULT_NAV]);
 
   setNavItems(ids: string[]) {
-    this.navItems = ids;
-    savePref("navItems", JSON.stringify(ids));
+    void bookSettings.update({ nav_items: JSON.stringify(ids) });
   }
   setAccountPanelOpen(open: boolean) {
-    this.accountPanelOpen = open;
-    savePref("accountPanelOpen", open);
+    void bookSettings.update({ account_panel_open: open });
   }
   setAccountPanelSide(side: PanelSide) {
-    this.accountPanelSide = side;
-    savePref("accountPanelSide", side);
+    void bookSettings.update({ account_panel_side: side });
   }
   setStartup(startup: string) {
-    this.startup = startup;
-    savePref("home", startup);
+    void bookSettings.update({ startup });
   }
 }
 

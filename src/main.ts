@@ -8,12 +8,15 @@ import "./css/themes/dark.css";
 import "./css/themes/classic.css";
 import { applyTheme, themeState } from "./lib/state/theme.svelte";
 
-// Before the first paint, so the window never shows unthemed.
-applyTheme(document.documentElement, themeState.theme, themeState.fontSize);
-
 const target = document.getElementById("app");
 if (!target) {
   throw new Error("missing #app root element");
 }
 
-export default mount(App, { target });
+// This computer's theme and size (SET-070) before the first paint, so the
+// window never shows unthemed; the defaults if they cannot be read.
+applyTheme(document.documentElement, themeState.theme, themeState.fontSize);
+void themeState.load().finally(() => {
+  applyTheme(document.documentElement, themeState.theme, themeState.fontSize);
+  mount(App, { target });
+});

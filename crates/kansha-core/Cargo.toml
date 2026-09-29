@@ -14,6 +14,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 specta = { workspace = true, optional = true }
+age = { version = "=0.12.1", features = ["armor"] }
+zip = { version = "=7.2.0", default-features = false, features = ["deflate-flate2"] }
+getrandom = "=0.2.17"
+flate2 = "=1.1.10"
 
 [features]
 # Derive `specta::Type` on the types that cross IPC (D-120). Enabled by

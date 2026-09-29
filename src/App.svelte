@@ -22,13 +22,20 @@
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import ThemePicker from "./lib/components/shell/ThemePicker.svelte";
   import { runAction } from "./lib/shell/actions";
-  import { guardWindowClose, openStartup } from "./lib/shell/nav";
+  import DbKeyModal from "./lib/components/backup/DbKeyModal.svelte";
+  import PassphraseModal from "./lib/components/backup/PassphraseModal.svelte";
+  import RestoreModal from "./lib/components/backup/RestoreModal.svelte";
+  import VerifyBackupModal from "./lib/components/backup/VerifyBackupModal.svelte";
+  import Modal from "./lib/components/Modal.svelte";
+  import { guardWindowClose } from "./lib/shell/nav";
+  import { startBook } from "./lib/shell/startup";
+  import { bookState } from "./lib/state/book.svelte";
+  import StartScreen from "./views/StartScreen.svelte";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
   import { MENUS } from "./lib/shell/menus";
   import { dialogState } from "./lib/state/dialogs.svelte";
   import { listsState } from "./lib/state/lists.svelte";
   import { REPORT_WINDOW, reportState } from "./lib/state/reports.svelte";
-  import { scheduleState } from "./lib/state/schedule.svelte";
   import { settingsState } from "./lib/state/settings.svelte";
   import { applyTheme, themeState } from "./lib/state/theme.svelte";
   import { viewState } from "./lib/state/view.svelte";
@@ -49,12 +56,15 @@
   // The close box asks to save changed reports, like File > Exit.
   onMount(() => void guardWindowClose());
 
-  onMount(() => {
-    void listsState.loadAll().then(() => {
-      // Open the startup setting, unless the user has already gone somewhere.
-      if (viewState.untouched) void openStartup();
-      return scheduleState.startup();
-    });
+  // Nothing loads until a book is open (SECU-020): the start screen shows
+  // until then.
+  onMount(() => void bookState.refresh());
+  let started = false;
+  $effect(() => {
+    if (bookState.open && !started) {
+      started = true;
+      void startBook();
+    }
   });
 
   const views: Record<string, Component> = {
@@ -76,6 +86,9 @@
   const report = $derived(win?.kind === REPORT_WINDOW ? reportState.get(win.id) : undefined);
 </script>
 
+{#if !bookState.open}
+<StartScreen />
+{:else}
 <div class="app">
   <MenuBar menus={MENUS} onselect={runAction}><ThemePicker /></MenuBar>
   <NavBar />
@@ -108,6 +121,25 @@
     />
   {/if}
   <ConfirmDialog />
+  {#if dialogState.restore}
+    <!-- A restored book starts over: reload, as after unlocking. -->
+    <RestoreModal
+      start={settingsState.backupFolder}
+      onclose={() => (dialogState.restore = false)}
+      ondone={() => location.reload()}
+    />
+  {/if}
+  {#if dialogState.verify}
+    <VerifyBackupModal start={settingsState.backupFolder} onclose={() => (dialogState.verify = false)} />
+  {/if}
+  {#if dialogState.passphrase}<PassphraseModal onclose={() => (dialogState.passphrase = false)} />{/if}
+  {#if dialogState.dbKey}<DbKeyModal onclose={() => (dialogState.dbKey = false)} />{/if}
+  {#if dialogState.backupDone}
+    <Modal title="Back up now" onclose={() => (dialogState.backupDone = null)}>
+      <p role={dialogState.backupDone.ok ? "status" : "alert"}>{dialogState.backupDone.text}</p>
+      <p><button type="button" onclick={() => (dialogState.backupDone = null)}>Close</button></p>
+    </Modal>
+  {/if}
   <div class="body" class:right={settingsState.accountPanelSide === "right"}>
     {#if settingsState.accountPanelOpen && !listsState.isEmptyBook}
       <AccountPanel />
@@ -133,6 +165,7 @@
   </div>
   <Dock />
 </div>
+{/if}
 
 <style>
   /* Global element styles are in src/css/base.css; colors and the font

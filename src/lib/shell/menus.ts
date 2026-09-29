@@ -28,8 +28,8 @@ export const MENUS: Menu[] = [
     items: [
       { id: "file.new", label: "New…", disabled: later("separate books") },
       { id: "file.open", label: "Open…", disabled: later("separate books") },
-      { id: "file.backup", label: "Backup…", disabled: later("Phase 8"), divider: true },
-      { id: "file.restore", label: "Restore…", disabled: later("Phase 8") },
+      { id: "file.backup", label: "Back Up Now", divider: true },
+      { id: "file.restore", label: "Restore…" },
       { id: "file.import", label: "Import…", disabled: later("import"), divider: true },
       { id: "file.export", label: "Export…", disabled: later("export") },
       { id: "file.integrity", label: "Integrity Check", divider: true },

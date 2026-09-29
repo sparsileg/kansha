@@ -11,6 +11,49 @@ export const commands = {
 	 *  browser).
 	 */
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
+	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
+	/**
+	 *  First-run setup (SECU-080): a new book, or the unencrypted prototype
+	 *  database converted; then the backup folder is stored in it.
+	 */
+	bookSetup: (passphrase: string, backupFolder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder })),
+	/**
+	 *  Unlock the book with the backup passphrase (SECU-020). A book from an
+	 *  older Kansha is backed up, then migrated (BAK-020).
+	 */
+	bookUnlock: (passphrase: string) => typedError<null, IpcError>(__TAURI_INVOKE("book_unlock", { passphrase })),
+	/**  File > Back Up Now (BAK-030). */
+	backupNow: () => typedError<BackupResult, IpcError>(__TAURI_INVOKE("backup_now")),
+	backupInfo: () => typedError<BackupInfo, IpcError>(__TAURI_INVOKE("backup_info")),
+	/**  A backup's manifest, read without the passphrase (BAK-070). */
+	backupManifest: (path: string) => typedError<Manifest, IpcError>(__TAURI_INVOKE("backup_manifest", { path })),
+	backupVerify: (path: string, passphrase: string) => typedError<VerifyResult, IpcError>(__TAURI_INVOKE("backup_verify", { path, passphrase })),
+	/**
+	 *  Restore, step 1 (BAK-070, BAK-075): open the backup with its
+	 *  passphrase and compare it with the current book. Nothing changes until
+	 *  [`restore_apply`].
+	 */
+	restoreOpen: (path: string, passphrase: string) => typedError<RestorePreview, IpcError>(__TAURI_INVOKE("restore_open", { path, passphrase })),
+	/**
+	 *  Restore, step 2: back up the current book, then replace it with the
+	 *  backup under a new database key, and open it. From now on the
+	 *  backup's passphrase opens the book.
+	 */
+	restoreApply: () => typedError<null, IpcError>(__TAURI_INVOKE("restore_apply")),
+	restoreCancel: () => typedError<null, IpcError>(__TAURI_INVOKE("restore_cancel")),
+	/**  Change backup passphrase (SECU-040). */
+	passphraseChange: (oldPassphrase: string, newPassphrase: string) => typedError<null, IpcError>(__TAURI_INVOKE("passphrase_change", { oldPassphrase, newPassphrase })),
+	/**  Show database key (SECU-020), after the passphrase. */
+	databaseKeyShow: (passphrase: string) => typedError<string, IpcError>(__TAURI_INVOKE("database_key_show", { passphrase })),
+	settingsGet: () => typedError<Settings, IpcError>(__TAURI_INVOKE("settings_get")),
+	/**  Store the book's settings (SET-070). A backup folder must exist. */
+	settingsSet: (settings: Settings) => typedError<Settings, IpcError>(__TAURI_INVOKE("settings_set", { settings })),
+	appearanceGet: () => __TAURI_INVOKE<Appearance>("appearance_get"),
+	appearanceSet: (appearance: Appearance) => typedError<null, IpcError>(__TAURI_INVOKE("appearance_set", { appearance })),
+	/**  The system folder picker (backup folder, BAK-030). */
+	pickFolder: (start: string | null) => __TAURI_INVOKE<string | null>("pick_folder", { start }),
+	/**  The system file picker for a backup `.zip` (BAK-070). */
+	pickBackupFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_backup_file", { start }),
 	/**  All accounts, open and closed, in display order. */
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
 	/**  Current and ending balance of every account (ACCT-230). */
@@ -396,6 +439,21 @@ export type AccountGroup = "banking" | "credit" | "investments" | "retirement" |
 /**  Row ID of an account. */
 export type AccountId = number;
 
+/**  One database's figures for one account. */
+export type AccountSide = {
+	name: string,
+	account_type: AccountType,
+	/**  Transactions with a posting in the account, voided ones included. */
+	txns: number,
+	/**
+	 *  Final balance: every transaction, future-dated included. An
+	 *  investment account's market value instead: cash plus holdings at
+	 *  the database's latest prices. Ledger sign (a liability owed is
+	 *  negative), as in the account list.
+	 */
+	value: string,
+};
+
 /**  Open or closed (ACCT-210). */
 export type AccountStatus = "open" | "closed";
 
@@ -444,6 +502,12 @@ export type AllocationRow = {
  */
 export type AmountType = "fixed" | "estimated";
 
+/**  Theme and font size (per computer, SET-070). */
+export type Appearance = {
+	theme: string | null,
+	font_size: number | null,
+};
+
 /**  Asset class for allocation (SEC-010, POS-020). */
 export type AssetClass = "us_equity" | "intl_equity" | "bond" | "cash" | "real_estate" | "commodity" | "other";
 
@@ -486,6 +550,77 @@ export type AutoEnterReport = {
 	 *  the due list.
 	 */
 	failed: AutoEnterFailure[],
+};
+
+/**  The last backup and verification, and the folder backups go to. */
+export type BackupInfo = {
+	status: BackupStatus,
+	/**  Where the next backup goes. */
+	folder: string | null,
+	/**  The chosen folder does not exist now. */
+	folder_missing_now: boolean,
+};
+
+/**  Why a backup was made. Only automatic ones are pruned (BAK-040). */
+export type BackupKind = 
+/**  "Back up now" (BAK-030). */
+"manual" | 
+/**  On closing the app (BAK-020). */
+"close" | 
+/**  Before a schema migration. */
+"migration" | 
+/**  Before a merge or other bulk change. */
+"bulk" | 
+/**  Before an import. */
+"import" | 
+/**  Of the current database, before a restore replaces it (BAK-070). */
+"restore";
+
+/**  A backup just made. */
+export type BackupResult = {
+	path: string,
+	created_at: string,
+	integrity_issues: number,
+	/**  The backup folder was missing; the backup went to Downloads. */
+	folder_missing: boolean,
+	pruned: number,
+};
+
+/**  The last backup and verification (BAK-080, DSH-030). */
+export type BackupStatus = {
+	last_at: string | null,
+	last_path: string | null,
+	/**  Integrity problems in the last backup's snapshot. */
+	last_issues: number,
+	/**  The last full decrypt-and-check (Verify backup…, restore drill). */
+	last_verified_at: string | null,
+	/**
+	 *  The backup folder was missing at the last backup, which went to
+	 *  Downloads instead (BAK-030). Cleared when a folder is chosen or a
+	 *  backup reaches it.
+	 */
+	folder_missing: boolean,
+};
+
+/**  What is on disk (SECU-080, SECU-090). */
+export type BookState = 
+/**  No database: first-run setup (create or restore). */
+"new" | 
+/**  The unencrypted prototype database: setup converts it once. */
+"unencrypted" | 
+/**  An encrypted database and its key file: ask for the passphrase. */
+"locked" | 
+/**  An encrypted database without its key file: only a restore helps. */
+"key_missing";
+
+/**  What the start screen shows (SECU-020, SECU-080, SECU-090). */
+export type BookStatus = {
+	state: BookState,
+	/**  A book is unlocked and open. */
+	open: boolean,
+	db_path: string,
+	/**  The default backup folder (BAK-030). */
+	downloads: string | null,
 };
 
 /**
@@ -637,6 +772,28 @@ export type ColumnKind = "text" | "date" | "money" | "quantity" |
 /**  A percent with two decimals, e.g. "12.34". */
 "percent";
 
+/**  The whole comparison. */
+export type Comparison = {
+	backup_created_at: string,
+	/**  Last change in each database, from its audit log. */
+	backup_last_change: string | null,
+	current_last_change: string | null,
+	/**
+	 *  Accounts in both databases first (in the backup's account order),
+	 *  then those only in the backup, then those only in the current one.
+	 */
+	rows: ComparisonRow[],
+};
+
+/**  One account in either database, matched by ID. */
+export type ComparisonRow = {
+	account: AccountId,
+	backup: AccountSide | null,
+	current: AccountSide | null,
+	/**  Only in one database, or a figure differs. */
+	differs: boolean,
+};
+
 /**  What sits on the other side of a register row. */
 export type Counterpart = 
 /**  No other posting (a zero-amount entry). */
@@ -670,7 +827,12 @@ export type Dashboard = {
 	upcoming: OccurrenceView[],
 	upcoming_days: number,
 	warnings: Warning[],
+	/**  Last backup and last full verification (DSH-030, BAK-080). */
+	backup: BackupStatus,
 };
+
+/**  How dates are shown and typed (SET-030). */
+export type DateFormat = "mdy" | "dmy" | "ymd";
 
 /**  Date range presets (RPT-040). */
 export type DatePreset = "all_dates" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
@@ -817,7 +979,11 @@ export type ErrorKind =
 "confirmation_required" | 
 /**  Malformed input (a bad amount or date). */
 "bad_input" | 
-/**  Anything else: a database or internal failure. */
+/**  The backup passphrase is wrong; ask again (SECU-020). */
+"wrong_passphrase" | 
+/**  No book is open yet (the passphrase screen or setup is showing). */
+"locked" | 
+/**  Anything else: a database, file, or internal failure. */
 "internal";
 
 /**
@@ -1106,6 +1272,16 @@ export type LotView = {
 	term: Term,
 } & Lot;
 
+/**  `manifest.json`. */
+export type Manifest = {
+	format: number,
+	/**  UTC. */
+	created_at: string,
+	app_version: string,
+	schema_version: number,
+	kind: BackupKind,
+};
+
 /**
  *  What a merge moved from the source to the target (CAT-020, PAY-030,
  *  TAG-020). Recorded as the `after` value of the merge's audit entry.
@@ -1199,6 +1375,9 @@ export type OtherAssetSettings = {
 };
 
 export type PageOrientation = "portrait" | "landscape";
+
+/**  Which side the account list panel opens on. */
+export type PanelSide = "left" | "right";
 
 /**  A stored payee. */
 export type Payee = {
@@ -1654,6 +1833,12 @@ export type ResolvedRange = {
 	to: string,
 };
 
+export type RestorePreview = {
+	manifest: Manifest,
+	integrity: IntegrityReport,
+	comparison: Comparison,
+};
+
 /**
  *  One row. `cells` line up with the report's columns; empty text is an
  *  empty cell. A group's money cells hold its totals.
@@ -1884,6 +2069,41 @@ export type Session = {
 	opening_check: OpeningCheck,
 };
 
+/**  Every book setting. */
+export type Settings = {
+	date_format: DateFormat,
+	week_start: WeekStart,
+	/**
+	 *  "On startup open to:" (SET-060): a view, a window, or
+	 *  `account:<id>`. The UI owns the choices.
+	 */
+	startup: string,
+	/**  Run the integrity check after the book opens (SET-060). */
+	integrity_at_startup: boolean,
+	/**  Navigation bar buttons as the UI's JSON list; `None` = default. */
+	nav_items: string | null,
+	account_panel_open: boolean,
+	account_panel_side: PanelSide,
+	/**
+	 *  The Investments screen's named views, as the UI's JSON; `None` =
+	 *  default.
+	 */
+	invest_views: string | null,
+	/**
+	 *  A price older than this many days is stale (SET-040), unless the
+	 *  security sets its own.
+	 */
+	stale_price_days: number,
+	/**  Days ahead the dashboard lists scheduled items (DSH-020). */
+	upcoming_days: number,
+	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */
+	backup_folder: string | null,
+	/**  Retention (BAK-040): newest automatic backups kept … */
+	backup_keep_last: number,
+	/**  … plus the newest one of each of this many months. */
+	backup_keep_months: number,
+};
+
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */
 export type SplitRatio = {
 	new: number,
@@ -1994,6 +2214,15 @@ export type TxnSource = { kind: "manual" } | { kind: "import"; batch: number } |
 /**  Normal or voided (TXN-040). */
 export type TxnStatus = "normal" | "void";
 
+/**
+ *  Verify backup… (BAK-080): decrypt with the passphrase and run the
+ *  integrity check. A clean result is recorded in the open book.
+ */
+export type VerifyResult = {
+	manifest: Manifest,
+	integrity: IntegrityReport,
+};
+
 /**  Something that needs attention. */
 export type Warning = {
 	kind: WarningKind,
@@ -2003,7 +2232,15 @@ export type Warning = {
 };
 
 /**  What a warning is about (DSH-030). */
-export type WarningKind = "stale_price" | "missing_price" | "unreconciled" | "integrity";
+export type WarningKind = "stale_price" | "missing_price" | "unreconciled" | "integrity" | 
+/**
+ *  The backup folder is missing, no backup was ever made, or the
+ *  last backup's snapshot had integrity problems (BAK-030).
+ */
+"backup";
+
+/**  First day of the week, for the calendar (SET-030). */
+export type WeekStart = "sunday" | "monday";
 
 /**  What to do when a due date falls on a weekend (REC-050). */
 export type WeekendRule = "none" | "previous" | "next";

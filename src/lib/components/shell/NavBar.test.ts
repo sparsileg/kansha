@@ -36,11 +36,11 @@ describe("NavBar", () => {
   });
 
   it("planned buttons are greyed with a reason and do nothing", async () => {
-    settingsState.setNavItems(["file.backup", "view.investments"]);
+    settingsState.setNavItems(["file.import", "view.investments"]);
     render(NavBar);
-    const backup = screen.getByRole("button", { name: "Backup" });
+    const backup = screen.getByRole("button", { name: "Import" });
     expect(backup.getAttribute("aria-disabled")).toBe("true");
-    expect(backup.getAttribute("title")).toBe("Planned: Phase 8");
+    expect(backup.getAttribute("title")).toBe("Planned: import");
     await fireEvent.click(backup);
     expect(viewState.current).toBe("dashboard");
     const inv = screen.getByRole("button", { name: "Investments" });

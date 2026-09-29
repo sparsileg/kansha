@@ -1,8 +1,8 @@
 // The user-facing date format (SET-030): every date shown or typed uses
 // it. Logs and histories show timestamps as stored (ISO 8601 UTC). Kept in
-// localStorage until the `settings` module lands (SET-070); see prefs.ts.
+// the book (SET-070) through booksettings.svelte.ts.
 
-import { loadPref, savePref } from "./prefs";
+import { bookSettings } from "./booksettings.svelte";
 
 export type DateFormat = "mdy" | "dmy" | "ymd";
 
@@ -12,14 +12,11 @@ export const DATE_FORMATS: { value: DateFormat; label: string }[] = [
   { value: "ymd", label: "YYYY-MM-DD" },
 ];
 
-const isFormat = (v: unknown) => v === "mdy" || v === "dmy" || v === "ymd";
-
 class DateFormatState {
-  value = $state<DateFormat>(loadPref<DateFormat>("dateFormat", "mdy", isFormat));
+  value = $derived<DateFormat>(bookSettings.value.date_format);
 
   set(format: DateFormat) {
-    this.value = format;
-    savePref("dateFormat", format);
+    void bookSettings.update({ date_format: format });
   }
 }
 

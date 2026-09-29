@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMonths, monthGrid, monthLabel, weekdayOf } from "./date";
+import { addMonths, monthGrid, monthLabel, weekdayNames, weekdayOf } from "./date";
 
 describe("calendar helpers", () => {
   it("weekdayOf: 0 = Sunday", () => {
@@ -23,6 +23,19 @@ describe("calendar helpers", () => {
     expect(g[6]).toBe("2026-08-01");
     expect(g[41]).toBe("2026-09-05");
     expect(monthGrid("2026-11-10")[0]).toBe("2026-11-01");
+  });
+
+  it("monthGrid can start weeks on Monday (SET-030)", () => {
+    const g = monthGrid("2026-08-15", 1);
+    expect(g[0]).toBe("2026-07-27"); // Monday
+    expect(g[5]).toBe("2026-08-01");
+    expect(weekdayOf(g[0])).toBe(1);
+    // A month starting on Monday starts the grid.
+    expect(monthGrid("2026-06-10", 1)[0]).toBe("2026-06-01");
+    // Starting on Sunday, a Monday-first grid backs up six days.
+    expect(monthGrid("2026-11-10", 1)[0]).toBe("2026-10-26");
+    expect(weekdayNames(1)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(weekdayNames(0)[0]).toBe("Sun");
   });
 
   it("monthLabel", () => {

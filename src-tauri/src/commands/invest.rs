@@ -2,6 +2,7 @@
 //! MIG-120).
 
 use kansha_core::accounts::AccountId;
+use kansha_core::backup::BackupKind;
 use kansha_core::invest::{
     self, Allocation, Holdings, IncomeReport, InvAction, InvInput, InvRegister, InvTxn, LotView,
     Performance, Portfolio, RealizedGain, SeedPreview,
@@ -104,6 +105,7 @@ pub fn price_import_preview(
 #[tauri::command]
 #[specta::specta]
 pub fn price_import(state: State<'_, AppState>, text: String) -> CmdResult<i64> {
+    state.backup(BackupKind::Import)?;
     state.write(|tx| securities::commit_prices(tx, &text))
 }
 
@@ -280,6 +282,7 @@ pub fn lot_seed(
     text: String,
     date: Date,
 ) -> CmdResult<i64> {
+    state.backup(BackupKind::Import)?;
     let batch = state.write(|tx| imports::stage(tx, &file_name, ImportFormat::Csv))?;
     state.write_as(Origin::Import(batch.id), |tx| {
         let n = invest::commit_seed(tx, &text, date)?;

@@ -18,6 +18,7 @@ use crate::error::{Error, Result};
 use crate::money::Money;
 use crate::persistence::{accounts, reports as repo};
 use crate::schedule::{self, OccurrenceView};
+use crate::settings::{self, BackupStatus};
 use crate::text_enum::text_enum;
 use crate::{integrity, invest};
 
@@ -31,6 +32,9 @@ text_enum! {
         MissingPrice = "missing_price",
         Unreconciled = "unreconciled",
         Integrity = "integrity",
+        /// The backup folder is missing, no backup was ever made, or the
+        /// last backup's snapshot had integrity problems (BAK-030).
+        Backup = "backup",
     }
 }
 
@@ -72,6 +76,8 @@ pub struct Dashboard {
     pub upcoming: Vec<OccurrenceView>,
     pub upcoming_days: i64,
     pub warnings: Vec<Warning>,
+    /// Last backup and last full verification (DSH-030, BAK-080).
+    pub backup: BackupStatus,
 }
 
 fn add(a: Money, b: Money) -> Result<Money> {
@@ -186,6 +192,7 @@ pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<D
         upcoming,
         upcoming_days: days,
         warnings: warnings(conn, today, &lk)?,
+        backup: settings::backup_status(conn)?,
     })
 }
 
@@ -251,6 +258,32 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
                 "The integrity check found {} problem{}.",
                 report.issues.len(),
                 if report.issues.len() == 1 { "" } else { "s" }
+            ),
+            account: None,
+        });
+    }
+
+    let b = settings::backup_status(conn)?;
+    if b.folder_missing {
+        out.push(Warning {
+            kind: WarningKind::Backup,
+            message: "The backup folder is missing, so backups go to Downloads. Choose a folder in Settings.".into(),
+            account: None,
+        });
+    }
+    if b.last_at.is_none() {
+        out.push(Warning {
+            kind: WarningKind::Backup,
+            message: "No backup has been made yet.".into(),
+            account: None,
+        });
+    } else if b.last_issues > 0 {
+        out.push(Warning {
+            kind: WarningKind::Backup,
+            message: format!(
+                "The last backup was made with {} integrity problem{}.",
+                b.last_issues,
+                if b.last_issues == 1 { "" } else { "s" }
             ),
             account: None,
         });

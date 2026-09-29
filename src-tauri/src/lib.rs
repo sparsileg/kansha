@@ -10,6 +10,8 @@
 
 use std::path::PathBuf;
 
+use kansha_core::book::BookFiles;
+use kansha_core::local_config::WindowGeometry;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands};
 
@@ -28,6 +30,24 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::app_version,
             commands::today,
+            commands::book::book_status,
+            commands::book::book_setup,
+            commands::book::book_unlock,
+            commands::book::backup_now,
+            commands::book::backup_info,
+            commands::book::backup_manifest,
+            commands::book::backup_verify,
+            commands::book::restore_open,
+            commands::book::restore_apply,
+            commands::book::restore_cancel,
+            commands::book::passphrase_change,
+            commands::book::database_key_show,
+            commands::book::settings_get,
+            commands::book::settings_set,
+            commands::book::appearance_get,
+            commands::book::appearance_set,
+            commands::book::pick_folder,
+            commands::book::pick_backup_file,
             commands::accounts::account_list,
             commands::accounts::account_balances,
             commands::accounts::account_defaults,
@@ -142,8 +162,8 @@ fn bindings_path() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/types/bindings.ts")
 }
 
-/// The prototype database (D-110, D-130: synthetic data only). Set
-/// `KANSHA_DB` to use another file, e.g. a scratch copy.
+/// The book's database (its key file sits beside it). Set `KANSHA_DB` to
+/// use another file, e.g. a scratch copy.
 fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     if let Some(path) = std::env::var_os("KANSHA_DB") {
         return Ok(PathBuf::from(path));
@@ -151,6 +171,52 @@ fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
     Ok(dir.join("kansha.db"))
+}
+
+/// The per-computer config file (SET-070).
+fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(app.path().app_config_dir()?.join("config.json"))
+}
+
+/// Put the main window where it was last closed.
+fn restore_geometry(app: &tauri::App, state: &AppState) {
+    let Some(g) = state.load_config().window else {
+        return;
+    };
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = w.set_size(tauri::PhysicalSize::new(g.width, g.height));
+    let _ = w.set_position(tauri::PhysicalPosition::new(g.x, g.y));
+    if g.maximized {
+        let _ = w.maximize();
+    }
+}
+
+/// Remember the main window's place for next time.
+fn save_geometry(window: &tauri::Window, state: &AppState) {
+    let maximized = window.is_maximized().unwrap_or(false);
+    let mut cfg = state.load_config();
+    if maximized {
+        // Keep the unmaximized size and place from before.
+        if let Some(g) = cfg.window.as_mut() {
+            g.maximized = true;
+        }
+    } else {
+        let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) else {
+            return;
+        };
+        cfg.window = Some(WindowGeometry {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+            maximized: false,
+        });
+    }
+    if let Err(e) = state.save_config(&cfg) {
+        eprintln!("could not save the window position: {}", e.message);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -167,14 +233,36 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
-            app.manage(AppState::open(&database_path(app.handle())?)?);
+            let handle = app.handle();
+            // Starts locked: the passphrase screen or setup opens the book
+            // (SECU-020, SECU-080).
+            let state = AppState::new(
+                BookFiles::at(database_path(handle)?),
+                config_path(handle)?,
+                handle.path().download_dir().ok(),
+                app.package_info().version.to_string(),
+            );
+            restore_geometry(app, &state);
+            app.manage(state);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Kansha application");
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                save_geometry(window, &window.state::<AppState>());
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building the Kansha application")
+        .run(|app, event| {
+            // Back up on close (BAK-020), after the window is gone.
+            if let tauri::RunEvent::Exit = event {
+                app.state::<AppState>().close_book();
+            }
+        });
 }
 
 #[cfg(test)]

@@ -1,11 +1,13 @@
-// Theme and base font size state (SET-010, SET-020). Kept in localStorage
-// until the `settings` module lands (persisted with the data, per SET-070);
-// the first run follows the OS preference.
+// Theme and base font size state (SET-010, SET-020). Per computer, not in
+// the book (SET-070): Rust keeps them in a config file in the OS
+// configuration folder (`appearance_get` / `appearance_set`), so the
+// passphrase screen can use them before any book is open. With nothing
+// stored, the OS light/dark preference picks the theme.
 //
 // The theme's colors and font family live in src/css/themes/<theme>.css;
 // the base size goes on <html>, so every rem in the app scales with it.
 
-import { loadPref, savePref } from "./prefs";
+import { commands } from "../api";
 
 export type Theme = "light" | "dark" | "classic";
 
@@ -32,9 +34,20 @@ const isFontSize = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= MIN_FONT_SIZE && v <= MAX_FONT_SIZE;
 
 class ThemeState {
-  theme = $state<Theme>(loadPref<Theme>("theme", prefersDark ? "dark" : "light", isTheme));
+  theme = $state<Theme>(prefersDark ? "dark" : "light");
   /** Base font size in px, set on <html>: 1rem (NFR-080). */
-  fontSize = $state(loadPref<number>("fontSize", DEFAULT_FONT_SIZE, isFontSize));
+  fontSize = $state(DEFAULT_FONT_SIZE);
+
+  /** Read this computer's stored choice. Never fails: the defaults stay. */
+  async load(): Promise<void> {
+    try {
+      const a = await commands.appearanceGet();
+      if (isTheme(a.theme)) this.theme = a.theme;
+      if (isFontSize(a.font_size)) this.fontSize = a.font_size;
+    } catch {
+      /* not running inside Tauri */
+    }
+  }
 
   toggle() {
     this.setTheme(this.theme === "light" ? "dark" : "light");
@@ -42,12 +55,19 @@ class ThemeState {
   setTheme(theme: Theme) {
     if (!isTheme(theme)) return;
     this.theme = theme;
-    savePref("theme", theme);
+    this.#save();
   }
   setFontSize(px: number) {
     if (!isFontSize(px)) return;
     this.fontSize = px;
-    savePref("fontSize", px);
+    this.#save();
+  }
+
+  #save() {
+    // Not saved, it still applies for this session.
+    Promise.resolve()
+      .then(() => commands.appearanceSet({ theme: this.theme, font_size: this.fontSize }))
+      .catch(() => {});
   }
 }
 

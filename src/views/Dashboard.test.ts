@@ -25,7 +25,11 @@ vi.mock("../lib/api", async (orig) => {
           trend: { dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0 },
           upcoming: [{ schedule: 1, nominal: "2026-09-20", date: "2026-09-20", amount: "-50.00", status: "pending", account: 1, payee: null, estimated: false, mode: "remind", overridden: false, txn: null, needs_review: false, overdue: true, actionable: true }],
           upcoming_days: 14,
-          warnings: [{ kind: "unreconciled", message: "Checking has uncleared transactions more than 60 days old.", account: 1 }],
+          warnings: [
+            { kind: "unreconciled", message: "Checking has uncleared transactions more than 60 days old.", account: 1 },
+            { kind: "backup", message: "The backup folder is missing, so backups go to Downloads. Choose a folder in Settings.", account: null },
+          ],
+          backup: { last_at: "2026-09-26T22:00:00Z", last_path: "/x.zip", last_issues: 0, last_verified_at: null, folder_missing: true },
         }),
     },
   };
@@ -50,6 +54,9 @@ describe("Dashboard", () => {
     }
     expect(screen.getByText("Overdue")).toBeTruthy();
     expect(screen.getByRole("img", { name: /Net Worth/ })).toBeTruthy();
+    // Backup status and the missing-folder warning (DSH-030).
+    expect(screen.getByText(/backup folder is missing/)).toBeTruthy();
+    expect(screen.getByText(/Last backup: 2026-09-26T22:00:00Z\. Last full verification:\s+never\./)).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: /uncleared/ }));
     expect(openAcct).toHaveBeenCalledWith(1);
   });

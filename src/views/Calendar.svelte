@@ -1,6 +1,7 @@
 <script lang="ts">
   import { call, commands } from "../lib/api";
-  import { addMonths, displayDate, monthGrid, monthLabel, monthStart } from "../lib/format/date";
+  import { addMonths, displayDate, monthGrid, monthLabel, monthStart, weekdayNames } from "../lib/format/date";
+  import { bookSettings } from "../lib/state/booksettings.svelte";
   import { formatMoney } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
   import DayModal from "../lib/components/DayModal.svelte";
@@ -10,7 +11,9 @@
   import { mergeItems, type CalItem } from "../lib/calendar/items";
   import type { CalendarTxn, DayBalance } from "../lib/types/bindings";
 
-  const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  /** First day of the week (SET-030). */
+  const weekStart = $derived<0 | 1>(bookSettings.value.week_start === "monday" ? 1 : 0);
+  const WEEK = $derived(weekdayNames(weekStart));
 
   let month = $state(monthStart(listsState.today || "2026-01-01"));
   let account = $state("");
@@ -26,7 +29,7 @@
   let seq = 0;
   let panel: HTMLElement | undefined;
 
-  const grid = $derived(monthGrid(month));
+  const grid = $derived(monthGrid(month, weekStart));
   const byDay = $derived.by(() => {
     const m = new Map<string, CalItem[]>();
     for (const v of items) m.set(v.date, [...(m.get(v.date) ?? []), v]);

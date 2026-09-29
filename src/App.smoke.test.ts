@@ -1,14 +1,43 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 
+const book = vi.hoisted(() => ({
+  state: "locked" as string,
+  open: true,
+  settings: null as unknown,
+  unlocks: [] as string[],
+}));
+
 vi.mock("./lib/api", async (orig) => {
   const real = await orig<typeof import("./lib/api")>();
   const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
+  // Not imported from booksettings: it imports this mocked module.
+  const DEFAULT_SETTINGS = {
+    date_format: "mdy", week_start: "sunday", startup: "dashboard", integrity_at_startup: false,
+    nav_items: null, account_panel_open: true, account_panel_side: "left", invest_views: null,
+    stale_price_days: 7, upcoming_days: 14, backup_folder: null, backup_keep_last: 10, backup_keep_months: 12,
+  };
   const acct = { id: 1, name: "Savings", account_type: "savings", group: "banking", status: "open", show_in_list: true, sort_order: 0, investment: null };
   return {
     ...real,
     commands: {
       appVersion: () => Promise.resolve("x"),
+      bookStatus: () => ok({ state: book.state, open: book.open, db_path: "/data/kansha.db", downloads: "/home/u/Downloads" }),
+      bookUnlock: (p: string) => {
+        book.unlocks.push(p);
+        if (p !== "right") {
+          return Promise.resolve({ status: "error" as const, error: { kind: "wrong_passphrase" as const, message: "the passphrase is not correct" } });
+        }
+        book.open = true;
+        return ok(null);
+      },
+      settingsGet: () => ok(book.settings ?? DEFAULT_SETTINGS),
+      settingsSet: (s: unknown) => {
+        book.settings = s;
+        return ok(s);
+      },
+      appearanceSet: () => ok(null),
+      backupInfo: () => ok({ status: { last_at: null, last_path: null, last_issues: 0, last_verified_at: null, folder_missing: false }, folder: "/home/u/Downloads", folder_missing_now: false }),
       today: () => ok("2026-09-24"),
       accountList: () => ok([acct]),
       accountBalances: () => ok([{ account: 1, current: "10.00", ending: "10.00" }]),
@@ -40,6 +69,10 @@ import { windowState } from "./lib/state/windows.svelte";
 const account = () => screen.findByRole("button", { name: /Savings/ });
 
 beforeEach(() => {
+  book.open = true;
+  book.state = "locked";
+  book.settings = null;
+  book.unlocks = [];
   settingsState.setAccountPanelOpen(true);
   settingsState.setStartup("dashboard");
   registerState.accountId = null;
@@ -50,6 +83,7 @@ beforeEach(() => {
 describe("App shell", () => {
   it("shows the menu bar, the quick-jump bar, and the account list", async () => {
     render(App);
+    await screen.findByRole("button", { name: "File" });
     for (const m of ["File", "Edit", "Tools", "Reports", "Help"]) {
       expect(screen.getByRole("button", { name: m })).toBeTruthy();
     }
@@ -122,7 +156,7 @@ describe("App shell", () => {
 
   it("picks the theme and font size from the right end of the menu bar", async () => {
     render(App);
-    const bar = screen.getByRole("navigation", { name: "Menu bar" });
+    const bar = await screen.findByRole("navigation", { name: "Menu bar" });
     const theme = within(bar).getByRole("combobox", { name: "Theme" });
     const size = within(bar).getByRole("combobox", { name: "Font size" });
     // Theme first, size last, both after the menus.
@@ -139,5 +173,42 @@ describe("App shell", () => {
     settingsState.setStartup("calendar");
     render(App);
     await waitFor(() => expect(screen.getByRole("grid", { name: "Month" })).toBeTruthy());
+  });
+
+  it("starts locked: a wrong passphrase is asked again; the right one opens the book", async () => {
+    book.open = false;
+    render(App);
+    const field = await screen.findByLabelText("Backup passphrase");
+    expect(screen.queryByRole("button", { name: "File" })).toBeNull();
+    await fireEvent.input(field, { target: { value: "wrong" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(await screen.findByText("the passphrase is not correct")).toBeTruthy();
+    await fireEvent.input(screen.getByLabelText("Backup passphrase"), { target: { value: "right" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await account();
+    expect(book.unlocks).toEqual(["wrong", "right"]);
+  });
+
+  it("first run shows setup: folder, passphrase twice, and the lost-passphrase warning", async () => {
+    book.open = false;
+    book.state = "new";
+    render(App);
+    expect(await screen.findByText(/Create a new, empty book/)).toBeTruthy();
+    expect(screen.getByText("/home/u/Downloads (default)")).toBeTruthy();
+    expect(screen.getByText(/If it is lost, they cannot be recovered/)).toBeTruthy();
+    const create = screen.getByRole("button", { name: "Create book" }) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    await fireEvent.input(screen.getByLabelText("Passphrase"), { target: { value: "a" } });
+    await fireEvent.input(screen.getByLabelText("Again"), { target: { value: "b" } });
+    expect(screen.getByText("The passphrases do not match.")).toBeTruthy();
+    expect(create.disabled).toBe(true);
+  });
+
+  it("an unencrypted prototype book is offered for encryption", async () => {
+    book.open = false;
+    book.state = "unencrypted";
+    render(App);
+    expect(await screen.findByText(/Keep the existing book; it will be encrypted/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Encrypt book" })).toBeTruthy();
   });
 });

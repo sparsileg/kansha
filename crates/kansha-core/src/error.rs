@@ -53,6 +53,14 @@ pub enum Error {
     /// Any other database failure.
     #[error("database error: {0}")]
     Database(String),
+
+    /// The backup passphrase did not unlock the private key (SECU-020).
+    #[error("the passphrase is not correct")]
+    WrongPassphrase,
+
+    /// A file could not be read or written (backups, key file, config).
+    #[error("{0}")]
+    Io(String),
 }
 
 impl From<rusqlite::Error> for Error {
@@ -71,6 +79,12 @@ impl From<rusqlite::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::Database(format!("audit JSON: {e}"))
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e.to_string())
     }
 }
 

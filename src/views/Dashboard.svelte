@@ -13,8 +13,7 @@
   import { openPanel } from "../lib/shell/panels";
   import type { Dashboard } from "../lib/types/bindings";
 
-  /** Days ahead for upcoming scheduled items (DSH-020). */
-  const DAYS = 14;
+  import { bookSettings } from "../lib/state/booksettings.svelte";
 
   let data = $state<Dashboard | null>(null);
   let error = $state<string | null>(null);
@@ -23,7 +22,8 @@
   onMount(async () => {
     version = await commands.appVersion();
     try {
-      data = await call(commands.dashboard(DAYS));
+      // Days ahead for upcoming scheduled items (DSH-020).
+      data = await call(commands.dashboard(bookSettings.value.upcoming_days));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -113,6 +113,10 @@
         {:else}
           <p class="sub">All clear.</p>
         {/if}
+        <p class="sub">
+          Last backup: {data.backup.last_at ?? "none yet"}. Last full verification:
+          {data.backup.last_verified_at ?? "never"}.
+        </p>
       </div>
     </div>
   {:else if !error}

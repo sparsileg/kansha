@@ -1,6 +1,7 @@
 // What running a menu item or navigation-bar button does, by id. Items
 // marked `disabled` never get here (the callers check).
 
+import { call, commands } from "../api";
 import { MENU_REPORTS } from "../reports/meta";
 import { dialogState } from "../state/dialogs.svelte";
 import { reportState } from "../state/reports.svelte";
@@ -20,6 +21,12 @@ export function runAction(id: string): void {
     void reportState.open(MENU_REPORTS[id]);
   } else {
     switch (id) {
+      case "file.backup":
+        void backUpNow();
+        break;
+      case "file.restore":
+        dialogState.restore = true;
+        break;
       case "file.integrity":
         dialogState.integrity = true;
         break;
@@ -63,6 +70,19 @@ export function runAction(id: string): void {
         reportState.savedOpen = true;
         break;
     }
+  }
+}
+
+/** File > Back Up Now (BAK-030): Rust picks the folder; say where it went. */
+export async function backUpNow(): Promise<void> {
+  try {
+    const r = await call(commands.backupNow());
+    const lines = [`Backed up to ${r.path}.`];
+    if (r.folder_missing) lines.push("⚠ The backup folder is missing, so the backup went to Downloads. Choose a folder in Settings.");
+    if (r.integrity_issues > 0) lines.push(`⚠ The integrity check found ${r.integrity_issues} problem(s) in the backed-up data.`);
+    dialogState.backupDone = { ok: true, text: lines.join(" ") };
+  } catch (e) {
+    dialogState.backupDone = { ok: false, text: `The backup failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 

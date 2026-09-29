@@ -9,6 +9,16 @@ class DialogState {
   history = $state<{ txn: TxnId; account: AccountId } | null>(null);
   integrity = $state(false);
   settings = $state(false);
+  /** File > Restore… (BAK-070). */
+  restore = $state(false);
+  /** Settings > Verify backup… (BAK-080). */
+  verify = $state(false);
+  /** Settings > Change backup passphrase… (SECU-040). */
+  passphrase = $state(false);
+  /** Settings > Show database key… (SECU-020). */
+  dbKey = $state(false);
+  /** Result of File > Back Up Now, or its error. */
+  backupDone = $state<{ ok: boolean; text: string } | null>(null);
   /** The Navigation Bar dialog (which buttons, in what order). */
   navbar = $state(false);
   /** Due, overdue, and auto-entered items (REC-130, REC-070). */

@@ -23,7 +23,7 @@ export const DEFAULT_NAV = [HOME_ID, "tools.reminders", "tools.calendar", "tools
 const NAV_LABEL: Record<string, string> = {
   "file.new": "New book",
   "file.open": "Open book",
-  "file.backup": "Backup",
+  "file.backup": "Back up",
   "file.restore": "Restore",
   "file.import": "Import",
   "file.export": "Export",

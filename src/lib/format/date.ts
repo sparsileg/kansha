@@ -167,11 +167,18 @@ export function monthLabel(iso: string): string {
   return `${names[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
 }
 
-/** Six Sunday-first weeks (42 ISO dates) covering the month of `iso`. */
-export function monthGrid(iso: string): string[] {
+/** Six weeks (42 ISO dates) covering the month of `iso`, each starting
+ * on `weekStart` (0 = Sunday, 1 = Monday; SET-030). */
+export function monthGrid(iso: string, weekStart: 0 | 1 = 0): string[] {
   const first = monthStart(iso);
-  const start = addDays(first, -weekdayOf(first));
+  const start = addDays(first, -((weekdayOf(first) - weekStart + 7) % 7));
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}
+
+/** Short day names for a week starting on `weekStart`. */
+export function weekdayNames(weekStart: 0 | 1 = 0): string[] {
+  const all = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return [...all.slice(weekStart), ...all.slice(0, weekStart)];
 }
 
 /** "Sep 2026" for the month containing `iso` (graph axes). */

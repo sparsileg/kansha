@@ -307,8 +307,8 @@ pub struct Holdings {
     pub stale_prices: bool,
 }
 
-/// `account`'s holdings on `as_of`. `stale_days` defaults to
-/// [`DEFAULT_STALE_DAYS`].
+/// `account`'s holdings on `as_of`. `stale_days` defaults to the book's
+/// stale-price setting (SET-040).
 pub fn holdings(
     conn: &Connection,
     account: AccountId,
@@ -316,12 +316,11 @@ pub fn holdings(
     stale_days: Option<i64>,
 ) -> Result<Holdings> {
     let internal = internal_cash(conn, account)?;
-    let positions = positions(
-        conn,
-        Some(account),
-        as_of,
-        stale_days.unwrap_or(DEFAULT_STALE_DAYS),
-    )?;
+    let stale_days = match stale_days {
+        Some(d) => d,
+        None => crate::settings::stale_price_days(conn)?,
+    };
+    let positions = positions(conn, Some(account), as_of, stale_days)?;
     let cash = if internal {
         Some(repo::cash_balance(conn, account, Some(as_of))?)
     } else {

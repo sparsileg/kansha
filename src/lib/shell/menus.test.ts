@@ -9,7 +9,7 @@ describe("menu definitions", () => {
   it("has the agreed menus in order", () => {
     expect(MENUS.map((m) => m.label)).toEqual(["File", "Edit", "Tools", "Reports", "Help"]);
     expect(MENUS[0].items.map((i) => i.label)).toEqual([
-      "New…", "Open…", "Backup…", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
+      "New…", "Open…", "Back Up Now", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
     ]);
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
       "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Reconcile",

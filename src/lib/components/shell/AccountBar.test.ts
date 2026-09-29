@@ -10,6 +10,7 @@ vi.mock("../../state/register.svelte", async () => {
 import AccountBar from "./AccountBar.svelte";
 import { listsState } from "../../state/lists.svelte";
 import { registerState } from "../../state/register.svelte";
+import { bookSettings } from "../../state/booksettings.svelte";
 import { settingsState } from "../../state/settings.svelte";
 import { viewState } from "../../state/view.svelte";
 
@@ -18,7 +19,6 @@ const acct = (id: number, name: string, status = "open") =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  localStorage.clear();
   listsState.accounts = [acct(1, "Checking"), acct(2, "Old", "closed")];
   listsState.balances = [];
   settingsState.showClosedAccounts = false;
@@ -35,7 +35,7 @@ describe("AccountBar", () => {
     expect(head.getAttribute("aria-expanded")).toBe("true");
     await fireEvent.click(head);
     expect(settingsState.accountPanelOpen).toBe(false);
-    expect(localStorage.getItem("kansha.accountPanelOpen")).toBe("false");
+    expect(bookSettings.value.account_panel_open).toBe(false);
     expect(screen.getByRole("button", { name: "Accounts" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("menu")).toBeNull();
   });

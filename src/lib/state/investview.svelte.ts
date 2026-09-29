@@ -1,7 +1,7 @@
 // The Investments screen: its named views, the as-of date, and the
-// overview Rust works out (POS-010, LOT-150). Views live in localStorage
-// until the `settings` module stores them with the book (SET-070); see
-// prefs.ts. Which rows are expanded is kept while the app runs.
+// overview Rust works out (POS-010, LOT-150). Views are kept in the book
+// (SET-070) through booksettings.svelte.ts; `applyStored` reads them when
+// a book opens. Which rows are expanded is kept while the app runs.
 
 import { call, commands } from "../api";
 import {
@@ -16,13 +16,12 @@ import {
 import type { Portfolio } from "../types/bindings";
 import { listsState } from "./lists.svelte";
 import { investState } from "./invest.svelte";
-import { loadPref, savePref } from "./prefs";
+import { bookSettings } from "./booksettings.svelte";
 
-const KEY = "investViews";
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 class InvestViewState {
-  #stored = parseViews(loadPref<string>(KEY, ""));
+  #stored = parseViews(bookSettings.value.invest_views ?? "");
   views = $state<ViewDef[]>(this.#stored.views);
   selected = $state(this.#stored.selected);
   /** The valuation date (ISO). */
@@ -42,7 +41,14 @@ class InvestViewState {
 
   #save() {
     const s: ViewsState = { views: this.views, selected: this.selected };
-    savePref(KEY, serializeViews(s));
+    void bookSettings.update({ invest_views: serializeViews(s) });
+  }
+
+  /** Take the views stored in the book (after it opens). */
+  applyStored() {
+    const s = parseViews(bookSettings.value.invest_views ?? "");
+    this.views = s.views;
+    this.selected = s.selected;
   }
 
   select(slot: number) {

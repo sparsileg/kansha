@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 import NavBarModal from "./NavBarModal.svelte";
 import { parseNav } from "../shell/navitems";
-import { loadPref } from "../state/prefs";
+import { bookSettings } from "../state/booksettings.svelte";
 import { dialogState } from "../state/dialogs.svelte";
 import { listsState } from "../state/lists.svelte";
 import { settingsState } from "../state/settings.svelte";
@@ -13,7 +13,6 @@ const choose = (label: string, value: string) => fireEvent.change(screen.getByLa
 
 beforeEach(() => {
   cleanup();
-  localStorage.clear();
   listsState.accounts = [{ id: 1, name: "Checking" }] as never;
   settingsState.setNavItems(["home", "tools.calendar"]);
   dialogState.navbar = true;
@@ -45,7 +44,7 @@ describe("Navigation bar dialog", () => {
     expect(available()).toContain("Home");
     await fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(settingsState.navItems).toEqual(["account:1", "tools.calendar"]);
-    expect(parseNav(loadPref<string>("navItems", ""))).toEqual(["account:1", "tools.calendar"]);
+    expect(parseNav(bookSettings.value.nav_items ?? "")).toEqual(["account:1", "tools.calendar"]);
     expect(dialogState.navbar).toBe(false);
   });
 

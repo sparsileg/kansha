@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.31 (draft) |
+| **Document version** | 0.3.32 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); D-20, D-50, D-60, D-100, D-110, D-140 decided |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); encryption, backup, restore, and settings (Phase 8); D-20, D-50, D-60, D-100, D-110, D-140 decided |
 
 ---
 
@@ -801,8 +801,18 @@ platform has one.
     Nothing financial, since it is readable without the passphrase.
   - the database snapshot, compressed and then encrypted (BAK-060);
   - the private key, locked with the backup passphrase (BAK-060).
+
+  Built (0.3.32): the file is `kansha-backup-<UTC time>-<kind>.zip`,
+  e.g. `kansha-backup-2026-09-29T18-30-12Z-close.zip`; a name already
+  taken gets `-2`, `-3`, … The kind is `manual`, `close`,
+  `migration`, `bulk` (before a merge), `import`, or `restore` (the
+  current book, before a restore replaces it). The entries are
+  `manifest.json`, `database.gz.age` (gzip, then `age`), and
+  `private-key.age`.
 - **BAK-040** [1.0][R] Configurable retention (e.g., keep last 10
-  automatic backups plus one per month for 12 months).
+  automatic backups plus one per month for 12 months). Only automatic
+  backups in the backup folder, named as in BAK-035, are ever
+  deleted; manual backups and other files never are.
 - **BAK-050** [1.0][R] Backups are consistent snapshots (SQLite online
   backup API, `VACUUM INTO`, or serialization), never a raw file copy
   of an open database. No unencrypted copy of the database is written
@@ -842,7 +852,11 @@ platform has one.
   read back and its manifest, structure, and checksum checked. A full
   decrypt-and-check needs the passphrase: "Verify backup…" and the
   restore drill (§20.3). The dashboard shows the last backup's age and
-  the date of the last full verification (DSH-030).
+  the date of the last full verification (DSH-030). A snapshot with
+  integrity problems is still backed up (a backup of a damaged book
+  beats none); the problems are counted and the dashboard warns
+  (INT-040). A backup before a merge or import that fails stops the
+  merge or import.
 
 #### 13.4 Security
 
@@ -850,6 +864,10 @@ platform has one.
   **SQLCipher** under a random 256-bit key made when the database is
   created. The key is kept in a key file next to the database,
   encrypted with the backup public key (BAK-060). No OS keyring (D-20).
+  Built (0.3.32): `kansha.key` beside `kansha.db`, JSON holding the
+  public key, the locked private key, and the database key encrypted
+  to the public key. The database opens with the key in SQLCipher's
+  raw form (no key derivation).
 - **SECU-020** [1.0][R] At startup the user types the backup
   passphrase; it unlocks the private key, which unlocks the database
   key. One passphrase for the database and all backups. A wrong
@@ -1148,7 +1166,13 @@ compiles against Tauri v2 and generates a matching
   RPT-050.
 - Encryption of backups and the key file: `age` crate (X25519
   recipients, scrypt-locked private key). Backup files: `zip` crate.
-  No OS keyring (SECU-010).
+  No OS keyring (SECU-010). Both pinned (`=0.12.1`, `=7.2.0`, the
+  newest for MSRV 1.85). The database key comes from `getrandom`;
+  the snapshot is gzipped with `flate2` (both already under `age` and
+  `zip`).
+- Folder and file pickers (backup folder, restore):
+  `tauri-plugin-dialog`, called from Rust only, so the webview gets
+  no dialog permission.
 - Testing: see Section 20.
 
 **R5 — Tauri security configuration.**  Tauri v2 capabilities expose
@@ -1242,6 +1266,9 @@ kansha/
 │       │   ├── accounts/  ledger/  categories/  schedule/
 │       │   ├── reconcile/  securities/  investments/
 │       │   ├── reports/  import/  integrity/  audit/  backup/
+│       │   ├── book.rs        # book files: setup, unlock, restore install
+│       │   ├── security.rs    # key file, passphrase, database key
+│       │   ├── local_config.rs # per-computer config file (SET-070)
 │       │   └── settings/
 │       └── tests/
 │           ├── scenarios.rs   # scenario runner
@@ -1823,6 +1850,7 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.32 | 2026-09-29 | Phase 8 built (encryption, backup, restore, settings). BAK-035: file and entry names, backup kinds. BAK-040: only automatic backups are pruned. BAK-080: a snapshot with integrity problems is still backed up and the dashboard warns; a failed backup before a merge or import stops it. SECU-010: `kansha.key` layout, raw SQLCipher key. §16.3 R4: `age`/`zip` pins, `getrandom`, `flate2`, `tauri-plugin-dialog`. §17.4: `book.rs`, `security.rs`, `local_config.rs`. No schema change. API change: 18 new IPC commands (book, backup, restore, settings, appearance, pickers); `Dashboard.backup`; error kinds `wrong_passphrase`, `locked`. |
 | 0.3.31 | 2026-09-29 | SET-070: all settings in the book's `setting` table except per-computer ones (theme, font size, window geometry, recent books), which go to a config file in the OS configuration folder; no localStorage. SET-010, SET-020: stored per computer. BAK-030, DSH-030: a missing backup folder falls back to Downloads with a dashboard warning; no file is created at the missing path. No schema or API change. |
 | 0.3.30 | 2026-09-29 | Backup and encryption decided (§13.5 proposal adopted and removed). BAK-030 (every backup to the Settings folder, default Downloads), BAK-035 (zip layout), BAK-050, BAK-060 (public-key encrypted backups, `age`), BAK-070, BAK-075 (restore comparison window), BAK-080 rewritten or added. SECU-010 (random database key in a key file encrypted to the backup public key; no OS keyring), SECU-020 (backup passphrase at startup; Show database key), SECU-040 (change backup passphrase), SECU-080 (first-run setup), SECU-090 added; SECU-060 withdrawn. DSH-030, SET-050, D-20, D-110, §16.3 R4, §23, §24 Phase 8 updated. No schema or API change. |
 | 0.3.29 | 2026-09-29 | §13.5 added: proposal for backup and encryption (backup folder in Settings, default Downloads; zipped backups; database key in the OS keyring; backups encrypted with a public key, restored with a backup passphrase), with open questions. To be discussed before a final decision; BAK and SECU stand until then. D-20 under discussion. No schema or API change. |

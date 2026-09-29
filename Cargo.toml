@@ -13,7 +13,7 @@ proptest = "1"
 rust_decimal = "1"
 # SQLCipher build with its own OpenSSL, so Kubuntu, Windows, and CI need no
 # system crypto library (D-20, D-110). Unkeyed databases behave as plain SQLite.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled-sqlcipher-vendored-openssl", "cache"] }
+rusqlite = { version = "0.40", default-features = false, features = ["bundled-sqlcipher-vendored-openssl", "cache", "serialize"] }
 serde = { version = "1", features = ["derive"] }
 # Optional in kansha-core (feature `specta`); pinned exactly (D-120, DR-03).
 specta = { version = "=2.0.0-rc.25", features = ["derive", "std"] }
