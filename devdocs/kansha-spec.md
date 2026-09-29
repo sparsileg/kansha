@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.28 (draft) |
+| **Document version** | 0.3.31 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-28 |
+| **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); D-50, D-60, D-100, D-110, D-140 decided |
+| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); D-20, D-50, D-60, D-100, D-110, D-140 decided |
 
 ---
 
@@ -735,7 +735,8 @@ This section is intentionally incomplete until export testing is done
   configurable) and overdue items.
 - **DSH-030** [1.0][R] Warnings panel: stale prices, unreconciled
   accounts beyond a threshold, integrity check results, last backup
-  age.
+  age, date of the last full backup verification (BAK-080), backup
+  folder missing (BAK-030).
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -774,44 +775,111 @@ This section is intentionally incomplete until export testing is done
 
 #### 13.3 Backup and restore
 
+Decided 2026-09-29 (0.3.30), modeled on LostSheep: the live database
+and every backup are encrypted, and one passphrase, the backup
+passphrase, unlocks both. No OS keyring is used, since not every
+platform has one.
+
 - **BAK-010** [1.0][S] Backups are a first-class feature.
 - **BAK-020** [1.0][R] Automatic backup on application close and
   before any import, schema migration, or bulk operation (merge, batch
   rollback).
-- **BAK-030** [1.0][R] Manual "Back up now" with user-chosen
-  destination.
+- **BAK-030** [1.0][R] Manual "Back up now". Every backup, manual or
+  automatic, is written to the backup folder chosen in Settings
+  (SET-050); with none chosen, to the system Downloads folder. No
+  destination is asked for. Setup and Settings say that a backup
+  folder on the same computer (Downloads included) does not survive
+  the loss of the computer; a cloud-synced folder, network drive, or
+  USB drive does. Before each backup the folder is checked to be an
+  existing folder. If it is not (e.g. after a restore on another
+  computer), the backup goes to Downloads and the dashboard warns
+  until a folder is chosen; Kansha never creates a file or folder at
+  the missing path.
+- **BAK-035** [1.0][R] Each backup is one `.zip` file named with its
+  date and time; an existing file is never overwritten. It holds:
+  - `manifest.json`: backup time (UTC), app version, schema version.
+    Nothing financial, since it is readable without the passphrase.
+  - the database snapshot, compressed and then encrypted (BAK-060);
+  - the private key, locked with the backup passphrase (BAK-060).
 - **BAK-040** [1.0][R] Configurable retention (e.g., keep last 10
   automatic backups plus one per month for 12 months).
 - **BAK-050** [1.0][R] Backups are consistent snapshots (SQLite online
-  backup API or `VACUUM INTO`), never a raw file copy of an open
-  database.
-- **BAK-060** [1.0][R] Backups remain encrypted with the same
-  mechanism as the live database.
-- **BAK-070** [1.0][R] Restore from backup: preview backup date and
-  summary, back up the current database first, then restore.
-- **BAK-080** [1.0][R] Each backup is verified after writing (open,
-  integrity check).
+  backup API, `VACUUM INTO`, or serialization), never a raw file copy
+  of an open database. No unencrypted copy of the database is written
+  to disk: the snapshot is taken in memory, or, if that fails under
+  SQLCipher, it stays under the database key and that key goes inside
+  the encrypted part of the backup.
+- **BAK-060** [1.0][R] Backups are encrypted with a public key (`age`,
+  X25519). Setting the backup passphrase makes a key pair: the public
+  key, which can encrypt but not decrypt and need not be secret, and
+  the private key, stored only locked with the passphrase (`age`
+  scrypt). Backups therefore need no passphrase, and the passphrase is
+  stored nowhere. Every backup carries the locked private key, so a
+  restore needs only the backup file and the passphrase.
+- **BAK-070** [1.0][R] Restore, on this or any computer, including at
+  first start with no database (SECU-080): pick a backup `.zip`, show
+  its manifest, ask for the passphrase it was made with, decrypt, run
+  the integrity check, and show the comparison window (BAK-075).
+  Restore backs up the current database first (when there is one),
+  then gives the restored database a new database key (SECU-010) and
+  opens it. A backup from a newer schema is refused (§21); one from an
+  older schema is migrated on opening.
+- **BAK-075** [1.0][R] Restore comparison window, shown before
+  anything is overwritten, so the user sees whether the restore would
+  replace newer data:
+  - backup date and time, and the time of the last change in each
+    database (from the audit log);
+  - one row per account: number of transactions, backup and current;
+    final balance (all transactions, future-dated included), backup
+    and current; for an investment account the market value (cash
+    plus holdings at each database's latest prices) instead;
+  - differences marked with a symbol and bold, not by color; accounts
+    only in the backup or only in the current database listed
+    separately; a filter to show only rows that differ;
+  - Restore and Cancel.
+- **BAK-080** [1.0][R] Each backup is checked: the snapshot passes the
+  integrity check before it is encrypted; after writing, the zip is
+  read back and its manifest, structure, and checksum checked. A full
+  decrypt-and-check needs the passphrase: "Verify backup…" and the
+  restore drill (§20.3). The dashboard shows the last backup's age and
+  the date of the last full verification (DSH-030).
 
 #### 13.4 Security
 
-- **SECU-010** [1.0][R] Database encrypted at rest using **SQLCipher**
-  (decision pending final confirmation; D-20).
-- **SECU-020** [1.0][R] The encryption passphrase is known to the user
-  so the database can be opened in DB Browser for SQLite (SQLCipher
-  build). Optional storage in the OS keyring (KWallet on Kubuntu,
-  Windows Credential Manager) for convenience.
+- **SECU-010** [1.0][R] The database is encrypted at rest with
+  **SQLCipher** under a random 256-bit key made when the database is
+  created. The key is kept in a key file next to the database,
+  encrypted with the backup public key (BAK-060). No OS keyring (D-20).
+- **SECU-020** [1.0][R] At startup the user types the backup
+  passphrase; it unlocks the private key, which unlocks the database
+  key. One passphrase for the database and all backups. A wrong
+  passphrase is asked again. "Show database key" in Settings asks for
+  the passphrase, then shows the key, which opens the database in DB
+  Browser for SQLite (SQLCipher build).
 - **SECU-030** [1.0][R] Clear warning at setup: a lost passphrase
   makes the database and all backups unrecoverable. The user is
   prompted to record it durably (e.g., password manager).
-- **SECU-040** [1.0][R] Change passphrase function (re-keys the
-  database).
+- **SECU-040** [1.0][R] Change backup passphrase: asks for the old and
+  new passphrase, makes a new key pair, and re-encrypts the key file
+  with the new public key; the database key does not change. Old
+  backups keep the passphrase they were made with.
 - **SECU-050** [1.0][R] External browsing is supported
   read-only. Direct edits via external tools are unsupported; the
   integrity check (INT-030) will detect resulting inconsistencies.
-- **SECU-060** [1.0][R] Optional auto-lock after a configurable idle
-  period.
+- **SECU-060** [Withdrawn] Auto-lock after an idle period (withdrawn
+  0.3.30; the desktop's screen lock serves). May return later.
 - **SECU-070** [1.0][R] No network access except explicitly enabled
   features (price download). No telemetry.
+- **SECU-080** [1.0][R] First-run setup, one screen in order: (1)
+  create a new database or restore from a backup (BAK-070); (2) choose
+  the backup folder (default Downloads, with BAK-030's note); (3) set
+  the backup passphrase, with SECU-030's warning. An existing
+  unencrypted database goes through the same screens once and is
+  converted; the unencrypted file is then deleted.
+- **SECU-090** [1.0][R] A missing or damaged key file cannot be
+  repaired; the database is recovered by restoring a backup. Changes
+  since the last backup are lost; the backup on close (BAK-020) keeps
+  that window small.
 
 ### 14. User Interface and Settings (UI, SET)
 
@@ -851,11 +919,11 @@ This section is intentionally incomplete until export testing is done
 - **SET-010** [1.0][S] Themes: Light, Dark, and Classic (the Quicken
   2013 look). Each theme is a readable CSS file of variables (colors,
   font family); switching is instant. Picked at the right end of the
-  menu bar.
+  menu bar. Stored per computer, not in the book (SET-070).
 - **SET-020** [1.0][S] One base font size, 10–24 px in 1 px steps
   (default 13). All text, spacing, and column widths scale with it;
   themes do not set sizes. Picked at the right end of the menu bar,
-  after the theme.
+  after the theme. Stored per computer, not in the book (SET-070).
 - **SET-030** [1.0][R] Date display format: MM/DD/YYYY (default),
   DD/MM/YYYY, or YYYY-MM-DD. Every user-facing date, shown or typed,
   follows it; a four-digit year typed first is always accepted. Logs
@@ -863,14 +931,20 @@ This section is intentionally incomplete until export testing is done
   day of week.
 - **SET-040** [1.0][R] Default lot selection method; stale-price
   threshold. (Tithing percentage withdrawn, 0.3.22.)
-- **SET-050** [1.0][R] Backup location, retention, and schedule.
+- **SET-050** [1.0][R] Backup folder (default: the system Downloads
+  folder; BAK-030), retention, and schedule. Change backup passphrase
+  (SECU-040); Show database key (SECU-020); Verify backup… (BAK-080).
 - **SET-060** [1.0][R] Startup behavior: "On startup open to:" the
   dashboard, Investments, Reminders, Calendar, Accounts, or any
   account (every new view or account joins the list); run integrity
   check at startup. The Home button always opens the dashboard.
-- **SET-070** [1.0][R] Settings are stored in the database (portable
-  with the data), except window geometry and database path, which are
-  stored locally per machine.
+- **SET-070** [1.0][R] Settings are stored in the book's database
+  (`setting` table; portable with the data and restored with it),
+  except per-computer ones: theme, font size (the passphrase screen
+  needs them before a book is open), window geometry, and the recent
+  books list with their paths. Those are kept in a config file in the
+  OS configuration folder, written by Rust. Browser storage
+  (localStorage) is not used for settings.
 
 ---
 
@@ -1072,8 +1146,9 @@ compiles against Tauri v2 and generates a matching
   WebKitGTK's print operation with the page setup set in code
   (`webkit2gtk` and `gtk` crates, the versions Tauri already uses),
   RPT-050.
-- Keyring: `keyring` crate (KWallet/Secret Service, Windows Credential
-  Manager).
+- Encryption of backups and the key file: `age` crate (X25519
+  recipients, scrypt-locked private key). Backup files: `zip` crate.
+  No OS keyring (SECU-010).
 - Testing: see Section 20.
 
 **R5 — Tauri security configuration.**  Tauri v2 capabilities expose
@@ -1625,7 +1700,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | ID | Decision | Status | Recommendation / Outcome |
 |---|---|---|---|
 | D-10 | Register: combined signed amount column or separate Payment/Deposit columns | **Decided** (2026-09-24) | Separate Payment and Deposit columns (REG-010). No schema impact; postings stay signed. |
-| D-20 | Encryption: SQLCipher vs. disk-level only | Tentative | SQLCipher; final decision before 1.0 development |
+| D-20 | Encryption: SQLCipher vs. disk-level only | **Decided** (2026-09-29) | SQLCipher with a random key in a key file encrypted to the backup public key; one backup passphrase at startup; public-key encrypted backups; no OS keyring (SECU-010, SECU-020, BAK-060) |
 | D-30 | Accounting engine in Rust vs. TypeScript | **Decided** | Rust (DR-01) |
 | D-35 | UI framework | **Decided** | Svelte 5 + Vite, no SvelteKit (DR-02) |
 | D-40 | Price download in 1.0, and which provider | Open | Yes, pluggable; provider to be evaluated |
@@ -1635,7 +1710,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-80 | Parallel-run duration before retiring Quicken | Open | 2–3 months |
 | D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
 | D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | **Decided** | As listed in ACCT-010/020 |
-| D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; enable encryption in Phase 8 or at 1.0 |
+| D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; encryption enabled in Phase 8 (decided 2026-09-29) |
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
 | D-140 | Chart library | **Decided** (2026-09-27) | None: hand-drawn SVG. Rust places values on the axis; the frontend only scales. Series differ by pattern and shape as well as color (red-green colorblind). |
@@ -1677,11 +1752,11 @@ all IPC and never performs money arithmetic.
 **In scope:** ACCT, CAT, PAY, TAG, TXN, REG, REC, CAL, RCN, SEC, PRC
 (manual and CSV), INV, LOT (FIFO and specific ID), POS, RPT (1.0 list
 except PDF export), DSH, INT, AUD, BAK (manual backup/restore and
-backup-on-close), UI, SET, TEST.
+backup-on-close), SECU (Phase 8), UI, SET, TEST.
 
 **Out of scope for the prototype:** MIG (all, except MIG-120
 lot-seeding mechanics on synthetic data), PRC-040 (price download),
-BAK-040 (retention policy), SECU (per D-110), RPT PDF export, and all
+BAK-040 (retention policy), RPT PDF export, and all
 [Later] items.
 
 ### 24. Phases
@@ -1700,7 +1775,7 @@ delivered as migration 0001 in Phase 1.
 | **5 — Reconciliation** | Reconcile workflow, save/resume, history, change detection, explicit adjustments | Reconciliation scenarios pass; Stan completes a reconciliation on synthetic data |
 | **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID); splits; return of capital; share transfers; positions; investment account tabs; lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
 | **7 — Reports and dashboard** | 1.0 report list; saved reports; drill-down; CSV export; charts; dashboard | Report snapshot tests pass; drill-down reaches transactions for every figure |
-| **8 — Backup, settings, review** | Manual backup/restore, backup on close, verification; settings; performance check; prototype review | Restore drill passes; review findings recorded for spec 0.4 |
+| **8 — Encryption, backup, settings, review** | Database encryption and first-run setup (SECU); encrypted backups, manual and on close; restore with comparison window; verification; settings; performance check; prototype review | Restore drill passes; review findings recorded for spec 0.4 |
 
 ### 25. Chat Workflow (no Claude Code)
 
@@ -1748,6 +1823,9 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.31 | 2026-09-29 | SET-070: all settings in the book's `setting` table except per-computer ones (theme, font size, window geometry, recent books), which go to a config file in the OS configuration folder; no localStorage. SET-010, SET-020: stored per computer. BAK-030, DSH-030: a missing backup folder falls back to Downloads with a dashboard warning; no file is created at the missing path. No schema or API change. |
+| 0.3.30 | 2026-09-29 | Backup and encryption decided (§13.5 proposal adopted and removed). BAK-030 (every backup to the Settings folder, default Downloads), BAK-035 (zip layout), BAK-050, BAK-060 (public-key encrypted backups, `age`), BAK-070, BAK-075 (restore comparison window), BAK-080 rewritten or added. SECU-010 (random database key in a key file encrypted to the backup public key; no OS keyring), SECU-020 (backup passphrase at startup; Show database key), SECU-040 (change backup passphrase), SECU-080 (first-run setup), SECU-090 added; SECU-060 withdrawn. DSH-030, SET-050, D-20, D-110, §16.3 R4, §23, §24 Phase 8 updated. No schema or API change. |
+| 0.3.29 | 2026-09-29 | §13.5 added: proposal for backup and encryption (backup folder in Settings, default Downloads; zipped backups; database key in the OS keyring; backups encrypted with a public key, restored with a backup passphrase), with open questions. To be discussed before a final decision; BAK and SECU stand until then. D-20 under discussion. No schema or API change. |
 | 0.3.28 | 2026-09-29 | SET-010, SET-020: the theme and font size pickers move from the Settings dialog to the right end of the menu bar. No schema or API change. |
 | 0.3.27 | 2026-09-29 | TXN-040: un-void will not be offered. AUD-020: category, payee, and tag merges record a `merge` entry in the history of each transaction they change. No schema or API change. |
 | 0.3.26 | 2026-09-28 | SET-010: Classic theme added; themes are CSS files of variables (`src/css/themes/`), with global element styles in `src/css/base.css`. SET-020: one base font size on `<html>`, 10–24 px in 1 px steps, default 13; named text sizes in rem. No schema or API change. |

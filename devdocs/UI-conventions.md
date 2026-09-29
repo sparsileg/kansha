@@ -95,8 +95,9 @@ section records what was decided about it.
 - A setting chooses the screen to open to (a specific account, the
   calendar, the investments view, or another view). It belongs to the
   book, since each book wants a different start screen.
-- Opening a book means asking for its passphrase (SECU-020) unless it is
-  kept in the OS keyring. Switching closes the current book first.
+- Opening a book means asking for its backup passphrase (SECU-020);
+  each book has its own passphrase, key file, and backups. No OS
+  keyring. Switching closes the current book first.
 
 ### Home, startup, and Due count
 
