@@ -62,8 +62,8 @@
     display: flex;
     align-items: center;
     padding: 0.1rem 0.5rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
-    font-size: 0.9em;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: var(--fs-ui);
   }
   .bar.right {
     flex-direction: row-reverse;
@@ -90,13 +90,13 @@
     top: 100%;
     left: 0;
     z-index: 40;
-    width: 16rem;
+    width: min(16rem, 90vw);
     max-height: 70vh;
     overflow-y: auto;
     padding: 0.5rem;
-    background: var(--bg, #fff);
-    border: 1px solid rgba(128, 128, 128, 0.6);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    background: var(--popup-bg);
+    border: 1px solid var(--popup-border);
+    box-shadow: var(--shadow-popup);
   }
   .right .drop {
     left: auto;

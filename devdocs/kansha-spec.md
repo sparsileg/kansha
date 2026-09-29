@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.25 (draft) |
+| **Document version** | 0.3.28 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-28 |
 | **Owner** | Stan |
@@ -848,8 +848,14 @@ This section is intentionally incomplete until export testing is done
 
 #### 14.2 Settings
 
-- **SET-010** [1.0][S] Multiple themes (at least light and dark).
-- **SET-020** [1.0][S] Adjustable font size, applied globally.
+- **SET-010** [1.0][S] Themes: Light, Dark, and Classic (the Quicken
+  2013 look). Each theme is a readable CSS file of variables (colors,
+  font family); switching is instant. Picked at the right end of the
+  menu bar.
+- **SET-020** [1.0][S] One base font size, 10–24 px in 1 px steps
+  (default 13). All text, spacing, and column widths scale with it;
+  themes do not set sizes. Picked at the right end of the menu bar,
+  after the theme.
 - **SET-030** [1.0][R] Date display format: MM/DD/YYYY (default),
   DD/MM/YYYY, or YYYY-MM-DD. Every user-facing date, shown or typed,
   follows it; a four-digit year typed first is always accepted. Logs
@@ -1208,7 +1214,9 @@ Modeling choices that affect other sections:
   on the viewing account's posting.
 - **Void (TXN-040):** the transaction and its postings stay; every
   amount becomes zero and status is `void`. Original amounts live in
-  the audit entry. A void can be deleted but not edited.
+  the audit entry. A void can be deleted but not edited. Un-void is
+  not offered and will not be (Stan, 2026-09-29): re-enter the
+  transaction instead.
 - **Reconciled edits (TXN-050):** edit, void, delete, or un-reconcile
   of a transaction with a reconciled posting requires explicit
   confirmation. Only reconciliation (or an import, MIG-090) sets
@@ -1240,6 +1248,11 @@ Modeling choices that affect other sections:
   same transaction as the entry.
 - **Audit view (AUD-020):** the `audit` module turns before/after JSON
   into per-field changes for display.
+- **Merges in transaction history (AUD-020, AUD-030):** merging a
+  category, payee, or tag also records a `merge` entry on every
+  transaction it changed, with that transaction's before and after, in
+  the same database transaction. The merged record keeps its own
+  `merge` entry.
 - **Investment accounts** take no postings through the general ledger
   API; their transactions come from the investments engine (Phase 6).
 - **Investment holdings in the ledger:** a posting to an investment
@@ -1735,6 +1748,9 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.28 | 2026-09-29 | SET-010, SET-020: the theme and font size pickers move from the Settings dialog to the right end of the menu bar. No schema or API change. |
+| 0.3.27 | 2026-09-29 | TXN-040: un-void will not be offered. AUD-020: category, payee, and tag merges record a `merge` entry in the history of each transaction they change. No schema or API change. |
+| 0.3.26 | 2026-09-28 | SET-010: Classic theme added; themes are CSS files of variables (`src/css/themes/`), with global element styles in `src/css/base.css`. SET-020: one base font size on `<html>`, 10–24 px in 1 px steps, default 13; named text sizes in rem. No schema or API change. |
 | 0.3.25 | 2026-09-28 | REG-050: a split's Tag column shows only its own tag; Split button in the entry row. Calendar: only skipped items are struck through. Scrollbars are classic (they take width) instead of GTK overlay ones, which covered the register's last column. No schema or API change. |
 | 0.3.24 | 2026-09-28 | REC-160: deleting a transaction entered from a schedule gives its occurrence back (the latest one returns to Due with "# left" restored; an earlier, auto-entry, or deleted-schedule one becomes skipped); it was refused before. CAL-020, CAL-030: the calendar and its day dialog show register transactions too (not investment accounts or voids). Register scrolls continuously (all rows loaded, only those in view drawn); split lines get a Tag picker. New IPC command `calendar_transactions`. No schema change. |
 | 0.3.23 | 2026-09-28 | SET-060: "On startup open to:" setting (was Home screen); the Home button always opens the dashboard. REG-070: future rows italic with their own alternate-row tint, not dimmed; reconciled rows gray, in banking and investment registers. No schema or API change. |

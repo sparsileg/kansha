@@ -307,7 +307,7 @@
   .tabs {
     display: flex;
     gap: 0.25rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
+    border-bottom: 1px solid var(--line);
   }
   .on {
     font-weight: 700;
@@ -322,7 +322,7 @@
   fieldset {
     display: grid;
     gap: 0.45rem;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--line);
     border-radius: 4px;
   }
   fieldset label:not(.check) {
@@ -340,10 +340,10 @@
     list-style: none;
     margin: 0;
     padding: 0.25rem;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--line);
     border-radius: 4px;
     height: 16rem;
-    min-width: 20rem;
+    min-width: min(20rem, 90vw);
     overflow: auto;
   }
   .list.cols {
@@ -384,7 +384,7 @@
   .none {
     opacity: 0.75;
     margin: 0;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   .err {
     color: var(--bad);

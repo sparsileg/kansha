@@ -51,9 +51,9 @@
   }
   h1 {
     margin: 0;
-    font-size: 1.3em;
+    font-size: var(--fs-title);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

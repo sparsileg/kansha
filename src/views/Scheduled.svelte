@@ -88,12 +88,12 @@
     cursor: pointer;
   }
   tbody tr:hover {
-    background: rgba(128, 128, 128, 0.2);
+    background: var(--hover-bg);
   }
   tr.dim td {
     opacity: 0.55;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

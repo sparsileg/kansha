@@ -47,7 +47,7 @@
 
 <style>
   h3 {
-    font-size: 0.95em;
+    font-size: var(--fs-ui);
     margin: 0.75rem 0 0.25rem;
   }
   .scroll {
@@ -61,10 +61,10 @@
   td {
     text-align: left;
     padding: 0.15rem 0.5rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+    border-bottom: 1px solid var(--line-soft);
     vertical-align: top;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

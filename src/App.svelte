@@ -20,6 +20,7 @@
   import SavedReportsModal from "./lib/components/reports/SavedReportsModal.svelte";
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
+  import ThemePicker from "./lib/components/shell/ThemePicker.svelte";
   import { runAction } from "./lib/shell/actions";
   import { guardWindowClose, openStartup } from "./lib/shell/nav";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
@@ -29,7 +30,7 @@
   import { REPORT_WINDOW, reportState } from "./lib/state/reports.svelte";
   import { scheduleState } from "./lib/state/schedule.svelte";
   import { settingsState } from "./lib/state/settings.svelte";
-  import { themeState } from "./lib/state/theme.svelte";
+  import { applyTheme, themeState } from "./lib/state/theme.svelte";
   import { viewState } from "./lib/state/view.svelte";
   import { windowState } from "./lib/state/windows.svelte";
   import Calendar from "./views/Calendar.svelte";
@@ -41,6 +42,8 @@
   import Scheduled from "./views/Scheduled.svelte";
   import Search from "./views/Search.svelte";
 
+  // The theme and base font size go on <html> (src/css/themes, base.css).
+  $effect(() => applyTheme(document.documentElement, themeState.theme, themeState.fontSize));
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
   // The close box asks to save changed reports, like File > Exit.
@@ -73,12 +76,8 @@
   const report = $derived(win?.kind === REPORT_WINDOW ? reportState.get(win.id) : undefined);
 </script>
 
-<div
-  class="app"
-  data-theme={themeState.theme}
-  style="font-size: {themeState.fontSize}px"
->
-  <MenuBar menus={MENUS} onselect={runAction} />
+<div class="app">
+  <MenuBar menus={MENUS} onselect={runAction}><ThemePicker /></MenuBar>
   <NavBar />
   {#if !listsState.isEmptyBook}<AccountBar />{/if}
   {#if listsState.error}<p class="err">{listsState.error}</p>{/if}
@@ -136,154 +135,13 @@
 </div>
 
 <style>
-  /* The window itself never scrolls: the shell is pinned to it, and only
-     areas inside (views, lists, the account panel) scroll. */
-  :global(html),
-  :global(body) {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-  }
-  /* Classic scrollbars that take their own width. WebKitGTK otherwise
-     follows GTK's overlay scrollbars, which take no width and draw over
-     the rows' last column; the register measures this width to keep its
-     header, entry row, and footer in line with the rows. */
-  :global(*::-webkit-scrollbar) {
-    width: 12px;
-    height: 12px;
-  }
-  :global(*::-webkit-scrollbar-track) {
-    background: var(--scroll-track, #ececec);
-  }
-  :global(*::-webkit-scrollbar-thumb) {
-    background: var(--scroll-thumb, #a8a8a8);
-    border: 2px solid transparent;
-    border-radius: 6px;
-    background-clip: content-box;
-  }
-  :global(*::-webkit-scrollbar-thumb:hover) {
-    background: var(--scroll-thumb-hover, #7a7a7a);
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-  :global(*::-webkit-scrollbar-corner) {
-    background: var(--scroll-track, #ececec);
-  }
-  /* The least space between table columns, everywhere (--col-gap, set
-     on .app; 6px if a table is drawn outside it). Cells split it, half
-     each side. `:where` adds no specificity, so a table that sets its
-     own, wider padding keeps it; grid-built tables (the register) use
-     `column-gap: var(--col-gap)`. */
-  :global(:where(th, td)) {
-    padding-inline: calc(var(--col-gap, 6px) / 2);
-  }
-  /* The field being typed in must be unmistakable (keyboard entry): its
-     background and text take the theme's focus colors. Buttons reached by
-     keyboard look the same. */
-  :global(input:focus),
-  :global(select:focus),
-  :global(textarea:focus),
-  :global(button:focus-visible) {
-    /* Drawn inside the edge, so a neighbouring cell cannot cover it. */
-    outline: 3px solid var(--focus-ring);
-    outline-offset: -3px;
-    background: var(--focus-bg);
-    color: var(--focus-fg);
-    box-shadow: 0 0 0 4px var(--focus-glow);
-    position: relative;
-    z-index: 1;
-  }
-  /* A dropdown's open list: the theme's plain colors, never the focus
-     colors its field has while open. */
-  :global(option),
-  :global(optgroup) {
-    background: var(--opt-bg);
-    color: var(--opt-fg);
-  }
-  /* A focused field's contents, selected on focus: a stronger shade of
-     the focus background, same text color, so the field keeps its look. */
-  :global(input:focus::selection),
-  :global(textarea:focus::selection) {
-    background: var(--focus-sel-bg);
-    color: var(--focus-fg);
-  }
-  /* Selected text elsewhere. */
-  :global(::selection) {
-    background: var(--sel-bg);
-    color: var(--sel-fg);
-  }
+  /* Global element styles are in src/css/base.css; colors and the font
+     family in src/css/themes. */
   .app {
     position: fixed;
     inset: 0;
     display: flex;
     flex-direction: column;
-    --bg: #fff;
-    --col-gap: 6px;
-    /* Problem and OK colors for a red-green colorblind eye: vermilion and
-       blue differ in lightness and on the blue-yellow axis, and each sits
-       at 7:1 or better on its background. Never the only cue: text or a
-       symbol always says the same thing. */
-    --bad: #a83200;
-    --good: #005a9c;
-    /* Focus and selection, per theme, the same for every kind of field.
-       Yellow and blue stay apart for a red-green colorblind eye; text on
-       each is 7:1 or better. */
-    color-scheme: light;
-    --opt-bg: #fff;
-    --opt-fg: #111;
-    --focus-bg: #fff6b0;
-    --focus-fg: #111;
-    --focus-sel-bg: #ffc933;
-    --focus-ring: #1f6feb;
-    --focus-glow: rgba(31, 111, 235, 0.35);
-    --sel-bg: #1f6feb;
-    --sel-fg: #fff;
-    /* Graphs: blue and orange stay apart for a red-green colorblind eye;
-       series also differ by pattern and shape. */
-    --chart-1: #1f5fa8;
-    --chart-2: #c25400;
-    --chart-2-light: #f7dcc4;
-    --chart-line: #1a1a1a;
-    /* Registers: future rows stripe in a light orange (not the yellow of
-       a focused field or the blue of a selection); reconciled text is
-       gray at 5:1 or better, on either stripe. */
-    --future-alt: rgba(194, 84, 0, 0.1);
-    --reconciled-fg: #666;
-    --scroll-track: #ececec;
-    --scroll-thumb: #a8a8a8;
-    --scroll-thumb-hover: #7a7a7a;
-  }
-  .app[data-theme="dark"] {
-    --bg: #1e1e1e;
-    --bad: #ff9f5a;
-    --good: #7cc0ff;
-    /* Native controls (fields, dropdown lists, scrollbars) draw dark. */
-    color-scheme: dark;
-    --opt-bg: #2a2a2a;
-    --opt-fg: #eee;
-    /* White on deep blue: 10:1. The yellow ring marks it at a glance. */
-    --focus-bg: #0b3d91;
-    --focus-fg: #fff;
-    --focus-sel-bg: #2563d9;
-    --focus-ring: #ffd84d;
-    --focus-glow: rgba(255, 216, 77, 0.35);
-    --sel-bg: #7cc0ff;
-    --sel-fg: #111;
-    --chart-1: #6fb0ff;
-    --chart-2: #ff9f5a;
-    --chart-2-light: #4d2c12;
-    --chart-line: #f2f2f2;
-    --future-alt: rgba(255, 159, 90, 0.12);
-    --reconciled-fg: #9a9a9a;
-    --scroll-track: #2a2a2a;
-    --scroll-thumb: #5c5c5c;
-    --scroll-thumb-hover: #808080;
-    background: #1e1e1e;
-    color: #eee;
-  }
-  .app[data-theme="light"] {
-    background: #fff;
-    color: #111;
   }
   .body {
     display: flex;
@@ -303,22 +161,15 @@
     flex-direction: column;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0.5rem;
   }
   /* Printing (RPT-050) shows only the view: no menus, bars, or account
      list, and nothing clipped by the fixed window. */
   @media print {
-    :global(html),
-    :global(body) {
-      height: auto;
-      overflow: visible;
-    }
     .app {
       position: static;
       display: block;
-      background: #fff;
-      color: #000;
     }
     .app > :global(:not(.body)),
     .body > :global(:not(main)),

@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
+use super::ledger;
 use crate::categories::{Merged, Payee, PayeeFields, PayeeId};
 use crate::error::{Error, Result};
 
@@ -160,18 +161,25 @@ pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
     }
     let src = get(conn, source)?;
     get(conn, target)?;
-    let moved = Merged {
-        into: target.0,
-        txns: conn.execute(
-            "UPDATE txn SET payee_id = ?2 WHERE payee_id = ?1",
-            [source, target],
-        )?,
-        schedules: conn.execute(
-            "UPDATE schedule SET payee_id = ?2 WHERE payee_id = ?1",
-            [source, target],
-        )?,
-        ..Merged::default()
-    };
+    let moved = ledger::audited_merge(
+        tx,
+        "SELECT id FROM txn WHERE payee_id = ?1",
+        source.0,
+        || {
+            Ok(Merged {
+                into: target.0,
+                txns: conn.execute(
+                    "UPDATE txn SET payee_id = ?2 WHERE payee_id = ?1",
+                    [source, target],
+                )?,
+                schedules: conn.execute(
+                    "UPDATE schedule SET payee_id = ?2 WHERE payee_id = ?1",
+                    [source, target],
+                )?,
+                ..Merged::default()
+            })
+        },
+    )?;
     conn.execute("DELETE FROM payee WHERE id = ?1", [source])?;
     audit::record(
         tx,

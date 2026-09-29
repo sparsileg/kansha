@@ -178,7 +178,7 @@
   .name {
     display: grid;
     gap: 0.15rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
     max-width: 24rem;
   }
   .tabs {
@@ -196,7 +196,7 @@
     align-items: start;
   }
   .cap {
-    font-size: 0.9em;
+    font-size: var(--fs-register);
     margin-bottom: 0.2rem;
   }
   ul {
@@ -204,7 +204,7 @@
     margin: 0;
     padding: 0.2rem;
     min-height: 9rem;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--line);
     border-radius: 4px;
   }
   .cols li button {
@@ -218,7 +218,7 @@
     padding: 0.15rem 0.4rem;
   }
   li button.sel {
-    background: rgba(128, 128, 128, 0.3);
+    background: var(--active-bg);
     font-weight: 700;
     border-color: currentColor;
   }
@@ -243,7 +243,7 @@
     padding: 0.1rem 0.3rem;
   }
   .checks li.sel {
-    background: rgba(128, 128, 128, 0.3);
+    background: var(--active-bg);
   }
   .none,
   .hint {

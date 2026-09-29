@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
+use super::ledger;
 use crate::categories::{Merged, Tag, TagFields, TagId};
 use crate::error::{Error, Result};
 
@@ -120,12 +121,21 @@ pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
     }
     let src = get(conn, source)?;
     get(conn, target)?;
-    let postings = conn.execute(
-        "INSERT OR IGNORE INTO posting_tag (posting_id, tag_id)
-         SELECT posting_id, ?2 FROM posting_tag WHERE tag_id = ?1",
-        [source, target],
+    let postings = ledger::audited_merge(
+        tx,
+        "SELECT DISTINCT p.txn_id FROM posting_tag pt JOIN posting p ON p.id = pt.posting_id
+         WHERE pt.tag_id = ?1",
+        source.0,
+        || {
+            let n = conn.execute(
+                "INSERT OR IGNORE INTO posting_tag (posting_id, tag_id)
+                 SELECT posting_id, ?2 FROM posting_tag WHERE tag_id = ?1",
+                [source, target],
+            )?;
+            conn.execute("DELETE FROM posting_tag WHERE tag_id = ?1", [source])?;
+            Ok(n)
+        },
     )?;
-    conn.execute("DELETE FROM posting_tag WHERE tag_id = ?1", [source])?;
     let moved = Merged {
         into: target.0,
         postings,

@@ -70,7 +70,7 @@
 
 <style>
   h3 {
-    font-size: 1em;
+    font-size: var(--fs-ui);
     margin: 0.75rem 0 0.25rem;
     display: flex;
     gap: 0.75rem;
@@ -85,10 +85,10 @@
     flex: 1;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .note {
     opacity: 0.7;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
 </style>

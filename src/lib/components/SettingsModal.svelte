@@ -3,7 +3,6 @@
   import { dialogState } from "../state/dialogs.svelte";
   import { DATE_FORMATS, dateFormatState, type DateFormat } from "../state/dateformat.svelte";
   import { settingsState, type PanelSide } from "../state/settings.svelte";
-  import { FONT_SIZES, themeState, type Theme } from "../state/theme.svelte";
   import Modal from "./Modal.svelte";
 
   // Reads listsState.accounts, so a new account shows up at once.
@@ -12,19 +11,6 @@
 
 <Modal title="Settings" onclose={() => (dialogState.settings = false)}>
   <div class="form">
-    <label>
-      <span>Theme</span>
-      <select value={themeState.theme} onchange={(e) => themeState.setTheme(e.currentTarget.value as Theme)}>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </label>
-    <label>
-      <span>Font size</span>
-      <select value={String(themeState.fontSize)} onchange={(e) => themeState.setFontSize(Number(e.currentTarget.value))}>
-        {#each FONT_SIZES as px (px)}<option value={String(px)}>{px} px</option>{/each}
-      </select>
-    </label>
     <label>
       <span>Date format</span>
       <select value={dateFormatState.value} onchange={(e) => dateFormatState.set(e.currentTarget.value as DateFormat)}>
@@ -80,7 +66,7 @@
     min-width: 100%;
     margin: 0;
     opacity: 0.7;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   .row {
     grid-column: 1 / -1;

@@ -70,8 +70,10 @@
     flex-wrap: wrap;
     gap: 0.35rem 0.9rem;
     align-items: center;
-    padding: 0.25rem 0;
-    font-size: 0.9em;
+    padding: 0.25rem 0.4rem;
+    /* The register's row size, so the bar reads as part of it. */
+    font-size: var(--fs-register);
+    background: var(--filter-bg);
   }
   label {
     display: flex;
@@ -89,6 +91,6 @@
   }
   .bad {
     /* Dashed as well as colored: not a hue-only cue. */
-    outline: 3px dashed var(--bad, #a83200);
+    outline: 3px dashed var(--bad);
   }
 </style>

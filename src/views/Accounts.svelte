@@ -81,10 +81,10 @@
     opacity: 0.6;
   }
   tbody tr:hover {
-    background: rgba(128, 128, 128, 0.15);
+    background: var(--hover-bg);
   }
   .note {
     opacity: 0.7;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
 </style>

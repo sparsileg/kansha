@@ -292,7 +292,7 @@
     gap: 0.75rem;
   }
   fieldset {
-    border: 1px solid rgba(128, 128, 128, 0.4);
+    border: 1px solid var(--line-soft);
     border-radius: 4px;
     display: grid;
     gap: 0.5rem;
@@ -305,7 +305,7 @@
   label {
     display: grid;
     gap: 0.15rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   label.check {
     display: flex;
@@ -322,7 +322,7 @@
     grid-template-columns: 7rem minmax(10rem, 1.4fr) 7rem 6.5rem;
   }
   .line.head {
-    font-size: 0.8em;
+    font-size: var(--fs-header);
     opacity: 0.7;
   }
   .amt {
@@ -351,7 +351,7 @@
     margin: 0;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0;
   }
 </style>

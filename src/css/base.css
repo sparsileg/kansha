@@ -1,0 +1,160 @@
+/*
+  css/base.css
+  Global element styles, for every theme. Colors and the font family come
+  from the theme files (themes/*.css), which scope their variables with
+  [data-theme="…"] on <html>. Layout stays in each component's <style>.
+
+  One base font size: the Font size setting goes on <html> (1rem), so
+  text, padding, gaps, and column widths all scale with it. Components
+  size text only with the named sizes below, never px or em (print may
+  use pt). Borders (1px), scrollbars (12px), and the column gap (6px)
+  stay in px.
+
+  Element rules sit in :where(), which adds no specificity, so any
+  component rule wins over them.
+*/
+
+:root {
+    /* ── Named text sizes ───────────────────────────────────────────── */
+    /* Ratios measured from Quicken 2013 (cap heights: menu and filter
+       12, register rows 10, column headers 9, navigation 10 bold,
+       register totals 11 bold, account title 19). */
+    --fs-ui:       1rem;      /* menus, forms, body text */
+    --fs-register: 0.85rem;   /* register rows and filter bar, lists, notes */
+    --fs-header:   0.8rem;    /* column headers (normal weight) */
+    --fs-small:    0.75rem;   /* hints, badges, the Today label */
+    --fs-nav:      0.85rem;   /* navigation bar buttons (bold) */
+    --fs-total:    0.92rem;   /* register totals */
+    --fs-heading:  1.15rem;   /* dialog and panel headings */
+    --fs-title:    1.6rem;    /* account and view titles (bold) */
+
+    /* Button corners: just enough to take the square edge off; rem so
+       they scale with the text. */
+    --btn-radius: 0.4rem;
+
+    /* The least space between table columns, everywhere. */
+    --col-gap: 6px;
+}
+
+/* ── Page ─────────────────────────────────────────────────────────── */
+/* The window itself never scrolls: the shell is pinned to it, and only
+   areas inside (views, lists, the account panel) scroll. */
+html,
+body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+html {
+    color-scheme: var(--color-scheme);
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-ui);
+}
+body {
+    font-size: var(--fs-ui);
+}
+
+/* Controls take the page's font and the one base size. */
+:where(button, input, select, textarea) {
+    font: inherit;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+:where(button) {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--btn-radius);
+    padding: 0.15rem 0.6rem;
+}
+:where(button:hover:not(:disabled)) {
+    background: var(--btn-hover-bg);
+}
+:where(button:disabled) {
+    opacity: 0.55;
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────────── */
+/* Classic scrollbars that take their own width. WebKitGTK otherwise
+   follows GTK's overlay scrollbars, which take no width and draw over
+   the rows' last column; the register measures this width to keep its
+   header, entry row, and footer in line with the rows. */
+*::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+*::-webkit-scrollbar-track {
+    background: var(--scroll-track);
+}
+*::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+    background: var(--scroll-track);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+/* Cells split the column gap, half each side. A table that sets its
+   own, wider padding keeps it; grid-built tables (the register) use
+   `column-gap: var(--col-gap)`. */
+:where(th, td) {
+    padding-inline: calc(var(--col-gap) / 2);
+}
+
+/* ── Focus & selection ────────────────────────────────────────────── */
+/* The field being typed in must be unmistakable (keyboard entry): its
+   background and text take the theme's focus colors. Buttons reached by
+   keyboard look the same. */
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+    /* Drawn inside the edge, so a neighbouring cell cannot cover it. */
+    outline: 3px solid var(--focus-ring);
+    outline-offset: -3px;
+    background: var(--focus-bg);
+    color: var(--focus-fg);
+    box-shadow: 0 0 0 4px var(--focus-glow);
+    position: relative;
+    z-index: 1;
+}
+/* A dropdown's open list: the theme's plain colors, never the focus
+   colors its field has while open. */
+option,
+optgroup {
+    background: var(--opt-bg);
+    color: var(--opt-fg);
+}
+/* A focused field's contents, selected on focus: a stronger shade of
+   the focus background, same text color, so the field keeps its look. */
+input:focus::selection,
+textarea:focus::selection {
+    background: var(--focus-sel-bg);
+    color: var(--focus-fg);
+}
+/* Selected text elsewhere. */
+::selection {
+    background: var(--sel-bg);
+    color: var(--sel-fg);
+}
+
+/* ── Print ────────────────────────────────────────────────────────── */
+/* Printing (RPT-050): black on white, nothing clipped by the window. */
+@media print {
+    html,
+    body {
+        height: auto;
+        overflow: visible;
+        background: #fff;
+        color: #000;
+    }
+}

@@ -35,13 +35,17 @@
     flex-wrap: wrap;
     gap: 0.35rem;
     padding: 0.25rem 0.5rem;
-    border-top: 1px solid rgba(128, 128, 128, 0.5);
+    border-top: 1px solid var(--line);
+    background: var(--tabs-bg);
+    color: var(--tabs-fg);
   }
   .item {
     display: inline-flex;
     align-items: stretch;
-    border: 1px solid rgba(128, 128, 128, 0.6);
-    border-radius: 3px;
+    border: 1px solid var(--line);
+    border-radius: var(--btn-radius);
+    /* The two buttons inside share the rounded edge. */
+    overflow: hidden;
   }
   .item.top {
     border: 2px solid currentColor;
@@ -55,12 +59,13 @@
     font-weight: inherit;
     cursor: pointer;
     padding: 0.15rem 0.5rem;
+    border-radius: 0;
   }
   .item .x {
     padding: 0.15rem 0.4rem;
-    border-left: 1px solid rgba(128, 128, 128, 0.5);
+    border-left: 1px solid var(--line);
   }
   .item button:hover {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--hover-bg);
   }
 </style>

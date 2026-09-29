@@ -39,13 +39,15 @@
     gap: 0.4rem;
     padding-bottom: 0.4rem;
     margin-bottom: 0.4rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
+    border-bottom: 1px solid var(--line);
+    background: var(--title-bg);
+    color: var(--title-fg);
   }
   .name {
     flex: 1;
     margin: 0;
-    font-size: 1.3em;
-    font-weight: 600;
+    font-size: var(--fs-title);
+    font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

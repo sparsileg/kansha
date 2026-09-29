@@ -98,7 +98,7 @@
 
 <style>
   h1 {
-    font-size: 1.3em;
+    font-size: var(--fs-title);
     margin: 0 0 0.5rem;
   }
   .bar {
@@ -126,7 +126,7 @@
     white-space: nowrap;
   }
   thead th {
-    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
+    border-bottom: 1px solid var(--line);
   }
   .num {
     text-align: right;
@@ -146,7 +146,7 @@
     opacity: 0.9;
   }
   .total td {
-    border-top: 1px solid rgba(128, 128, 128, 0.5);
+    border-top: 1px solid var(--line);
     font-weight: 700;
   }
   .tog {
@@ -170,6 +170,6 @@
   }
   .flag,
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

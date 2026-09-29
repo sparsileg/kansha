@@ -99,12 +99,12 @@
     vertical-align: bottom;
   }
   thead th {
-    border-bottom: 1px solid rgba(128, 128, 128, 0.6);
+    border-bottom: 1px solid var(--line);
     font-weight: 600;
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--bg, #fff);
+    background: var(--bg);
   }
   @media print {
     thead {
@@ -133,7 +133,7 @@
   }
   .closing td.num,
   .total td.num {
-    border-top: 1px solid rgba(128, 128, 128, 0.6);
+    border-top: 1px solid var(--line);
   }
   .total td {
     font-weight: 700;
@@ -161,7 +161,7 @@
     text-decoration: underline;
   }
   .dir {
-    font-size: 0.8em;
+    font-size: var(--fs-small);
   }
   .fig {
     background: none;

@@ -155,7 +155,7 @@
   label {
     display: grid;
     gap: 0.15rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   textarea {
     font-family: monospace;
@@ -178,13 +178,13 @@
   }
   .bad td,
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .dim td {
     opacity: 0.7;
   }
   .ok {
-    color: var(--good, #005a9c);
+    color: var(--good);
   }
   .note {
     opacity: 0.8;

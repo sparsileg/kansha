@@ -86,7 +86,7 @@
     min-height: 10rem;
     max-height: 22rem;
     overflow: auto;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--line);
     border-radius: 4px;
   }
   .list button {
@@ -103,7 +103,7 @@
     gap: 1rem;
   }
   .list button.sel {
-    background: rgba(128, 128, 128, 0.3);
+    background: var(--active-bg);
     border-color: currentColor;
     font-weight: 700;
   }

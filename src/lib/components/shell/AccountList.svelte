@@ -49,11 +49,11 @@
     display: flex;
     gap: 0.4rem;
     align-items: center;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   h3 {
     margin: 0.75rem 0 0.25rem;
-    font-size: 0.8em;
+    font-size: var(--fs-header);
     text-transform: uppercase;
     opacity: 0.7;
   }
@@ -78,7 +78,7 @@
   }
   button:hover,
   button.active {
-    background: rgba(128, 128, 128, 0.2);
+    background: var(--hover-bg);
   }
   button.active {
     font-weight: 700;

@@ -42,6 +42,10 @@ function decl(body: string, prop: string): string | null {
 /** Split a value on spaces outside parentheses. */
 const parts = (v: string) => v.match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
 
+const BASE = Object.values(
+  import.meta.glob<string>("/src/css/base.css", { query: "?raw", import: "default", eager: true }),
+)[0];
+
 const all = Object.entries(SOURCES).flatMap(([file, src]) => rules(file, src));
 
 // Grids that are not tables: a month of day cells drawn with borders, and
@@ -91,12 +95,11 @@ describe("space between columns", () => {
   });
 
   it("scrollbars take their own width (no overlay over the last column)", () => {
-    expect(SOURCES["App.svelte"]).toMatch(/:global\(\*::-webkit-scrollbar\)\s*\{\s*width: 12px;/);
+    expect(BASE).toMatch(/\*::-webkit-scrollbar\s*\{\s*width: 12px;/);
   });
 
   it("the app sets the gap and pads every table cell with it", () => {
-    const app = SOURCES["App.svelte"];
-    expect(app).toMatch(/--col-gap:\s*6px;/);
-    expect(app).toMatch(/:global\(:where\(th, td\)\)\s*\{\s*padding-inline: calc\(var\(--col-gap, 6px\) \/ 2\);/);
+    expect(BASE).toMatch(/--col-gap:\s*6px;/);
+    expect(BASE).toMatch(/:where\(th, td\)\s*\{\s*padding-inline: calc\(var\(--col-gap\) \/ 2\);/);
   });
 });

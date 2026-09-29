@@ -94,7 +94,7 @@
   }
   h1 {
     margin: 0;
-    font-size: 1.3em;
+    font-size: var(--fs-title);
   }
   .count {
     opacity: 0.85;
@@ -111,17 +111,17 @@
     width: 100%;
     text-align: left;
     padding: 0.2rem 0.4rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
     background: none;
     border: 0;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+    border-bottom: 1px solid var(--line-soft);
     color: inherit;
     font-family: inherit;
     cursor: pointer;
   }
   button.row:hover,
   button.row:focus-visible {
-    background: rgba(128, 128, 128, 0.2);
+    background: var(--hover-bg);
   }
   .head {
     font-weight: 600;
@@ -137,6 +137,6 @@
     text-align: right;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

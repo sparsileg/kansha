@@ -110,11 +110,29 @@ describe("App shell", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: /Settings/ }));
     const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    // Theme and font size are on the menu bar, not in Settings.
+    expect(within(dialog).queryByRole("combobox", { name: "Theme" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Font size" })).toBeNull();
     await fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
     await fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "Accounts" }));
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit Savings" })).toBeTruthy();
+  });
+
+  it("picks the theme and font size from the right end of the menu bar", async () => {
+    render(App);
+    const bar = screen.getByRole("navigation", { name: "Menu bar" });
+    const theme = within(bar).getByRole("combobox", { name: "Theme" });
+    const size = within(bar).getByRole("combobox", { name: "Font size" });
+    // Theme first, size last, both after the menus.
+    const order = Array.from(bar.querySelectorAll("button, select"));
+    expect(order.indexOf(theme)).toBe(order.length - 2);
+    expect(order.indexOf(size)).toBe(order.length - 1);
+    await fireEvent.change(theme, { target: { value: "classic" } });
+    await fireEvent.change(size, { target: { value: "17" } });
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("classic"));
+    expect(document.documentElement.style.fontSize).toBe("17px");
   });
 
   it("starts on the home screen setting", async () => {

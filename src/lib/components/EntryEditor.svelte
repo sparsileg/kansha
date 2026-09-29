@@ -443,11 +443,12 @@
 
 <style>
   .entry {
-    border-top: 1px solid rgba(128, 128, 128, 0.4);
+    border-top: 1px solid var(--line-soft);
     padding: 0.25rem 0;
+    background: var(--entry-bg);
   }
   .entry.editing {
-    background: rgba(80, 130, 220, 0.12);
+    background: var(--edit-bg);
   }
   .cells {
     display: grid;
@@ -497,11 +498,11 @@
     gap: 2px var(--col-gap);
   }
   .split-title {
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     opacity: 0.85;
   }
   .split-head {
-    font-size: 0.8em;
+    font-size: var(--fs-header);
     font-weight: 600;
     opacity: 0.85;
   }
@@ -511,13 +512,13 @@
     align-items: center;
   }
   .rem {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .rem.ok {
-    color: var(--good, #005a9c);
+    color: var(--good);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     padding: 0.15rem 0.25rem;
   }
   .msg {
@@ -525,7 +526,7 @@
     padding: 0.15rem 0.25rem;
   }
   .ok {
-    color: var(--good, #005a9c);
+    color: var(--good);
     padding: 0.15rem 0.25rem;
   }
 </style>

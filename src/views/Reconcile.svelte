@@ -367,10 +367,10 @@
   }
   h2 {
     margin: 0.25rem 0;
-    font-size: 1.05em;
+    font-size: var(--fs-heading);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .dim {
     opacity: 0.75;
@@ -405,14 +405,14 @@
     padding-top: 0.2rem;
   }
   dd.bad {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .num {
     font-variant-numeric: tabular-nums;
     text-align: right;
   }
   .warn {
-    border: 2px solid var(--bad, #a83200);
+    border: 2px solid var(--bad);
     padding: 0.5rem 0.75rem;
   }
   .warn ul {
@@ -439,7 +439,7 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    border: 1px solid rgba(128, 128, 128, 0.35);
+    border: 1px solid var(--line-soft);
   }
   table {
     border-collapse: collapse;
@@ -449,7 +449,7 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--bg, #fff);
+    background: var(--bg);
   }
   .scroll tbody tr {
     cursor: pointer;
@@ -484,7 +484,7 @@
     text-align: right;
   }
   tr.checked td {
-    background: color-mix(in srgb, var(--good, #005a9c) 14%, transparent);
+    background: color-mix(in srgb, var(--good) 14%, transparent);
   }
   .start {
     display: flex;

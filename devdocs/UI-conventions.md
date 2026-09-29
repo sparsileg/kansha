@@ -132,6 +132,20 @@ Agreed with Stan, 2026-09-24.
   Selecting a field's text on focus keeps that look (a stronger shade
   of the background). A dropdown's open list uses the theme's plain
   colors.
+- **Themes** (2026-09-28, spec 0.3.26): Light, Dark, and Classic
+  (Quicken 2013: mauve window, slate navigation bar with white bold
+  text, gray column headers, pale blue/gray row stripes, blue entry
+  row and buttons, blue today line). Each is a file of variables in
+  `src/css/themes/`, meant to be read and edited by hand; element
+  styles are in `src/css/base.css`. Classic darkens a few sampled
+  colors for contrast (text, negative red, sorted header, buttons).
+- **Buttons:** slightly rounded corners (`--btn-radius`, 0.4rem, in
+  `src/css/base.css`), on every button.
+- **Text size:** one base size (menu bar Font size picker, 10–24 px,
+  default 13). Named sizes, ratios from Quicken: UI 1, register rows
+  and the register filter bar 0.85, column headers 0.8 (normal
+  weight), small 0.75, navigation 0.85 bold, register totals 0.92,
+  headings 1.15, titles 1.6 bold.
 - **Select on focus:** entering any text field selects what is in it,
   so typing replaces it.
 - **Dates:** shown and typed in the format chosen in Settings:

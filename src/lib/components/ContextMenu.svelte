@@ -73,15 +73,15 @@
   .menu {
     position: fixed;
     z-index: 60;
-    background: var(--bg, #fff);
+    background: var(--popup-bg);
     color: inherit;
-    border: 1px solid rgba(128, 128, 128, 0.6);
+    border: 1px solid var(--popup-border);
     border-radius: 4px;
     display: flex;
     flex-direction: column;
     min-width: 11rem;
     padding: 0.2rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-popup);
   }
   button {
     text-align: left;
@@ -94,7 +94,7 @@
   }
   button:hover:not(:disabled),
   button:focus {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--hover-bg);
     outline: none;
   }
   button:disabled {

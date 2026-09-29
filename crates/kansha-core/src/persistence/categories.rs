@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
+use super::ledger;
 use crate::categories::{
     Category, CategoryFields, CategoryId, CategoryKind, Merged, SystemCategory,
 };
@@ -312,12 +313,20 @@ pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merg
         )));
     }
 
+    let postings = ledger::audited_merge(
+        tx,
+        "SELECT DISTINCT txn_id FROM posting WHERE category_id = ?1",
+        source.0,
+        || {
+            Ok(conn.execute(
+                "UPDATE posting SET category_id = ?2 WHERE category_id = ?1",
+                [source, target],
+            )?)
+        },
+    )?;
     let moved = Merged {
         into: target.0,
-        postings: conn.execute(
-            "UPDATE posting SET category_id = ?2 WHERE category_id = ?1",
-            [source, target],
-        )?,
+        postings,
         schedule_lines: conn.execute(
             "UPDATE schedule_line SET category_id = ?2 WHERE category_id = ?1",
             [source, target],

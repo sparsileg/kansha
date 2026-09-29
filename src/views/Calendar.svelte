@@ -227,8 +227,8 @@
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     grid-auto-rows: minmax(5.5rem, auto);
-    border-top: 1px solid rgba(128, 128, 128, 0.35);
-    border-left: 1px solid rgba(128, 128, 128, 0.35);
+    border-top: 1px solid var(--line-soft);
+    border-left: 1px solid var(--line-soft);
     align-self: start;
   }
   .dow {
@@ -236,35 +236,35 @@
     text-align: center;
     font-weight: 600;
     padding: 0.2rem;
-    border-right: 1px solid rgba(128, 128, 128, 0.35);
-    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
   }
   .day {
-    border-right: 1px solid rgba(128, 128, 128, 0.35);
-    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
     padding: 0.15rem 0.25rem;
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
     cursor: pointer;
     overflow: hidden;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   .day.other {
     opacity: 0.45;
   }
   .day.today {
-    background: rgba(31, 111, 235, 0.12);
+    background: var(--today-bg);
   }
   .day.sel {
-    outline: 2px solid var(--focus-ring, #1f6feb);
+    outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
   }
   .num {
     font-weight: 600;
   }
   .chip {
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -273,10 +273,10 @@
     text-decoration: underline;
   }
   .chip.overdue {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .chip .od {
-    font-size: 0.8em;
+    font-size: var(--fs-small);
     text-transform: uppercase;
   }
   /* Done items fade; only a skipped one is struck through. */
@@ -290,10 +290,10 @@
     all: unset;
     cursor: pointer;
     text-decoration: underline;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   .more:focus-visible {
-    outline: 2px solid var(--focus-ring, #1f6feb);
+    outline: 2px solid var(--focus-ring);
   }
   .proj {
     margin-top: auto;
@@ -313,7 +313,7 @@
     gap: 0.5rem;
     width: 100%;
     text-align: left;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     margin-bottom: 0.2rem;
     align-items: baseline;
   }
@@ -327,10 +327,10 @@
   }
   aside h2 {
     margin: 0 0 0.5rem;
-    font-size: 1.05em;
+    font-size: var(--fs-heading);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   @media (max-width: 800px) {
     .layout {

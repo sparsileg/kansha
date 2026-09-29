@@ -125,10 +125,10 @@
     z-index: 20;
     margin-top: 0.2rem;
     padding: 0.4rem;
-    background: var(--bg, #fff);
-    border: 1px solid rgba(128, 128, 128, 0.6);
+    background: var(--popup-bg);
+    border: 1px solid var(--popup-border);
     border-radius: 6px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-popup);
   }
   .nav {
     display: flex;
@@ -146,7 +146,7 @@
   }
   .dow {
     opacity: 0.7;
-    font-size: 0.8em;
+    font-size: var(--fs-header);
   }
   .day {
     padding: 0.2rem 0;
@@ -157,7 +157,7 @@
     color: inherit;
   }
   .day:hover {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--hover-bg);
   }
   .day.other {
     opacity: 0.45;
@@ -165,7 +165,7 @@
   /* Selected and today are told apart by shape, not by color. */
   .day.sel {
     font-weight: 700;
-    background: rgba(128, 128, 128, 0.35);
+    background: var(--active-bg);
     text-decoration: underline;
   }
   .day.today {
@@ -176,7 +176,7 @@
     top: 100%;
     left: 0;
     white-space: nowrap;
-    font-size: 0.85em;
-    color: var(--bad, #a83200);
+    font-size: var(--fs-register);
+    color: var(--bad);
   }
 </style>

@@ -37,5 +37,5 @@ Date: 2026-09-24. Spec: 0.3.1. No schema change; no IPC change.
 - Close investment account: open-position check — Phase 6.
 - Hidden categories/payees/tags still accepted on new postings (UI hides them).
 - Integrity: lots/shares and reconciliation-history checks — Phases 5, 6.
-- Merges don't write per-transaction audit entries (AUD-020 view of a txn won't show a category merge).
-- Un-void (TXN-040) not offered.
+- ~~Merges don't write per-transaction audit entries~~ Done 2026-09-29 (spec 0.3.27): each changed transaction gets a `merge` entry (`persistence::ledger::audited_merge`; test `merges_write_an_audit_entry_on_each_changed_txn`).
+- Un-void (TXN-040) not offered: **not to be done** (Stan, 2026-09-29; spec 0.3.27).

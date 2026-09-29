@@ -128,11 +128,11 @@
     align-content: start;
   }
   h1 {
-    font-size: 1.3em;
+    font-size: var(--fs-title);
     margin: 0;
   }
   h2 {
-    font-size: 1em;
+    font-size: var(--fs-ui);
     margin: 0 0 0.4rem;
   }
   .tiles,
@@ -142,7 +142,7 @@
     gap: 0.75rem;
   }
   .tile {
-    border: 1px solid rgba(128, 128, 128, 0.45);
+    border: 1px solid var(--line);
     border-radius: 6px;
     padding: 0.6rem 0.8rem;
   }
@@ -150,7 +150,7 @@
     grid-column: 1 / -1;
   }
   .big {
-    font-size: 1.6em;
+    font-size: var(--fs-title);
     font-weight: 700;
     margin: 0 0 0.3rem;
     font-variant-numeric: tabular-nums;
@@ -168,7 +168,7 @@
     white-space: nowrap;
   }
   .net td {
-    border-top: 1px solid rgba(128, 128, 128, 0.5);
+    border-top: 1px solid var(--line);
     font-weight: 700;
   }
   .sub {
@@ -198,7 +198,7 @@
   }
   .ver {
     opacity: 0.6;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   .err {
     color: var(--bad);

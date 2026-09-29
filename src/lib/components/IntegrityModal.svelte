@@ -60,12 +60,12 @@
   td {
     text-align: left;
     padding: 0.15rem 0.5rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+    border-bottom: 1px solid var(--line-soft);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .ok {
-    color: var(--good, #005a9c);
+    color: var(--good);
   }
 </style>

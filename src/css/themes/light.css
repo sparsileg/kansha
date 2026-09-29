@@ -1,0 +1,115 @@
+/*
+  css/themes/light.css
+  Light theme: variables only. Element styles are in ../base.css,
+  layout in each component. Every theme defines the same variables
+  (src/lib/themes.test.ts checks). Sizes are not set here: the one
+  base font size is a setting, and base.css names the sizes.
+
+  Stan is red-green colorblind: never let red against green carry
+  meaning, keep text at 4.5:1 or better on every background it sits on,
+  and back every color cue with text, a symbol, or a shape.
+*/
+
+[data-theme="light"] {
+    /* ── Fonts ──────────────────────────────────────────────────────── */
+    --font-ui: system-ui, "Noto Sans", "DejaVu Sans", sans-serif;
+
+    /* ── Core palette ───────────────────────────────────────────────── */
+    /* Native controls (fields, checkboxes, dropdown lists) draw light. */
+    --color-scheme: light;
+    --bg:         #ffffff;
+    --fg:         #111111;
+    --panel-bg:   #ffffff;
+    --line:       rgba(128, 128, 128, 0.5);
+    --line-soft:  rgba(128, 128, 128, 0.3);
+    --hover-bg:   rgba(128, 128, 128, 0.22);
+    --active-bg:  rgba(128, 128, 128, 0.32);
+
+    /* ── Status: problem / OK ───────────────────────────────────────── */
+    /* Vermilion and blue differ in lightness and on the blue-yellow
+       axis; each 7:1 or better on white. */
+    --bad:  #a83200;
+    --good: #005a9c;
+
+    /* ── Focus & selection ──────────────────────────────────────────── */
+    /* The field being typed in: yellow, apart from the blue of a
+       selection; text on each 7:1 or better. */
+    --focus-bg:     #fff6b0;
+    --focus-fg:     #111111;
+    --focus-sel-bg: #ffc933;
+    --focus-ring:   #1f6feb;
+    --focus-glow:   rgba(31, 111, 235, 0.35);
+    --sel-bg:       #1f6feb;
+    --sel-fg:       #ffffff;
+
+    /* ── Navigation ─────────────────────────────────────────────────── */
+    --menubar-bg:        #ffffff;
+    --menubar-fg:        #111111;
+    --nav-bg:            #ffffff;
+    --nav-fg:            #111111;
+    --nav-btn-bg:        #f4f4f4;
+    --nav-btn-fg:        #111111;
+    --nav-btn-border:    #8f8f8f;
+    --nav-btn-hover-bg:  #e2e2e2;
+    /* The count of scheduled entries due. */
+    --nav-badge:         #a83200;
+
+    /* ── Title bands ────────────────────────────────────────────────── */
+    /* Account/window title, and the band of open windows at the foot. */
+    --title-bg: #ffffff;
+    --title-fg: #111111;
+    --tabs-bg:  #ffffff;
+    --tabs-fg:  #111111;
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    --btn-bg:        #f4f4f4;
+    --btn-fg:        #111111;
+    --btn-border:    #8f8f8f;
+    --btn-hover-bg:  #e2e2e2;
+
+    /* ── Inputs ─────────────────────────────────────────────────────── */
+    /* A dropdown's open list. */
+    --opt-bg: #ffffff;
+    --opt-fg: #111111;
+
+    /* ── Tables & registers ─────────────────────────────────────────── */
+    --filter-bg:        #ffffff;
+    --head-bg:          #ffffff;
+    --head-fg:          #111111;
+    --head-sorted-bg:   #e2e2e2;
+    --head-sorted-fg:   #111111;
+    --row-bg:           #ffffff;
+    --row-alt:          rgba(128, 128, 128, 0.07);
+    /* Future rows stripe in a light orange (not the yellow of a focused
+       field or the blue of a selection); they are also italic. */
+    --future-alt:       rgba(194, 84, 0, 0.1);
+    --row-sel-bg:       rgba(80, 130, 220, 0.3);
+    /* Reconciled text: gray at 5:1 or better on either stripe. */
+    --reconciled-fg:    #666666;
+    --entry-bg:         transparent;
+    --edit-bg:          rgba(80, 130, 220, 0.12);
+    --today-line:       #a83200;
+    --today-bg:         rgba(31, 111, 235, 0.12);
+    --total-bg:         transparent;
+
+    /* ── Charts ─────────────────────────────────────────────────────── */
+    /* Blue and orange stay apart for a red-green colorblind eye; series
+       also differ by pattern and shape. */
+    --chart-1:       #1f5fa8;
+    --chart-2:       #c25400;
+    --chart-2-light: #f7dcc4;
+    --chart-line:    #1a1a1a;
+
+    /* ── Scrollbars ─────────────────────────────────────────────────── */
+    --scroll-track:       #ececec;
+    --scroll-thumb:       #a8a8a8;
+    --scroll-thumb-hover: #7a7a7a;
+
+    /* ── Menus, dropdowns & modals ──────────────────────────────────── */
+    --popup-bg:     #ffffff;
+    --popup-border: rgba(128, 128, 128, 0.6);
+    --backdrop:     rgba(0, 0, 0, 0.45);
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --shadow-popup: 0 3px 10px rgba(0, 0, 0, 0.35);
+}

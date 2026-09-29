@@ -118,7 +118,7 @@
   }
   .tick {
     fill: currentColor;
-    font-size: 11px;
+    font-size: var(--fs-small);
     opacity: 0.8;
   }
   .bar {
@@ -133,14 +133,14 @@
   }
   .mark {
     fill: var(--chart-line);
-    stroke: var(--bg, #fff);
+    stroke: var(--bg);
     stroke-width: 1;
   }
   .legend {
     display: flex;
     gap: 1.2rem;
     justify-content: center;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   .legend span {
     display: inline-flex;

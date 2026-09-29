@@ -145,7 +145,7 @@
 
 <style>
   .occ {
-    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+    border-bottom: 1px solid var(--line-soft);
     padding: 0.3rem 0;
   }
   .occ.done {
@@ -165,7 +165,7 @@
   .who {
     flex: 1;
     min-width: 8rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -175,16 +175,16 @@
     text-align: right;
   }
   .badge {
-    font-size: 0.75em;
-    border: 1px solid rgba(128, 128, 128, 0.6);
+    font-size: var(--fs-small);
+    border: 1px solid var(--line);
     border-radius: 3px;
     padding: 0 0.3rem;
     margin-right: 0.2rem;
     font-weight: 600;
   }
   .badge.bad {
-    color: var(--bad, #a83200);
-    border-color: var(--bad, #a83200);
+    color: var(--bad);
+    border-color: var(--bad);
   }
   .panel {
     display: flex;
@@ -196,17 +196,17 @@
   .panel label {
     display: grid;
     gap: 0.1rem;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   .panel input {
     width: 8rem;
   }
   .note {
     opacity: 0.7;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0.2rem 0 0;
   }
 </style>

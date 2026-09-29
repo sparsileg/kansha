@@ -259,11 +259,11 @@
     list-style: none;
     max-height: 15rem;
     overflow-y: auto;
-    background: var(--opt-bg, #fff);
-    color: var(--opt-fg, #111);
-    border: 1px solid #555;
+    background: var(--opt-bg);
+    color: var(--opt-fg);
+    border: 1px solid var(--popup-border);
     border-radius: 4px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-popup);
   }
   li {
     padding: 0.2rem 0.5rem;
@@ -271,11 +271,11 @@
     white-space: nowrap;
   }
   li.active {
-    background: var(--sel-bg, #1f6feb);
-    color: var(--sel-fg, #fff);
+    background: var(--sel-bg);
+    color: var(--sel-fg);
   }
   li.create {
-    border-top: 1px solid #555;
+    border-top: 1px solid var(--line);
     font-weight: 600;
   }
   li.none {

@@ -359,7 +359,7 @@
     flex: 1;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0;
   }
 </style>

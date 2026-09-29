@@ -186,7 +186,7 @@
 <style>
   .list {
     display: grid;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--line);
     max-height: 50vh;
     overflow: auto;
     margin-bottom: 0.75rem;
@@ -200,12 +200,12 @@
     align-items: baseline;
   }
   .row + .row {
-    border-top: 1px solid rgba(128, 128, 128, 0.25);
+    border-top: 1px solid var(--line-soft);
   }
   /* Selection: the theme's selection colors plus a bold status word. */
   .row.sel {
-    background: var(--sel-bg, #1f6feb);
-    color: var(--sel-fg, #fff);
+    background: var(--sel-bg);
+    color: var(--sel-fg);
   }
   /* Amounts keep their sign text but take the selection's text color, so
      nothing sits in a low-contrast color on the selection background. */
@@ -221,7 +221,7 @@
     text-decoration: line-through;
   }
   .st {
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     text-transform: uppercase;
   }
   .who,
@@ -241,6 +241,6 @@
     min-width: 2rem;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

@@ -1,0 +1,117 @@
+/*
+  css/themes/classic.css
+  Classic theme: the Quicken 2013 look, with colors sampled from
+  ignored/sample-quicken-colors-text-size.png. Variables only. Element
+  styles are in ../base.css, layout in each component. Every theme
+  defines the same variables (src/lib/themes.test.ts checks). Sizes are
+  not set here: the one base font size is a setting, and base.css names
+  the sizes.
+
+  Stan is red-green colorblind, so some sampled colors are darkened for
+  contrast: text #4d4d4d → #333333; Quicken's negative red #ff4d4d →
+  vermilion #a83200, well apart from the text in lightness; the sorted
+  column header #8d949e → #6b7480 and the blue buttons #558af1 →
+  #2f6ad9, so their white text reads at 4.5:1 or better.
+*/
+
+[data-theme="classic"] {
+    /* ── Fonts ──────────────────────────────────────────────────────── */
+    --font-ui: Tahoma, "DejaVu Sans", "Noto Sans", sans-serif;
+
+    /* ── Core palette ───────────────────────────────────────────────── */
+    /* Native controls (fields, checkboxes, dropdown lists) draw light. */
+    --color-scheme: light;
+    --bg:         #e6d7e6;
+    --fg:         #333333;
+    --panel-bg:   #f4eef4;
+    --line:       rgba(77, 77, 77, 0.45);
+    --line-soft:  rgba(77, 77, 77, 0.25);
+    --hover-bg:   rgba(85, 138, 241, 0.2);
+    --active-bg:  rgba(85, 138, 241, 0.32);
+
+    /* ── Status: problem / OK ───────────────────────────────────────── */
+    /* Vermilion and blue, 4.5:1 or better on the mauve window and white
+       rows; each backed by a sign, word, or symbol. */
+    --bad:  #a83200;
+    --good: #005a9c;
+
+    /* ── Focus & selection ──────────────────────────────────────────── */
+    --focus-bg:     #fff6b0;
+    --focus-fg:     #111111;
+    --focus-sel-bg: #ffc933;
+    --focus-ring:   #1f6feb;
+    --focus-glow:   rgba(31, 111, 235, 0.35);
+    --sel-bg:       #1f6feb;
+    --sel-fg:       #ffffff;
+
+    /* ── Navigation ─────────────────────────────────────────────────── */
+    /* Dark slate bar, white bold text: 8.6:1. */
+    --menubar-bg:        #f5f5f5;
+    --menubar-fg:        #333333;
+    --nav-bg:            #454d54;
+    --nav-fg:            #ffffff;
+    --nav-btn-bg:        transparent;
+    --nav-btn-fg:        #ffffff;
+    --nav-btn-border:    transparent;
+    --nav-btn-hover-bg:  #5b636a;
+    /* The count of scheduled entries due. */
+    --nav-badge:         #ffc38f;
+
+    /* ── Title bands ────────────────────────────────────────────────── */
+    /* Account/window title on the mauve window; the band of open
+       windows at the foot in a deeper mauve. */
+    --title-bg: #e6d7e6;
+    --title-fg: #333333;
+    --tabs-bg:  #b4a0b4;
+    --tabs-fg:  #222222;
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    --btn-bg:        #2f6ad9;
+    --btn-fg:        #ffffff;
+    --btn-border:    #2458b8;
+    --btn-hover-bg:  #2458b8;
+
+    /* ── Inputs ─────────────────────────────────────────────────────── */
+    /* A dropdown's open list. */
+    --opt-bg: #ffffff;
+    --opt-fg: #333333;
+
+    /* ── Tables & registers ─────────────────────────────────────────── */
+    --filter-bg:        #e5e5e5;
+    --head-bg:          #ececec;
+    --head-fg:          #333333;
+    --head-sorted-bg:   #6b7480;
+    --head-sorted-fg:   #ffffff;
+    --row-bg:           #ffffff;
+    /* Past rows stripe pale blue, future rows pale gray (and italic). */
+    --row-alt:          #f1f9ff;
+    --future-alt:       #f0f0f0;
+    --row-sel-bg:       #c9dcf7;
+    /* Reconciled text: gray at 4.5:1 or better on either stripe. */
+    --reconciled-fg:    #6e6e6e;
+    /* The entry row, new or being edited. */
+    --entry-bg:         #c5d3e7;
+    --edit-bg:          #c5d3e7;
+    --today-line:       #0066c0;
+    --today-bg:         rgba(0, 102, 192, 0.15);
+    --total-bg:         #ffffff;
+
+    /* ── Charts ─────────────────────────────────────────────────────── */
+    --chart-1:       #1f5fa8;
+    --chart-2:       #c25400;
+    --chart-2-light: #f7dcc4;
+    --chart-line:    #1a1a1a;
+
+    /* ── Scrollbars ─────────────────────────────────────────────────── */
+    --scroll-track:       #ececec;
+    --scroll-thumb:       #a8a8a8;
+    --scroll-thumb-hover: #7a7a7a;
+
+    /* ── Menus, dropdowns & modals ──────────────────────────────────── */
+    --popup-bg:     #ffffff;
+    --popup-border: rgba(77, 77, 77, 0.6);
+    --backdrop:     rgba(0, 0, 0, 0.4);
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --shadow-popup: 0 3px 10px rgba(0, 0, 0, 0.3);
+}

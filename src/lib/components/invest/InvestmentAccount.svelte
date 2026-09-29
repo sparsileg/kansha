@@ -105,8 +105,8 @@
   thead th {
     position: sticky;
     top: 0;
-    background: var(--bg, #fff);
-    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
   }
   .num {
     text-align: right;
@@ -118,7 +118,7 @@
   /* As in the banking register: stripes, future rows italic in their
      own tint, reconciled rows gray. */
   .reg tbody tr.alt {
-    background: rgba(128, 128, 128, 0.07);
+    background: var(--row-alt);
   }
   .reg tbody tr.future {
     font-style: italic;
@@ -130,7 +130,7 @@
     color: var(--reconciled-fg);
   }
   .reg tbody tr:hover {
-    background: rgba(128, 128, 128, 0.2);
+    background: var(--hover-bg);
   }
   .blank input {
     width: 100%;
@@ -142,7 +142,7 @@
   }
   .flag,
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .status {
     opacity: 0.8;

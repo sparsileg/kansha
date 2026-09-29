@@ -21,5 +21,7 @@ export default defineConfig(async () => ({
   test: {
     environment: "jsdom",
     globals: true,
+    // Keep stylesheet contents, so tests can read the theme files (?raw).
+    css: true,
   },
 }));

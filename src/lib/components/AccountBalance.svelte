@@ -13,6 +13,6 @@
     font-variant-numeric: tabular-nums;
   }
   .neg {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
 </style>

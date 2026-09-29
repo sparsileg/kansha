@@ -80,12 +80,22 @@
     gap: 0.25rem;
     align-items: center;
     padding: 0.25rem 0.5rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--nav-bg);
+    color: var(--nav-fg);
   }
   button {
     display: inline-flex;
     gap: 0.35rem;
     align-items: center;
+    background: var(--nav-btn-bg);
+    color: var(--nav-btn-fg);
+    border-color: var(--nav-btn-border);
+    font-size: var(--fs-nav);
+    font-weight: 700;
+  }
+  button:hover:not(.off) {
+    background: var(--nav-btn-hover-bg);
   }
   button[aria-current="page"] {
     font-weight: 700;
@@ -108,10 +118,10 @@
     min-width: 1.2em;
     padding: 0 0.3em;
     text-align: center;
-    font-size: 0.8em;
+    font-size: var(--fs-small);
     font-weight: 700;
-    border: 1px solid var(--bad, #a83200);
-    color: var(--bad, #a83200);
+    border: 1px solid var(--nav-badge);
+    color: var(--nav-badge);
     border-radius: 0.7em;
   }
   .spacer {
@@ -126,7 +136,7 @@
     display: inline-flex;
     gap: 0.3rem;
     align-items: center;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     white-space: nowrap;
   }
   .search {

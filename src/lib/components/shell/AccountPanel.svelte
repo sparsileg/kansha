@@ -12,11 +12,12 @@
     width: 15rem;
     flex: none;
     padding: 0.5rem;
-    border-right: 1px solid rgba(128, 128, 128, 0.3);
+    border-right: 1px solid var(--line-soft);
     overflow-y: auto;
+    background: var(--panel-bg);
   }
   .panel.right {
     border-right: 0;
-    border-left: 1px solid rgba(128, 128, 128, 0.3);
+    border-left: 1px solid var(--line-soft);
   }
 </style>

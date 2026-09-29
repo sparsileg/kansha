@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import type { Menu } from "../../shell/menus";
 
   /**
@@ -10,7 +10,16 @@
    * Left or Esc goes back to it. Greyed items stay visible and say why
    * they are unavailable.
    */
-  let { menus, onselect }: { menus: Menu[]; onselect: (id: string) => void } = $props();
+  let {
+    menus,
+    onselect,
+    children,
+  }: {
+    menus: Menu[];
+    onselect: (id: string) => void;
+    /** Controls at the right end of the bar (they take their own Tab stops). */
+    children?: Snippet;
+  } = $props();
 
   let open = $state<number | null>(null);
   /** The open submenu: its item's index in the open menu. */
@@ -220,13 +229,17 @@
       {/if}
     </div>
   {/each}
+  {@render children?.()}
 </nav>
 
 <style>
   .menubar {
     display: flex;
+    align-items: center;
+    background: var(--menubar-bg);
+    color: var(--menubar-fg);
     padding: 0 0.25rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+    border-bottom: 1px solid var(--line-soft);
   }
   .menu {
     position: relative;
@@ -241,7 +254,7 @@
   }
   .menu > button:hover,
   .menu > button.on {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--hover-bg);
   }
   .list {
     position: absolute;
@@ -250,10 +263,10 @@
     z-index: 40;
     min-width: 14rem;
     padding: 0.2rem 0;
-    background: var(--bg, #fff);
+    background: var(--popup-bg);
     color: inherit;
-    border: 1px solid rgba(128, 128, 128, 0.6);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--popup-border);
+    box-shadow: var(--shadow-popup);
   }
   .list button {
     display: flex;
@@ -270,12 +283,12 @@
   }
   .list button:hover:not(.off),
   .list button:focus-visible {
-    background: var(--sel-bg, #1f6feb);
-    color: var(--sel-fg, #fff);
+    background: var(--sel-bg);
+    color: var(--sel-fg);
     outline: none;
   }
   .list button.on {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--hover-bg);
   }
   .subwrap {
     position: relative;
@@ -292,12 +305,12 @@
     opacity: 0.6;
   }
   .hint {
-    font-size: 0.8em;
+    font-size: var(--fs-small);
     align-self: center;
   }
   hr {
     border: 0;
-    border-top: 1px solid rgba(128, 128, 128, 0.4);
+    border-top: 1px solid var(--line-soft);
     margin: 0.2rem 0;
   }
 </style>

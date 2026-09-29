@@ -270,7 +270,7 @@
   {#if inst.exported}<p class="note no-print">Saved to {inst.exported}</p>{/if}
   {#if inst.error}<p class="err" role="alert">{inst.error}</p>{/if}
 
-  <div class="page">
+  <div class="page" data-theme="light">
     <header class="title">
       <h1>{inst.heading}</h1>
       {#if report}
@@ -387,28 +387,20 @@
   .sep {
     width: 0.75rem;
   }
-  /* The report looks like the printed page in every theme: white paper,
-     dark ink, the light theme's graph colors. The page scrolls, so the
-     table's heading row can stay at its top. */
+  /* The report looks like the printed page in every theme: the page
+     takes the light theme (data-theme="light"), for white paper, dark
+     ink, and its graph colors. The page scrolls, so the table's heading
+     row can stay at its top. */
   .page {
     flex: 1;
     min-height: 0;
     overflow: auto;
     /* No top padding: the sticky heading row meets the page's top edge. */
     padding: 0 1rem 0.75rem;
-    background: #fff;
-    color: #111;
-    color-scheme: light;
-    border: 1px solid rgba(128, 128, 128, 0.5);
-    --bg: #fff;
-    --bad: #a83200;
-    --good: #005a9c;
-    --opt-bg: #fff;
-    --opt-fg: #111;
-    --chart-1: #1f5fa8;
-    --chart-2: #c25400;
-    --chart-2-light: #f7dcc4;
-    --chart-line: #1a1a1a;
+    background: var(--bg);
+    color: var(--fg);
+    color-scheme: var(--color-scheme);
+    border: 1px solid var(--line);
   }
   .title {
     text-align: center;
@@ -417,7 +409,7 @@
     margin-bottom: 0.5rem;
   }
   .title h1 {
-    font-size: 1.25em;
+    font-size: var(--fs-heading);
     margin: 0;
   }
   .title p {
@@ -427,7 +419,7 @@
     position: absolute;
     left: 0;
     top: 0.75rem;
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     opacity: 0.8;
   }
   .part {
@@ -449,7 +441,7 @@
   }
   .split {
     border: 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.45);
+    border-top: 1px solid var(--line);
     margin: 0.5rem 0;
   }
   .note {

@@ -797,6 +797,89 @@ fn payee_and_tag_merges() {
     assert_eq!(h.last().unwrap().action, AuditAction::Merge);
 }
 
+/// The last audit entry of a transaction, as (action, before, after).
+fn last_txn_audit(book: &Book, id: kansha_core::ledger::TxnId) -> (AuditAction, String, String) {
+    let h = audit::history(book.conn(), AuditEntity::Txn, id.0).unwrap();
+    let e = h.last().unwrap();
+    (
+        e.action,
+        e.before_json.clone().unwrap_or_default(),
+        e.after_json.clone().unwrap_or_default(),
+    )
+}
+
+// AUD-020: a merge shows in the history of every transaction it changed,
+// with the before and after, and in no other transaction's.
+#[test]
+fn merges_write_an_audit_entry_on_each_changed_txn() {
+    let Setup {
+        mut book,
+        chk,
+        food,
+        ..
+    } = setup();
+    let dining = book.category("Dining", CategoryKind::Expense).unwrap();
+    let trip = book.tag("Trip").unwrap();
+    let vacation = book.tag("Vacation").unwrap();
+    let t1 = book
+        .entry(chk, date("2026-02-01"))
+        .payee("Cafe")
+        .amount(m("-12.00"))
+        .category(dining)
+        .tag(vacation)
+        .save()
+        .unwrap();
+    let t2 = book
+        .entry(chk, date("2026-02-02"))
+        .payee("Costco")
+        .amount(m("-20.00"))
+        .category(food)
+        .save()
+        .unwrap();
+
+    book.write(|tx| categories::merge(tx, dining, food))
+        .unwrap();
+    let (action, before, after) = last_txn_audit(&book, t1.id);
+    assert_eq!(action, AuditAction::Merge);
+    assert!(
+        before.contains(&format!(r#""kind":"category","id":{}"#, dining.0)),
+        "{before}"
+    );
+    assert!(
+        after.contains(&format!(r#""kind":"category","id":{}"#, food.0)),
+        "{after}"
+    );
+    assert_ne!(last_txn_audit(&book, t2.id).0, AuditAction::Merge);
+
+    let cafe = t1.payee.unwrap();
+    let costco = t2.payee.unwrap();
+    book.write(|tx| payees::merge(tx, cafe, costco)).unwrap();
+    let (action, before, after) = last_txn_audit(&book, t1.id);
+    assert_eq!(action, AuditAction::Merge);
+    assert!(
+        before.contains(&format!(r#""payee":{}"#, cafe.0)),
+        "{before}"
+    );
+    assert!(
+        after.contains(&format!(r#""payee":{}"#, costco.0)),
+        "{after}"
+    );
+    assert_ne!(last_txn_audit(&book, t2.id).0, AuditAction::Merge);
+
+    book.write(|tx| tags::merge(tx, vacation, trip)).unwrap();
+    let (action, before, after) = last_txn_audit(&book, t1.id);
+    assert_eq!(action, AuditAction::Merge);
+    assert!(
+        before.contains(&format!(r#""tags":[{}]"#, vacation.0)),
+        "{before}"
+    );
+    assert!(
+        after.contains(&format!(r#""tags":[{}]"#, trip.0)),
+        "{after}"
+    );
+    assert_ne!(last_txn_audit(&book, t2.id).0, AuditAction::Merge);
+}
+
 #[test]
 fn hidden_categories_keep_working_on_existing_postings() {
     let Setup {

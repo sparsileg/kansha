@@ -118,6 +118,42 @@ pub fn get(conn: &Connection, id: TxnId) -> Result<Txn> {
     })
 }
 
+/// Run a merge's bulk changes (`change`) and record a `Merge` audit entry
+/// on each transaction it changed, with its before and after (AUD-020).
+/// `affected` selects the IDs of the transactions the merge may touch;
+/// its one parameter is `source`.
+pub(crate) fn audited_merge<T>(
+    tx: &Tx<'_>,
+    affected: &str,
+    source: i64,
+    change: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    let ids = tx
+        .conn()
+        .prepare(affected)?
+        .query_map([source], |r| r.get(0).map(TxnId))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let before = ids
+        .into_iter()
+        .map(|id| get(tx.conn(), id))
+        .collect::<Result<Vec<_>>>()?;
+    let out = change()?;
+    for b in &before {
+        let a = get(tx.conn(), b.id)?;
+        if a != *b {
+            audit::record(
+                tx,
+                AuditEntity::Txn,
+                b.id.0,
+                AuditAction::Merge,
+                Some(b),
+                Some(&a),
+            )?;
+        }
+    }
+    Ok(out)
+}
+
 /// Does the transaction carry investment detail (`investment_txn`)? Those
 /// are changed only through the investments engine (Phase 6).
 pub fn is_investment_txn(conn: &Connection, id: TxnId) -> Result<bool> {

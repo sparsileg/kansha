@@ -249,7 +249,7 @@
   label {
     display: grid;
     gap: 0.15rem;
-    font-size: 0.9em;
+    font-size: var(--fs-register);
   }
   .wide,
   .lots,
@@ -283,7 +283,7 @@
     opacity: 0.8;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0;
   }
 </style>

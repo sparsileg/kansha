@@ -300,7 +300,7 @@
   <div class="head" role="row">
     {#each cols as [label, key], i (i)}
       {#if key}
-        <button type="button" class:num={i === 3 || i === 4 || i === 9} onclick={() => registerState.sortBy(key)}>{label}{arrow(key)}</button>
+        <button type="button" class:num={i === 3 || i === 4 || i === 9} class:sorted={registerState.sort === key} onclick={() => registerState.sortBy(key)}>{label}{arrow(key)}</button>
       {:else}
         <span>{label}</span>
       {/if}
@@ -380,7 +380,7 @@
     flex-direction: column;
     min-height: 0;
     flex: 1 1 auto;
-    font-size: 0.92em;
+    font-size: var(--fs-register);
   }
   .head,
   .row {
@@ -390,9 +390,12 @@
     align-items: center;
     padding-right: var(--gap-r);
   }
+  /* Column headers: smaller than the rows, normal weight. */
   .head {
-    font-weight: 600;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.5);
+    font-size: var(--fs-header);
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line);
   }
   .head button {
     background: none;
@@ -403,6 +406,12 @@
     padding: 0.2rem 0;
     cursor: pointer;
   }
+  /* The sort column; the ▲/▼ after its name says so too. */
+  .head button.sorted {
+    background: var(--head-sorted-bg);
+    color: var(--head-sorted-fg);
+    font-weight: 700;
+  }
   .head button.num {
     text-align: right;
   }
@@ -412,11 +421,12 @@
     overflow-y: auto;
     position: relative;
     outline: none;
+    background: var(--row-bg);
     /* Inside the scrolling area the scrollbar is already outside the rows. */
     --gap-r: 0.75rem;
   }
   .rows:focus-visible {
-    box-shadow: inset 0 0 0 2px rgba(80, 130, 220, 0.6);
+    box-shadow: inset 0 0 0 2px var(--focus-ring);
   }
   .row {
     padding-block: 0.12rem;
@@ -426,7 +436,7 @@
      open editor do not shift the stripes. Future rows stripe in their
      own tint and are italic; reconciled rows have gray text. */
   .row.alt {
-    background: rgba(128, 128, 128, 0.07);
+    background: var(--row-alt);
   }
   .row.future {
     font-style: italic;
@@ -439,7 +449,7 @@
     color: var(--reconciled-fg);
   }
   .row.selected {
-    background: rgba(80, 130, 220, 0.3);
+    background: var(--row-sel-bg);
   }
   .row.void {
     text-decoration: line-through;
@@ -454,7 +464,7 @@
     font-variant-numeric: tabular-nums;
   }
   .neg {
-    color: var(--bad, #a83200);
+    color: var(--bad);
   }
   .clr {
     text-align: center;
@@ -471,14 +481,14 @@
     left: 0;
     right: 0;
     top: -1px;
-    border-top: 2px solid var(--bad, #a83200);
+    border-top: 2px solid var(--today-line);
   }
   .today span {
     position: absolute;
     right: 0;
     top: -0.9em;
-    font-size: 0.75em;
-    color: var(--bad, #a83200);
+    font-size: var(--fs-small);
+    color: var(--today-line);
   }
   .empty {
     padding: 1rem;
@@ -490,13 +500,15 @@
     gap: 0.25rem 1rem;
     align-items: center;
     padding: 0.4rem var(--gap-r) 0.4rem 0;
-    border-top: 1px solid rgba(128, 128, 128, 0.5);
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-total);
+    background: var(--total-bg);
   }
   .spacer {
     flex: 1;
   }
   .err {
-    color: var(--bad, #a83200);
+    color: var(--bad);
     margin: 0.25rem 0;
   }
 </style>

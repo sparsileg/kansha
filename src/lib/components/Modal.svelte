@@ -48,7 +48,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--backdrop);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -56,9 +56,9 @@
     z-index: 50;
   }
   .modal {
-    background: var(--bg, #fff);
+    background: var(--popup-bg);
     color: inherit;
-    border: 1px solid rgba(128, 128, 128, 0.5);
+    border: 1px solid var(--popup-border);
     border-radius: 6px;
     padding: 1rem;
     width: min(34rem, 94vw);
@@ -75,6 +75,6 @@
   }
   h2 {
     margin: 0 0 0.5rem;
-    font-size: 1.15em;
+    font-size: var(--fs-heading);
   }
 </style>
