@@ -6,11 +6,13 @@ import { MENU_REPORTS } from "../reports/meta";
 import { dialogState } from "../state/dialogs.svelte";
 import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
+import { statusState, type StatusKind } from "../state/status.svelte";
 import { viewState } from "../state/view.svelte";
 import { exitApp, goHome, openAccount, openReconcile } from "./nav";
 import { openPanel } from "./panels";
 import { windowState } from "../state/windows.svelte";
 import { HOME_ID, INVESTMENTS_ID } from "./navitems";
+import type { BackupResult } from "../types/bindings";
 
 export function runAction(id: string): void {
   if (id === HOME_ID) {
@@ -28,10 +30,14 @@ export function runAction(id: string): void {
         dialogState.restore = true;
         break;
       case "file.integrity":
+        dialogState.integrityReport = null;
         dialogState.integrity = true;
         break;
       case "file.exit":
         void exitApp();
+        break;
+      case "help.about":
+        dialogState.about = true;
         break;
       case "edit.settings":
         dialogState.settings = true;
@@ -73,16 +79,23 @@ export function runAction(id: string): void {
   }
 }
 
-/** File > Back Up Now (BAK-030): Rust picks the folder; say where it went. */
+/** What to tell the user about a backup just made: a note, or an alert
+ * when the folder was missing or the data had integrity problems. */
+export function backupMessage(r: BackupResult, done: string): { text: string; kind: StatusKind } {
+  const lines = [`${done}${r.path}.`];
+  if (r.folder_missing) lines.push("The backup folder is missing, so the backup went to Downloads. Choose a folder in Settings.");
+  if (r.integrity_issues > 0) lines.push(`The integrity check found ${r.integrity_issues} problem(s) in the backed-up data.`);
+  return { text: lines.join(" "), kind: lines.length > 1 ? "alert" : "info" };
+}
+
+/** File > Back Up Now (BAK-030): Rust picks the folder; say where it went
+ * in the status bar. Trouble flashes. */
 export async function backUpNow(): Promise<void> {
   try {
-    const r = await call(commands.backupNow());
-    const lines = [`Backed up to ${r.path}.`];
-    if (r.folder_missing) lines.push("⚠ The backup folder is missing, so the backup went to Downloads. Choose a folder in Settings.");
-    if (r.integrity_issues > 0) lines.push(`⚠ The integrity check found ${r.integrity_issues} problem(s) in the backed-up data.`);
-    dialogState.backupDone = { ok: true, text: lines.join(" ") };
+    const m = backupMessage(await call(commands.backupNow()), "Backed up to ");
+    statusState.show(m.text, m.kind);
   } catch (e) {
-    dialogState.backupDone = { ok: false, text: `The backup failed: ${e instanceof Error ? e.message : String(e)}` };
+    statusState.show(`The backup failed: ${e instanceof Error ? e.message : String(e)}`, "alert");
   }
 }
 

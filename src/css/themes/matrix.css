@@ -1,0 +1,105 @@
+/*
+  css/themes/matrix.css
+  Matrix theme: variables only. Green on black, from lostsheep's Matrix
+  theme (colors only: no glows, scanlines, or extra borders). Element
+  styles are in ../base.css, layout in each component. Every theme
+  defines the same variables (src/lib/themes.test.ts checks). Sizes and
+  fonts are not set here: the base font size and the font are settings.
+
+  Stan is red-green colorblind, and the text here is green, so green
+  cannot also mean "good": OK is cyan #00ffff and a problem is amber
+  #ffaa00 (lostsheep uses green and red). Text stays at 4.5:1 or better
+  on every background it sits on (themes.test.ts checks the pairs).
+*/
+
+[data-theme="matrix"] {
+    /* ── Core palette ───────────────────────────────────────────────── */
+    --color-scheme: dark;
+    --bg:         #000000;
+    --fg:         #00ff00;
+    --panel-bg:   #000000;
+    --line:       #00ff00;
+    --line-soft:  rgba(0, 255, 0, 0.3);
+    --hover-bg:   rgba(0, 255, 0, 0.2);
+    --active-bg:  rgba(0, 255, 0, 0.3);
+
+    /* ── Status: problem / OK ───────────────────────────────────────── */
+    --bad:  #ffaa00;
+    --good: #00ffff;
+
+    /* ── Focus & selection ──────────────────────────────────────────── */
+    --focus-bg:     #003c00;
+    --focus-fg:     #00ff00;
+    --focus-sel-bg: #006400;
+    --focus-ring:   #00ff00;
+    --focus-glow:   rgba(0, 255, 0, 0.3);
+    --sel-bg:       #00ff00;
+    --sel-fg:       #000000;
+
+    /* ── Navigation ─────────────────────────────────────────────────── */
+    --menubar-bg:        #000000;
+    --menubar-fg:        #00ff00;
+    --nav-bg:            #000000;
+    --nav-fg:            #00ff00;
+    --nav-btn-bg:        #000000;
+    --nav-btn-fg:        #00ff00;
+    --nav-btn-border:    #00ff00;
+    --nav-btn-hover-bg:  rgba(0, 255, 0, 0.2);
+    /* The count of scheduled entries due. */
+    --nav-badge:         #ffaa00;
+
+    /* ── Title bands ────────────────────────────────────────────────── */
+    --title-bg: #000000;
+    --title-fg: #00ff00;
+    --tabs-bg:  #000000;
+    --tabs-fg:  #00ff00;
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    --btn-bg:        #000000;
+    --btn-fg:        #00ff00;
+    --btn-border:    #00ff00;
+    --btn-hover-bg:  rgba(0, 255, 0, 0.2);
+
+    /* ── Inputs ─────────────────────────────────────────────────────── */
+    --opt-bg: #000000;
+    --opt-fg: #00ff00;
+
+    /* ── Tables & registers ─────────────────────────────────────────── */
+    --filter-bg:        #000000;
+    --head-bg:          #003200;
+    --head-fg:          #00ff00;
+    --head-sorted-bg:   #006400;
+    --head-sorted-fg:   #00ff00;
+    --row-bg:           #000000;
+    --row-alt:          rgba(0, 255, 0, 0.1);
+    /* Future rows stripe in amber; they are also italic. */
+    --future-alt:       rgba(255, 170, 0, 0.15);
+    --row-sel-bg:       rgba(0, 255, 0, 0.25);
+    --reconciled-fg:    #00aa00;
+    --entry-bg:         transparent;
+    --edit-bg:          rgba(0, 255, 0, 0.12);
+    --today-line:       #ffaa00;
+    --today-bg:         rgba(0, 255, 255, 0.2);
+    --total-bg:         transparent;
+
+    /* ── Charts ─────────────────────────────────────────────────────── */
+    /* Cyan, not yellow, beside green (lostsheep's note: near-collision
+       for red-green color vision deficiency). */
+    --chart-1:       #00ff00;
+    --chart-2:       #00ffff;
+    --chart-2-light: #004d4d;
+    --chart-line:    #00ff00;
+
+    /* ── Scrollbars ─────────────────────────────────────────────────── */
+    --scroll-track:       #001a00;
+    --scroll-thumb:       #00aa00;
+    --scroll-thumb-hover: #00ff00;
+
+    /* ── Menus, dropdowns & modals ──────────────────────────────────── */
+    --popup-bg:     #000000;
+    --popup-border: #00ff00;
+    --backdrop:     rgba(0, 0, 0, 0.5);
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --shadow-popup: 0 3px 10px rgba(0, 0, 0, 0.6);
+}

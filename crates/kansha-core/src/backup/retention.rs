@@ -2,6 +2,10 @@
 //! backups, plus the newest one of each of the last `keep_months`
 //! calendar months (UTC). Manual backups are never deleted, nor any file
 //! whose name is not a Kansha backup's.
+//!
+//! Timeout backups (SET-050) are temporary and outside that count: at
+//! most one is kept, the newest, and only while no backup of another
+//! kind (manual ones included) is newer.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -25,13 +29,23 @@ pub fn prune_plan(
     keep_last: u32,
     keep_months: u32,
 ) -> Vec<String> {
-    let mut auto: Vec<(Timestamp, u32, &String)> = names
-        .iter()
-        .filter_map(|n| {
-            let (t, kind, seq) = parse_parts(n)?;
-            (kind != BackupKind::Manual).then_some((t, seq, n))
-        })
-        .collect();
+    let mut auto: Vec<(Timestamp, u32, &String)> = Vec::new();
+    let mut timeouts: Vec<(Timestamp, u32, &String)> = Vec::new();
+    // The newest backup that is not a timeout, of any kind.
+    let mut newest_other: Option<(Timestamp, u32)> = None;
+    for n in names {
+        let Some((t, kind, seq)) = parse_parts(n) else {
+            continue;
+        };
+        if kind == BackupKind::Timeout {
+            timeouts.push((t, seq, n));
+            continue;
+        }
+        newest_other = newest_other.max(Some((t, seq)));
+        if kind != BackupKind::Manual {
+            auto.push((t, seq, n));
+        }
+    }
     // Newest first: by time, then by the `-n` suffix of a later backup in
     // the same second; the name makes the plan deterministic.
     auto.sort_by(|a, b| b.cmp(a));
@@ -51,10 +65,22 @@ pub fn prune_plan(
             }
         }
     }
-    auto.iter()
+    let mut delete: Vec<String> = auto
+        .iter()
         .filter(|(_, _, n)| !keep.contains(n))
         .map(|(_, _, n)| (*n).clone())
-        .collect()
+        .collect();
+
+    // A timeout backup stays only if it is the newest timeout and nothing
+    // else is newer.
+    timeouts.sort_by(|a, b| b.cmp(a));
+    for (i, (t, seq, n)) in timeouts.iter().enumerate() {
+        let superseded = i > 0 || newest_other.is_some_and(|o| o > (*t, *seq));
+        if superseded {
+            delete.push((*n).clone());
+        }
+    }
+    delete
 }
 
 /// Delete automatic backups in `folder` beyond the retention rule.
@@ -126,6 +152,69 @@ mod tests {
         assert!(del12.contains(&name("2025-09-30T10:00:00Z", BackupKind::Close)));
         let del13 = prune_plan(&names, t("2026-09-29T12:00:00Z"), 2, 13);
         assert!(!del13.contains(&name("2025-09-30T10:00:00Z", BackupKind::Close)));
+    }
+
+    #[test]
+    fn a_timeout_backup_stays_only_while_it_is_the_newest_of_all() {
+        let now = t("2026-09-29T12:00:00Z");
+        let close = name("2026-09-29T10:00:00Z", BackupKind::Close);
+        let timeout = name("2026-09-29T11:00:00Z", BackupKind::Timeout);
+        // Newer than the close backup: kept.
+        assert!(prune_plan(&[close.clone(), timeout.clone()], now, 10, 12).is_empty());
+        // A close backup after it: deleted.
+        let later_close = name("2026-09-29T11:30:00Z", BackupKind::Close);
+        assert_eq!(
+            prune_plan(&[close, timeout.clone(), later_close], now, 10, 12),
+            vec![timeout.clone()]
+        );
+        // So is a manual one, though a manual backup is never itself deleted.
+        let manual = name("2026-09-29T11:30:00Z", BackupKind::Manual);
+        assert_eq!(
+            prune_plan(&[timeout.clone(), manual], now, 10, 12),
+            vec![timeout]
+        );
+    }
+
+    #[test]
+    fn only_the_newest_timeout_backup_is_kept() {
+        let now = t("2026-09-29T12:00:00Z");
+        let a = name("2026-09-29T10:00:00Z", BackupKind::Timeout);
+        let b = name("2026-09-29T10:05:00Z", BackupKind::Timeout);
+        let c = name("2026-09-29T10:10:00Z", BackupKind::Timeout);
+        let del = prune_plan(&[a.clone(), b.clone(), c.clone()], now, 10, 12);
+        assert_eq!(del.len(), 2);
+        assert!(del.contains(&a) && del.contains(&b) && !del.contains(&c));
+    }
+
+    #[test]
+    fn timeout_backups_do_not_use_up_the_keep_count() {
+        let now = t("2026-09-29T12:00:00Z");
+        let old = name("2026-09-28T10:00:00Z", BackupKind::Close);
+        let timeout = name("2026-09-29T11:00:00Z", BackupKind::Timeout);
+        // keep_last = 1: the close backup stays; the timeout is not counted
+        // against it and is the newest, so it stays too.
+        assert!(prune_plan(&[old, timeout], now, 1, 0).is_empty());
+    }
+
+    #[test]
+    fn a_timeout_in_the_old_name_style_is_treated_the_same() {
+        let now = t("2026-09-29T12:00:00Z");
+        let timeout = "kansha-backup-2026-09-29T11-00-00Z-timeout.zip".to_owned();
+        let close = name("2026-09-29T11:30:00Z", BackupKind::Close);
+        assert_eq!(
+            prune_plan(&[timeout.clone(), close], now, 10, 12),
+            vec![timeout]
+        );
+    }
+
+    #[test]
+    fn old_and_new_name_styles_prune_by_the_same_rules() {
+        let now = t("2026-09-29T12:00:00Z");
+        let old_a = "kansha-backup-2026-09-27T10-00-00Z-close.zip".to_owned();
+        let old_manual = "kansha-backup-2025-01-05T10-00-00Z-manual.zip".to_owned();
+        let new_b = name("2026-09-29T10:00:00Z", BackupKind::Close);
+        let del = prune_plan(&[old_a.clone(), old_manual, new_b], now, 1, 0);
+        assert_eq!(del, vec![old_a]);
     }
 
     #[test]

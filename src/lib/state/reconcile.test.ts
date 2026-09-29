@@ -25,6 +25,7 @@ vi.mock("../api", async (orig) => {
 
 import { commands } from "../api";
 import { confirmState } from "./confirm.svelte";
+import { listsState } from "./lists.svelte";
 import { reconcileState } from "./reconcile.svelte";
 import { registerState } from "./register.svelte";
 
@@ -48,6 +49,7 @@ const session = (difference: string) =>
 beforeEach(async () => {
   vi.clearAllMocks();
   registerState.close();
+  listsState.accounts = [];
   c.accountBalances.mockImplementation(() => ok([]));
   c.reconcileOpeningCheck.mockImplementation(() => ok(opening));
   c.reconcileHistory.mockImplementation(() => ok([]));
@@ -151,5 +153,18 @@ describe("reconcileState", () => {
     expect(await reconcileState.start(input)).toBe(true);
     expect(c.reconcileStart).toHaveBeenCalledWith(input);
     expect(reconcileState.session?.difference).toBe("1000.00");
+  });
+
+  it("notes which reconcilable accounts have a session in progress", async () => {
+    listsState.accounts = [
+      { id: 1, name: "Checking", status: "open", account_type: "checking" },
+      { id: 2, name: "Savings", status: "open", account_type: "savings" },
+      { id: 3, name: "Visa", status: "open", account_type: "credit_card" },
+      { id: 4, name: "Old", status: "closed", account_type: "checking" },
+    ] as never;
+    c.reconcileOpen.mockImplementation((a) => ok(a === 1 || a === 3 || a === 4 ? rec : null));
+    c.reconcileSession.mockImplementation(() => ok(session("5.00")));
+    await reconcileState.select(2);
+    expect(reconcileState.inProgress).toEqual([1, 3]);
   });
 });

@@ -149,6 +149,20 @@ pub fn backup_now(state: State<'_, AppState>) -> CmdResult<BackupResult> {
     state.backup(BackupKind::Manual).map(backup_result)
 }
 
+/// Whether a timed backup is due (SET-050). The UI asks every so often.
+#[tauri::command]
+#[specta::specta]
+pub fn backup_timed_due(state: State<'_, AppState>) -> CmdResult<bool> {
+    state.timed_backup_due()
+}
+
+/// The timed backup (SET-050), kind `timeout`.
+#[tauri::command]
+#[specta::specta]
+pub fn backup_timed_run(state: State<'_, AppState>) -> CmdResult<BackupResult> {
+    state.backup(BackupKind::Timeout).map(backup_result)
+}
+
 /// The last backup and verification, and the folder backups go to.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct BackupInfo {
@@ -346,10 +360,11 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> CmdResult
     })
 }
 
-/// Theme and font size (per computer, SET-070).
+/// Theme, font, and font size (per computer, SET-070).
 #[derive(Debug, Clone, Serialize, serde::Deserialize, Type)]
 pub struct Appearance {
     pub theme: Option<String>,
+    pub font: Option<String>,
     pub font_size: Option<i64>,
 }
 
@@ -359,6 +374,7 @@ pub fn appearance_get(state: State<'_, AppState>) -> Appearance {
     let cfg = state.load_config();
     Appearance {
         theme: cfg.theme,
+        font: cfg.font,
         font_size: cfg.font_size,
     }
 }
@@ -368,6 +384,7 @@ pub fn appearance_get(state: State<'_, AppState>) -> Appearance {
 pub fn appearance_set(state: State<'_, AppState>, appearance: Appearance) -> CmdResult<()> {
     let mut cfg = state.load_config();
     cfg.theme = appearance.theme;
+    cfg.font = appearance.font;
     cfg.font_size = appearance
         .font_size
         .filter(|s| kansha_core::local_config::FONT_SIZES.contains(s));

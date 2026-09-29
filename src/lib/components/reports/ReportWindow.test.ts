@@ -52,6 +52,7 @@ import ReportWindow from "./ReportWindow.svelte";
 import { confirmState } from "../../state/confirm.svelte";
 import { listsState } from "../../state/lists.svelte";
 import { reportState, type ReportInstance } from "../../state/reports.svelte";
+import { statusState } from "../../state/status.svelte";
 import { viewState } from "../../state/view.svelte";
 import { investState } from "../../state/invest.svelte";
 import { windowState } from "../../state/windows.svelte";
@@ -163,7 +164,7 @@ describe("Report window", () => {
     await fireEvent.click(within(dialog).getByRole("button", { name: "Save PDF" }));
     await waitFor(() => expect(savePdf).toHaveBeenCalledWith("Capital Gains - Last year", "landscape"));
     expect(screen.queryByRole("dialog", { name: "Save PDF" })).toBeNull();
-    expect(await screen.findByText(/Saved to .*Capital Gains 2026-09-27\.pdf/)).toBeTruthy();
+    await waitFor(() => expect(statusState.message?.text).toMatch(/^Saved to .*Capital Gains 2026-09-27\.pdf$/));
     // The choice is remembered for the next PDF.
     await fireEvent.click(screen.getByRole("button", { name: "Save PDF…" }));
     const again = screen.getByRole("dialog", { name: "Save PDF" });

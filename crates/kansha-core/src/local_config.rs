@@ -1,5 +1,5 @@
-//! Per-computer preferences (SET-010, SET-020, SET-070): theme, font
-//! size, window geometry, and recent books. Kept in a JSON file in the OS
+//! Per-computer preferences (SET-010, SET-020, SET-025, SET-070): theme,
+//! font, font size, window geometry, and recent books. Kept in a JSON file in the OS
 //! configuration folder, not in the book: the passphrase screen needs the
 //! theme before any book is open.
 //!
@@ -35,6 +35,8 @@ pub struct LocalConfig {
     /// Theme name; `None` follows the OS light/dark preference. The UI
     /// owns the list of themes.
     pub theme: Option<String>,
+    /// Font name; `None` = the default (System). The UI owns the list.
+    pub font: Option<String>,
     /// Base font size in px; `None` = the default.
     pub font_size: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,6 +93,7 @@ mod tests {
         let p = dir.path().join("sub").join("config.json");
         let mut cfg = LocalConfig {
             theme: Some("classic".into()),
+            font: Some("courier".into()),
             font_size: Some(16),
             window: Some(WindowGeometry {
                 x: 10,
@@ -108,6 +111,17 @@ mod tests {
         let back = LocalConfig::load(&p);
         assert_eq!(back.font_size, None);
         assert_eq!(back.theme.as_deref(), Some("dark"));
+    }
+
+    #[test]
+    fn a_config_from_before_fonts_loads_without_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("config.json");
+        std::fs::write(&p, r#"{"font_size": 16, "theme": "matrix"}"#).unwrap();
+        let cfg = LocalConfig::load(&p);
+        assert_eq!(cfg.font, None);
+        assert_eq!(cfg.font_size, Some(16));
+        assert_eq!(cfg.theme.as_deref(), Some("matrix"));
     }
 
     #[test]

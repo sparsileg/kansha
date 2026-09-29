@@ -16,6 +16,7 @@ vi.mock("./lib/api", async (orig) => {
     date_format: "mdy", week_start: "sunday", startup: "dashboard", integrity_at_startup: false,
     nav_items: null, account_panel_open: true, account_panel_side: "left", invest_views: null,
     stale_price_days: 7, upcoming_days: 14, backup_folder: null, backup_keep_last: 10, backup_keep_months: 12,
+    backup_timeout_minutes: 5,
   };
   const acct = { id: 1, name: "Savings", account_type: "savings", group: "banking", status: "open", show_in_list: true, sort_order: 0, investment: null };
   return {
@@ -154,18 +155,25 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Edit Savings" })).toBeTruthy();
   });
 
-  it("picks the theme and font size from the right end of the menu bar", async () => {
+  it("picks the theme, font, and font size from the right end of the menu bar", async () => {
     render(App);
     const bar = await screen.findByRole("navigation", { name: "Menu bar" });
     const theme = within(bar).getByRole("combobox", { name: "Theme" });
+    const font = within(bar).getByRole("combobox", { name: "Font" });
     const size = within(bar).getByRole("combobox", { name: "Font size" });
-    // Theme first, size last, both after the menus.
+    // Theme, font, size, in that order, all after the menus.
     const order = Array.from(bar.querySelectorAll("button, select"));
-    expect(order.indexOf(theme)).toBe(order.length - 2);
+    expect(order.indexOf(theme)).toBe(order.length - 3);
+    expect(order.indexOf(font)).toBe(order.length - 2);
     expect(order.indexOf(size)).toBe(order.length - 1);
+    expect(within(font).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "System", "Arial", "Verdana", "Courier New",
+    ]);
     await fireEvent.change(theme, { target: { value: "classic" } });
+    await fireEvent.change(font, { target: { value: "verdana" } });
     await fireEvent.change(size, { target: { value: "17" } });
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("classic"));
+    expect(document.documentElement.style.getPropertyValue("--font-ui")).toMatch(/^Verdana,/);
     expect(document.documentElement.style.fontSize).toBe("17px");
   });
 

@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { listsState } from "../../state/lists.svelte";
   import { settingsState } from "../../state/settings.svelte";
+  import { statusState } from "../../state/status.svelte";
   import AccountList from "./AccountList.svelte";
 
   /**
@@ -8,6 +10,10 @@
    * is open (click to close it), pointing sideways while it is closed
    * (click to drop the list down and pick an account). The drop-down has a
    * "Keep this list open" button to bring the panel back.
+   *
+   * The same row is the status bar: messages from statusState show on the
+   * side away from the button, and clear themselves. An empty book has
+   * no button, only the bar.
    */
   let drop = $state(false);
   let root: HTMLElement;
@@ -36,6 +42,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="bar" class:right={settingsState.accountPanelSide === "right"} bind:this={root} {onkeydown} role="group" aria-label="Account list">
+  {#if !listsState.isEmptyBook}
   <span class="anchor">
     <button
       type="button"
@@ -55,12 +62,19 @@
       </div>
     {/if}
   </span>
+  {/if}
+  <!-- Always present, so a screen reader hears what is put in it. -->
+  <span class="status" class:alert={statusState.message?.kind === "alert"} role="status">
+    {statusState.message?.text ?? ""}
+  </span>
 </div>
 
 <style>
   .bar {
     display: flex;
     align-items: center;
+    gap: 2rem;
+    min-height: 1.6rem;
     padding: 0.1rem 0.5rem;
     border-bottom: 1px solid var(--line-soft);
     font-size: var(--fs-ui);
@@ -70,6 +84,36 @@
   }
   .anchor {
     position: relative;
+  }
+  /* The message is pushed to the far side from the button: right when the
+     button is on the left, left (against the window edge) when it is on
+     the right. The gap keeps it clear of the button. */
+  .status {
+    margin-left: auto;
+    min-width: 0;
+    text-align: right;
+  }
+  .right .status {
+    margin-left: 0;
+    margin-right: auto;
+    text-align: left;
+  }
+  /* An alert flashes once a second and is bold, so it does not rely on
+     color. Those who ask for less motion get the bold text steady. */
+  .status.alert {
+    color: var(--bad);
+    font-weight: 700;
+    animation: flash 1s steps(1, end) infinite;
+  }
+  @keyframes flash {
+    50% {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status.alert {
+      animation: none;
+    }
   }
   .head {
     display: inline-flex;

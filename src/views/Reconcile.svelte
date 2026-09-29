@@ -188,12 +188,14 @@
       Account
       <select
         value={reconcileState.accountId ?? ""}
-        disabled={session !== null || reconcileState.busy}
+        disabled={reconcileState.busy}
         onchange={(e) => void reconcileState.select(Number(e.currentTarget.value))}
       >
         {#if reconcileState.accountId === null}<option value="">Choose…</option>{/if}
         {#each accounts as a (a.id)}
-          <option value={a.id}>{a.name}</option>
+          <option value={a.id}>
+            {a.name}{reconcileState.inProgress.includes(a.id) ? " (in progress)" : ""}
+          </option>
         {/each}
       </select>
     </label>

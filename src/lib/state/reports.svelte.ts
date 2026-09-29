@@ -5,6 +5,7 @@
 
 import { call, commands } from "../api";
 import { presetLabel } from "../reports/meta";
+import { statusState } from "./status.svelte";
 import type {
   PageOrientation,
   ReportKind,
@@ -35,8 +36,6 @@ export class ReportInstance {
   collapsed = $state<Set<string>>(new Set());
   loading = $state(false);
   error = $state<string | null>(null);
-  /** Last CSV or PDF file saved, to tell the user where it went. */
-  exported = $state<string | null>(null);
   /** The graph or the table folded away (view only, not saved). */
   hideGraph = $state(false);
   hideTable = $state(false);
@@ -75,7 +74,6 @@ export class ReportInstance {
   async apply(settings: ReportSettings): Promise<void> {
     this.settings = settings;
     this.collapsed = new Set();
-    this.exported = null;
     await this.run();
   }
 
@@ -138,12 +136,12 @@ export class ReportInstance {
   }
 
   async exportCsv(): Promise<void> {
-    this.exported = await call(commands.reportExportCsv($state.snapshot(this.settings)));
+    statusState.show(`Saved to ${await call(commands.reportExportCsv($state.snapshot(this.settings)))}`);
   }
 
   /** Save the page as a PDF (opened in the PDF viewer, which prints). */
   async savePdf(): Promise<void> {
-    this.exported = await call(commands.reportSavePdf(this.heading, this.orientation));
+    statusState.show(`Saved to ${await call(commands.reportSavePdf(this.heading, this.orientation))}`);
   }
 }
 

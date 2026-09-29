@@ -1,8 +1,10 @@
 /*
   css/base.css
-  Global element styles, for every theme. Colors and the font family come
-  from the theme files (themes/*.css), which scope their variables with
-  [data-theme="…"] on <html>. Layout stays in each component's <style>.
+  Global element styles, for every theme. Colors come from the theme
+  files (themes/*.css), which scope their variables with
+  [data-theme="…"] on <html>. The font (--font-ui) is a setting, put on
+  <html> by applyTheme; the default below shows until it runs. Layout
+  stays in each component's <style>.
 
   One base font size: the Font size setting goes on <html> (1rem), so
   text, padding, gaps, and column widths all scale with it. Components
@@ -15,6 +17,9 @@
 */
 
 :root {
+    /* ── Font ───────────────────────────────────────────────────────── */
+    --font-ui: system-ui, "Noto Sans", "DejaVu Sans", sans-serif;
+
     /* ── Named text sizes ───────────────────────────────────────────── */
     /* Ratios measured from Quicken 2013 (cap heights: menu and filter
        12, register rows 10, column headers 9, navigation 10 bold,

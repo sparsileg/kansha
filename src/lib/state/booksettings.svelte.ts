@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backup_folder: null,
   backup_keep_last: 10,
   backup_keep_months: 12,
+  backup_timeout_minutes: 5,
 };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

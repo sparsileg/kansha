@@ -44,6 +44,7 @@ beforeEach(() => {
   reconcileState.opening = null;
   reconcileState.history = [];
   reconcileState.error = null;
+  reconcileState.inProgress = [];
 });
 
 describe("Reconcile view", () => {
@@ -157,5 +158,26 @@ describe("Reconcile view", () => {
     render(Reconcile);
     expect(screen.getByText(/Opening balance changed/)).toBeTruthy();
     expect(screen.getByText(/01\/05\/2026: was -100.00, now/)).toBeTruthy();
+  });
+
+  it("in a session, still lets another account be chosen, marking those in progress", () => {
+    listsState.accounts = [
+      { id: 1, name: "Checking", status: "open", account_type: "checking" },
+      { id: 3, name: "Savings", status: "open", account_type: "savings" },
+    ] as never;
+    reconcileState.session = session("500.00");
+    reconcileState.inProgress = [1];
+    const select = vi.spyOn(reconcileState, "select").mockResolvedValue();
+    render(Reconcile);
+    const box = screen.getByLabelText("Account") as HTMLSelectElement;
+    expect(box.disabled).toBe(false);
+    expect(within(box).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Checking (in progress)",
+      "Savings",
+    ]);
+    box.value = "3";
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(select).toHaveBeenCalledWith(3);
+    select.mockRestore();
   });
 });

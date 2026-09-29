@@ -8,6 +8,7 @@
   import ConfirmDialog from "./lib/components/ConfirmDialog.svelte";
   import DueDialog from "./lib/components/DueDialog.svelte";
   import HistoryModal from "./lib/components/HistoryModal.svelte";
+  import AboutModal from "./lib/components/AboutModal.svelte";
   import IntegrityModal from "./lib/components/IntegrityModal.svelte";
   import ScheduleModal from "./lib/components/ScheduleModal.svelte";
   import NavBarModal from "./lib/components/NavBarModal.svelte";
@@ -26,7 +27,6 @@
   import PassphraseModal from "./lib/components/backup/PassphraseModal.svelte";
   import RestoreModal from "./lib/components/backup/RestoreModal.svelte";
   import VerifyBackupModal from "./lib/components/backup/VerifyBackupModal.svelte";
-  import Modal from "./lib/components/Modal.svelte";
   import { guardWindowClose } from "./lib/shell/nav";
   import { startBook } from "./lib/shell/startup";
   import { bookState } from "./lib/state/book.svelte";
@@ -50,7 +50,7 @@
   import Search from "./views/Search.svelte";
 
   // The theme and base font size go on <html> (src/css/themes, base.css).
-  $effect(() => applyTheme(document.documentElement, themeState.theme, themeState.fontSize));
+  $effect(() => applyTheme(document.documentElement, themeState.theme, themeState.fontSize, themeState.font));
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
   // The close box asks to save changed reports, like File > Exit.
@@ -92,7 +92,7 @@
 <div class="app">
   <MenuBar menus={MENUS} onselect={runAction}><ThemePicker /></MenuBar>
   <NavBar />
-  {#if !listsState.isEmptyBook}<AccountBar />{/if}
+  <AccountBar />
   {#if listsState.error}<p class="err">{listsState.error}</p>{/if}
   {#if dialogState.account !== undefined}
     {#key dialogState.account?.id ?? "new"}<AccountModal account={dialogState.account} />{/key}
@@ -100,6 +100,7 @@
   {#if dialogState.history}<HistoryModal txn={dialogState.history.txn} />{/if}
   {#if dialogState.integrity}<IntegrityModal />{/if}
   {#if dialogState.settings}<SettingsModal />{/if}
+  {#if dialogState.about}<AboutModal />{/if}
   {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
   {#if dialogState.schedule !== undefined}
@@ -134,12 +135,6 @@
   {/if}
   {#if dialogState.passphrase}<PassphraseModal onclose={() => (dialogState.passphrase = false)} />{/if}
   {#if dialogState.dbKey}<DbKeyModal onclose={() => (dialogState.dbKey = false)} />{/if}
-  {#if dialogState.backupDone}
-    <Modal title="Back up now" onclose={() => (dialogState.backupDone = null)}>
-      <p role={dialogState.backupDone.ok ? "status" : "alert"}>{dialogState.backupDone.text}</p>
-      <p><button type="button" onclick={() => (dialogState.backupDone = null)}>Close</button></p>
-    </Modal>
-  {/if}
   <div class="body" class:right={settingsState.accountPanelSide === "right"}>
     {#if settingsState.accountPanelOpen && !listsState.isEmptyBook}
       <AccountPanel />

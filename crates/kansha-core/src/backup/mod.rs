@@ -15,6 +15,7 @@
 
 mod compare;
 mod retention;
+mod timer;
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 pub use compare::{AccountSide, Comparison, ComparisonRow, compare};
 pub use retention::{prune, prune_plan};
+pub use timer::BackupTimer;
 
 use crate::date::{Clock, Timestamp};
 use crate::error::{Error, Result};
@@ -39,7 +41,9 @@ pub const PRIVATE_KEY: &str = "private-key.age";
 
 /// Backup file format version.
 const FORMAT: u32 = 1;
-const PREFIX: &str = "kansha-backup-";
+/// File names from before 0.7.0: `kansha-backup-2026-09-29T18-30-12Z-close.zip`.
+const OLD_PREFIX: &str = "kansha-backup-";
+const PREFIX: &str = "kansha-";
 
 text_enum! {
     /// Why a backup was made. Only automatic ones are pruned (BAK-040).
@@ -56,6 +60,9 @@ text_enum! {
         Import = "import",
         /// Of the current database, before a restore replaces it (BAK-070).
         Restore = "restore",
+        /// A few minutes after a change (SET-050). Temporary: deleted once
+        /// a backup of any other kind, or a newer timeout, exists.
+        Timeout = "timeout",
     }
 }
 
@@ -88,11 +95,14 @@ pub struct Written {
     pub integrity_issues: usize,
 }
 
-/// The file name for a backup: `kansha-backup-2026-09-29T18-30-12Z-close.zip`
-/// (UTC; colons are not allowed in Windows file names).
+/// The file name for a backup: `kansha-20260929-183012Z-close.zip` (UTC,
+/// no colons, which Windows file names do not allow).
 pub fn file_name(created_at: Timestamp, kind: BackupKind) -> String {
-    let t = created_at.to_string().replace(':', "-");
-    format!("{PREFIX}{t}-{}.zip", kind.as_str())
+    // 2026-09-29T18:30:12Z
+    let s = created_at.to_string();
+    let date = s[..10].replace('-', "");
+    let time = s[11..19].replace(':', "");
+    format!("{PREFIX}{date}-{time}Z-{}.zip", kind.as_str())
 }
 
 /// The time and kind in a backup's file name, if it is one of ours.
@@ -101,11 +111,36 @@ pub fn parse_file_name(name: &str) -> Option<(Timestamp, BackupKind)> {
 }
 
 /// Time, kind, and sequence: 1, or `n` for a `-n` suffix added when the
-/// name was taken (a later backup in the same second).
+/// name was taken (a later backup in the same second). Reads the current
+/// name style and the one from before 0.7.0.
 pub(crate) fn parse_parts(name: &str) -> Option<(Timestamp, BackupKind, u32)> {
-    let rest = name.strip_prefix(PREFIX)?.strip_suffix(".zip")?;
-    let (stamp, rest) = rest.split_at_checked(20)?;
-    let rest = rest.strip_prefix('-')?;
+    let (stamp, rest) = if let Some(rest) = name.strip_prefix(OLD_PREFIX) {
+        // 2026-09-29T18-30-12Z → 2026-09-29T18:30:12Z
+        let (stamp, rest) = rest.split_at_checked(20)?;
+        let mut t = stamp.to_owned();
+        t.replace_range(13..14, ":");
+        t.replace_range(16..17, ":");
+        (t, rest)
+    } else {
+        // 20260929-183012Z → 2026-09-29T18:30:12Z
+        let (stamp, rest) = name.strip_prefix(PREFIX)?.split_at_checked(16)?;
+        let b = stamp.as_bytes();
+        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+        if !(digits(0..8) && b[8] == b'-' && digits(9..15) && b[15] == b'Z') {
+            return None;
+        }
+        let t = format!(
+            "{}-{}-{}T{}:{}:{}Z",
+            &stamp[0..4],
+            &stamp[4..6],
+            &stamp[6..8],
+            &stamp[9..11],
+            &stamp[11..13],
+            &stamp[13..15]
+        );
+        (t, rest)
+    };
+    let rest = rest.strip_suffix(".zip")?.strip_prefix('-')?;
     let (kind, seq) = match rest.split_once('-') {
         Some((k, n)) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => {
             (k, n.parse().ok()?)
@@ -113,11 +148,7 @@ pub(crate) fn parse_parts(name: &str) -> Option<(Timestamp, BackupKind, u32)> {
         Some(_) => return None,
         None => (rest, 1),
     };
-    // 2026-09-29T18-30-12Z → 2026-09-29T18:30:12Z
-    let mut t = stamp.to_owned();
-    t.replace_range(13..14, ":");
-    t.replace_range(16..17, ":");
-    Some((t.parse().ok()?, kind.parse().ok()?, seq))
+    Some((stamp.parse().ok()?, kind.parse().ok()?, seq))
 }
 
 /// Write a backup of `db` into `folder` (BAK-030 … BAK-050, BAK-080).
@@ -422,8 +453,45 @@ mod tests {
     fn file_names_round_trip() {
         let t: Timestamp = "2026-09-29T18:30:12Z".parse().unwrap();
         let name = file_name(t, BackupKind::Close);
-        assert_eq!(name, "kansha-backup-2026-09-29T18-30-12Z-close.zip");
+        assert_eq!(name, "kansha-20260929-183012Z-close.zip");
         assert_eq!(parse_file_name(&name), Some((t, BackupKind::Close)));
+        assert_eq!(
+            file_name(t, BackupKind::Timeout),
+            "kansha-20260929-183012Z-timeout.zip"
+        );
+        assert_eq!(
+            parse_file_name("kansha-20260929-183012Z-manual-2.zip"),
+            Some((t, BackupKind::Manual))
+        );
+        assert_eq!(
+            parse_parts("kansha-20260929-183012Z-manual-2.zip").map(|p| p.2),
+            Some(2)
+        );
+        for bad in [
+            "kansha-20260929-183012Z-close.zip.partial",
+            "kansha-20260929-183012Z-nope.zip",
+            "kansha-20260929-183012Z-close-x.zip",
+            "kansha-20261329-183012Z-close.zip",
+            "kansha-20260929-253012Z-close.zip",
+            "kansha-2026092a-183012Z-close.zip",
+            "kansha-20260929_183012Z-close.zip",
+            "kansha-20260929-183012-close.zip",
+            "other-20260929-183012Z-close.zip",
+            "kansha.zip",
+            "kansha-.zip",
+            "kansha-backup-.zip",
+        ] {
+            assert_eq!(parse_file_name(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn file_names_from_before_0_7_0_still_read() {
+        let t: Timestamp = "2026-09-29T18:30:12Z".parse().unwrap();
+        assert_eq!(
+            parse_file_name("kansha-backup-2026-09-29T18-30-12Z-close.zip"),
+            Some((t, BackupKind::Close))
+        );
         assert_eq!(
             parse_file_name("kansha-backup-2026-09-29T18-30-12Z-manual-2.zip"),
             Some((t, BackupKind::Manual))
@@ -433,8 +501,6 @@ mod tests {
             "kansha-backup-2026-09-29T18-30-12Z-nope.zip",
             "kansha-backup-2026-09-29T18-30-12Z-close-x.zip",
             "kansha-backup-2026-13-29T18-30-12Z-close.zip",
-            "other-2026-09-29T18-30-12Z-close.zip",
-            "kansha-backup-.zip",
         ] {
             assert_eq!(parse_file_name(bad), None, "{bad}");
         }
@@ -443,14 +509,13 @@ mod tests {
     #[test]
     fn free_path_never_reuses_a_name() {
         let dir = tempfile::tempdir().unwrap();
-        let name = "kansha-backup-2026-09-29T18-30-12Z-close.zip";
+        let name = "kansha-20260929-183012Z-close.zip";
         assert_eq!(free_path(dir.path(), name), dir.path().join(name));
         std::fs::write(dir.path().join(name), b"x").unwrap();
         let second = free_path(dir.path(), name);
         assert_eq!(
             second,
-            dir.path()
-                .join("kansha-backup-2026-09-29T18-30-12Z-close-2.zip")
+            dir.path().join("kansha-20260929-183012Z-close-2.zip")
         );
     }
 

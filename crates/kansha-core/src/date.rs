@@ -91,6 +91,12 @@ impl Timestamp {
         Timestamp(date.0.and_time(NaiveTime::MIN))
     }
 
+    /// Whole seconds from `earlier` to `self` (negative when `self` is
+    /// the earlier one).
+    pub fn seconds_since(self, earlier: Timestamp) -> i64 {
+        self.0.signed_duration_since(earlier.0).num_seconds()
+    }
+
     pub fn from_ymd_hms(
         year: i32,
         month: u32,

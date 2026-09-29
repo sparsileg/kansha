@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.32 (draft) |
+| **Document version** | 0.3.37 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -756,6 +756,9 @@ This section is intentionally incomplete until export testing is done
     and adjustments
   - reconciled balances match reconciliation history
   - SQLite `PRAGMA integrity_check` passes
+  File > Integrity Check always shows its result in a window. A check
+  run automatically shows a window only when it finds problems; a clean
+  result appears as a note in the status bar (UI-045).
 - **INT-040** [1.0][R] Integrity failures are reported with specific
   records identified; the app never auto-repairs silently.
 - **INT-050** [1.0][R] Derived values may be cached for performance,
@@ -783,7 +786,7 @@ platform has one.
 - **BAK-010** [1.0][S] Backups are a first-class feature.
 - **BAK-020** [1.0][R] Automatic backup on application close and
   before any import, schema migration, or bulk operation (merge, batch
-  rollback).
+  rollback); and a timed backup a few minutes after a change (SET-050).
 - **BAK-030** [1.0][R] Manual "Back up now". Every backup, manual or
   automatic, is written to the backup folder chosen in Settings
   (SET-050); with none chosen, to the system Downloads folder. No
@@ -802,17 +805,24 @@ platform has one.
   - the database snapshot, compressed and then encrypted (BAK-060);
   - the private key, locked with the backup passphrase (BAK-060).
 
-  Built (0.3.32): the file is `kansha-backup-<UTC time>-<kind>.zip`,
-  e.g. `kansha-backup-2026-09-29T18-30-12Z-close.zip`; a name already
-  taken gets `-2`, `-3`, … The kind is `manual`, `close`,
-  `migration`, `bulk` (before a merge), `import`, or `restore` (the
-  current book, before a restore replaces it). The entries are
+  Built (0.3.32, name changed 0.3.37): the file is
+  `kansha-<YYYYMMDD>-<HHMMSS>Z-<kind>.zip` (UTC), e.g.
+  `kansha-20260929-183012Z-close.zip`; a name already taken gets `-2`,
+  `-3`, … Names from before 0.3.37
+  (`kansha-backup-2026-09-29T18-30-12Z-close.zip`) are still read and
+  pruned by the same rules. The kind is `manual`, `close`,
+  `migration`, `bulk` (before a merge), `import`, `restore` (the
+  current book, before a restore replaces it), or `timeout` (a timed
+  backup, SET-050). The entries are
   `manifest.json`, `database.gz.age` (gzip, then `age`), and
   `private-key.age`.
 - **BAK-040** [1.0][R] Configurable retention (e.g., keep last 10
   automatic backups plus one per month for 12 months). Only automatic
   backups in the backup folder, named as in BAK-035, are ever
-  deleted; manual backups and other files never are.
+  deleted; manual backups and other files never are. A `timeout`
+  backup is temporary and outside the count: only the newest one is
+  kept, and only while no backup of any other kind (a manual one
+  included) is newer.
 - **BAK-050** [1.0][R] Backups are consistent snapshots (SQLite online
   backup API, `VACUUM INTO`, or serialization), never a raw file copy
   of an open database. No unencrypted copy of the database is written
@@ -921,6 +931,19 @@ platform has one.
   Reconcile screens are windows too, one each. File > Exit and the
   window's close box ask to save each changed report first; Cancel
   keeps the app open.
+- **UI-045** [1.0][R] A status bar shares the row of the Accounts
+  button, on the side away from it (left-aligned against the window
+  edge when the button is on the right, right-aligned with a margin
+  when it is on the left). It stays when the book is empty, without the
+  button. Any part of the app may post a note; it clears itself after
+  30 seconds. An alert (a backup that failed, was made with a missing
+  folder, or found problems; an integrity check that could not run)
+  flashes once a second in bold and stays 60 seconds; with reduced
+  motion asked for, it does not flash. A new message replaces the
+  old one. Back Up Now, report exports (CSV, PDF), and the automatic
+  integrity check report there rather than in windows.
+- **UI-047** [1.0][R] Help > About Kansha shows the version (for now
+  only that).
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions;
   full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent edit in the current
@@ -934,14 +957,22 @@ platform has one.
 
 #### 14.2 Settings
 
-- **SET-010** [1.0][S] Themes: Light, Dark, and Classic (the Quicken
-  2013 look). Each theme is a readable CSS file of variables (colors,
-  font family); switching is instant. Picked at the right end of the
-  menu bar. Stored per computer, not in the book (SET-070).
+- **SET-010** [1.0][S] Themes: Light, Dark, Classic (the Quicken
+  2013 look), Matrix (green on black; OK is cyan and a problem amber,
+  since text is green), and Nordic. Nordic is the theme when none is
+  stored, whatever the OS prefers. Each theme is a readable CSS file of
+  variables (colors only); switching is instant. Picked at the right
+  end of the menu bar. Stored per computer, not in the book (SET-070).
 - **SET-020** [1.0][S] One base font size, 10–24 px in 1 px steps
   (default 13). All text, spacing, and column widths scale with it;
   themes do not set sizes. Picked at the right end of the menu bar,
-  after the theme. Stored per computer, not in the book (SET-070).
+  after the font. Stored per computer, not in the book (SET-070).
+- **SET-025** [1.0][S] Font: System (default), Arial, Verdana, or
+  Courier New, whatever the theme. Each is a font stack that falls back
+  to the nearest analogue where the named font is missing (System is
+  the OS's own UI font); themes do not set fonts. Picked at the right
+  end of the menu bar, between the theme and the size. Stored per
+  computer, not in the book (SET-070).
 - **SET-030** [1.0][R] Date display format: MM/DD/YYYY (default),
   DD/MM/YYYY, or YYYY-MM-DD. Every user-facing date, shown or typed,
   follows it; a four-digit year typed first is always accepted. Logs
@@ -952,6 +983,14 @@ platform has one.
 - **SET-050** [1.0][R] Backup folder (default: the system Downloads
   folder; BAK-030), retention, and schedule. Change backup passphrase
   (SECU-040); Show database key (SECU-020); Verify backup… (BAK-080).
+  The schedule is one number: minutes after the first change since the
+  last backup, when a timed backup is made (default 5; 0 = off). The
+  clock runs from the first change, not the last, so steady editing
+  still gets a backup; a backup of any kind resets it. The status bar
+  says the backup is starting and, when it is done, that it finished
+  (a failure, a missing folder, or integrity problems flash, UI-045).
+  Settings offers Verify backup…, Change backup passphrase…, and Show
+  database key… in one "Backup tools" list with an Apply button.
 - **SET-060** [1.0][R] Startup behavior: "On startup open to:" the
   dashboard, Investments, Reminders, Calendar, Accounts, or any
   account (every new view or account joins the list); run integrity
@@ -1850,6 +1889,11 @@ Goal for this chat: <sub-scope>
 | 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
 | 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
 | 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.37 | 2026-09-29 | Backup file names are `kansha-YYYYMMDD-HHMMSSZ-<kind>.zip` (old names still read). BAK-035, BAK-040, SET-050: timed backups, kind `timeout` (5 minutes after the first change, setting `backup_timeout_minutes`, 0 = off; only the newest kept, deleted once any other backup is newer; status bar shows start and finish). UI-047: Help > About shows the version. The app is version 0.7.0. No schema change. **API change:** commands `backup_timed_due`, `backup_timed_run`; `Settings.backup_timeout_minutes`; `BackupKind` gains `timeout`. |
+| 0.3.36 | 2026-09-29 | SET-025: Font picker (System, Arial, Verdana, Courier New) beside theme and size; themes no longer set a font; Nordic Courier removed (a stored one becomes Nordic with Courier New). SET-010, SET-020 reworded. No schema change. **API change:** `appearance_get` and `appearance_set` carry a `font` field (per-computer config file, optional). |
+| 0.3.35 | 2026-09-29 | SET-010: Nordic theme (from lostsheep; filled navigation bar like Classic; light-blue OK, amber problem) and Nordic Courier (same, Courier New). Nordic is the default theme; the OS light/dark preference no longer picks one. No schema or API change. |
+| 0.3.34 | 2026-09-29 | SET-010: Matrix theme (colors from lostsheep, Courier New; cyan OK, amber problem). No schema or API change. |
+| 0.3.33 | 2026-09-29 | UI-045: status bar on the Accounts button row (notes clear after 30 s; alerts flash, 60 s). INT-030: an automatic check opens a window only for problems. Back Up Now and report exports report in the status bar. No schema or API change. |
 | 0.3.32 | 2026-09-29 | Phase 8 built (encryption, backup, restore, settings). BAK-035: file and entry names, backup kinds. BAK-040: only automatic backups are pruned. BAK-080: a snapshot with integrity problems is still backed up and the dashboard warns; a failed backup before a merge or import stops it. SECU-010: `kansha.key` layout, raw SQLCipher key. §16.3 R4: `age`/`zip` pins, `getrandom`, `flate2`, `tauri-plugin-dialog`. §17.4: `book.rs`, `security.rs`, `local_config.rs`. No schema change. API change: 18 new IPC commands (book, backup, restore, settings, appearance, pickers); `Dashboard.backup`; error kinds `wrong_passphrase`, `locked`. |
 | 0.3.31 | 2026-09-29 | SET-070: all settings in the book's `setting` table except per-computer ones (theme, font size, window geometry, recent books), which go to a config file in the OS configuration folder; no localStorage. SET-010, SET-020: stored per computer. BAK-030, DSH-030: a missing backup folder falls back to Downloads with a dashboard warning; no file is created at the missing path. No schema or API change. |
 | 0.3.30 | 2026-09-29 | Backup and encryption decided (§13.5 proposal adopted and removed). BAK-030 (every backup to the Settings folder, default Downloads), BAK-035 (zip layout), BAK-050, BAK-060 (public-key encrypted backups, `age`), BAK-070, BAK-075 (restore comparison window), BAK-080 rewritten or added. SECU-010 (random database key in a key file encrypted to the backup public key; no OS keyring), SECU-020 (backup passphrase at startup; Show database key), SECU-040 (change backup passphrase), SECU-080 (first-run setup), SECU-090 added; SECU-060 withdrawn. DSH-030, SET-050, D-20, D-110, §16.3 R4, §23, §24 Phase 8 updated. No schema or API change. |

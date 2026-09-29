@@ -1,6 +1,6 @@
 # Phase 8 — Encryption, backup, restore, settings
 
-Spec: 0.3.32 (design 0.3.30–0.3.31). `just check` green.
+Spec: 0.3.32 (design 0.3.30–0.3.31); changes since in the last section (now 0.3.37). App version 0.7.0. `just check` green.
 
 **Exit criteria (spec §24):** restore drill passes
 (`tests/integration/backup.rs::restore_drill`: back up, change the
@@ -68,7 +68,7 @@ New dependencies: `age =0.12.1`, `zip =7.2.0` (newest for MSRV 1.85),
   File menu: Back Up Now, Restore…. Calendar honours the first day of
   week. Dashboard: last backup, last verification, backup warnings.
 
-## Decisions made in the build (check with Stan)
+## Decisions made in the build (confirmed by Stan 2026-09-29)
 
 - A snapshot with integrity problems is still backed up and counted;
   the dashboard warns. The spec said "passes the integrity check
@@ -102,14 +102,67 @@ New dependencies: `age =0.12.1`, `zip =7.2.0` (newest for MSRV 1.85),
 ## Known gaps
 
 - Not run in the real app yet (GUI flows tested with mocks only):
-  setup, conversion, unlock, backup on close, pickers, restore and
-  reload, window geometry.
-- SET-050 "schedule" (timed backups) not built; backups are on close,
-  manual, and before migrations, merges, and imports.
+  restore and reload, the folder picker, window geometry, the timed
+  backup, Help > About. (Setup, conversion, and unlock Stan has run.)
 - SET-040 default lot method stays per account (no book-wide setting).
-- Help > About still disabled.
 - SQLCipher logs "hmac check failed" to stderr on a wrong key (not an
   error in Kansha).
-- Backup on close blocks exit ~1 s on a large book; no progress shown.
-- Old plaintext pages of the converted prototype file may remain on
-  disk (rename replaces the file; no secure wipe).
+
+Not gaps, by Stan's decision (2026-09-29): backup on close blocks exit
+about 1 s on a large book; old plaintext pages of the converted
+prototype file may remain on disk.
+
+## Changes after the build (2026-09-29, spec 0.3.33–0.3.37)
+
+Made while Stan tried the app; none changes a Phase 8 decision.
+
+- **Status bar (UI-045, 0.3.33).** Messages that used to be modal
+  windows now appear in a bar on the Accounts button row
+  (`AccountBar.svelte`, state in `state/status.svelte.ts`). A note
+  clears after 30 s; an alert flashes once a second and stays 60 s.
+  Back Up Now reports there ("Backed up to …", flashing if the folder
+  was missing, the data had integrity problems, or the backup failed);
+  the "Back up now" modal and `dialogState.backupDone` are gone.
+  The startup integrity check (INT-030) shows "Integrity check found no
+  problems with the data." there, and opens the window only when it
+  finds problems (the report it already has is passed in, so it does
+  not run twice); File > Integrity Check always opens the window. Report
+  CSV/PDF export ("Saved to …") uses the bar too. Left in their own
+  windows: passphrase changed, backup verification, restore comparison,
+  CSV import result.
+- **Settings dialog layout.** The form overflowed the window: the
+  "On startup open to" dropdown (one choice per account) stretched the
+  right column. The columns are now `fit-content(60%) minmax(0, 1fr)`
+  and dropdowns are capped to the dialog. Backup folder: its label,
+  then the path, then Browse… and Use Downloads, each on its own line;
+  the "A folder on this computer…" note is removed. Verify backup…,
+  Change backup passphrase…, and Show database key… are one
+  "Backup tools" dropdown with an Apply button. Checked in WebKitGTK at
+  680 px wide.
+- **Appearance commands.** `appearance_get` / `appearance_set` (Phase 8)
+  carry a `font` field since 0.3.36 (SET-025): the font is a per-computer
+  setting beside theme and size. ⚠ API change; bindings regenerated.
+- **Backup file names (0.3.37).** `kansha-YYYYMMDD-HHMMSSZ-<kind>.zip`
+  (was `kansha-backup-2026-09-29T18-30-12Z-<kind>.zip`). Old names are
+  still read, so existing backups still restore and are pruned by the
+  same rules; none was renamed. `parse_parts` reads both styles.
+- **Timed backups (SET-050, 0.3.37).** New kind `timeout`. A change
+  starts a timer (`backup/timer.rs`, `BackupTimer`); 5 minutes later
+  (setting `backup_timeout_minutes`, 0 = off) a backup is made; any
+  backup resets it. Retention (`retention.rs`): timeouts are outside the
+  keep count; only the newest is kept, and only while no other kind
+  (manual included) is newer. `AppState` marks a change after each
+  successful `write` (and after an auto-entry that entered something) and
+  clears it after any backup. The UI (`shell/timedbackup.ts`) asks
+  `backup_timed_due` every 30 s; if due it shows "Timed backup
+  starting…" in the status bar, calls `backup_timed_run`, then shows
+  "Timed backup finished: …" (flashing for a missing folder, integrity
+  problems, or a failure; after a failure it skips 10 checks, about
+  5 minutes). Settings has "Back up after a change (minutes, 0 = off)".
+  ⚠ API change: two commands, `Settings.backup_timeout_minutes`,
+  `BackupKind::Timeout`; bindings regenerated.
+- **Help > About Kansha (UI-047).** Enabled; a small dialog with the
+  version from `app_version`.
+- **App version 0.7.0** in `Cargo.toml`, `package.json`,
+  `tauri.conf.json` (and the lock files); `version.test.ts` checks the
+  three agree.

@@ -267,7 +267,6 @@
     <button type="button" onclick={exportCsv} disabled={!report}>Export CSV</button>
     <button type="button" onclick={() => (pdfOpen = true)} disabled={!report}>Save PDF…</button>
   </div>
-  {#if inst.exported}<p class="note no-print">Saved to {inst.exported}</p>{/if}
   {#if inst.error}<p class="err" role="alert">{inst.error}</p>{/if}
 
   <div class="page" data-theme="light">

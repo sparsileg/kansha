@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
-use kansha_core::backup::{self, BackupKind};
+use kansha_core::backup::{self, BackupKind, BackupTimer};
 use kansha_core::book::{BookFiles, OpenBook};
 use kansha_core::local_config::LocalConfig;
 use kansha_core::{Clock, Db, Origin, SystemClock, Tx};
@@ -80,6 +80,8 @@ pub struct AppState {
     /// A backup opened for restore, waiting for Restore or Cancel
     /// (BAK-075).
     pending_restore: Mutex<Option<backup::Opened>>,
+    /// When a timed backup is due (SET-050).
+    timer: Mutex<BackupTimer>,
     pub files: BookFiles,
     /// The per-computer config file (SET-070).
     pub config_path: PathBuf,
@@ -99,6 +101,7 @@ impl AppState {
         AppState {
             book: Mutex::new(None),
             pending_restore: Mutex::new(None),
+            timer: Mutex::new(BackupTimer::default()),
             files,
             config_path,
             downloads,
@@ -158,13 +161,36 @@ impl AppState {
         f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<T>,
     ) -> CmdResult<T> {
         let clock = SystemClock;
-        self.with_book(|b| b.db.write(&clock, origin, f))
+        let done = self.with_book(|b| b.db.write(&clock, origin, f))?;
+        self.note_change();
+        Ok(done)
+    }
+
+    /// A change was saved: a timed backup will be due (SET-050).
+    fn note_change(&self) {
+        if let Ok(mut t) = self.timer.lock() {
+            t.changed(self.clock.now());
+        }
+    }
+
+    /// Whether a timed backup is due now: the book's delay has passed
+    /// since the first change after the last backup (SET-050).
+    pub fn timed_backup_due(&self) -> CmdResult<bool> {
+        let minutes = self
+            .with_book(|b| Ok(kansha_core::settings::load(b.db.conn())?.backup_timeout_minutes))?;
+        let now = self.clock.now();
+        Ok(self.timer.lock().is_ok_and(|t| t.due(now, minutes)))
     }
 
     /// Enter everything auto-entry schedules owe up to today (REC-070).
     pub fn auto_enter(&self) -> CmdResult<kansha_core::schedule::AutoEnterReport> {
         let clock = SystemClock;
-        self.with_book(|b| kansha_core::schedule::auto_enter_due(&mut b.db, &clock))
+        let report =
+            self.with_book(|b| kansha_core::schedule::auto_enter_due(&mut b.db, &clock))?;
+        if !report.entered.is_empty() {
+            self.note_change();
+        }
+        Ok(report)
     }
 
     /// Back up the open book now (BAK-020, BAK-030).
@@ -172,7 +198,7 @@ impl AppState {
         let clock = SystemClock;
         let downloads = self.downloads.clone();
         let version = self.app_version.clone();
-        self.with_book(|b| {
+        let done = self.with_book(|b| {
             backup::back_up(
                 &mut b.db,
                 &b.key_file,
@@ -181,7 +207,12 @@ impl AppState {
                 &version,
                 &clock,
             )
-        })
+        })?;
+        // Anything before this is saved: nothing is waiting for a backup.
+        if let Ok(mut t) = self.timer.lock() {
+            t.backed_up();
+        }
+        Ok(done)
     }
 
     /// Back up and close the book, if one is open (on exit, BAK-020).

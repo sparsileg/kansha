@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Settings } from "../types/bindings";
 
-const store = vi.hoisted(() => ({ saved: null as unknown, appearance: null as unknown, fail: false }));
+const store = vi.hoisted(() => ({
+  saved: null as unknown,
+  appearance: null as unknown,
+  stored: { theme: "classic", font: "arial", font_size: 18 } as unknown,
+  fail: false,
+}));
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
@@ -16,7 +21,7 @@ vi.mock("../api", async (orig) => {
           ? Promise.resolve({ status: "error" as const, error: { kind: "invalid" as const, message: "no" } })
           : ok(s);
       },
-      appearanceGet: () => Promise.resolve({ theme: "classic", font_size: 18 }),
+      appearanceGet: () => Promise.resolve(store.stored),
       appearanceSet: (a: unknown) => {
         store.appearance = a;
         return Promise.resolve({ status: "ok" as const, data: null });
@@ -33,6 +38,7 @@ import { themeState } from "./theme.svelte";
 beforeEach(() => {
   bookSettings.reset();
   store.saved = { ...DEFAULT_SETTINGS };
+  store.stored = { theme: "classic", font: "arial", font_size: 18 };
   store.fail = false;
   localStorage.clear();
 });
@@ -65,13 +71,39 @@ describe("book settings (SET-070)", () => {
   });
 });
 
-describe("theme and font size (per computer)", () => {
+describe("theme, font, and font size (per computer)", () => {
   it("load from the config file and save changes to it", async () => {
     await themeState.load();
     expect(themeState.theme).toBe("classic");
+    expect(themeState.font).toBe("arial");
     expect(themeState.fontSize).toBe(18);
     themeState.setFontSize(20);
-    await vi.waitFor(() => expect(store.appearance).toEqual({ theme: "classic", font_size: 20 }));
+    await vi.waitFor(() => expect(store.appearance).toEqual({ theme: "classic", font: "arial", font_size: 20 }));
+    themeState.setFont("courier");
+    await vi.waitFor(() => expect(store.appearance).toEqual({ theme: "classic", font: "courier", font_size: 20 }));
     expect(localStorage.length).toBe(0);
+  });
+
+  it("a config from before fonts keeps the System font", async () => {
+    store.stored = { theme: "matrix", font: null, font_size: 16 };
+    themeState.setFont("system");
+    await themeState.load();
+    expect(themeState.theme).toBe("matrix");
+    expect(themeState.font).toBe("system");
+  });
+
+  it("a stored Nordic Courier becomes Nordic with the Courier New font", async () => {
+    store.stored = { theme: "nordic-courier", font: null, font_size: 14 };
+    themeState.setFont("system");
+    await themeState.load();
+    expect(themeState.theme).toBe("nordic");
+    expect(themeState.font).toBe("courier");
+  });
+
+  it("an unknown stored font is ignored", async () => {
+    store.stored = { theme: "dark", font: "comic-sans", font_size: 14 };
+    themeState.setFont("verdana");
+    await themeState.load();
+    expect(themeState.font).toBe("verdana");
   });
 });

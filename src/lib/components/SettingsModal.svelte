@@ -44,9 +44,13 @@
     if (picked !== null) await save({ backup_folder: picked });
   }
 
-  function open(which: "verify" | "passphrase" | "dbKey") {
+  type Tool = "verify" | "passphrase" | "dbKey";
+  let tool = $state<Tool>("verify");
+
+  /** Close Settings and open the chosen backup tool's dialog. */
+  function applyTool() {
     dialogState.settings = false;
-    dialogState[which] = true;
+    dialogState[tool] = true;
   }
 </script>
 
@@ -99,21 +103,17 @@
     </label>
 
     <h3>Backups</h3>
-    <div class="field">
-      <span>Backup folder</span>
-      <div>
-        <span class="path">{s.backup_folder ?? "Downloads (default)"}</span>
+    <div class="folder">
+      <span class="head">Backup folder</span>
+      <span class="path">{s.backup_folder ?? "Downloads (default)"}</span>
+      <div class="buttons">
         <button type="button" onclick={browse}>Browse…</button>
         {#if s.backup_folder}<button type="button" onclick={() => save({ backup_folder: null })}>Use Downloads</button>{/if}
-        {#if info?.folder_missing_now}
-          <p role="alert"><strong>⚠ This folder is missing; backups go to Downloads until another is chosen.</strong></p>
-        {/if}
       </div>
+      {#if info?.folder_missing_now}
+        <p role="alert"><strong>⚠ This folder is missing; backups go to Downloads until another is chosen.</strong></p>
+      {/if}
     </div>
-    <p class="note">
-      A folder on this computer, Downloads included, is lost with the computer; a cloud-synced folder, network
-      drive, or USB drive is not.
-    </p>
     <label>
       <span>Keep the newest automatic backups</span>
       <input type="number" min="1" max="1000" value={s.backup_keep_last} onchange={(e) => saveNumber("backup_keep_last", e)} />
@@ -122,16 +122,24 @@
       <span>… plus one per month for (months)</span>
       <input type="number" min="0" max="120" value={s.backup_keep_months} onchange={(e) => saveNumber("backup_keep_months", e)} />
     </label>
+    <label>
+      <span>Back up after a change (minutes, 0 = off)</span>
+      <input type="number" min="0" max="1440" value={s.backup_timeout_minutes} onchange={(e) => saveNumber("backup_timeout_minutes", e)} />
+    </label>
     {#if info}
       <p class="note">
         Last backup: {info.status.last_at ?? "none yet"}. Last full verification: {info.status.last_verified_at ?? "never"}.
-        Manual backups are never deleted.
+        Manual backups are never deleted. A timed backup is temporary: only the newest is kept, until another kind of backup is made.
       </p>
     {/if}
-    <div class="row left">
-      <button type="button" onclick={() => open("verify")}>Verify backup…</button>
-      <button type="button" onclick={() => open("passphrase")}>Change backup passphrase…</button>
-      <button type="button" onclick={() => open("dbKey")}>Show database key…</button>
+    <span class="head">Backup tools</span>
+    <div class="inline">
+      <select aria-label="Backup tools" bind:value={tool}>
+        <option value="verify">Verify backup…</option>
+        <option value="passphrase">Change backup passphrase…</option>
+        <option value="dbKey">Show database key…</option>
+      </select>
+      <button type="button" onclick={applyTool}>Apply</button>
     </div>
     {#if error}<p class="note" role="alert"><strong>{error}</strong></p>{/if}
     <div class="row">
@@ -146,21 +154,51 @@
      columns (`display: contents`), so every control lines up. */
   .form {
     display: grid;
-    grid-template-columns: max-content auto;
+    grid-template-columns: fit-content(60%) minmax(0, 1fr);
     gap: 0.5rem 0.75rem;
     align-items: center;
   }
-  label,
-  .field {
+  label {
     display: contents;
   }
   label > span,
-  .field > span {
+  .head {
     text-align: right;
   }
+  /* A long choice (the startup list names every account) is cut to the
+     dialog, never widens it. */
   label select,
   label input {
     justify-self: start;
+    max-width: 100%;
+  }
+  .inline {
+    display: flex;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .inline select {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* The folder gets the full width: label, then the path, then buttons. */
+  .folder {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+  .folder .head {
+    text-align: left;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .folder p {
+    margin: 0;
   }
   input[type="number"] {
     width: 6em;
@@ -173,7 +211,6 @@
   .path {
     font-family: monospace;
     word-break: break-all;
-    margin-right: 0.5rem;
   }
   /* Wraps to the width the settings take: `width: 0` keeps the note from
      widening the grid, `min-width: 100%` then fills it. */
@@ -191,8 +228,5 @@
     justify-content: flex-end;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-  .row.left {
-    justify-content: flex-start;
   }
 </style>

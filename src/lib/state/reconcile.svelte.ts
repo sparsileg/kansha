@@ -3,6 +3,7 @@
 // All figures come from the engine; nothing here adds up money.
 
 import { call, commands, withConfirmation } from "../api";
+import { isReconcilable } from "../reconcile/form";
 import type {
   AccountId,
   HistoryRow,
@@ -24,6 +25,9 @@ class ReconcileState {
   /** Shown before a statement is entered (RCN-030). */
   opening = $state<OpeningCheck | null>(null);
   history = $state<HistoryRow[]>([]);
+  /** Reconcilable accounts with a session in progress, marked in the
+   * account picker. */
+  inProgress = $state<AccountId[]>([]);
   error = $state<string | null>(null);
   busy = $state(false);
 
@@ -42,7 +46,13 @@ class ReconcileState {
     const id = this.accountId;
     if (id === null) return;
     await this.run(async () => {
-      const open = await call(commands.reconcileOpen(id));
+      const others = listsState.accounts
+        .filter((a) => a.status === "open" && isReconcilable(a))
+        .map((a) => a.id);
+      const [open, othersOpen] = await Promise.all([
+        call(commands.reconcileOpen(id)),
+        Promise.all(others.map((a) => call(commands.reconcileOpen(a)))),
+      ]);
       const [session, opening, history] = await Promise.all([
         open ? call(commands.reconcileSession(open.id)) : Promise.resolve(null),
         call(commands.reconcileOpeningCheck(id)),
@@ -52,6 +62,7 @@ class ReconcileState {
       this.session = session;
       this.opening = opening;
       this.history = history;
+      this.inProgress = others.filter((_, i) => othersOpen[i] !== null);
     });
   }
 

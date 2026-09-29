@@ -438,3 +438,102 @@ fn back_up_falls_back_to_downloads_and_records_status() {
         .is_err()
     );
 }
+
+/// SET-050, BAK-040: a timeout backup is temporary. Only the newest is
+/// kept, and it goes as soon as any backup of another kind is newer; the
+/// backups made in the old name style still count.
+#[test]
+fn timeout_backups_are_temporary() {
+    use kansha_core::{Clock, FixedClock, Timestamp};
+    let dir = tempfile::tempdir().unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    let at = |h, m| {
+        FixedClock::with_now(
+            date("2026-06-30"),
+            Timestamp::from_ymd_hms(2026, 6, 30, h, m, 0).unwrap(),
+        )
+    };
+    let run = |db: &mut Db, key: &kansha_core::security::KeyFile, kind, c: &FixedClock| {
+        backup::back_up(db, key, Some(folder.path()), kind, "0.7.0", c as &dyn Clock).unwrap()
+    };
+
+    let first = run(
+        &mut open.db,
+        &open.key_file,
+        BackupKind::Timeout,
+        &at(10, 0),
+    );
+    let second = run(
+        &mut open.db,
+        &open.key_file,
+        BackupKind::Timeout,
+        &at(10, 5),
+    );
+    assert_eq!(second.pruned, 1, "the older timeout goes at once");
+    assert!(!first.written.path.exists());
+    assert!(second.written.path.exists());
+    assert!(
+        second
+            .written
+            .path
+            .to_string_lossy()
+            .ends_with("kansha-20260630-100500Z-timeout.zip")
+    );
+
+    let close = run(&mut open.db, &open.key_file, BackupKind::Close, &at(10, 30));
+    assert_eq!(
+        close.pruned, 1,
+        "a close backup makes the timeout redundant"
+    );
+    assert!(!second.written.path.exists());
+    assert!(close.written.path.exists());
+
+    let third = run(
+        &mut open.db,
+        &open.key_file,
+        BackupKind::Timeout,
+        &at(11, 0),
+    );
+    let manual = run(
+        &mut open.db,
+        &open.key_file,
+        BackupKind::Manual,
+        &at(11, 30),
+    );
+    assert!(!third.written.path.exists(), "so does a manual one");
+    assert!(manual.written.path.exists());
+}
+
+/// SET-050: the new setting is stored, defaults to 5, and is range-checked.
+#[test]
+fn timed_backup_delay_is_a_setting() {
+    use kansha_core::settings;
+    let dir = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    assert_eq!(
+        settings::load(open.db.conn())
+            .unwrap()
+            .backup_timeout_minutes,
+        5
+    );
+    open.db
+        .write(&clock(), Origin::Ui, |tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.backup_timeout_minutes = 0;
+            settings::save(tx, &s)
+        })
+        .unwrap();
+    assert_eq!(
+        settings::load(open.db.conn())
+            .unwrap()
+            .backup_timeout_minutes,
+        0
+    );
+    let bad = open.db.write(&clock(), Origin::Ui, |tx| {
+        let mut s = settings::load(tx.conn())?;
+        s.backup_timeout_minutes = 1441;
+        settings::save(tx, &s)
+    });
+    assert!(bad.is_err());
+}

@@ -2,8 +2,9 @@
   css/themes/light.css
   Light theme: variables only. Element styles are in ../base.css,
   layout in each component. Every theme defines the same variables
-  (src/lib/themes.test.ts checks). Sizes are not set here: the one
-  base font size is a setting, and base.css names the sizes.
+  (src/lib/themes.test.ts checks). Sizes and fonts are not set
+  here: the base font size and the font are settings, and base.css
+  names the sizes.
 
   Stan is red-green colorblind: never let red against green carry
   meaning, keep text at 4.5:1 or better on every background it sits on,
@@ -11,9 +12,6 @@
 */
 
 [data-theme="light"] {
-    /* ── Fonts ──────────────────────────────────────────────────────── */
-    --font-ui: system-ui, "Noto Sans", "DejaVu Sans", sans-serif;
-
     /* ── Core palette ───────────────────────────────────────────────── */
     /* Native controls (fields, checkboxes, dropdown lists) draw light. */
     --color-scheme: light;

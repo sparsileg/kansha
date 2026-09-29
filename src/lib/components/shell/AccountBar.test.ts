@@ -12,6 +12,7 @@ import { listsState } from "../../state/lists.svelte";
 import { registerState } from "../../state/register.svelte";
 import { bookSettings } from "../../state/booksettings.svelte";
 import { settingsState } from "../../state/settings.svelte";
+import { statusState } from "../../state/status.svelte";
 import { viewState } from "../../state/view.svelte";
 
 const acct = (id: number, name: string, status = "open") =>
@@ -26,6 +27,7 @@ beforeEach(() => {
   settingsState.setAccountPanelSide("left");
   registerState.accountId = null;
   viewState.reset();
+  statusState.clear();
 });
 
 describe("AccountBar", () => {
@@ -74,5 +76,41 @@ describe("AccountBar", () => {
     await fireEvent.click(head);
     await fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("shows the status message, and clears it when it expires", async () => {
+    render(AccountBar);
+    const bar = screen.getByRole("status");
+    expect(bar.textContent).toBe("");
+    statusState.show("Integrity check found no problems with the data.");
+    expect(await screen.findByText("Integrity check found no problems with the data.")).toBeTruthy();
+    expect(bar.classList.contains("alert")).toBe(false);
+    statusState.clear();
+    await vi.waitFor(() => expect(bar.textContent).toBe(""));
+  });
+
+  it("an alert is marked to flash", async () => {
+    render(AccountBar);
+    statusState.show("The backup failed.", "alert");
+    await screen.findByText("The backup failed.");
+    expect(screen.getByRole("status").classList.contains("alert")).toBe(true);
+  });
+
+  it("the message sits opposite the Accounts button", () => {
+    const { container } = render(AccountBar);
+    const bar = container.querySelector(".bar")!;
+    expect(bar.classList.contains("right")).toBe(false);
+    settingsState.setAccountPanelSide("right");
+    return vi.waitFor(() => expect(container.querySelector(".bar")!.classList.contains("right")).toBe(true));
+  });
+
+  it("an empty book has no Accounts button but still has the status bar", async () => {
+    listsState.accounts = [];
+    listsState.loaded = true;
+    render(AccountBar);
+    expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+    statusState.show("Hello");
+    expect(await screen.findByText("Hello")).toBeTruthy();
+    listsState.loaded = false;
   });
 });

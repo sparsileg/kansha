@@ -84,6 +84,82 @@ describe("theme files", () => {
   });
 });
 
+/** WCAG contrast of two `#rrggbb` colors. */
+function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+describe("fonts", () => {
+  it("no theme sets one: the font is a setting", () => {
+    for (const [file, css] of Object.entries(THEME_FILES)) {
+      expect({ file, fonts: noComments(css).match(/font-family|--font-ui/g) }).toEqual({ file, fonts: null });
+    }
+  });
+});
+
+describe("Matrix theme", () => {
+  const css = noComments(THEME_FILES["css/themes/matrix.css"]);
+  const value = (name: string) => css.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim() ?? "";
+
+  it("keeps text at 4.5:1 or better on the solid backgrounds it sits on", () => {
+    const pairs: [string, string][] = [
+      ["--fg", "--bg"], ["--fg", "--panel-bg"], ["--menubar-fg", "--menubar-bg"], ["--nav-fg", "--nav-bg"],
+      ["--nav-btn-fg", "--nav-btn-bg"], ["--title-fg", "--title-bg"], ["--tabs-fg", "--tabs-bg"],
+      ["--btn-fg", "--btn-bg"], ["--opt-fg", "--opt-bg"], ["--head-fg", "--head-bg"],
+      ["--head-sorted-fg", "--head-sorted-bg"], ["--focus-fg", "--focus-bg"], ["--focus-fg", "--focus-sel-bg"],
+      ["--sel-fg", "--sel-bg"], ["--reconciled-fg", "--row-bg"], ["--bad", "--bg"], ["--good", "--bg"],
+      ["--nav-badge", "--nav-bg"], ["--fg", "--filter-bg"], ["--fg", "--popup-bg"],
+    ];
+    const low = pairs
+      .map(([fg, bg]) => ({ fg, bg, ratio: contrast(value(fg), value(bg)) }))
+      .filter((p) => !(p.ratio >= 4.5));
+    expect(low).toEqual([]);
+  });
+
+  it("OK and problem colors differ from the green text and from each other", () => {
+    const [fg, good, bad] = [value("--fg"), value("--good"), value("--bad")];
+    expect(new Set([fg, good, bad]).size).toBe(3);
+  });
+});
+
+describe("Nordic theme", () => {
+  const nordic = noComments(THEME_FILES["css/themes/nordic.css"]);
+  const value = (css: string, name: string) => css.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim() ?? "";
+
+  it("has a filled navigation bar, unlike Nordic's own transparent one", () => {
+    expect(value(nordic, "--nav-bg")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("keeps text at 4.5:1 or better on the solid backgrounds it sits on", () => {
+    const v = (n: string) => value(nordic, n);
+    const pairs: [string, string][] = [
+      ["--fg", "--bg"], ["--fg", "--panel-bg"], ["--menubar-fg", "--menubar-bg"], ["--nav-fg", "--nav-bg"],
+      ["--nav-btn-fg", "--nav-btn-hover-bg"], ["--title-fg", "--title-bg"], ["--tabs-fg", "--tabs-bg"],
+      ["--btn-fg", "--btn-bg"], ["--btn-fg", "--btn-hover-bg"], ["--opt-fg", "--opt-bg"],
+      ["--head-fg", "--head-bg"], ["--head-sorted-fg", "--head-sorted-bg"], ["--focus-fg", "--focus-bg"],
+      ["--focus-fg", "--focus-sel-bg"], ["--sel-fg", "--sel-bg"], ["--reconciled-fg", "--row-bg"],
+      ["--bad", "--bg"], ["--good", "--bg"], ["--bad", "--row-bg"], ["--good", "--row-bg"],
+      ["--nav-badge", "--nav-bg"], ["--fg", "--filter-bg"], ["--fg", "--popup-bg"],
+    ];
+    const low = pairs
+      .map(([fg, bg]) => ({ fg, bg, ratio: contrast(v(fg), v(bg)) }))
+      .filter((p) => !(p.ratio >= 4.5));
+    expect(low).toEqual([]);
+  });
+
+  it("OK, problem, and text colors are three different colors", () => {
+    expect(new Set([value(nordic, "--fg"), value(nordic, "--good"), value(nordic, "--bad")]).size).toBe(3);
+  });
+});
+
 describe("components", () => {
   it("hold no color literals: colors come from the theme", () => {
     const bad: string[] = [];

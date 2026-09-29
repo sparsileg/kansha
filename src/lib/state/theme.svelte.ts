@@ -2,26 +2,43 @@
 // the book (SET-070): Rust keeps them in a config file in the OS
 // configuration folder (`appearance_get` / `appearance_set`), so the
 // passphrase screen can use them before any book is open. With nothing
-// stored, the OS light/dark preference picks the theme.
+// stored the theme is Nordic.
 //
-// The theme's colors and font family live in src/css/themes/<theme>.css;
-// the base size goes on <html>, so every rem in the app scales with it.
+// The theme's colors live in src/css/themes/<theme>.css. The font (SET-025)
+// and the base size go on <html>, so every rem in the app scales with the
+// size and every theme shows in the chosen font.
 
 import { commands } from "../api";
 
-export type Theme = "light" | "dark" | "classic";
+export type Theme = "light" | "dark" | "classic" | "matrix" | "nordic";
 
 export const THEMES: { value: Theme; label: string }[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
   { value: "classic", label: "Classic" },
+  { value: "matrix", label: "Matrix" },
+  { value: "nordic", label: "Nordic" },
 ];
 
 const isTheme = (v: unknown): v is Theme => THEMES.some((t) => t.value === v);
 
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+export type Font = "system" | "arial" | "verdana" | "courier";
+
+/** The fonts offered: each falls back to the nearest analogue where the
+ * named one is missing (Windows, macOS, and Linux all have one). */
+export const FONTS: { value: Font; label: string; stack: string }[] = [
+  { value: "system", label: "System", stack: 'system-ui, "Noto Sans", "DejaVu Sans", sans-serif' },
+  { value: "arial", label: "Arial", stack: 'Arial, "Liberation Sans", Helvetica, sans-serif' },
+  { value: "verdana", label: "Verdana", stack: 'Verdana, "DejaVu Sans", sans-serif' },
+  { value: "courier", label: "Courier New", stack: '"Courier New", "Liberation Mono", "DejaVu Sans Mono", monospace' },
+];
+
+export const DEFAULT_FONT: Font = "system";
+
+const isFont = (v: unknown): v is Font => FONTS.some((f) => f.value === v);
+
+/** The theme with nothing stored, whatever the OS prefers. */
+export const DEFAULT_THEME: Theme = "nordic";
 
 export const MIN_FONT_SIZE = 10;
 export const MAX_FONT_SIZE = 24;
@@ -34,7 +51,8 @@ const isFontSize = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= MIN_FONT_SIZE && v <= MAX_FONT_SIZE;
 
 class ThemeState {
-  theme = $state<Theme>(prefersDark ? "dark" : "light");
+  theme = $state<Theme>(DEFAULT_THEME);
+  font = $state<Font>(DEFAULT_FONT);
   /** Base font size in px, set on <html>: 1rem (NFR-080). */
   fontSize = $state(DEFAULT_FONT_SIZE);
 
@@ -43,6 +61,12 @@ class ThemeState {
     try {
       const a = await commands.appearanceGet();
       if (isTheme(a.theme)) this.theme = a.theme;
+      // Nordic Courier, a theme for a few days, became Nordic plus a font.
+      if (a.theme === "nordic-courier") {
+        this.theme = "nordic";
+        this.font = "courier";
+      }
+      if (isFont(a.font)) this.font = a.font;
       if (isFontSize(a.font_size)) this.fontSize = a.font_size;
     } catch {
       /* not running inside Tauri */
@@ -57,6 +81,11 @@ class ThemeState {
     this.theme = theme;
     this.#save();
   }
+  setFont(font: Font) {
+    if (!isFont(font)) return;
+    this.font = font;
+    this.#save();
+  }
   setFontSize(px: number) {
     if (!isFontSize(px)) return;
     this.fontSize = px;
@@ -66,16 +95,17 @@ class ThemeState {
   #save() {
     // Not saved, it still applies for this session.
     Promise.resolve()
-      .then(() => commands.appearanceSet({ theme: this.theme, font_size: this.fontSize }))
+      .then(() => commands.appearanceSet({ theme: this.theme, font: this.font, font_size: this.fontSize }))
       .catch(() => {});
   }
 }
 
 export const themeState = new ThemeState();
 
-/** Put the theme and base size on <html>, where the theme files and rem
- * read them. */
-export function applyTheme(root: HTMLElement, theme: Theme, fontSize: number) {
+/** Put the theme, font, and base size on <html>, where the theme files and
+ * rem read them. */
+export function applyTheme(root: HTMLElement, theme: Theme, fontSize: number, font: Font = DEFAULT_FONT) {
   root.dataset.theme = theme;
+  root.style.setProperty("--font-ui", (FONTS.find((f) => f.value === font) ?? FONTS[0]).stack);
   root.style.fontSize = `${fontSize}px`;
 }

@@ -24,6 +24,10 @@ export const commands = {
 	bookUnlock: (passphrase: string) => typedError<null, IpcError>(__TAURI_INVOKE("book_unlock", { passphrase })),
 	/**  File > Back Up Now (BAK-030). */
 	backupNow: () => typedError<BackupResult, IpcError>(__TAURI_INVOKE("backup_now")),
+	/**  Whether a timed backup is due (SET-050). The UI asks every so often. */
+	backupTimedDue: () => typedError<boolean, IpcError>(__TAURI_INVOKE("backup_timed_due")),
+	/**  The timed backup (SET-050), kind `timeout`. */
+	backupTimedRun: () => typedError<BackupResult, IpcError>(__TAURI_INVOKE("backup_timed_run")),
 	backupInfo: () => typedError<BackupInfo, IpcError>(__TAURI_INVOKE("backup_info")),
 	/**  A backup's manifest, read without the passphrase (BAK-070). */
 	backupManifest: (path: string) => typedError<Manifest, IpcError>(__TAURI_INVOKE("backup_manifest", { path })),
@@ -502,9 +506,10 @@ export type AllocationRow = {
  */
 export type AmountType = "fixed" | "estimated";
 
-/**  Theme and font size (per computer, SET-070). */
+/**  Theme, font, and font size (per computer, SET-070). */
 export type Appearance = {
 	theme: string | null,
+	font: string | null,
 	font_size: number | null,
 };
 
@@ -574,7 +579,12 @@ export type BackupKind =
 /**  Before an import. */
 "import" | 
 /**  Of the current database, before a restore replaces it (BAK-070). */
-"restore";
+"restore" | 
+/**
+ *  A few minutes after a change (SET-050). Temporary: deleted once
+ *  a backup of any other kind, or a newer timeout, exists.
+ */
+"timeout";
 
 /**  A backup just made. */
 export type BackupResult = {
@@ -2102,6 +2112,11 @@ export type Settings = {
 	backup_keep_last: number,
 	/**  … plus the newest one of each of this many months. */
 	backup_keep_months: number,
+	/**
+	 *  Minutes after the first change since the last backup, when a timed
+	 *  backup is made (SET-050); 0 = off.
+	 */
+	backup_timeout_minutes: number,
 };
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */

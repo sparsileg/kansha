@@ -2480,7 +2480,7 @@ dependencies = [
 
 [[package]]
 name = "kansha"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "gtk",
  "kansha-core",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "kansha-core"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "age",
  "chrono",

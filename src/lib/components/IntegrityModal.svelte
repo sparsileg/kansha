@@ -4,7 +4,8 @@
   import type { IntegrityReport } from "../types/bindings";
   import Modal from "./Modal.svelte";
 
-  let report = $state<IntegrityReport | null>(null);
+  // An automatic check hands over the report it already has.
+  let report = $state<IntegrityReport | null>(dialogState.integrityReport);
   let error = $state<string | null>(null);
   let running = $state(false);
 
@@ -21,11 +22,16 @@
   }
 
   $effect(() => {
-    void run();
+    if (report === null) void run();
   });
+
+  function close() {
+    dialogState.integrityReport = null;
+    dialogState.integrity = false;
+  }
 </script>
 
-<Modal title="Integrity check" wide onclose={() => (dialogState.integrity = false)}>
+<Modal title="Integrity check" wide onclose={close}>
   {#if error}
     <p class="err">{error}</p>
   {:else if report === null}
@@ -34,6 +40,10 @@
     <p class="ok">No problems found.</p>
   {:else}
     <p class="err">{report.issues.length} problem(s) found.</p>
+    <p>
+      The check compares the book's data against its own rules. Each row names the check that failed, the table and
+      row ID involved, and what is wrong.
+    </p>
     <div class="scroll">
       <table>
         <thead><tr><th>Check</th><th>Table</th><th>ID</th><th>Detail</th></tr></thead>

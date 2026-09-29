@@ -3,9 +3,9 @@
   Classic theme: the Quicken 2013 look, with colors sampled from
   ignored/sample-quicken-colors-text-size.png. Variables only. Element
   styles are in ../base.css, layout in each component. Every theme
-  defines the same variables (src/lib/themes.test.ts checks). Sizes are
-  not set here: the one base font size is a setting, and base.css names
-  the sizes.
+  defines the same variables (src/lib/themes.test.ts checks). Sizes and
+  fonts are not set here: the base font size and the font are settings,
+  and base.css names the sizes.
 
   Stan is red-green colorblind, so some sampled colors are darkened for
   contrast: text #4d4d4d → #333333; Quicken's negative red #ff4d4d →
@@ -15,9 +15,6 @@
 */
 
 [data-theme="classic"] {
-    /* ── Fonts ──────────────────────────────────────────────────────── */
-    --font-ui: Tahoma, "DejaVu Sans", "Noto Sans", sans-serif;
-
     /* ── Core palette ───────────────────────────────────────────────── */
     /* Native controls (fields, checkboxes, dropdown lists) draw light. */
     --color-scheme: light;

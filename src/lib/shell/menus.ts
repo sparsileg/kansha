@@ -101,7 +101,7 @@ export const MENUS: Menu[] = [
   {
     id: "help",
     label: "Help",
-    items: [{ id: "help.about", label: "About Kansha", disabled: later("Phase 8") }],
+    items: [{ id: "help.about", label: "About Kansha" }],
   },
 ];
 

@@ -34,6 +34,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::book::book_setup,
             commands::book::book_unlock,
             commands::book::backup_now,
+            commands::book::backup_timed_due,
+            commands::book::backup_timed_run,
             commands::book::backup_info,
             commands::book::backup_manifest,
             commands::book::backup_verify,

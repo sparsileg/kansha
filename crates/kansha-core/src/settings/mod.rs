@@ -73,6 +73,9 @@ pub struct Settings {
     pub backup_keep_last: i64,
     /// … plus the newest one of each of this many months.
     pub backup_keep_months: i64,
+    /// Minutes after the first change since the last backup, when a timed
+    /// backup is made (SET-050); 0 = off.
+    pub backup_timeout_minutes: i64,
 }
 
 impl Default for Settings {
@@ -91,6 +94,7 @@ impl Default for Settings {
             backup_folder: None,
             backup_keep_last: 10,
             backup_keep_months: 12,
+            backup_timeout_minutes: 5,
         }
     }
 }
@@ -99,6 +103,7 @@ pub const STALE_PRICE_DAYS: std::ops::RangeInclusive<i64> = 1..=365;
 pub const UPCOMING_DAYS: std::ops::RangeInclusive<i64> = 1..=366;
 pub const KEEP_LAST: std::ops::RangeInclusive<i64> = 1..=1000;
 pub const KEEP_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
+pub const TIMEOUT_MINUTES: std::ops::RangeInclusive<i64> = 0..=1440;
 
 fn get<T: std::str::FromStr>(conn: &Connection, key: &str, default: T) -> Result<T> {
     Ok(repo::get(conn, key)?
@@ -147,6 +152,12 @@ pub fn load(conn: &Connection) -> Result<Settings> {
             KEEP_MONTHS,
             d.backup_keep_months,
         )?,
+        backup_timeout_minutes: get_in(
+            conn,
+            "backup_timeout_minutes",
+            TIMEOUT_MINUTES,
+            d.backup_timeout_minutes,
+        )?,
     })
 }
 
@@ -175,6 +186,11 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     check_range("Upcoming days", s.upcoming_days, UPCOMING_DAYS)?;
     check_range("Backups to keep", s.backup_keep_last, KEEP_LAST)?;
     check_range("Months to keep", s.backup_keep_months, KEEP_MONTHS)?;
+    check_range(
+        "Minutes before a timed backup",
+        s.backup_timeout_minutes,
+        TIMEOUT_MINUTES,
+    )?;
     if s.startup.trim().is_empty() {
         return Err(Error::Invalid("the startup choice is required".into()));
     }
@@ -195,6 +211,11 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     put_text(tx, "backup_folder", s.backup_folder.as_deref())?;
     repo::set(tx, "backup_keep_last", &s.backup_keep_last.to_string())?;
     repo::set(tx, "backup_keep_months", &s.backup_keep_months.to_string())?;
+    repo::set(
+        tx,
+        "backup_timeout_minutes",
+        &s.backup_timeout_minutes.to_string(),
+    )?;
     Ok(())
 }
 

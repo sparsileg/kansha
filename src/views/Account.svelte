@@ -1,11 +1,8 @@
 <script lang="ts">
   import RegisterGrid from "../lib/components/RegisterGrid.svelte";
   import InvestmentAccount from "../lib/components/invest/InvestmentAccount.svelte";
-  import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { registerState } from "../lib/state/register.svelte";
-  import { isReconcilable } from "../lib/reconcile/form";
-  import { openReconcile } from "../lib/shell/nav";
 
   const account = $derived(
     registerState.accountId === null
@@ -18,10 +15,6 @@
   <section class="account">
     <header>
       <h1>{account.name}{account.status === "closed" ? " (closed)" : ""}</h1>
-      <button type="button" onclick={() => dialogState.editAccount(account)}>Edit account</button>
-      {#if account.status === "open" && !account.investment && isReconcilable(account)}
-        <button type="button" onclick={() => void openReconcile(account.id)}>Reconcile</button>
-      {/if}
     </header>
     {#if account.investment}
       {#key account.id}<InvestmentAccount {account} />{/key}

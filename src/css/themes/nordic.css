@@ -1,0 +1,108 @@
+/*
+  css/themes/nordic.css
+  Nordic theme: variables only. The soft Nordic blues and grays of
+  lostsheep's Nordic theme (colors only: no 2px borders, shadows, or
+  select arrow). The default theme. Element styles are in ../base.css,
+  layout in each component. Every theme defines the same variables.
+  Sizes and fonts are not set here: the base font size and the font are
+  settings.
+
+  Stan is red-green colorblind: OK is light blue #88c0d0 and a problem is
+  amber #ebcb8b (Nordic's own primary and warning colors), never red
+  against green. Text stays at 4.5:1 or better on every solid background
+  it sits on (themes.test.ts checks the pairs).
+
+  The navigation bar is a filled slate band, as in Classic: Nordic's own
+  is transparent. Its hover blue #5e81ac is 3.5:1 with the light text,
+  so the hover is #58637a.
+*/
+
+[data-theme="nordic"] {
+    /* ── Core palette ───────────────────────────────────────────────── */
+    --color-scheme: dark;
+    --bg:         #1e2124;
+    --fg:         #d8dee9;
+    --panel-bg:   #2e3440;
+    --line:       #4c566a;
+    --line-soft:  rgba(76, 86, 106, 0.5);
+    --hover-bg:   rgba(94, 129, 172, 0.25);
+    --active-bg:  rgba(94, 129, 172, 0.4);
+
+    /* ── Status: problem / OK ───────────────────────────────────────── */
+    --bad:  #ebcb8b;
+    --good: #88c0d0;
+
+    /* ── Focus & selection ──────────────────────────────────────────── */
+    --focus-bg:     #434c5e;
+    --focus-fg:     #eceff4;
+    --focus-sel-bg: #4c6a8f;
+    --focus-ring:   #88c0d0;
+    --focus-glow:   rgba(136, 192, 208, 0.25);
+    --sel-bg:       #88c0d0;
+    --sel-fg:       #2e3440;
+
+    /* ── Navigation ─────────────────────────────────────────────────── */
+    --menubar-bg:        #2e3440;
+    --menubar-fg:        #d8dee9;
+    --nav-bg:            #4c566a;
+    --nav-fg:            #eceff4;
+    --nav-btn-bg:        transparent;
+    --nav-btn-fg:        #eceff4;
+    --nav-btn-border:    transparent;
+    --nav-btn-hover-bg:  #58637a;
+    /* The count of scheduled entries due. */
+    --nav-badge:         #ebcb8b;
+
+    /* ── Title bands ────────────────────────────────────────────────── */
+    --title-bg: #1e2124;
+    --title-fg: #d8dee9;
+    --tabs-bg:  #2e3440;
+    --tabs-fg:  #d8dee9;
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    --btn-bg:        #2e3440;
+    --btn-fg:        #88c0d0;
+    --btn-border:    #5e81ac;
+    --btn-hover-bg:  #3b4252;
+
+    /* ── Inputs ─────────────────────────────────────────────────────── */
+    --opt-bg: #434c5e;
+    --opt-fg: #d8dee9;
+
+    /* ── Tables & registers ─────────────────────────────────────────── */
+    --filter-bg:        #2e3440;
+    --head-bg:          #434c5e;
+    --head-fg:          #eceff4;
+    --head-sorted-bg:   #4c6a8f;
+    --head-sorted-fg:   #eceff4;
+    --row-bg:           #2e3440;
+    --row-alt:          rgba(59, 66, 82, 0.5);
+    /* Future rows stripe in amber; they are also italic. */
+    --future-alt:       rgba(235, 203, 139, 0.12);
+    --row-sel-bg:       rgba(94, 129, 172, 0.35);
+    --reconciled-fg:    #81a1c1;
+    --entry-bg:         transparent;
+    --edit-bg:          rgba(136, 192, 208, 0.12);
+    --today-line:       #ebcb8b;
+    --today-bg:         rgba(94, 129, 172, 0.3);
+    --total-bg:         transparent;
+
+    /* ── Charts ─────────────────────────────────────────────────────── */
+    --chart-1:       #88c0d0;
+    --chart-2:       #ebcb8b;
+    --chart-2-light: #4a4432;
+    --chart-line:    #d8dee9;
+
+    /* ── Scrollbars ─────────────────────────────────────────────────── */
+    --scroll-track:       #2e3440;
+    --scroll-thumb:       #4c566a;
+    --scroll-thumb-hover: #5e81ac;
+
+    /* ── Menus, dropdowns & modals ──────────────────────────────────── */
+    --popup-bg:     #2e3440;
+    --popup-border: #4c566a;
+    --backdrop:     rgba(46, 52, 64, 0.5);
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --shadow-popup: 0 3px 10px rgba(0, 0, 0, 0.6);
+}
