@@ -169,7 +169,7 @@
     switch (d.kind) {
       case "txn":
         viewState.navigate("account");
-        await registerState.goToTransaction(d.account, d.txn, d.date);
+        await registerState.goToTransaction(d.account, d.txn);
         break;
       case "account":
         await openAccount(d.account);

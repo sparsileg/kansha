@@ -23,8 +23,8 @@ and `tax_line_in`; 11 new commands (below); `just bindings` run.
 Built: Capital Gains (Investing and Tax menus), Net Worth, Itemized
 Categories, Itemized Payees, Income/Expense by Category, Tax Schedule,
 Tax Summary, saved reports, Customize dialog, drill-down, CSV export,
-printing, the dashboard. Not built (Stan, 2026-09-27): tithing, cash
-flow, transaction report, account balances (RPT-120, 130, 190, 200).
+printing, the dashboard. Not built (Stan, 2026-09-27): cash
+flow, transaction report, account balances (RPT-190, 200, 120).
 Investment Performance, Investment Income, Holdings, and Asset
 Allocation (RPT-160, 170, 180, 310) came later with the Phase 6
 follow-up; see `phase-6.md`.
@@ -249,18 +249,15 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
   printer name "Print to File" may differ on a non-English GTK.
 - Security Types and Investing Goals tabs (Quicken) not built: Kansha
   has no such concepts.
-- Organization option (Quicken's Itemized Categories) not built; only
-  Income & Expense.
 - Report date comparison to a prior period (RPT-040) not built.
 - Wide reports (Net Worth by month) print as one wide table; Quicken
   splits columns across pages.
 - Last backup age warning (DSH-030) waits for backups (Phase 8).
 - Upcoming days (DSH-020) fixed at 14 until settings (SET).
-- The DAF gift of 7/15/2025 will show as a 0-gain sale (charitable
-  gift disposal still deferred).
+- The DAF gift of 7/15/2025 is a 0-gain sale, as in Quicken (Stan's
+  choice). A separate charitable-gift disposal type is an unscheduled
+  idea, not a gap.
 - Back/Forward history does not restore an earlier report's settings.
 - A window's scroll position resets each time it is shown (collapsed
   groups and hidden parts are kept).
 - Windows fill the view area; no moving or resizing.
-- The account list sidebar (AccountPanel) is not a window; "Accounts"
-  in the dock is Tools > Accounts.

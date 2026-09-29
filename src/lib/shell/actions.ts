@@ -13,7 +13,7 @@ import { HOME_ID, INVESTMENTS_ID } from "./navitems";
 
 export function runAction(id: string): void {
   if (id === HOME_ID) {
-    void goHome();
+    goHome();
   } else if (id.startsWith("account:")) {
     void openAccount(Number(id.slice("account:".length)));
   } else if (id in MENU_REPORTS) {

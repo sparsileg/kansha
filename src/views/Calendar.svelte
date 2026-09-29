@@ -7,7 +7,8 @@
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { scheduleState } from "../lib/state/schedule.svelte";
-  import type { DayBalance, OccurrenceView } from "../lib/types/bindings";
+  import { mergeItems, type CalItem } from "../lib/calendar/items";
+  import type { CalendarTxn, DayBalance } from "../lib/types/bindings";
 
   const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -19,7 +20,7 @@
   /** The day whose transactions are open in a dialog, and the item
    * clicked to open it (`schedule-nominal`). */
   let dayOpen = $state<{ day: string; pick: string | null } | null>(null);
-  let items = $state<OccurrenceView[]>([]);
+  let items = $state<CalItem[]>([]);
   let balances = $state<DayBalance[]>([]);
   let error = $state<string | null>(null);
   let seq = 0;
@@ -27,27 +28,30 @@
 
   const grid = $derived(monthGrid(month));
   const byDay = $derived.by(() => {
-    const m = new Map<string, OccurrenceView[]>();
+    const m = new Map<string, CalItem[]>();
     for (const v of items) m.set(v.date, [...(m.get(v.date) ?? []), v]);
     return m;
   });
   const balanceByDay = $derived(new Map(balances.map((b) => [b.date, b.balance])));
   const dayItems = $derived(selected ? (byDay.get(selected) ?? []) : []);
-  const keyOf = (v: OccurrenceView) => `${v.schedule}-${v.nominal}`;
+  const keyOf = (v: CalItem) => v.key;
 
   async function load() {
     const mine = ++seq;
     const [from, to] = [grid[0], grid[41]];
     const filter = account === "" ? null : [Number(account)];
     try {
-      const [occ, proj] = await Promise.all([
+      // "Show entered" adds what is done: entered and skipped occurrences,
+      // and register transactions not from a schedule (CAL-020).
+      const [occ, txns, proj] = await Promise.all([
         call(commands.calendarOccurrences(from, to, filter, showDone)),
+        showDone ? call(commands.calendarTransactions(from, to, filter)) : Promise.resolve([] as CalendarTxn[]),
         projection && account !== ""
           ? call(commands.calendarProjection(Number(account), from, to))
           : Promise.resolve([] as DayBalance[]),
       ]);
       if (mine !== seq) return;
-      items = occ;
+      items = mergeItems(occ, txns);
       balances = proj;
       error = null;
     } catch (e) {
@@ -62,7 +66,7 @@
   });
 
   /** A transaction was clicked: its day's dialog opens with it chosen. */
-  function open(v: OccurrenceView, e: Event) {
+  function open(v: CalItem, e: Event) {
     e.stopPropagation();
     selected = v.date;
     dayOpen = { day: v.date, pick: keyOf(v) };
@@ -81,7 +85,7 @@
   });
 
   const inMonth = (d: string) => d.slice(0, 7) === month.slice(0, 7);
-  const payeeOf = (v: OccurrenceView) =>
+  const payeeOf = (v: CalItem) =>
     v.payee === null ? "(no payee)" : (listsState.payee(v.payee)?.name ?? "");
 </script>
 
@@ -100,7 +104,7 @@
         {/each}
       </select>
     </label>
-    <label><input type="checkbox" bind:checked={showDone} /> Show entered and skipped</label>
+    <label><input type="checkbox" bind:checked={showDone} /> Show entered transactions</label>
     <label title="Choose an account first">
       <input type="checkbox" bind:checked={projection} disabled={account === ""} /> Projected balance
     </label>
@@ -126,11 +130,12 @@
         >
           <span class="num">{Number(day.slice(8, 10))}</span>
           <!-- The selected day shows every item; others show three and "+n more". -->
-          {#each day === selected ? list : list.slice(0, 3) as v (`${v.schedule}-${v.nominal}`)}
+          {#each day === selected ? list : list.slice(0, 3) as v (v.key)}
             <span
               class="chip"
               class:overdue={v.overdue}
               class:done={v.status !== "pending"}
+              class:skipped={v.status === "skipped"}
               class:go={v.actionable && v.status === "pending"}
               role="button"
               tabindex="0"
@@ -171,7 +176,7 @@
             <AccountBalance amount={v.amount} />
           </button>
         {:else}
-          <p>Nothing scheduled.</p>
+          <p>Nothing on this day.</p>
         {/each}
         <button type="button" onclick={() => dialogState.newSchedule(selected)}>
           New schedule on this date
@@ -274,8 +279,11 @@
     font-size: 0.8em;
     text-transform: uppercase;
   }
+  /* Done items fade; only a skipped one is struck through. */
   .chip.done {
     opacity: 0.6;
+  }
+  .chip.skipped {
     text-decoration: line-through;
   }
   .more {

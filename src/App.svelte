@@ -21,7 +21,7 @@
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import { runAction } from "./lib/shell/actions";
-  import { goHome, guardWindowClose } from "./lib/shell/nav";
+  import { guardWindowClose, openStartup } from "./lib/shell/nav";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
   import { MENUS } from "./lib/shell/menus";
   import { dialogState } from "./lib/state/dialogs.svelte";
@@ -48,8 +48,8 @@
 
   onMount(() => {
     void listsState.loadAll().then(() => {
-      // Start on the home screen, unless the user has already gone somewhere.
-      if (viewState.untouched) void goHome();
+      // Open the startup setting, unless the user has already gone somewhere.
+      if (viewState.untouched) void openStartup();
       return scheduleState.startup();
     });
   });
@@ -144,6 +144,39 @@
     height: 100%;
     overflow: hidden;
   }
+  /* Classic scrollbars that take their own width. WebKitGTK otherwise
+     follows GTK's overlay scrollbars, which take no width and draw over
+     the rows' last column; the register measures this width to keep its
+     header, entry row, and footer in line with the rows. */
+  :global(*::-webkit-scrollbar) {
+    width: 12px;
+    height: 12px;
+  }
+  :global(*::-webkit-scrollbar-track) {
+    background: var(--scroll-track, #ececec);
+  }
+  :global(*::-webkit-scrollbar-thumb) {
+    background: var(--scroll-thumb, #a8a8a8);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background-clip: content-box;
+  }
+  :global(*::-webkit-scrollbar-thumb:hover) {
+    background: var(--scroll-thumb-hover, #7a7a7a);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  :global(*::-webkit-scrollbar-corner) {
+    background: var(--scroll-track, #ececec);
+  }
+  /* The least space between table columns, everywhere (--col-gap, set
+     on .app; 6px if a table is drawn outside it). Cells split it, half
+     each side. `:where` adds no specificity, so a table that sets its
+     own, wider padding keeps it; grid-built tables (the register) use
+     `column-gap: var(--col-gap)`. */
+  :global(:where(th, td)) {
+    padding-inline: calc(var(--col-gap, 6px) / 2);
+  }
   /* The field being typed in must be unmistakable (keyboard entry): its
      background and text take the theme's focus colors. Buttons reached by
      keyboard look the same. */
@@ -185,6 +218,7 @@
     display: flex;
     flex-direction: column;
     --bg: #fff;
+    --col-gap: 6px;
     /* Problem and OK colors for a red-green colorblind eye: vermilion and
        blue differ in lightness and on the blue-yellow axis, and each sits
        at 7:1 or better on its background. Never the only cue: text or a
@@ -210,6 +244,14 @@
     --chart-2: #c25400;
     --chart-2-light: #f7dcc4;
     --chart-line: #1a1a1a;
+    /* Registers: future rows stripe in a light orange (not the yellow of
+       a focused field or the blue of a selection); reconciled text is
+       gray at 5:1 or better, on either stripe. */
+    --future-alt: rgba(194, 84, 0, 0.1);
+    --reconciled-fg: #666;
+    --scroll-track: #ececec;
+    --scroll-thumb: #a8a8a8;
+    --scroll-thumb-hover: #7a7a7a;
   }
   .app[data-theme="dark"] {
     --bg: #1e1e1e;
@@ -231,6 +273,11 @@
     --chart-2: #ff9f5a;
     --chart-2-light: #4d2c12;
     --chart-line: #f2f2f2;
+    --future-alt: rgba(255, 159, 90, 0.12);
+    --reconciled-fg: #9a9a9a;
+    --scroll-track: #2a2a2a;
+    --scroll-thumb: #5c5c5c;
+    --scroll-thumb-hover: #808080;
     background: #1e1e1e;
     color: #eee;
   }

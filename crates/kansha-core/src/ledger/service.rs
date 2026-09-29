@@ -78,10 +78,13 @@ pub fn void(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<Txn> {
 }
 
 /// Delete a transaction, both sides of a transfer included (TXN-030). A
-/// reconciled transaction needs `confirmed` (TXN-050).
+/// reconciled transaction needs `confirmed` (TXN-050). One entered from a
+/// schedule gives its occurrence back first (back in Due, or skipped;
+/// `schedule::release_txn`).
 pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     let before = repo::get(tx.conn(), id)?;
     check_changeable(tx.conn(), &before, confirmed)?;
+    crate::schedule::release_txn(tx, id)?;
     repo::delete(tx, id)
 }
 

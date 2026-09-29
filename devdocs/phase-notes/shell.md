@@ -42,11 +42,23 @@ change. Spec follow-ups are listed in that document.
   does). A transfer matches once per account. The register's own text
   filter box was removed; `RegisterQuery.text` stays in Rust, unused by
   the UI. Spec 0.3.7: UI-070, REG-040.
-- **Settings dialog** (Edit > Settings): theme, font size, home screen,
-  account list side.
-- **Home screen setting:** `dashboard` (still the Phase 0 placeholder),
-  `calendar`, `scheduled` (Reminders), or `account:<id>`. Opened at
-  startup (unless the user already navigated) and by the Home button.
+- **Settings dialog** (Edit > Settings): theme, font size, "On startup
+  open to:", account list side.
+- **Startup setting** (2026-09-28, spec 0.3.23; was "Home screen"):
+  `shell/nav.ts` `startupChoices()` = Dashboard, Investments,
+  Reminders, Calendar, Accounts, then every account. `STARTUP_VIEWS`
+  and `STARTUP_PANELS` are `Record`s over `ViewId` and `PanelKind`, so
+  a new view or panel does not compile until it is listed (label or
+  `null`). `openStartup()` runs at startup (unless the user already
+  navigated); anything it cannot open falls back to the dashboard.
+  Still saved under the pref key `home`. The **Home button always opens
+  the dashboard** (`goHome()`).
+- **Register rows** (spec 0.3.23, REG-070): banking and investment
+  registers stripe by row position (`alt`), not `nth-child`, so the
+  today line and an open editor do not shift stripes. Future rows are
+  italic and their alternate rows use `--future-alt` (light orange);
+  not dimmed. Reconciled rows use `--reconciled-fg` (gray, 5:1 or
+  better). Both variables are in `App.svelte`, per theme.
 - **Account status line** (register footer): transaction count and pager
   on the left; Available credit, Cleared, Current, Ending on the right.
   The Current/Ending line in the account header is gone.
@@ -57,23 +69,29 @@ change. Spec follow-ups are listed in that document.
 - Removed: `AccountSelector`, the `accountNav` setting, the old top bar
   (Toggle theme, New account, Integrity check, mode buttons).
 
+- **Settings dialog layout** (2026-09-28): labels right-aligned left of
+  their controls, one line per setting (`display: contents` labels in a
+  two-column grid).
+- **Column gap** (2026-09-28): `--col-gap: 6px` on `.app` is the least
+  space between table columns. HTML cells get half each side from a
+  zero-specificity `:where(th, td)` rule in `App.svelte` (tables with
+  wider padding keep it); the register and its editor use
+  `column-gap: var(--col-gap)`. `src/lib/columnGap.test.ts` fails on any
+  grid or cell rule below it. 6px is a first try (Stan).
+
 ## Decisions
 
-- Startup opens the home screen, not the last view.
+- Startup opens the startup setting, not the last view.
 - Clicking the account already open (in the list) returns to it without
   resetting its filters or sort.
 - Preferences live in localStorage (`state/prefs.ts`) until the settings
-  module stores them with the book (SET-070). The home screen will then
-  be per book.
+  module stores them with the book (SET-070). The startup setting will
+  then be per book.
 - Help > About is greyed (my choice; Help had no items specified).
 - Cleared stays in the status line (REG-060, needed for Phase 5).
 
 ## Known gaps
 
-- Back/Forward arrows, Reconcile, Investments, Reports,
-  Backup, Restore, Import, Export, File > New/Open, Edit > Renaming are
-  placeholders.
+- Back/Forward arrows, Backup, Restore, Import, Export, File >
+  New/Open, Edit > Renaming are placeholders.
 - Status line shows the filtered count only, not "N of M".
-- The Dashboard is still the Phase 0 placeholder (Phase 7).
-- Register still paginates (continuous scroll is deferred).
-- Not hands-on tested by Stan yet.

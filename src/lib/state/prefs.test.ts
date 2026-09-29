@@ -20,7 +20,7 @@ describe("prefs", () => {
 
   it("settings and theme changes are saved", () => {
     settingsState.setAccountPanelSide("right");
-    settingsState.setHome("calendar");
+    settingsState.setStartup("calendar");
     themeState.setFontSize(20);
     themeState.setTheme("dark");
     expect(loadPref("accountPanelSide", "left")).toBe("right");
@@ -36,8 +36,8 @@ describe("prefs", () => {
     };
     try {
       expect(() => savePref("x", 1)).not.toThrow();
-      expect(() => settingsState.setHome("calendar")).not.toThrow();
-      expect(settingsState.home).toBe("calendar");
+      expect(() => settingsState.setStartup("calendar")).not.toThrow();
+      expect(settingsState.startup).toBe("calendar");
     } finally {
       Storage.prototype.setItem = real;
     }

@@ -3,9 +3,10 @@
 Spec: 0.3.11. Engine, IPC, and UI in one pass. `just check` green.
 
 **Exit criteria (spec §24):** lot scenario suite and basis-conservation
-properties pass (Kubuntu). **Open:** Stan reviews the lot scenarios
-(`tests/scenarios/invest/INV-001…013.toml`); `just test` on Windows not
-yet run.
+properties pass (Kubuntu). **Closed 2026-09-28:** Stan reviewed the lot
+scenarios (`tests/scenarios/invest/INV-001…013.toml`), tested the UI,
+and ran `just test` on Windows. More checks follow after real-data
+import.
 
 **⚠ API change:** 25 new commands (below); `Posting` and
 `PostingInput` gain `security`; `just bindings` run.
@@ -200,8 +201,6 @@ non-zero). **⚠ API change:** `AdjustmentKind::Average`; `ReportKind`
 
 ## Known gaps
 
-- Stan's review of the lot scenarios (exit criterion) and hands-on UI
-  test not done; `just test` on Windows not run.
 - No replay: fixing an old trade after later sales means deleting and
   re-entering the later ones.
 - Return-of-capital excess gain has no holding period.

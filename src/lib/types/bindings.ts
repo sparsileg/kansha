@@ -184,6 +184,11 @@ export const commands = {
 	scheduleReviewDismiss: (items: ([ScheduleId, string])[]) => typedError<number, IpcError>(__TAURI_INVOKE("schedule_review_dismiss", { items })),
 	/**  Calendar occurrences dated `from..=to` (CAL-010, CAL-020, CAL-040). */
 	calendarOccurrences: (from: string, to: string, accounts: AccountId[] | null, includeDone: boolean) => typedError<OccurrenceView[], IpcError>(__TAURI_INVOKE("calendar_occurrences", { from, to, accounts, includeDone })),
+	/**
+	 *  Register transactions dated `from..=to` for the calendar (CAL-020),
+	 *  investment accounts and voids left out.
+	 */
+	calendarTransactions: (from: string, to: string, accounts: AccountId[] | null) => typedError<CalendarTxn[], IpcError>(__TAURI_INVOKE("calendar_transactions", { from, to, accounts })),
 	/**  Projected end-of-day balance of an account (CAL-050). */
 	calendarProjection: (account: AccountId, from: string, to: string) => typedError<DayBalance[], IpcError>(__TAURI_INVOKE("calendar_projection", { account, from, to })),
 	/**
@@ -481,6 +486,19 @@ export type AutoEnterReport = {
 	 *  the due list.
 	 */
 	failed: AutoEnterFailure[],
+};
+
+/**
+ *  A register transaction on the calendar (CAL-020): one per transaction
+ *  and account it posts to, as each account's register shows it.
+ */
+export type CalendarTxn = {
+	txn: TxnId,
+	date: string,
+	account: AccountId,
+	payee: PayeeId | null,
+	/**  The account's amount (sign as in its register). */
+	amount: string,
 };
 
 /**  Where an investment account's cash lives (INV-300). */

@@ -1,8 +1,10 @@
-// The open account's register: which account, the filter/sort/paging
-// query, the current page, and the footer summary (REG-010 … REG-060).
-// Opens date-ascending, on the last page, so the newest entries are at the
-// bottom next to the entry row (Quicken style). A response that arrives after a newer request was
-// issued is dropped, so fast typing in a filter cannot show stale rows.
+// The open account's register: which account, the filter and sort, every
+// matching row, and the footer summary (REG-010 … REG-060). All rows are
+// loaded (no paging); the grid draws only the ones in view, so the
+// register scrolls continuously. Opens date-ascending, scrolled to the
+// bottom, so the newest entries sit next to the entry row (Quicken
+// style). A response that arrives after a newer request was issued is
+// dropped, so fast typing in a filter cannot show stale rows.
 
 import { call, commands } from "../api";
 import type {
@@ -17,10 +19,9 @@ import type {
   RegisterSummary,
 } from "../types/bindings";
 import { listsState } from "./lists.svelte";
-import { settingsState } from "./settings.svelte";
 
 /** The user-editable filters (REG-040); everything in the query but the
- * account, sort, and paging. */
+ * account and sort. */
 export type RegisterFilters = Pick<
   RegisterQuery,
   "date_from" | "date_to" | "payee" | "category" | "tag" | "cleared" | "text"
@@ -43,8 +44,6 @@ class RegisterState {
   filters = $state<RegisterFilters>(emptyFilters());
   sort = $state<RegisterSort>("date");
   descending = $state(false);
-  /** Zero-based page index. */
-  pageIndex = $state(0);
 
   page = $state<RegisterPage | null>(null);
   summary = $state<RegisterSummary | null>(null);
@@ -61,9 +60,6 @@ class RegisterState {
 
   rows = $derived(this.page?.rows ?? []);
   total = $derived(this.page?.total ?? 0);
-  pageCount = $derived(
-    Math.max(1, Math.ceil(this.total / settingsState.pageSize)),
-  );
   filtered = $derived(
     Object.values(this.filters).some((v) => v !== null && v !== ""),
   );
@@ -75,8 +71,8 @@ class RegisterState {
       ...$state.snapshot(this.filters),
       sort: this.sort,
       descending: this.descending,
-      limit: settingsState.pageSize,
-      offset: this.pageIndex * settingsState.pageSize,
+      limit: null,
+      offset: 0,
     };
   }
 
@@ -87,35 +83,28 @@ class RegisterState {
   /** Set on open; the grid scrolls to the bottom once, then clears it. */
   scrollToEnd = $state(false);
 
-  /** Switch account: filters reset; opens date-ascending on the last page. */
+  /** Switch account: filters reset; opens date-ascending at the bottom. */
   async open(account: AccountId): Promise<void> {
     this.accountId = account;
     this.filters = emptyFilters();
     this.sort = "date";
     this.descending = false;
-    this.pageIndex = 0;
     this.page = null;
     this.summary = null;
     this.selected = null;
     this.editing = null;
     this.reveal = null;
     await this.reload();
-    if (this.accountId === account && this.pageCount > 1) {
-      this.pageIndex = this.pageCount - 1;
-      await this.reload();
-    }
     this.scrollToEnd = true;
   }
 
-  /** TXN-030: show the other side of a transfer, next to its entry. */
-  async goToTransaction(
-    account: AccountId,
-    txn: TxnId,
-    date: string,
-  ): Promise<void> {
+  /** TXN-030 and drill-downs: open the account with `txn` selected and
+   * scrolled into view among its neighbors (no date filter). */
+  async goToTransaction(account: AccountId, txn: TxnId): Promise<void> {
     await this.open(account);
+    this.scrollToEnd = false;
     this.selected = txn;
-    await this.setFilters({ date_from: date, date_to: date });
+    this.reveal = txn;
   }
 
   close(): void {
@@ -157,13 +146,11 @@ class RegisterState {
 
   async setFilters(patch: Partial<RegisterFilters>): Promise<void> {
     this.filters = { ...this.filters, ...patch };
-    this.pageIndex = 0;
     await this.reload();
   }
 
   async clearFilters(): Promise<void> {
     this.filters = emptyFilters();
-    this.pageIndex = 0;
     await this.reload();
   }
 
@@ -176,14 +163,6 @@ class RegisterState {
       this.sort = column;
       this.descending = false;
     }
-    this.pageIndex = 0;
-    await this.reload();
-  }
-
-  async goToPage(index: number): Promise<void> {
-    const clamped = Math.min(Math.max(0, index), this.pageCount - 1);
-    if (clamped === this.pageIndex && this.page) return;
-    this.pageIndex = clamped;
     await this.reload();
   }
 }

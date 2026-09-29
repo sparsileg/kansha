@@ -22,10 +22,10 @@ Spec: 0.3.4. Split into 3a (core queries, sample data, IPC) and 3b (Svelte UI), 
 **Known gaps and open issues:**
 - Shift+F10 and the Menu key do not open the row context menu in the running app. A native `contextmenu` fallback did not fix it. Cause unknown.
 - Right-click menu placement is still wrong near the bottom of the window despite viewport clamping in `ContextMenu.svelte`.
-- No UI toggle for `showClosedAccounts`, so closed accounts cannot be seen or reopened. Phase 4.
-- Paging, not continuous scroll. After Phase 4.
-- Account panel is a sidebar/dropdown mode switch. Redesign in Phase 4.
-- Settings not persisted (SET-070); other gaps under "Known gaps from 3b".
+- Settings are kept in localStorage, not with the book (SET-070); other gaps under "Known gaps from 3b".
+- Closed 2026-09-28: show-closed toggle and account panel redesign (done in the shell), paging (continuous scroll built, below), category and tag update/merge (covered by the managers), keyboard shortcut list and modal focus trap (Stan: not needed).
+- **Split button, split Tag cell, scrollbars (2026-09-28, spec 0.3.25):** Split button (`SPLIT_ICON` in `shell/icons.ts`) before Enter in `EntryEditor`; `register_query` shows a split's own tag only (`s.others <= 1 OR o.id = s.posting_id`). The scrollbar was covering the Balance column again: WebKitGTK now follows GTK overlay scrollbars (no layout width, so the measured width was 0). `App.svelte` styles `::-webkit-scrollbar` (12px, per-theme colors), which turns overlay off; the register also re-measures on resize.
+- **Split lines (built 2026-09-28):** each split line has a Tag picker (its first tag; further tags from an import are kept) and a read-only Clr column. A transfer line shows the other account's cleared mark (c or R); it is set in that account or by reconciling it, never from this side. Category lines have none. Pure helpers `splitTagValue`, `setSplitTag`, `splitCleared` in `register/draft.ts`.
 
 **Hands-on tests:** all 8 confirmed by Stan except the open issues above.
 
@@ -73,8 +73,7 @@ No schema change. **⚠ API change:** 28 new IPC commands; `src/lib/types/bindin
 
 ### Known gaps from 3a
 
-- The window function scans the whole account per query. Fine at 10k rows; revisit at 100k+.
-- No update, delete, or merge commands for categories and tags. Payee update exists. Add if the UI needs them.
+- The window function scans the whole account per query. Fine at 10k rows; revisit at 100k+ (Stan, 2026-09-28: leave until real data is slow). Continuous scroll re-runs the full query after each save; accepted.
 - Payee search is prefix only.
 
 ## 3b — what was built
@@ -209,14 +208,10 @@ Bugs found so far in hands-on use, all fixed and covered by tests (see "Bug foun
 ### Known gaps from 3b
 
 - **Only partly exercised in the real app.** See "Hands-on testing". Automated checks are Vitest (jsdom, IPC mocked), `svelte-check`, and `vite build`; jsdom has no layout, so layout and focus fixes were confirmed only by hand.
-- Paging, not virtualization. Sorting or filtering resets to page 0.
 - Account reordering (ACCT-240) is by the Sort order number in the account modal; no drag and drop.
-- No UI toggle for `showClosedAccounts`.
-- Settings (page size, sidebar/dropdown, theme) are not persisted (SET-070).
-- Balances on credit and liability accounts show as stored (negative = owed).
-- Split lines keep their tags and cleared status on edit but the split panel does not edit them. No per-line tag picker.
+- Settings (sidebar, theme, startup) are kept in localStorage, not with the book (SET-070).
+- Balances on credit and liability accounts show as stored (negative = owed). Stan, 2026-09-28: correct as is; not a gap.
 - Payee suggestions and the payee filter list load all payees; fine at hundreds, revisit if it grows.
-- No keyboard shortcut list or focus trap in modals beyond Esc and initial focus.
 - Accessibility pass and the icon bar (UI-020) are not done.
 
 ### 17 Docs and close-out
@@ -235,7 +230,7 @@ This file. The spec is unchanged: no requirement or convention changed. The spec
 - **Today line** (REG-070): a horizontal line across the full register row between the last entry dated today or earlier and the first future-dated one. Future rows are dimmed. Stan had no preference; full-width chosen.
 - **Category, tag, and payee screens:** the spec's phase table (§24) gives them no phase. Stan wants all three in 3b. Payee editing (memorized defaults, rename, hide, merge), category management (create, rename, re-parent, merge, hide), and tag management (create, rename, merge, hide) are required 3b items 15 and 16.
 
-### Deferred to Phase 4: account panel redesign
+### Account panel redesign (done in the shell, `shell.md`)
 
 Replaces the `sidebar`/`dropdown` modes (`settingsState.accountNav`) and the top-bar mode button.
 
@@ -247,9 +242,11 @@ Replaces the `sidebar`/`dropdown` modes (`settingsState.accountNav`) and the top
 - Panel side (left or right) is a setting, default left; a settings screen can come later.
 - Add "Show closed accounts" checkbox in the same panel (see test 4 issue).
 
-### Deferred to after Phase 4: continuous-scroll register
+### Continuous-scroll register (built 2026-09-28)
 
-Replaces pagination (`pageIndex`, `goToPage`, footer pager). Decided with Stan; do after the Phase 4 account-panel work.
+Built differently from the plan below: `register_query` is called with `limit: null`, so every matching row is loaded at once (10,232 rows: 110 ms release, 430 ms debug, as measured in 3a). `RegisterGrid.svelte` draws only the rows in view plus 30 either side, between two spacers sized from the measured row height; the row being edited is always drawn. No new command, no API change. "Go to other side of transfer", search results, report drill-downs, and the calendar's Edit open the account with the row selected and scrolled into view (`goToTransaction(account, txn)`; the one-day date filter is gone). The today line takes no height. PageUp/PageDown move a screenful. Not measured in the running app at 10,000 rows.
+
+The original plan, kept for reference:
 
 - **Why:** paging loses running-balance context at page edges and slows scanning. Not a performance need: one rendered page already meets NFR-040 at 10,000 transactions.
 - **Design:** one scroll area sized to `total` rows at a fixed row height. A sliding window of loaded rows; fetch the next or previous chunk near an edge, drop chunks far from the viewport.

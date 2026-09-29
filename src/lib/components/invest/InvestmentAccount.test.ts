@@ -53,6 +53,25 @@ beforeEach(() => {
 });
 
 describe("Investment account register (INV-030)", () => {
+  it("stripes rows; future rows are italic in their own tint; reconciled rows are gray", async () => {
+    const saved = register.rows;
+    const at = (txn_id: number, o: object) => ({ ...saved[0], txn_id, ...o });
+    register.rows = [
+      at(20, { cleared: "reconciled" }),
+      at(21, {}),
+      at(22, { date: "2026-07-01", future: true }),
+      at(23, { date: "2026-07-02", future: true }),
+    ];
+    try {
+      render(InvestmentAccount, { account });
+      await waitFor(() => expect(screen.getAllByText("Buy")).toHaveLength(4));
+      const cls = screen.getAllByText("Buy").map((td) => [...td.closest("tr")!.classList].filter((x) => !x.startsWith("svelte-")).sort().join(" "));
+      expect(cls).toEqual(["reconciled", "alt", "future", "alt future"]);
+    } finally {
+      register.rows = saved;
+    }
+  });
+
   it("lists the register with its cash balance and has no tabs", async () => {
     render(InvestmentAccount, { account });
     await waitFor(() => expect(screen.getByText("-2,005.00")).toBeTruthy());

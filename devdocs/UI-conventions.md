@@ -138,8 +138,9 @@ Agreed with Stan, 2026-09-24.
 - **Register filter bar:** compact. Each box is as wide as its content,
   labels sit beside the boxes, and the row does not stretch with the
   window or line up with the register columns.
-- **Register scrolling:** pagination goes; the register lazy-scrolls
-  through all transactions (not yet built).
+- **Register scrolling:** no pagination; the register scrolls through
+  all transactions (built 2026-09-28: all rows loaded, only those in
+  view drawn).
 - **Reconcile view:** statement, totals, and buttons stay put while
   each item list scrolls on its own. The checkbox sits by the amount,
   and a click anywhere on a row toggles it. Credit card amounts appear

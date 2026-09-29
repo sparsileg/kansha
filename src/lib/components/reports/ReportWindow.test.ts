@@ -128,7 +128,7 @@ describe("Report window", () => {
     show();
     const figs = await screen.findAllByRole("button", { name: "11,237.14" });
     await fireEvent.click(figs[0]);
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith(3, 42, "2025-12-15"));
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith(3, 42));
     expect(viewState.current).toBe("account");
   });
 

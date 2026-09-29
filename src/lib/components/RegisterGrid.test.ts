@@ -85,6 +85,29 @@ describe("RegisterGrid", () => {
     expect(document.getElementById("row-3")!.classList.contains("future")).toBe(true);
   });
 
+  it("stripes by position; future rows are italic in their own tint; reconciled rows are gray", async () => {
+    c.registerQuery.mockImplementation(() =>
+      ok({
+        rows: [
+          row(4, "2026-10-02", "-5.00", { future: true }),
+          row(3, "2026-10-01", "20.00", { future: true }),
+          row(2, "2026-09-20", "-10.00", { cleared: "cleared" }),
+          row(1, "2026-09-01", "-2.50", { cleared: "reconciled", balance: "-2.50" }),
+        ],
+        total: 4,
+        today: "2026-09-24",
+      }),
+    );
+    await registerState.open(1);
+    render(RegisterGrid, { account: 1 });
+    const cls = (id: number) => [...document.getElementById(`row-${id}`)!.classList].filter((x) => x !== "row" && !x.startsWith("svelte-")).sort();
+    // The today line sits between rows 3 and 2 and does not shift the stripes.
+    expect(cls(4)).toEqual(["future"]);
+    expect(cls(3)).toEqual(["alt", "future"]);
+    expect(cls(2)).toEqual([]);
+    expect(cls(1)).toEqual(["alt", "reconciled"]);
+  });
+
   it("clicking a header sorts; the today line goes away off date sort", async () => {
     render(RegisterGrid, { account: 1 });
     await fireEvent.click(screen.getByRole("button", { name: /Payee/ }));
@@ -150,6 +173,79 @@ describe("RegisterGrid", () => {
     await waitFor(() => expect(registerState.editing).toBeNull());
     expect(c.entryUpdate).not.toHaveBeenCalled();
     expect(registerState.selected).toBe(3);
+  });
+
+  describe("continuous scroll", () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, k) => row(n - k, `2026-01-01`, "-1.00"));
+    const drawn = () => [...document.querySelectorAll(".row")].map((e) => Number(e.id.slice(4)));
+    const spacers = () => [...document.querySelectorAll<HTMLElement>(".spacer-row")].map((e) => e.style.height);
+    const scrollTo = async (grid: HTMLElement, top: number) => {
+      Object.defineProperty(grid, "scrollTop", { value: top, writable: true, configurable: true });
+      await fireEvent.scroll(grid);
+    };
+
+    beforeEach(async () => {
+      c.registerQuery.mockImplementation(() => ok({ rows: many(1000), total: 1000, today: "2026-09-24" }));
+      await registerState.open(1);
+      registerState.scrollToEnd = false;
+    });
+
+    it("loads every row in one query, with no paging", () => {
+      expect(c.registerQuery).toHaveBeenLastCalledWith(expect.objectContaining({ limit: null, offset: 0 }));
+      expect(registerState.rows).toHaveLength(1000);
+      render(RegisterGrid, { account: 1 });
+      expect(screen.queryByRole("button", { name: /Next/ })).toBeNull();
+      expect(screen.getByText("1000 transactions")).toBeTruthy();
+    });
+
+    it("draws only the rows in view, with spacers for the rest", async () => {
+      render(RegisterGrid, { account: 1 });
+      const grid = screen.getByRole("grid");
+      // 24px rows, an 800px view, 30 rows either side.
+      let ids = drawn();
+      expect(ids.length).toBeLessThan(100);
+      expect(ids[0]).toBe(1000);
+      expect(spacers()[0]).toBe("0px");
+      await scrollTo(grid, 24 * 500);
+      ids = drawn();
+      expect(ids[0]).toBe(1000 - 470); // row index 470 = 500 - 30
+      expect(spacers()[0]).toBe(`${470 * 24}px`);
+      expect(ids.length).toBeLessThan(100);
+      // The alternate stripe follows the row's place in the whole list.
+      expect(document.getElementById("row-530")!.classList.contains("alt")).toBe(false);
+      expect(document.getElementById("row-529")!.classList.contains("alt")).toBe(true);
+    });
+
+    it("keeps the row being edited drawn when it scrolls out of view", async () => {
+      render(RegisterGrid, { account: 1 });
+      const grid = screen.getByRole("grid");
+      await fireEvent.keyDown(grid, { key: "ArrowDown" });
+      await fireEvent.keyDown(grid, { key: "Enter" });
+      expect(registerState.editing).toBe(1000);
+      await screen.findAllByLabelText("Payment");
+      await scrollTo(grid, 24 * 900);
+      expect(screen.getAllByLabelText("Payment").length).toBe(2); // the edit and the new-entry row
+    });
+
+    it("reveals a row that is not drawn yet, from its index", async () => {
+      render(RegisterGrid, { account: 1 });
+      const grid = screen.getByRole("grid");
+      Object.defineProperty(grid, "clientHeight", { value: 240, configurable: true });
+      registerState.selected = 400; // index 600
+      registerState.reveal = 400;
+      await waitFor(() => expect(grid.scrollTop).toBe(601 * 24 - 240));
+      await waitFor(() => expect(drawn()).toContain(400));
+    });
+
+    it("PageDown moves by a screenful", async () => {
+      render(RegisterGrid, { account: 1 });
+      const grid = screen.getByRole("grid");
+      await fireEvent.keyDown(grid, { key: "ArrowDown" });
+      await fireEvent.keyDown(grid, { key: "PageDown" });
+      // No measured view in the test DOM: 10 rows a page, less one.
+      expect(registerState.selected).toBe(1000 - 9);
+    });
   });
 
   it("keeps the saved row pinned in view until the user scrolls", async () => {

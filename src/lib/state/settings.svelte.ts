@@ -8,17 +8,15 @@ import { loadPref, savePref } from "./prefs";
 export type PanelSide = "left" | "right";
 
 class SettingsState {
-  /** Register page size (NFR-040). */
-  pageSize = $state(100);
   showClosedAccounts = $state(false);
   /** The account list panel: open beside the register, or closed. */
   accountPanelOpen = $state(loadPref<boolean>("accountPanelOpen", true));
   accountPanelSide = $state<PanelSide>(
     loadPref<PanelSide>("accountPanelSide", "left", (v) => v === "left" || v === "right"),
   );
-  /** The home screen: "dashboard", "calendar", "scheduled", or
-   * "account:<id>". Opened at startup and by the Home button. */
-  home = $state(loadPref<string>("home", "dashboard"));
+  /** Where the app opens at startup: a view, a panel, or "account:<id>"
+   * (shell/nav.ts `startupChoices`). Saved as "home", its old name. */
+  startup = $state(loadPref<string>("home", "dashboard"));
 
   /** Navigation bar buttons, left to right (ids from shell/navitems). */
   navItems = $state<string[]>(parseNav(loadPref<string>("navItems", "")) ?? [...DEFAULT_NAV]);
@@ -35,9 +33,9 @@ class SettingsState {
     this.accountPanelSide = side;
     savePref("accountPanelSide", side);
   }
-  setHome(home: string) {
-    this.home = home;
-    savePref("home", home);
+  setStartup(startup: string) {
+    this.startup = startup;
+    savePref("home", startup);
   }
 }
 

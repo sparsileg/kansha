@@ -519,3 +519,48 @@ fn register_with_10000_rows_opens_under_a_second() {
         );
     }
 }
+
+#[test]
+fn a_split_row_shows_only_its_own_tag_but_the_tag_filter_finds_its_lines() {
+    let mut f = fixture();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let household = f.book.find_category("Household").unwrap().unwrap();
+    let gift = f.book.tag("Gift").unwrap();
+    let home = f.book.tag("Home").unwrap();
+    let mut a = kansha_core::ledger::EntryLine::new(Target::Category(groceries), m("-30.00"));
+    a.tags = vec![gift];
+    let mut b = kansha_core::ledger::EntryLine::new(Target::Category(household), m("-20.00"));
+    b.tags = vec![home];
+    f.book
+        .entry(f.chk, date("2026-03-01"))
+        .payee("Target")
+        .amount(m("-50.00"))
+        .line(a.clone())
+        .line(b.clone())
+        .save()
+        .unwrap();
+    // A split with its own tag too: only that one shows.
+    let trip = f.book.clone_tag("Trip");
+    f.book
+        .entry(f.chk, date("2026-03-02"))
+        .payee("Target")
+        .amount(m("-50.00"))
+        .tag(trip)
+        .line(a)
+        .line(b)
+        .save()
+        .unwrap();
+
+    let p = query(&f, |q| {
+        q.date_from = Some(date("2026-03-01"));
+        q.date_to = Some(date("2026-03-02"));
+    });
+    let tags: Vec<&str> = p.rows.iter().map(|r| r.tags.as_str()).collect();
+    assert_eq!(tags, ["", "Trip"]);
+    // A one-line entry still shows its tag (fixture: 01-05 Trip).
+    let jan = query(&f, |q| q.date_to = Some(date("2026-01-05")));
+    assert_eq!(jan.rows.last().unwrap().tags, "Trip");
+    // Filtering by a line's tag still finds both splits.
+    let p = query(&f, |q| q.tag = Some(home));
+    assert_eq!(dates(&p), vec!["2026-03-01", "2026-03-02"]);
+}

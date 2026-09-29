@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 let occurrences: unknown[] = [];
+let posted: unknown[] = [];
 const occCalls = vi.hoisted(() => vi.fn());
+const txnCalls = vi.hoisted(() => vi.fn());
 const skip = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/api", async (orig) => {
@@ -12,6 +14,7 @@ vi.mock("../lib/api", async (orig) => {
     ...real,
     commands: {
       calendarOccurrences: (...a: unknown[]) => (occCalls(...a), ok(occurrences)),
+      calendarTransactions: (...a: unknown[]) => (txnCalls(...a), ok(posted)),
       scheduleSkip: (...a: unknown[]) => (skip(...a), ok(null)),
       calendarProjection: () => ok([]),
       scheduleList: () => ok([]),
@@ -55,6 +58,7 @@ beforeEach(() => {
     default_memo: "", default_amount: null, hidden: false, created_at: "",
   }));
   occurrences = [1, 2, 3, 4, 5].map((n) => item(n));
+  posted = [];
 });
 
 describe("Calendar day with more than three items", () => {
@@ -78,7 +82,7 @@ describe("Calendar day with more than three items", () => {
     const cell = await screen.findByRole("gridcell", { name: displayDate("2026-09-24") });
     await waitFor(() => expect(within(cell).getAllByText(/Payee \d/)).toHaveLength(3));
     await fireEvent.click(within(cell).getByText(/Payee 2/));
-    const dialog = await screen.findByRole("dialog", { name: `Scheduled transactions: ${displayDate("2026-09-24")}` });
+    const dialog = await screen.findByRole("dialog", { name: `Transactions: ${displayDate("2026-09-24")}` });
     // Open and done ones alike, whatever the calendar's checkbox says.
     expect(occCalls).toHaveBeenLastCalledWith("2026-09-24", "2026-09-24", null, true);
     const options = await within(dialog).findAllByRole("option");
@@ -112,6 +116,46 @@ describe("Calendar day with more than three items", () => {
     await fireEvent.click(within(dialog).getByRole("button", { name: "New Schedule" }));
     expect(dialogState.schedule).toEqual({ id: null, fields: null, start: "2026-09-24" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("register transactions show with Show entered transactions, and always in the day's dialog", async () => {
+    occurrences = [item(1)];
+    posted = [{ txn: 40, date: "2026-09-24", account: 2, payee: 4, amount: "-12.00" }];
+    render(Calendar);
+    const cell = await screen.findByRole("gridcell", { name: displayDate("2026-09-24") });
+    await waitFor(() => expect(within(cell).getAllByText(/Payee \d/)).toHaveLength(1));
+    expect(txnCalls).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByLabelText("Show entered transactions"));
+    await waitFor(() => expect(within(cell).getAllByText(/Payee \d/)).toHaveLength(2));
+    expect(txnCalls).toHaveBeenLastCalledWith(expect.any(String), expect.any(String), null);
+
+    await fireEvent.click(within(cell).getByText(/Payee 4/));
+    const dialog = await screen.findByRole("dialog");
+    expect(txnCalls).toHaveBeenLastCalledWith("2026-09-24", "2026-09-24", null);
+    const options = await within(dialog).findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([expect.stringContaining("Due"), expect.stringContaining("Register")]);
+    expect(options[1].getAttribute("aria-selected")).toBe("true");
+    // Not scheduled: it can be opened, not entered or skipped.
+    const enterBtn = within(dialog).getByRole("button", { name: "Enter" }) as HTMLButtonElement;
+    expect(enterBtn.disabled).toBe(true);
+    expect(enterBtn.title).toBe("Not a scheduled transaction");
+    expect((within(dialog).getByRole("button", { name: "Edit" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("strikes through skipped items only, not entered or register ones", async () => {
+    occurrences = [item(1, { status: "skipped" }), item(2, { status: "entered", txn: 9 })];
+    posted = [{ txn: 40, date: "2026-09-24", account: 2, payee: 4, amount: "-12.00" }];
+    render(Calendar);
+    await fireEvent.click(screen.getByLabelText("Show entered transactions"));
+    const cell = await screen.findByRole("gridcell", { name: displayDate("2026-09-24") });
+    await waitFor(() => expect(within(cell).getAllByText(/Payee \d/)).toHaveLength(3));
+    const chip = (n: number) => within(cell).getByText(new RegExp(`Payee ${n}`)).closest(".chip")!;
+    expect(chip(1).classList.contains("skipped")).toBe(true);
+    expect(chip(2).classList.contains("skipped")).toBe(false);
+    expect(chip(4).classList.contains("skipped")).toBe(false);
+    await fireEvent.click(within(cell).getByText(/Payee 4/));
+    const options = await within(await screen.findByRole("dialog")).findAllByRole("option");
+    expect(options.map((o) => o.classList.contains("skipped"))).toEqual([true, false, false]);
   });
 
   it("marks an overdue chip with the word, not only a color", async () => {

@@ -28,10 +28,11 @@ mod recurrence;
 mod service;
 
 pub use recurrence::{Dates, Frequency, Recurrence, WeekendRule, add_days};
+pub(crate) use service::release_txn;
 pub use service::{
     AutoEnterFailure, AutoEnterReport, EnterEdits, Entered, auto_enter_due, create, delete,
     dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between, prefill_entry,
-    projected_balances, review_list, set_override, skip, update,
+    projected_balances, register_between, review_list, set_override, skip, update,
 };
 
 use serde::{Deserialize, Serialize};
@@ -206,6 +207,19 @@ pub struct OccurrenceView {
     pub overdue: bool,
     /// Only the schedule's next occurrence can be entered or skipped.
     pub actionable: bool,
+}
+
+/// A register transaction on the calendar (CAL-020): one per transaction
+/// and account it posts to, as each account's register shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct CalendarTxn {
+    pub txn: TxnId,
+    pub date: Date,
+    pub account: AccountId,
+    pub payee: Option<PayeeId>,
+    /// The account's amount (sign as in its register).
+    pub amount: Money,
 }
 
 /// A row of the Scheduled Transactions list (REC-300).

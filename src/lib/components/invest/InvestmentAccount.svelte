@@ -46,8 +46,8 @@
       <tr><th>Date</th><th>Action</th><th>Security</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Comm.</th><th class="num">Amount</th><th class="num">Cash</th><th>Clr</th><th>Memo</th></tr>
     </thead>
     <tbody>
-      {#each r?.rows ?? [] as row (`${row.txn_id}-${row.incoming}`)}
-        <tr class:future={row.future} onclick={() => (entry = row.incoming ? undefined : row.txn_id)} title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
+      {#each r?.rows ?? [] as row, i (`${row.txn_id}-${row.incoming}`)}
+        <tr class:alt={i % 2 === 1} class:future={row.future} class:reconciled={row.cleared === "reconciled"} onclick={() => (entry = row.incoming ? undefined : row.txn_id)} title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
           <td>{displayDate(row.date)}</td>
           <td>{row.action_label}{#if row.split}&nbsp;{row.split.new}:{row.split.old}{/if}</td>
           <td>{row.security_label}{#if row.other_account !== null && row.action === "transfer_shares"} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
@@ -115,12 +115,22 @@
   .reg tbody tr {
     cursor: pointer;
   }
+  /* As in the banking register: stripes, future rows italic in their
+     own tint, reconciled rows gray. */
+  .reg tbody tr.alt {
+    background: rgba(128, 128, 128, 0.07);
+  }
+  .reg tbody tr.future {
+    font-style: italic;
+  }
+  .reg tbody tr.future.alt {
+    background: var(--future-alt);
+  }
+  .reg tbody tr.reconciled {
+    color: var(--reconciled-fg);
+  }
   .reg tbody tr:hover {
     background: rgba(128, 128, 128, 0.2);
-  }
-  .future td {
-    font-style: italic;
-    opacity: 0.75;
   }
   .blank input {
     width: 100%;

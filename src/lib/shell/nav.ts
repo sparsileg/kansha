@@ -6,9 +6,10 @@ import { listsState } from "../state/lists.svelte";
 import { reconcileState } from "../state/reconcile.svelte";
 import { registerState } from "../state/register.svelte";
 import { settingsState } from "../state/settings.svelte";
-import { viewState } from "../state/view.svelte";
+import { groupAccounts } from "../state/groups";
+import { viewState, type ViewId } from "../state/view.svelte";
 import { windowState } from "../state/windows.svelte";
-import { openPanel } from "./panels";
+import { isPanel, openPanel, type PanelKind } from "./panels";
 import type { AccountId } from "../types/bindings";
 
 /** Show an account's register. Coming back to the account already open
@@ -18,20 +19,61 @@ export async function openAccount(id: AccountId): Promise<void> {
   if (id !== registerState.accountId) await registerState.open(id);
 }
 
-/** The home screen setting, as a place to go. */
-export async function goHome(): Promise<void> {
-  const home = settingsState.home;
-  if (home.startsWith("account:")) {
-    const id = Number(home.slice("account:".length));
+/** The Home button: always the dashboard. */
+export function goHome(): void {
+  viewState.navigate("dashboard");
+}
+
+/** Which views startup can open, by label; `null` for those it cannot
+ * (they need an account, a search, or a window). A `Record` over every
+ * view and panel, so adding one fails to compile until it is listed. */
+const STARTUP_VIEWS: Record<ViewId, string | null> = {
+  dashboard: "Dashboard",
+  investments: "Investments",
+  account: null, // each account is its own choice
+  window: null,
+  manage: null,
+  search: null,
+  settings: null,
+};
+const STARTUP_PANELS: Record<PanelKind, string | null> = {
+  scheduled: "Reminders",
+  calendar: "Calendar",
+  accounts: "Accounts",
+  reconcile: null,
+};
+
+/** The "On startup open to" choices: views, panels, then every account
+ * in the account list's order. */
+export function startupChoices(): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  for (const [value, label] of Object.entries({ ...STARTUP_VIEWS, ...STARTUP_PANELS })) {
+    if (label !== null) out.push({ value, label });
+  }
+  for (const g of groupAccounts(listsState.accounts, false)) {
+    for (const a of g.accounts) out.push({ value: `account:${a.id}`, label: `Account: ${a.name}` });
+  }
+  return out;
+}
+
+/** Open what the startup setting names; the dashboard if it names
+ * nothing that exists. */
+export async function openStartup(): Promise<void> {
+  const to = settingsState.startup;
+  if (to.startsWith("account:")) {
+    const id = Number(to.slice("account:".length));
     if (listsState.account(id)) {
       await openAccount(id);
       return;
     }
-  } else if (home === "calendar" || home === "scheduled") {
-    openPanel(home);
+  } else if (isPanel(to) && STARTUP_PANELS[to] !== null) {
+    openPanel(to);
+    return;
+  } else if (to in STARTUP_VIEWS && STARTUP_VIEWS[to as ViewId] !== null) {
+    viewState.navigate(to as ViewId);
     return;
   }
-  viewState.navigate("dashboard");
+  goHome();
 }
 
 /** Set once the user has agreed to quit, so closing does not ask twice. */

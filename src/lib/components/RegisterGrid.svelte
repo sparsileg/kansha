@@ -22,6 +22,38 @@
   const rows = $derived(registerState.rows);
   const dateSorted = $derived(registerState.sort === "date");
 
+  // Continuous scroll: every row is loaded, but only those in view, plus a
+  // margin, are drawn, between two spacers sized from the measured row
+  // height. The row being edited is always drawn, so scrolling away never
+  // throws its changes out.
+  const OVERSCAN = 30;
+  let rowH = $state(24);
+  let scrollTop = $state(0);
+  let viewH = $state(0);
+  const editIndex = $derived(
+    registerState.editing === null ? -1 : rows.findIndex((r) => r.txn_id === registerState.editing),
+  );
+  const range = $derived.by(() => {
+    const h = viewH > 0 ? viewH : 800;
+    let from = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN);
+    let to = Math.min(rows.length, Math.ceil((scrollTop + h) / rowH) + OVERSCAN);
+    if (editIndex >= 0) {
+      from = Math.min(from, editIndex);
+      to = Math.max(to, editIndex + 1);
+    }
+    return { from, to };
+  });
+  const visible = $derived(rows.slice(range.from, range.to));
+
+  // Rows are one line each, so one drawn row gives the height of all.
+  $effect(() => {
+    void visible;
+    void tick().then(() => {
+      const h = rowsEl?.querySelector<HTMLElement>(".row")?.getBoundingClientRect().height ?? 0;
+      if (h > 0 && h !== rowH) rowH = h;
+    });
+  });
+
   // The rows scroll and their scrollbar takes width the header, the entry
   // row, and the footer do not have. Measure it so all of them keep the
   // same right edge, plus a pad so the last column never touches it.
@@ -32,17 +64,21 @@
     if (rowsEl) scrollbar = rowsEl.offsetWidth - rowsEl.clientWidth;
   });
 
-  /** Scroll the rows area, not the page, so `id` is fully visible. */
+  /** Scroll the rows area, not the page, so `id` is fully visible. A row
+   * not drawn yet is placed from its index. */
   function revealRow(id: number) {
+    if (!rowsEl) return;
+    const i = rows.findIndex((r) => r.txn_id === id);
+    if (i < 0) return;
     const el = document.getElementById(`row-${id}`);
-    if (!el || !rowsEl) return;
-    const top = el.offsetTop;
-    const bottom = top + el.offsetHeight;
+    const top = el ? el.offsetTop : i * rowH;
+    const bottom = top + (el ? el.offsetHeight : rowH);
     if (bottom > rowsEl.scrollTop + rowsEl.clientHeight) {
       rowsEl.scrollTop = bottom - rowsEl.clientHeight;
     } else if (top < rowsEl.scrollTop) {
       rowsEl.scrollTop = top;
     }
+    scrollTop = rowsEl.scrollTop;
   }
 
   // Keep the just-saved (or just-selected) row fully visible, also when
@@ -56,7 +92,10 @@
 
   $effect(() => {
     if (!rowsEl || typeof ResizeObserver === "undefined") return;
+    const el = rowsEl;
     const ro = new ResizeObserver(() => {
+      viewH = el.clientHeight;
+      scrollbar = el.offsetWidth - el.clientWidth;
       if (registerState.reveal !== null) revealRow(registerState.reveal);
     });
     ro.observe(rowsEl);
@@ -67,7 +106,10 @@
   $effect(() => {
     if (registerState.scrollToEnd && !registerState.loading && rows.length > 0) {
       registerState.scrollToEnd = false;
-      if (rowsEl) rowsEl.scrollTop = rowsEl.scrollHeight;
+      if (rowsEl) {
+        rowsEl.scrollTop = rowsEl.scrollHeight;
+        scrollTop = rowsEl.scrollTop;
+      }
     }
   });
 
@@ -162,7 +204,7 @@
 
   async function otherSide(r: RegisterRow) {
     if (r.counterpart.kind !== "transfer") return;
-    await registerState.goToTransaction(r.counterpart.id, r.txn_id, r.date);
+    await registerState.goToTransaction(r.counterpart.id, r.txn_id);
   }
 
   async function scheduleThis(r: RegisterRow) {
@@ -240,6 +282,7 @@
           rows.map((r) => r.txn_id),
           registerState.selected,
           action,
+          Math.max(1, Math.floor((viewH || 10 * rowH) / rowH) - 1),
         );
         registerState.selected = next;
         registerState.reveal = null;
@@ -265,8 +308,10 @@
   </div>
 
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-  <div class="rows" bind:this={rowsEl} role="grid" onwheel={() => (registerState.reveal = null)} onpointerdown={() => (registerState.reveal = null)} aria-label="Register" tabindex="0" onkeydown={onKeydown} oncontextmenu={onRowsContextMenu}>
-    {#each rows as r, i (r.txn_id)}
+  <div class="rows" bind:this={rowsEl} role="grid" onscroll={() => (scrollTop = rowsEl?.scrollTop ?? 0)} onwheel={() => (registerState.reveal = null)} onpointerdown={() => (registerState.reveal = null)} aria-label="Register" tabindex="0" onkeydown={onKeydown} oncontextmenu={onRowsContextMenu}>
+    <div class="spacer-row" style="height: {range.from * rowH}px"></div>
+    {#each visible as r, k (r.txn_id)}
+      {@const i = range.from + k}
       {#if todayLineBefore(i)}<div class="today" aria-label="Today"><span>Today</span></div>{/if}
       {#if registerState.editing === r.txn_id}
         <EntryEditor txn={r.txn_id} {account} ondone={(saved) => afterEdit(r.txn_id, saved)} />
@@ -276,7 +321,9 @@
         <div
           id="row-{r.txn_id}"
           class="row"
+          class:alt={i % 2 === 1}
           class:future={r.future}
+          class:reconciled={r.cleared === "reconciled"}
           class:selected={registerState.selected === r.txn_id}
           class:void={r.status === "void"}
           role="row"
@@ -306,15 +353,13 @@
     {:else}
       <p class="empty">{registerState.loading ? "Loading…" : registerState.filtered ? "No entries match the filters." : "No entries."}</p>
     {/each}
+    <div class="spacer-row" style="height: {(rows.length - range.to) * rowH}px"></div>
   </div>
 
   <EntryEditor bind:this={newEntry} {account} />
 
   <footer>
     <span>{registerState.total} {registerState.total === 1 ? "transaction" : "transactions"}</span>
-    <button type="button" disabled={registerState.pageIndex === 0} onclick={() => registerState.goToPage(registerState.pageIndex - 1)}>‹ Previous</button>
-    <span>Page {registerState.pageIndex + 1} of {registerState.pageCount}</span>
-    <button type="button" disabled={registerState.pageIndex + 1 >= registerState.pageCount} onclick={() => registerState.goToPage(registerState.pageIndex + 1)}>Next ›</button>
     <span class="spacer"></span>
     {#if registerState.summary?.available_credit != null}
       <span>Available credit <b>{formatMoney(registerState.summary.available_credit)}</b></span>
@@ -341,7 +386,7 @@
   .row {
     display: grid;
     grid-template-columns: var(--cols);
-    gap: 2px;
+    gap: 2px var(--col-gap);
     align-items: center;
     padding-right: var(--gap-r);
   }
@@ -377,14 +422,24 @@
     padding-block: 0.12rem;
     cursor: default;
   }
-  .row:nth-child(even) {
+  /* Alternate rows by position in the list, so the today line and an
+     open editor do not shift the stripes. Future rows stripe in their
+     own tint and are italic; reconciled rows have gray text. */
+  .row.alt {
     background: rgba(128, 128, 128, 0.07);
+  }
+  .row.future {
+    font-style: italic;
+  }
+  .row.future.alt {
+    background: var(--future-alt);
+  }
+  .row.reconciled,
+  .row.reconciled .neg {
+    color: var(--reconciled-fg);
   }
   .row.selected {
     background: rgba(80, 130, 220, 0.3);
-  }
-  .row.future {
-    opacity: 0.55;
   }
   .row.void {
     text-decoration: line-through;
@@ -404,11 +459,19 @@
   .clr {
     text-align: center;
   }
+  /* Takes no height, so the rows above and below stay where the scroll
+     spacers put them; the line is drawn over the row edge. */
   .today {
-    border-top: 2px solid var(--bad, #a83200);
     position: relative;
     height: 0;
-    margin: 2px 0;
+  }
+  .today::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    border-top: 2px solid var(--bad, #a83200);
   }
   .today span {
     position: absolute;

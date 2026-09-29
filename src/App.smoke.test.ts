@@ -25,6 +25,7 @@ vi.mock("./lib/api", async (orig) => {
       scheduleDueList: () => ok([]),
       scheduleReviewList: () => ok([]),
       calendarOccurrences: () => ok([]),
+      calendarTransactions: () => ok([]),
       calendarProjection: () => ok([]),
     },
   };
@@ -40,7 +41,7 @@ const account = () => screen.findByRole("button", { name: /Savings/ });
 
 beforeEach(() => {
   settingsState.setAccountPanelOpen(true);
-  settingsState.setHome("dashboard");
+  settingsState.setStartup("dashboard");
   registerState.accountId = null;
   windowState.reset();
   viewState.reset();
@@ -117,7 +118,7 @@ describe("App shell", () => {
   });
 
   it("starts on the home screen setting", async () => {
-    settingsState.setHome("calendar");
+    settingsState.setStartup("calendar");
     render(App);
     await waitFor(() => expect(screen.getByRole("grid", { name: "Month" })).toBeTruthy());
   });

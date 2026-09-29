@@ -4,6 +4,7 @@
 
 use kansha_core::accounts::{AccountId, AccountType};
 use kansha_core::categories::{CategoryId, CategoryKind};
+use kansha_core::invest::{InvAction, InvInput};
 use kansha_core::ledger::{self, Target, TxnSource};
 use kansha_core::persistence::audit::AuditEntity;
 use kansha_core::persistence::{Origin, audit, schedules};
@@ -169,17 +170,171 @@ fn only_the_next_occurrence_can_be_entered() {
     assert!(enter(&mut fx, id, "2026-07-01").is_err());
 }
 
+fn delete_txn(fx: &mut Fx, txn: ledger::TxnId) {
+    fx.book.write(|tx| ledger::delete(tx, txn, false)).unwrap();
+}
+
+fn occ_status(fx: &Fx, id: ScheduleId, due: &str) -> Option<OccurrenceStatus> {
+    schedules::occurrence(fx.book.conn(), id, date(due))
+        .unwrap()
+        .map(|o| o.status)
+}
+
 #[test]
-fn entered_transactions_can_be_voided_but_not_deleted() {
+fn entered_transactions_can_be_voided() {
     let mut fx = fx();
     let id = create_rent(&mut fx, "2026-07-01");
     let e = enter(&mut fx, id, "2026-07-01").unwrap();
-    let err = fx
-        .book
-        .write(|tx| ledger::delete(tx, e.txn, false))
-        .unwrap_err();
-    assert!(matches!(err, Error::InUse { .. }), "{err}");
     fx.book.write(|tx| ledger::void(tx, e.txn, false)).unwrap();
+    assert_eq!(
+        occ_status(&fx, id, "2026-07-01"),
+        Some(OccurrenceStatus::Entered)
+    );
+}
+
+#[test]
+fn deleting_the_latest_entered_transaction_puts_its_occurrence_back_in_due() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.end = End::AfterCount { count: 3 };
+    let id = create(&mut fx, &f);
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(get(&fx, id).fields.end, End::AfterCount { count: 2 });
+
+    delete_txn(&mut fx, e.txn);
+    let s = get(&fx, id);
+    assert_eq!(s.next_due, Some(date("2026-07-01")));
+    assert_eq!(
+        s.fields.end,
+        End::AfterCount { count: 3 },
+        "# left given back"
+    );
+    assert_eq!(s.status, ScheduleStatus::Active);
+    assert_eq!(occ_status(&fx, id, "2026-07-01"), None);
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("5000.00"));
+    let due = schedule::due_list(fx.book.conn(), date("2026-07-01")).unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].nominal, date("2026-07-01"));
+    assert!(due[0].actionable);
+    // The schedule's change is audited with the delete.
+    let hist = audit::history(fx.book.conn(), AuditEntity::Schedule, id.0).unwrap();
+    assert!(hist.len() >= 3, "create, enter, revert: {hist:?}");
+
+    // It can be entered again, using up one of "# left" again.
+    enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(get(&fx, id).fields.end, End::AfterCount { count: 2 });
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-08-01")));
+}
+
+#[test]
+fn a_reverted_occurrence_keeps_its_one_time_edit_and_drops_its_review_flag() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    fx.book
+        .write(|tx| schedule::set_override(tx, id, date("2026-07-01"), None, Some(m("-1100.00"))))
+        .unwrap();
+    let clock = FixedClock::new(date("2026-07-01"));
+    let e = fx
+        .book
+        .db_mut()
+        .write(&clock, Origin::Scheduler, |tx| {
+            schedule::enter(tx, id, date("2026-07-01"), &EnterEdits::default(), false)
+        })
+        .unwrap();
+    assert_eq!(schedule::review_list(fx.book.conn()).unwrap().len(), 1);
+
+    delete_txn(&mut fx, e.txn);
+    let occ = schedules::occurrence(fx.book.conn(), id, date("2026-07-01"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(occ.status, OccurrenceStatus::Pending);
+    assert_eq!(occ.override_amount, Some(m("-1100.00")));
+    assert_eq!(occ.txn, None);
+    assert!(!occ.needs_review);
+    assert!(schedule::review_list(fx.book.conn()).unwrap().is_empty());
+    let due = schedule::due_list(fx.book.conn(), date("2026-07-01")).unwrap();
+    assert_eq!(due[0].amount, m("-1100.00"));
+}
+
+#[test]
+fn deleting_the_last_occurrence_of_an_ended_schedule_revives_it() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.recurrence.frequency = Frequency::Once;
+    f.recurrence.day1 = None;
+    let id = create(&mut fx, &f);
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(get(&fx, id).status, ScheduleStatus::Ended);
+
+    delete_txn(&mut fx, e.txn);
+    let s = get(&fx, id);
+    assert_eq!(s.status, ScheduleStatus::Active);
+    assert_eq!(s.next_due, Some(date("2026-07-01")));
+
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.end = End::AfterCount { count: 1 };
+    let id = create(&mut fx, &f);
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(get(&fx, id).status, ScheduleStatus::Ended);
+    delete_txn(&mut fx, e.txn);
+    let s = get(&fx, id);
+    assert_eq!(s.status, ScheduleStatus::Active);
+    assert_eq!(s.fields.end, End::AfterCount { count: 1 });
+}
+
+#[test]
+fn deleting_an_earlier_entered_transaction_marks_its_occurrence_skipped() {
+    // Occurrences are handled in order, so one before a later entered or
+    // skipped one cannot become due again: it counts as skipped.
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.end = End::AfterCount { count: 5 };
+    let id = create(&mut fx, &f);
+    let july = enter(&mut fx, id, "2026-07-01").unwrap();
+    enter(&mut fx, id, "2026-08-01").unwrap();
+
+    delete_txn(&mut fx, july.txn);
+    assert_eq!(
+        occ_status(&fx, id, "2026-07-01"),
+        Some(OccurrenceStatus::Skipped)
+    );
+    let s = get(&fx, id);
+    assert_eq!(s.next_due, Some(date("2026-09-01")));
+    assert_eq!(s.fields.end, End::AfterCount { count: 3 });
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("4000.00"));
+}
+
+#[test]
+fn deleting_an_auto_entered_transaction_skips_its_occurrence() {
+    // Put back in Due, auto-entry would only enter it again.
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.mode = EntryMode::Auto;
+    let id = create(&mut fx, &f);
+    let clock = FixedClock::new(date("2026-07-02"));
+    let report = schedule::auto_enter_due(fx.book.db_mut(), &clock).unwrap();
+    delete_txn(&mut fx, report.entered[0].txn);
+    assert_eq!(
+        occ_status(&fx, id, "2026-07-01"),
+        Some(OccurrenceStatus::Skipped)
+    );
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-08-01")));
+    let again = schedule::auto_enter_due(fx.book.db_mut(), &clock).unwrap();
+    assert!(again.entered.is_empty());
+}
+
+#[test]
+fn deleting_a_transaction_of_a_deleted_schedule_keeps_the_schedule_deleted() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    fx.book.write(|tx| schedule::delete(tx, id)).unwrap();
+    delete_txn(&mut fx, e.txn);
+    assert_eq!(get(&fx, id).status, ScheduleStatus::Deleted);
+    assert_eq!(
+        occ_status(&fx, id, "2026-07-01"),
+        Some(OccurrenceStatus::Skipped)
+    );
 }
 
 #[test]
@@ -947,4 +1102,89 @@ fn enter_with_an_edited_entry_uses_it_whole() {
             .write(|tx| schedule::enter(tx, id, date("2026-08-01"), &edits, false))
             .is_err()
     );
+}
+
+#[test]
+fn calendar_lists_register_transactions_but_not_investments_voids_or_scheduled_ones() {
+    let mut fx = fx();
+    let ira = fx.book.account("IRA", AccountType::TraditionalIra).unwrap();
+    let food = fx.book.category("Food", CategoryKind::Expense).unwrap();
+    let groceries = fx
+        .book
+        .entry(fx.chk, date("2026-07-03"))
+        .amount(m("-45.00"))
+        .payee("Costco")
+        .category(food)
+        .save()
+        .unwrap();
+    let transfer = fx
+        .book
+        .entry(fx.chk, date("2026-07-04"))
+        .amount(m("-200.00"))
+        .transfer(fx.sav)
+        .save()
+        .unwrap();
+    let voided = fx
+        .book
+        .entry(fx.chk, date("2026-07-05"))
+        .amount(m("-10.00"))
+        .category(food)
+        .save()
+        .unwrap();
+    fx.book
+        .write(|tx| ledger::void(tx, voided.id, false))
+        .unwrap();
+    // Cash put into the IRA from Checking: shows in Checking only.
+    let mut cash = InvInput::new(ira, InvAction::CashIn, date("2026-07-06"));
+    cash.amount = Some(m("300.00"));
+    cash.counterpart = Some(Target::Account(fx.chk));
+    fx.book.invest(&cash).unwrap();
+    // A scheduled transfer to Savings: its Checking side is the entered
+    // occurrence; its Savings side is a register transaction.
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.lines[0].target = Target::Account(fx.sav);
+    let id = create(&mut fx, &f);
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    // Outside the range.
+    fx.book
+        .entry(fx.chk, date("2026-08-01"))
+        .amount(m("-1.00"))
+        .category(food)
+        .save()
+        .unwrap();
+
+    let from = date("2026-07-01");
+    let to = date("2026-07-31");
+    let all = schedule::register_between(fx.book.conn(), from, to, None).unwrap();
+    let got: Vec<(String, i64, AccountId, Money)> = all
+        .iter()
+        .map(|t| (t.date.to_string(), t.txn.0, t.account, t.amount))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("2026-07-01".to_string(), e.txn.0, fx.sav, m("1000.00")),
+            (
+                "2026-07-03".to_string(),
+                groceries.id.0,
+                fx.chk,
+                m("-45.00")
+            ),
+            (
+                "2026-07-04".to_string(),
+                transfer.id.0,
+                fx.chk,
+                m("-200.00")
+            ),
+            ("2026-07-04".to_string(), transfer.id.0, fx.sav, m("200.00")),
+            ("2026-07-06".to_string(), all[4].txn.0, fx.chk, m("-300.00")),
+        ]
+    );
+    assert_eq!(all[1].payee, Some(fx.book.payee("Costco").unwrap()));
+
+    let sav_only = schedule::register_between(fx.book.conn(), from, to, Some(&[fx.sav])).unwrap();
+    assert_eq!(sav_only.len(), 2);
+    assert!(sav_only.iter().all(|t| t.account == fx.sav));
+    let ira_only = schedule::register_between(fx.book.conn(), from, to, Some(&[ira])).unwrap();
+    assert!(ira_only.is_empty());
 }

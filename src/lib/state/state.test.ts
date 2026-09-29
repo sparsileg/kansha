@@ -80,33 +80,27 @@ describe("listsState", () => {
 });
 
 describe("registerState", () => {
-  it("opens date-ascending with paging", async () => {
+  it("opens date-ascending with every row, in one query", async () => {
     await registerState.open(7);
+    expect(c.registerQuery).toHaveBeenCalledTimes(1);
     expect(c.registerQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({
         account: 7,
         sort: "date",
         descending: false,
-        limit: 100,
+        limit: null,
         offset: 0,
       }),
     );
     expect(registerState.rows).toHaveLength(3);
   });
 
-  it("filter change resets to page 0; clear-all empties filters", async () => {
+  it("a filter reloads every matching row; clear-all empties filters", async () => {
     await registerState.open(7);
-    c.registerQuery.mockImplementation(() => ok(page(100, 350)));
-    await registerState.reload();
-    await registerState.goToPage(2);
-    expect(c.registerQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 200 }),
-    );
     await registerState.setFilters({ text: "rent" });
-    expect(registerState.pageIndex).toBe(0);
     expect(registerState.filtered).toBe(true);
     expect(c.registerQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ text: "rent", offset: 0 }),
+      expect.objectContaining({ text: "rent", limit: null, offset: 0 }),
     );
     await registerState.clearFilters();
     expect(registerState.filtered).toBe(false);
@@ -124,14 +118,22 @@ describe("registerState", () => {
     expect(registerState.descending).toBe(false);
   });
 
-  it("opens on the last page so the newest rows are at the bottom", async () => {
-    c.registerQuery.mockImplementation(() => ok(page(100, 250)));
+  it("opens scrolled to the bottom so the newest rows are next to the entry row", async () => {
+    c.registerQuery.mockImplementation(() => ok(page(250)));
     await registerState.open(7);
-    expect(registerState.pageIndex).toBe(2);
-    expect(c.registerQuery).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 200 }),
-    );
+    expect(registerState.rows).toHaveLength(250);
     expect(registerState.scrollToEnd).toBe(true);
+  });
+
+  it("goes to a transaction by selecting and revealing it, not by filtering", async () => {
+    c.registerQuery.mockImplementation(() => ok(page(250)));
+    await registerState.goToTransaction(7, 40);
+    expect(registerState.accountId).toBe(7);
+    expect(registerState.selected).toBe(40);
+    expect(registerState.reveal).toBe(40);
+    expect(registerState.scrollToEnd).toBe(false);
+    expect(registerState.filtered).toBe(false);
+    expect(registerState.rows).toHaveLength(250);
   });
 
   it("drops a stale response", async () => {

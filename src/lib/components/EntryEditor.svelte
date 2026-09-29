@@ -13,7 +13,10 @@
     isBlank,
     newDraft,
     setAmountField,
+    setSplitTag,
+    splitCleared,
     splitParts,
+    splitTagValue,
     type Draft,
   } from "../register/draft";
   import { confirmState } from "../state/confirm.svelte";
@@ -21,6 +24,7 @@
   import { registerState } from "../state/register.svelte";
   import { scheduleState } from "../state/schedule.svelte";
   import type { AccountId, Payee } from "../types/bindings";
+  import { SPLIT_ICON } from "../shell/icons";
   import TargetCombo from "./TargetCombo.svelte";
 
   /** `null` = the new-entry row; otherwise edit this transaction in place. */
@@ -232,6 +236,18 @@
     focusSplit(i + 1);
   }
 
+  /** The Split button: the category chosen so far becomes the first
+   * split line, which is offered the whole amount. */
+  async function startSplit() {
+    if (isSplit) return;
+    const first = d.category;
+    d.category = SPLIT;
+    d.splits = [{ ...emptySplit(), target: first }, emptySplit()];
+    await tick();
+    await prefill(0);
+    focusSplit(0);
+  }
+
   async function onCategoryChange() {
     if (d.category === SPLIT && d.splits.length === 0) {
       d.splits = [emptySplit(), emptySplit()];
@@ -368,6 +384,16 @@
     <input class="c-memo" aria-label="Memo" bind:value={d.memo} />
     <span class="c-clr">{d.cleared === "cleared" ? "c" : d.cleared === "reconciled" ? "R" : ""}</span>
     <span class="c-actions">
+      <button
+        type="button"
+        class="icon"
+        aria-label="Split"
+        title={isSplit ? "The split lines are open" : "Split this transaction"}
+        disabled={isSplit || busy}
+        onclick={() => void startSplit()}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d={SPLIT_ICON} /></svg>
+      </button>
       <button type="submit" disabled={busy}>{txn === null ? "Enter" : "Save"}</button>
       <button type="button" onclick={cancel}>Cancel</button>
     </span>
@@ -379,13 +405,21 @@
         Split of {d.payment.trim() ? `payment ${d.payment}` : d.deposit.trim() ? `deposit ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Amounts are positive; each new line offers what is left.
       </div>
       <div class="split-line split-head" aria-hidden="true">
-        <span>Category or transfer account</span><span class="num">Amount</span><span>Memo</span><span></span>
+        <span>Category or transfer account</span><span class="num">Amount</span><span>Tag</span><span>Memo</span><span title="Cleared in the other account (transfer lines)">Clr</span><span></span>
       </div>
       {#each d.splits as s, i (i)}
         <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
           <TargetCombo bind:value={s.target} excludeAccount={account} newKind={newKind} label={`Split ${i + 1} category`} />
           <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
+          <select aria-label={`Split ${i + 1} tag`} value={splitTagValue(s)} onchange={(e) => (d.splits[i] = setSplitTag(s, e.currentTarget.value))}>
+            <option value="">—</option>
+            {#each listsState.tags.filter((t) => !t.hidden || s.tags.includes(t.id)) as t (t.id)}
+              <option value={String(t.id)}>{t.name}</option>
+            {/each}
+          </select>
           <input aria-label={`Split ${i + 1} memo`} bind:value={s.memo} onkeydown={(e) => onSplitMemoKey(e, i)} />
+          <!-- A transfer line's cleared mark belongs to the other account: set there or by reconciling it. -->
+          <span class="c-clr" aria-label={`Split ${i + 1} cleared`}>{splitCleared(s)}</span>
           <button type="button" tabindex="-1" aria-label={`Remove split ${i + 1}`} onclick={() => (d.splits = d.splits.filter((_, j) => j !== i))}>×</button>
         </div>
       {/each}
@@ -418,7 +452,7 @@
   .cells {
     display: grid;
     grid-template-columns: var(--cols);
-    gap: 2px;
+    gap: 2px var(--col-gap);
     align-items: center;
     padding-right: var(--gap-r, 0.5rem);
   }
@@ -436,16 +470,31 @@
     display: flex;
     gap: 2px;
   }
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 0.3rem;
+  }
+  .icon svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
   .split {
     margin: 0.25rem 0 0.25rem 4rem;
     display: grid;
     gap: 2px;
-    max-width: 44rem;
+    max-width: 54rem;
   }
   .split-line {
     display: grid;
-    grid-template-columns: 2fr 8rem 2fr 2rem;
-    gap: 2px;
+    grid-template-columns: 2fr 8rem 7rem 2fr 2rem 2rem;
+    align-items: center;
+    gap: 2px var(--col-gap);
   }
   .split-title {
     font-size: 0.85em;

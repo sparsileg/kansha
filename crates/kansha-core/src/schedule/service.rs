@@ -8,9 +8,9 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AmountType, DayBalance, End, EntryMode, Occurrence, OccurrenceStatus, OccurrenceView,
-    Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine, ScheduleRow, ScheduleStatus,
-    add_days,
+    AmountType, CalendarTxn, DayBalance, End, EntryMode, Occurrence, OccurrenceStatus,
+    OccurrenceView, Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine, ScheduleRow,
+    ScheduleStatus, add_days,
 };
 use crate::accounts::AccountId;
 use crate::date::{Clock, Date};
@@ -388,6 +388,61 @@ pub fn enter(
         txn: txn.id,
         date: entry.date,
     })
+}
+
+/// A transaction entered from a schedule is about to be deleted: unlink
+/// its occurrence first. The latest occurrence acted on of a live,
+/// remind-mode schedule goes back to Due: pending again (its one-time
+/// edits kept), the schedule's next occurrence, with its "# left" given
+/// back; an ended schedule comes back to life. Otherwise the occurrence
+/// is marked skipped: one before a later entered or skipped one cannot
+/// become due again (occurrences are handled in order), an auto-entry one
+/// would only be entered again, and a deleted schedule has no Due.
+pub(crate) fn release_txn(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
+    let Some(occ) = repo::occurrence_for_txn(tx.conn(), txn)? else {
+        return Ok(());
+    };
+    let s = repo::get(tx.conn(), occ.schedule)?;
+    let latest = repo::last_acted(tx.conn(), s.id)? == Some(occ.due_date);
+    let back_to_due =
+        latest && s.status != ScheduleStatus::Deleted && s.fields.mode == EntryMode::Remind;
+    if !back_to_due {
+        repo::put_occurrence(
+            tx,
+            &Occurrence {
+                status: OccurrenceStatus::Skipped,
+                txn: None,
+                needs_review: false,
+                ..occ
+            },
+        )?;
+        return Ok(());
+    }
+    if occ.override_date.is_some() || occ.override_amount.is_some() {
+        repo::put_occurrence(
+            tx,
+            &Occurrence {
+                status: OccurrenceStatus::Pending,
+                txn: None,
+                needs_review: false,
+                ..occ
+            },
+        )?;
+    } else {
+        repo::delete_occurrence(tx, s.id, occ.due_date)?;
+    }
+    let remaining = match s.fields.end {
+        End::AfterCount { count } => Some(count + 1),
+        _ => None,
+    };
+    repo::set_progress(
+        tx,
+        s.id,
+        Some(occ.due_date),
+        remaining,
+        ScheduleStatus::Active,
+    )?;
+    Ok(())
 }
 
 /// The entry an occurrence would become, one-time date and amount
@@ -782,6 +837,22 @@ pub fn occurrences_between(
     }
     out.sort_by_key(|v| (v.date, v.nominal, v.schedule));
     Ok(out)
+}
+
+/// Register transactions dated `from..=to` for the calendar (CAL-020),
+/// investment accounts left out (their register is not a cash register).
+/// `accounts` limits to those accounts. See `repo::register_between`.
+pub fn register_between(
+    conn: &Connection,
+    from: Date,
+    to: Date,
+    accounts: Option<&[AccountId]>,
+) -> Result<Vec<CalendarTxn>> {
+    Ok(repo::register_between(conn, from, to)?
+        .into_iter()
+        .filter(|(t, ty)| !ty.is_investment() && accounts.is_none_or(|a| a.contains(&t.account)))
+        .map(|(t, _)| t)
+        .collect())
 }
 
 /// Projected balance of `account` at the end of each day `from..=to`

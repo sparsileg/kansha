@@ -395,6 +395,25 @@ describe("saving does not change the entry row's height", () => {
   });
 });
 
+describe("Split button", () => {
+  it("opens two split lines, the first keeping the category chosen so far, and is off while split", async () => {
+    c.splitRemainder.mockImplementation(rustRemainder);
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "100" } });
+    await pick("Category", "fuel");
+    const btn = screen.getByRole("button", { name: "Split" }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    await fireEvent.click(btn);
+    await screen.findByLabelText("Split 2 amount");
+    expect((screen.getByLabelText("Split 1 category") as HTMLInputElement).value).toBe("Fuel");
+    await waitFor(() => expect(field("Split 1 amount").value).toBe("100.00"));
+    expect(btn.disabled).toBe(true);
+    // Its place: just before Enter.
+    const buttons = [...btn.parentElement!.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    expect(buttons).toEqual(["Split", "Enter", "Cancel"]);
+  });
+});
+
 describe("split remainder validation (TXN-020)", () => {
   async function toSplit() {
     render(EntryEditor, { account: 1 });
@@ -443,5 +462,21 @@ describe("split remainder validation (TXN-020)", () => {
     await fireEvent.submit(field("Date").closest("form")!);
     await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
     expect(c.entryCreate.mock.calls[0][0].lines).toHaveLength(2);
+  });
+
+  it("each split line takes its own tag; hidden tags are not offered", async () => {
+    listsState.tags = [
+      { id: 3, name: "Trip", hidden: false },
+      { id: 4, name: "Old", hidden: true },
+    ] as never;
+    c.splitRemainder.mockImplementation(() => ok("0.00"));
+    await toSplit();
+    const tag2 = screen.getByLabelText("Split 2 tag") as HTMLSelectElement;
+    expect([...tag2.options].map((o) => o.textContent)).toEqual(["—", "Trip"]);
+    await fireEvent.change(tag2, { target: { value: "3" } });
+    await screen.findByText(/Remainder: ✓ 0\.00/);
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
+    expect(c.entryCreate.mock.calls[0][0].lines.map((l) => l.tags)).toEqual([[], [3]]);
   });
 });

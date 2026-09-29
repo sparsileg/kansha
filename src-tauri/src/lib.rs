@@ -81,6 +81,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::schedule::schedule_review_list,
             commands::schedule::schedule_review_dismiss,
             commands::schedule::calendar_occurrences,
+            commands::schedule::calendar_transactions,
             commands::schedule::calendar_projection,
             commands::reconcile::reconcile_open,
             commands::reconcile::reconcile_opening_check,

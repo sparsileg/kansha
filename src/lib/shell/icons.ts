@@ -15,6 +15,11 @@ const ICONS: Record<string, string> = {
   dot: "M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z",
 };
 
+/** The register's Split button: from the bottom middle, two long arrows
+ * about 25 degrees from vertical, into the top corners. */
+export const SPLIT_ICON =
+  "M8 15L2 2M1.38 5.45L2 2l3.02 1.76M8 15l6-13M14.62 5.45L14 2l-3.02 1.76";
+
 export function navIcon(id: string): string {
   if (ICONS[id]) return ICONS[id];
   if (id.startsWith("account:")) return ICONS.account;

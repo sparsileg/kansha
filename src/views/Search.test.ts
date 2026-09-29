@@ -46,7 +46,7 @@ describe("Search view", () => {
     viewState.navigate("search", { q: "costco" });
     render(Search);
     await fireEvent.click(await screen.findByRole("button", { name: /Costco/ }));
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith(1, 7, "2026-02-01"));
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith(1, 7));
     expect(viewState.current).toBe("account");
   });
 

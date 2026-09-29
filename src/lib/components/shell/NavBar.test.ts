@@ -11,7 +11,7 @@ import { windowState } from "../../state/windows.svelte";
 beforeEach(() => {
   windowState.reset();
   viewState.reset();
-  settingsState.setHome("calendar");
+  settingsState.setStartup("calendar");
   settingsState.setNavItems(["home", "tools.reminders", "tools.calendar", "tools.reconcile", "view.investments"]);
   scheduleState.due = [];
   scheduleState.review = [];
@@ -26,13 +26,13 @@ describe("NavBar", () => {
     expect(await screen.findByRole("button", { name: "Reminders 3" })).toBeTruthy();
   });
 
-  it("quick jumps navigate; Home goes to the home screen setting", async () => {
+  it("quick jumps navigate; Home goes to the dashboard, not the startup setting", async () => {
     render(NavBar);
     await fireEvent.click(screen.getByRole("button", { name: "Reminders" }));
     expect(windowState.shownKind).toBe("scheduled");
     await fireEvent.click(screen.getByRole("button", { name: "Home" }));
-    await Promise.resolve();
-    expect(windowState.shownKind).toBe("calendar");
+    expect(viewState.current).toBe("dashboard");
+    expect(windowState.shownKind).toBeNull();
   });
 
   it("planned buttons are greyed with a reason and do nothing", async () => {

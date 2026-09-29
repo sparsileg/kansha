@@ -47,12 +47,9 @@ Startup order for the UI: `schedule_auto_enter`, then show `schedule_review_list
 
 ### Known gaps
 
-- A transaction entered from a schedule cannot be deleted (occurrence FK); void it. Undoing an entry needs a "revert occurrence" operation.
-- CAL-020 "show completed transactions" currently means entered and skipped occurrences; other register transactions in the month are not in `calendar_occurrences`. Decide in 4b whether to add a query.
 - No holiday calendar (REC-050 is weekends only, as specified).
 - Deleted payee/account merges: `payee_merge` already moves schedules; account and category merge paths for `schedule_line` were done in Phase 3 (not re-tested here).
-- `describe()` text is English-only, fixed strings.
-- UI (4b) not built at this point: Scheduled list, edit form, due-and-overdue dialog, review list, calendar, "Schedule this" menu item, plus Phase 3 carry-overs (show closed accounts toggle, account panel redesign). All built in 4b or in the UI shell (see `shell.md`).
+- Closed 2026-09-28: deleting an entered transaction and register transactions on the calendar (both built, below); English-only `describe()` text (Stan: not needed).
 
 ## 4b — what was built
 
@@ -76,15 +73,7 @@ No API or schema change in 4b (uses the 4a commands).
 - Enter for an estimated single-line schedule always opens the panel; the amount sent is the confirmation. Estimated splits use the standard confirmation dialog.
 - Amount edits are disabled on split schedules (engine rule); edit the split in the register after entering.
 - Payee on a schedule is chosen from existing payees (payees are only created by entering transactions).
-- "Show entered and skipped" on the calendar shows scheduled occurrences only, not every register transaction (CAL-020 gap from 4a stands).
 - Calendar cells show three chips, then "+n more"; click a day for all.
-
-### Known gaps
-
-- Not hands-on tested. Suggested checks: create monthly rent; open Due; Enter; Skip; edit one occurrence; auto schedule with a past start (startup review list); estimated amount; split schedule; calendar projection; "Schedule this" from a register row.
-- No keyboard shortcuts in the calendar grid beyond Enter/Space on a day.
-- Calendar does not open a transaction in its register.
-- A transaction entered from a schedule cannot be deleted (4a gap).
 
 ## 4b revisions (Stan's first review)
 
@@ -117,7 +106,6 @@ Tests 1–12 passed. Changes from that review:
 
 ### Known gaps
 - **Placeholders:** the layout and the colors are still placeholders pending a real UI design and theme.
-- Calendar is still a view, not a docked panel.
 - The picker offers "Create" even for the name of the account being edited (which cannot be its own transfer target).
 - The Due dialog still shows full rows; the calendar day panel shows one line per item with details in a modal.
 
@@ -131,4 +119,9 @@ Phase 4 ended with the commit "Finish Phase 4". Work after it, driven by Stan's 
 - **Account panel redesign** (a Phase 3 carry-over) and **Show closed accounts** are done, in the shell.
 - **Search** (`search_transactions`, spec UI-070) replaced the register's text-filter box.
 - **Spec 0.3.6:** REC-030 says "entered or skipped" (confirmed by Stan). **0.3.7:** UI-070; REG-040.
-- **⚠ API changes since the Phase 4 commit:** `search_transactions` only. No schema change.
+- **⚠ API changes since the Phase 4 commit:** `search_transactions`; `calendar_transactions` (2026-09-28). No schema change.
+
+## Delete entered transactions; register transactions on the calendar (2026-09-28, spec 0.3.24)
+
+- **Delete (REC-160):** `ledger::delete` calls `schedule::release_txn` first, which unlinks the occurrence. The schedule's latest acted occurrence (remind mode, schedule not deleted) goes back to Due: its row is removed, or kept as pending if it has a one-time date or amount; `next_due` returns to it, "# left" gains one, an ended schedule is active again (audited through `set_progress`). Any other one is marked skipped: an earlier one (occurrences are handled in order, so it cannot be due again behind later ones), an auto-entry one (Due would only re-enter it at the next startup), one of a deleted schedule. Tests in `tests/integration/schedule.rs` (`deleting_*`, `a_reverted_occurrence_*`).
+- **Calendar (CAL-020, CAL-030):** new `schedule::register_between` and command `calendar_transactions(from, to, accounts)`: one `CalendarTxn` per transaction and account posted to, not void, investment accounts left out (`AccountType::is_investment`), and a scheduled transaction left out for its schedule's account (the occurrence shows there). A transfer shows once per account. `src/lib/calendar/items.ts` merges both into `CalItem` (status `posted` for register ones). The calendar shows them with "Show entered transactions" (was "Show entered and skipped"); the day dialog ("Transactions: <date>") always does; Edit opens one in its register; Enter and Skip say "Not a scheduled transaction". Only skipped items are struck through (spec 0.3.25); entered and register ones are faded on the calendar, plain in the dialog.

@@ -6,14 +6,15 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
 
 use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
-use crate::accounts::AccountId;
+use crate::accounts::{AccountId, AccountType};
 use crate::categories::TagId;
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::ledger::{Target, TxnId};
 use crate::money::Money;
 use crate::schedule::{
-    End, Occurrence, Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine, ScheduleStatus,
+    CalendarTxn, End, Occurrence, Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine,
+    ScheduleStatus,
 };
 
 const COLUMNS: &str = "id, account_id, payee_id, memo, amount_type, frequency, interval, \
@@ -381,6 +382,24 @@ pub fn put_occurrence(tx: &Tx<'_>, o: &Occurrence) -> Result<Occurrence> {
     })
 }
 
+/// The occurrence a transaction was entered from, if any.
+pub fn occurrence_for_txn(conn: &Connection, txn: TxnId) -> Result<Option<Occurrence>> {
+    let sql = format!("SELECT {OCC_COLUMNS} FROM schedule_occurrence WHERE txn_id = ?1");
+    Ok(conn
+        .prepare_cached(&sql)?
+        .query_row([txn], occ_from_row)
+        .optional()?)
+}
+
+/// Remove an occurrence's row, whatever its status.
+pub fn delete_occurrence(tx: &Tx<'_>, schedule: ScheduleId, due: Date) -> Result<()> {
+    tx.conn().execute(
+        "DELETE FROM schedule_occurrence WHERE schedule_id = ?1 AND due_date = ?2",
+        params![schedule.0, due],
+    )?;
+    Ok(())
+}
+
 /// Remove a pending row (its one-time override).
 pub fn delete_pending_occurrence(tx: &Tx<'_>, schedule: ScheduleId, due: Date) -> Result<()> {
     tx.conn().execute(
@@ -432,6 +451,43 @@ pub fn acted_between(conn: &Connection, from: Date, to: Date) -> Result<Vec<Occu
          ORDER BY coalesce(t.txn_date, o.override_date, o.due_date), o.id",
     )?;
     let rows = stmt.query_map(params![from, to], occ_from_row)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Transactions dated `from..=to`, not void, one row per transaction and
+/// account posted to (amounts summed; security postings left out), with
+/// the account's type. A transaction entered from a schedule is left out
+/// for the schedule's account, where the calendar shows the occurrence.
+pub fn register_between(
+    conn: &Connection,
+    from: Date,
+    to: Date,
+) -> Result<Vec<(CalendarTxn, AccountType)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.id, t.txn_date, p.account_id, t.payee_id, sum(p.amount), a.type
+         FROM posting p
+         JOIN txn t ON t.id = p.txn_id
+         JOIN account a ON a.id = p.account_id
+         WHERE t.txn_date BETWEEN ?1 AND ?2 AND t.status = 'normal'
+           AND p.security_id IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM schedule_occurrence o JOIN schedule s ON s.id = o.schedule_id
+               WHERE o.txn_id = t.id AND s.account_id = p.account_id)
+         GROUP BY t.id, p.account_id
+         ORDER BY t.txn_date, t.id, p.account_id",
+    )?;
+    let rows = stmt.query_map(params![from, to], |r| {
+        Ok((
+            CalendarTxn {
+                txn: r.get(0)?,
+                date: r.get(1)?,
+                account: r.get(2)?,
+                payee: r.get(3)?,
+                amount: r.get(4)?,
+            },
+            r.get(5)?,
+        ))
+    })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 

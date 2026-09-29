@@ -126,6 +126,26 @@ export function emptySplit(): SplitDraft {
   return { target: "", amount: "", memo: "", cleared: "unmarked", tags: [] };
 }
 
+/** A split line's tag picker shows its first tag ("" for none). */
+export function splitTagValue(s: SplitDraft): string {
+  return s.tags.length ? String(s.tags[0]) : "";
+}
+
+/** Picking a tag replaces the line's first tag; "—" removes it. Any
+ * further tags (from an import) are kept. */
+export function setSplitTag(s: SplitDraft, value: string): SplitDraft {
+  const rest = s.tags.slice(1);
+  return { ...s, tags: value ? [Number(value), ...rest.filter((t) => t !== Number(value))] : rest };
+}
+
+/** A transfer line's cleared mark in the other account ("c", "R", or ""),
+ * shown read-only: it is set in that account or by reconciling it.
+ * Category lines have none. */
+export function splitCleared(s: SplitDraft): string {
+  if (!s.target.startsWith("a:")) return "";
+  return s.cleared === "cleared" ? "c" : s.cleared === "reconciled" ? "R" : "";
+}
+
 /** Whether the split direction is a payment (negative) for this draft. */
 function isPayment(d: Draft): boolean {
   return d.payment.trim() !== "";

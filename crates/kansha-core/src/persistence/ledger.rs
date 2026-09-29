@@ -282,12 +282,16 @@ pub fn register_query(
         "{ctes} SELECT s.txn_id, s.txn_date, s.check_num, s.payee_id, s.payee_name, s.memo,
                 s.status, s.amount, s.cleared, s.others, s.other_account, s.other_category,
                 s.category, s.balance,
+                -- A split shows only its own tag; its lines' tags show in
+                -- the split panel. A one-line entry shows every tag.
                 ifnull((SELECT group_concat(name, ', ') FROM (
                             SELECT DISTINCT tg.name AS name
                             FROM posting o
                             JOIN posting_tag pt ON pt.posting_id = o.id
                             JOIN tag tg ON tg.id = pt.tag_id
-                            WHERE o.txn_id = s.txn_id ORDER BY tg.name)), '') AS tags
+                            WHERE o.txn_id = s.txn_id
+                              AND (s.others <= 1 OR o.id = s.posting_id)
+                            ORDER BY tg.name)), '') AS tags
          FROM shaped s {filter} ORDER BY {order} LIMIT :limit OFFSET :offset"
     );
     let mut stmt = conn.prepare_cached(&sql)?;
@@ -601,8 +605,8 @@ pub fn void(tx: &Tx<'_>, id: TxnId) -> Result<Txn> {
     Ok(after)
 }
 
-/// Delete a transaction and its postings. One entered from a schedule
-/// occurrence is `InUse`.
+/// Delete a transaction and its postings. One still linked to a schedule
+/// occurrence is `InUse`; the service unlinks it first.
 pub fn delete(tx: &Tx<'_>, id: TxnId) -> Result<()> {
     let before = get(tx.conn(), id)?;
     tx.conn()

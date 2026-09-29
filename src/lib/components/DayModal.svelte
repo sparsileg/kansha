@@ -1,8 +1,9 @@
 <script lang="ts">
-  // A calendar day's scheduled transactions, open and done (entered or
-  // skipped), whatever the calendar's "show entered" box says. Pick one,
-  // then Enter it (in its register, REC-110), Edit it, or Skip it; or
-  // start a new schedule on this day.
+  // A calendar day's transactions: scheduled ones, open and done (entered
+  // or skipped), and register transactions that did not come from a
+  // schedule (CAL-020), whatever the calendar's "show entered" box says.
+  // Pick one, then Enter it (in its register, REC-110), Edit it, or Skip
+  // it; or start a new schedule on this day.
   import { untrack } from "svelte";
   import { call, commands } from "../api";
   import { displayDate } from "../format/date";
@@ -11,7 +12,8 @@
   import { registerState } from "../state/register.svelte";
   import { scheduleState } from "../state/schedule.svelte";
   import { viewState } from "../state/view.svelte";
-  import type { AccountId, OccurrenceView } from "../types/bindings";
+  import { mergeItems, type CalItem } from "../calendar/items";
+  import type { AccountId } from "../types/bindings";
   import AccountBalance from "./AccountBalance.svelte";
   import Modal from "./Modal.svelte";
 
@@ -29,9 +31,9 @@
     onclose: () => void;
   } = $props();
 
-  const keyOf = (v: OccurrenceView) => `${v.schedule}-${v.nominal}`;
+  const keyOf = (v: CalItem) => v.key;
 
-  let items = $state<OccurrenceView[]>([]);
+  let items = $state<CalItem[]>([]);
   let selected = $state<string | null>(untrack(() => pick));
   let loaded = $state(false);
   let busy = $state(false);
@@ -39,7 +41,11 @@
 
   async function load() {
     try {
-      items = await call(commands.calendarOccurrences(day, day, accounts, true));
+      const [occ, txns] = await Promise.all([
+        call(commands.calendarOccurrences(day, day, accounts, true)),
+        call(commands.calendarTransactions(day, day, accounts)),
+      ]);
+      items = mergeItems(occ, txns);
       if (!items.some((v) => keyOf(v) === selected)) selected = items[0] ? keyOf(items[0]) : null;
       error = null;
     } catch (e) {
@@ -51,51 +57,63 @@
   void load();
 
   const sel = $derived(items.find((v) => keyOf(v) === selected));
-  const canAct = $derived(sel !== undefined && sel.status === "pending" && sel.actionable);
+  const canAct = $derived(sel?.occ != null && sel.status === "pending" && sel.actionable);
   const why = $derived(
     sel === undefined
       ? "Choose a transaction first"
-      : sel.status !== "pending"
-        ? `Already ${sel.status}`
-        : "Only the schedule's next transaction can be entered or skipped",
+      : sel.status === "posted"
+        ? "Not a scheduled transaction"
+        : sel.status !== "pending"
+          ? `Already ${sel.status}`
+          : "Only the schedule's next transaction can be entered or skipped",
   );
 
-  const payeeOf = (v: OccurrenceView) =>
+  const payeeOf = (v: CalItem) =>
     v.payee === null ? "(no payee)" : (listsState.payee(v.payee)?.name ?? "");
-  const statusOf = (v: OccurrenceView) =>
-    v.status === "entered" ? "Entered" : v.status === "skipped" ? "Skipped" : v.overdue ? "Overdue" : "Due";
+  const statusOf = (v: CalItem) =>
+    v.status === "posted"
+      ? "Register"
+      : v.status === "entered"
+        ? "Entered"
+        : v.status === "skipped"
+          ? "Skipped"
+          : v.overdue
+            ? "Overdue"
+            : "Due";
 
   function enter() {
-    if (!sel || !canAct) return;
+    if (!sel?.occ || !canAct) return;
     // Props are gone once closed: act first.
-    void scheduleState.enterOccurrence(sel);
+    void scheduleState.enterOccurrence(sel.occ);
     onclose();
   }
 
-  /** An entered one opens its transaction; otherwise the schedule. */
+  /** One with a transaction (entered, or a register one) opens it in its
+   * register; otherwise the schedule. */
   async function edit() {
     if (!sel) return;
     const v = sel;
-    if (v.status === "entered" && v.txn !== null) {
+    if (v.status !== "pending" && v.status !== "skipped" && v.txn !== null) {
       onclose();
       viewState.navigate("account");
-      await registerState.goToTransaction(v.account, v.txn, v.date);
+      await registerState.goToTransaction(v.account, v.txn);
       return;
     }
-    const row = scheduleState.row(v.schedule);
+    if (!v.occ) return;
+    const row = scheduleState.row(v.occ.schedule);
     if (!row) {
       error = "This schedule no longer exists.";
       return;
     }
-    dialogState.editSchedule(v.schedule, row.schedule.fields);
+    dialogState.editSchedule(v.occ.schedule, row.schedule.fields);
     onclose();
   }
 
   async function skip() {
-    if (!sel || !canAct) return;
+    if (!sel?.occ || !canAct) return;
     busy = true;
     try {
-      await call(commands.scheduleSkip(sel.schedule, sel.nominal));
+      await call(commands.scheduleSkip(sel.occ.schedule, sel.occ.nominal));
       await scheduleState.changed();
       await load();
     } catch (e) {
@@ -120,10 +138,10 @@
   }
 </script>
 
-<Modal title="Scheduled transactions: {displayDate(day)}" wide {onclose}>
+<Modal title="Transactions: {displayDate(day)}" wide {onclose}>
   {#if error}<p class="err" role="alert">{error}</p>{/if}
   {#if loaded && items.length === 0}
-    <p>Nothing scheduled on this day.</p>
+    <p>No transactions on this day.</p>
   {:else}
     <div
       class="list"
@@ -139,6 +157,7 @@
           class="row"
           class:sel={keyOf(v) === selected}
           class:done={v.status !== "pending"}
+          class:skipped={v.status === "skipped"}
           role="option"
           tabindex="-1"
           aria-selected={keyOf(v) === selected}
@@ -196,7 +215,9 @@
   .row.sel .st {
     font-weight: 700;
   }
-  .row.done .who {
+  /* Only a skipped one is struck through; entered and register
+     transactions happened. */
+  .row.skipped .who {
     text-decoration: line-through;
   }
   .st {

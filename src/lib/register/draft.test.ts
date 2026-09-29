@@ -7,7 +7,11 @@ import {
   draftFromEntry,
   newDraft,
   setAmountField,
+  setSplitTag,
+  splitCleared,
   splitParts,
+  splitTagValue,
+  type Draft,
 } from "./draft";
 import type { Entry, Payee } from "../types/bindings";
 
@@ -70,7 +74,7 @@ describe("buildEntry", () => {
 });
 
 describe("splits", () => {
-  const split = () => ({
+  const split = (): Draft => ({
     ...base(),
     category: SPLIT,
     payment: "100",
@@ -104,6 +108,31 @@ describe("splits", () => {
     const d = split();
     d.splits[0].target = "";
     expect(buildEntry(d, 1, today).ok).toBe(false);
+  });
+
+  it("a line's tag picker sets its first tag and keeps any others", () => {
+    const s = split().splits[0];
+    expect(splitTagValue(s)).toBe("");
+    const tagged = setSplitTag(s, "7");
+    expect(tagged.tags).toEqual([7]);
+    expect(splitTagValue(tagged)).toBe("7");
+    const two = { ...s, tags: [7, 9] };
+    expect(setSplitTag(two, "8").tags).toEqual([8, 9]);
+    expect(setSplitTag(two, "9").tags).toEqual([9]);
+    expect(setSplitTag(two, "").tags).toEqual([9]);
+    const d = split();
+    d.splits[1] = setSplitTag(d.splits[1], "4");
+    const r = buildEntry(d, 1, today);
+    expect(r.ok && r.entry.lines.map((l) => l.tags)).toEqual([[], [4]]);
+  });
+
+  it("shows the cleared mark of transfer lines only, and saves it unchanged", () => {
+    const d = split();
+    d.splits[0] = { ...d.splits[0], target: "a:3", cleared: "reconciled" };
+    d.splits[1] = { ...d.splits[1], cleared: "cleared" }; // a category line: no mark
+    expect(d.splits.map(splitCleared)).toEqual(["R", ""]);
+    const r = buildEntry(d, 1, today);
+    expect(r.ok && r.entry.lines.map((l) => l.cleared)).toEqual(["reconciled", "unmarked"]);
   });
 });
 

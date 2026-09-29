@@ -4,8 +4,8 @@ use kansha_core::accounts::AccountId;
 use kansha_core::ledger::{self, Entry, TxnId};
 use kansha_core::persistence::{payees, schedules};
 use kansha_core::schedule::{
-    self, AutoEnterReport, DayBalance, EnterEdits, Entered, Occurrence, OccurrenceView, Schedule,
-    ScheduleFields, ScheduleId, ScheduleRow,
+    self, AutoEnterReport, CalendarTxn, DayBalance, EnterEdits, Entered, Occurrence,
+    OccurrenceView, Schedule, ScheduleFields, ScheduleId, ScheduleRow,
 };
 use kansha_core::{Date, Money, Tx};
 use tauri::State;
@@ -203,6 +203,19 @@ pub fn calendar_occurrences(
             include_done,
         )
     })
+}
+
+/// Register transactions dated `from..=to` for the calendar (CAL-020),
+/// investment accounts and voids left out.
+#[tauri::command]
+#[specta::specta]
+pub fn calendar_transactions(
+    state: State<'_, AppState>,
+    from: Date,
+    to: Date,
+    accounts: Option<Vec<AccountId>>,
+) -> CmdResult<Vec<CalendarTxn>> {
+    state.read(|db, _| schedule::register_between(db.conn(), from, to, accounts.as_deref()))
 }
 
 /// Projected end-of-day balance of an account (CAL-050).
