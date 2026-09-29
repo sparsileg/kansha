@@ -115,7 +115,7 @@ Phase 4 ended with the commit "Finish Phase 4". Work after it, driven by Stan's 
 
 - **Scheduled is now "Reminders"** (spec wording: the scheduled transactions). The list view is headed Reminders and has a "Due and overdue (n)" button that opens the Due dialog. The Reminders quick-jump button carries the due count. The startup behavior (auto-enter, review list, Due dialog when anything needs attention) is unchanged.
 - **Calendar** and **Reminders** are menu items (Tools) and quick-jump buttons the user can place (Edit > Navigation Bar). The old top bar is gone.
-- **Home screen setting** can be Reminders or Calendar; the app opens there at startup, before the auto-enter step reports.
+- **"On startup open to:"** (was the Home screen setting) can be Reminders or Calendar; the app opens there at startup, before the auto-enter step reports. The Home button always opens the Dashboard (spec 0.3.23).
 - **Account panel redesign** (a Phase 3 carry-over) and **Show closed accounts** are done, in the shell.
 - **Search** (`search_transactions`, spec UI-070) replaced the register's text-filter box.
 - **Spec 0.3.6:** REC-030 says "entered or skipped" (confirmed by Stan). **0.3.7:** UI-070; REG-040.

@@ -90,8 +90,8 @@ No schema change. **⚠ API change:** 28 new IPC commands; `src/lib/types/bindin
 ### Item 3 (state modules)
 
 - `src/lib/state/lists.svelte.ts`: `listsState` holds `today`, accounts, balances, categories, tags, with id lookup maps, `isEmptyBook`, `loadAll`, `loadBalances`.
-- `src/lib/state/register.svelte.ts`: `registerState` holds the open account, filters, sort, page index, page, and summary. Methods: `open`, `close`, `reload`, `refresh` (rows, footer, balances), `setFilters`, `clearFilters`, `sortBy`, `goToPage`.
-- `src/lib/state/settings.svelte.ts`: `settingsState.pageSize` (100). Theme and font size stay in `theme.svelte.ts`. Not persisted yet (SET-070).
+- `src/lib/state/register.svelte.ts`: `registerState` holds the open account, filters, sort, page index, page, and summary. Methods: `open`, `close`, `reload`, `refresh` (rows, footer, balances), `setFilters`, `clearFilters`, `sortBy`, `goToPage`. (2026-09-28: paging removed, see "Continuous-scroll register"; `goToTransaction(account, txn)` selects and reveals.)
+- `src/lib/state/settings.svelte.ts`: `settingsState.pageSize` (100; removed 2026-09-28). Theme and font size stay in `theme.svelte.ts`. Settings are now kept in localStorage (`prefs.ts`) until SET-070.
 - Tests: `src/lib/state/state.test.ts` (7), IPC mocked.
 
 ### Item 4 (shell)
@@ -132,7 +132,7 @@ All 17 items are built. Items 1–4 are described above. Items 5–17:
 ### Items 5–16
 
 - **5 Account modal** (`AccountModal.svelte`): create and edit; type-specific fields (interest rate, credit limit, investment settings, other asset); type defaults come from Rust (`account_defaults`), so the UI does not duplicate group and tax rules. Account number masked through `account_number_masked` with Reveal (ACCT-150). Close (confirmation via `withConfirmation`), reopen, delete. Type is locked after creation. Reached from "New account" and "Edit account".
-- **6 Register grid** (`RegisterGrid.svelte`): Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Paging (100 rows, "Previous/Next"), not virtualized. Opens date-ascending on the last page, scrolled to the bottom. Sort by clicking a header (Payment and Deposit both sort by amount). Split rows show `--Split--` from the query. Today line (REG-070) where `future` flips between adjacent rows, drawn only on date sort. Future rows dimmed. Void rows struck through. Footer: current, cleared, ending, available credit (REG-060), entry count, paging.
+- **6 Register grid** (`RegisterGrid.svelte`): Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Clr, Balance. Paging (100 rows, "Previous/Next"), not virtualized. Opens date-ascending on the last page, scrolled to the bottom. Sort by clicking a header (Payment and Deposit both sort by amount). Split rows show `--Split--` from the query. Today line (REG-070) where `future` flips between adjacent rows, drawn only on date sort. Future rows dimmed. Void rows struck through. Footer: current, cleared, ending, available credit (REG-060), entry count, paging. (Superseded 2026-09-28: continuous scroll, no pager; future rows italic with their own stripe tint, not dimmed; reconciled rows gray; stripes by position.)
 - **7 Filters** (`FilterBar.svelte`): date range, payee, category, tag, cleared, text (250 ms debounce), Clear all.
 - **8 Keyboard entry** (`EntryEditor.svelte`, `register/draft.ts`, `register/keys.ts`): the entry row is pinned below the grid. Tab order is Date, Num, Payee, Payment, Deposit, Category, Tag, Memo, Enter. Enter saves; Esc cancels. In Date: `+` or `=` next day, `-` previous day, `t` today. After a save the row resets, keeps the date, and refocuses Date. Grid keys: arrows, Home, End, PageUp, PageDown move; Enter edits; Delete deletes; Space toggles cleared; Insert or Ctrl+N focuses the entry row; Shift+F10 or the menu key opens the context menu.
 - **9 QuickFill**: payee suggestions from `payee_search` through a datalist. On change, an exact name match fills empty category, tag, memo, and amount from the payee's defaults. Never overwrites typed values. Edits do not QuickFill. `payee_name` is always sent; Rust finds or creates the payee.
@@ -227,7 +227,7 @@ This file. The spec is unchanged: no requirement or convention changed. The spec
 ### Decided with Stan
 
 - **D-10:** separate Payment and Deposit columns. The UI splits the signed amount for display (`src/lib/format/`). The entry row has both fields; typing in one clears the other. Recorded in spec 0.3.3.
-- **Today line** (REG-070): a horizontal line across the full register row between the last entry dated today or earlier and the first future-dated one. Future rows are dimmed. Stan had no preference; full-width chosen.
+- **Today line** (REG-070): a horizontal line across the full register row between the last entry dated today or earlier and the first future-dated one. Future rows are dimmed (now italic with their own stripe tint, spec 0.3.23). Stan had no preference; full-width chosen.
 - **Category, tag, and payee screens:** the spec's phase table (§24) gives them no phase. Stan wants all three in 3b. Payee editing (memorized defaults, rename, hide, merge), category management (create, rename, re-parent, merge, hide), and tag management (create, rename, merge, hide) are required 3b items 15 and 16.
 
 ### Account panel redesign (done in the shell, `shell.md`)

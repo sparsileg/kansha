@@ -98,15 +98,16 @@ section records what was decided about it.
 - Opening a book means asking for its passphrase (SECU-020) unless it is
   kept in the OS keyring. Switching closes the current book first.
 
-### Home screen and Due count
+### Home, startup, and Due count
 
-- **No separate Dashboard entry.** The app has a home screen, chosen by
-  the per-book setting (a specific account, the calendar, the
-  investments view, the Dashboard once it exists, the last view, or
-  another view). A Home icon in the navigation bar goes to it.
-- **Dashboard:** built in Phase 7 as specified (DSH-010: net worth with
-  its breakdown, and this month's income, expenses, and net). It is one
-  of the choices for the home screen, not a required screen.
+- **Home is the Dashboard** (changed 2026-09-28, spec 0.3.23). The Home
+  icon in the navigation bar always opens the Dashboard (DSH-010: net
+  worth with its breakdown, and this month's income, expenses, and
+  net).
+- **"On startup open to:"** setting: Dashboard, Investments, Reminders,
+  Calendar, Accounts, or any account; every new view or account joins
+  the list. Kept on this computer until settings move into the book
+  (SET-070).
 - **Due count:** a small number on the Reminders icon in the navigation
   bar (due, overdue, or awaiting review), visible from any view.
 - **One book open at a time.** Opening another book closes the current
@@ -114,7 +115,8 @@ section records what was decided about it.
 
 ### Spec follow-ups (next spec revision)
 
-- SET-060 (startup behavior) becomes the per-book home screen setting.
+- SET-060 (startup behavior): done in spec 0.3.23; per-book once
+  settings live in the book (SET-070).
 - UI-020 (icon bar) and UI-010 (account selector) follow this document.
 - Add requirements for the menu structure, search, and multiple books
   (one open at a time).
