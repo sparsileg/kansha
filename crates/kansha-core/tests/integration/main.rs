@@ -14,6 +14,7 @@ mod invest;
 mod ipc_json;
 mod ledger;
 mod migrations;
+mod perf;
 mod performance;
 mod reconcile;
 mod register;

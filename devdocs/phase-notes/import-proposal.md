@@ -1,8 +1,8 @@
 # Import proposal (Phase 9) — plan, not built
 
 Status: plan agreed in chat 2026-09-30. Nothing here is implemented.
-Parts B and C wait for Stan's "proceed"; Part A feeds the Phase 9
-spec (MIG) and settles placeholders P-01 and P-03.
+Part C (performance test) is built; Part A feeds the Phase 9 spec
+(MIG) and settles placeholders P-01 and P-03.
 
 ## Context
 
@@ -11,8 +11,7 @@ saved the data file and started a new one, dropping most older
 transactions. The current file still holds hidden accounts (kept only
 for long-term net worth history) and the full investment history (kept
 for cost basis). The questions: what to bring into Kansha, how far
-back, what to leave behind, and how to keep net worth history once
-old accounts are gone.
+back, and what to leave behind.
 
 Facts from sample exports (real data; not copied into the repo):
 
@@ -60,11 +59,11 @@ maybe later, separate from this conversion.
 | Option | Pros | Cons |
 |---|---|---|
 | Import as closed accounts | Computed net worth history continues | Clutter returns; needs their full history |
-| **Skip; keep history as net worth values (Part B)** ★ | Clean book; long-term net worth kept | No drill-down into old net worth |
+| **Skip** ★ | Clean book | Net worth history before cutover not in Kansha |
 
 Decided: skip. The preview lists every QIF account with a checkbox;
-hidden accounts start unchecked. Long-term net worth comes from
-RPT-115, typed in by hand from Stan's spreadsheet.
+hidden accounts start unchecked. Stan keeps long-term net worth in
+his spreadsheet; Kansha does not record it.
 
 ### A4. Investments
 
@@ -108,45 +107,20 @@ effect).
    whole-file QIF plus broker lot CSVs), imports into the real book,
    verifies once more, and switches over.
 
-## Part B — New requirement (spec edit on "proceed")
+## Part B — Dropped
 
-Add to §12 after RPT-110 in `devdocs/kansha-spec.md` (no MIG-180:
-Stan types in about 40 values from a spreadsheet):
+A hand-entered monthly net worth list (RPT-115) was proposed and
+dropped (Stan, 2026-09-30): he keeps it in a spreadsheet. No spec
+change, no table.
 
-- **RPT-115** [1.0][S] **Net worth history.** The user records a net
-  worth amount for a month (month and year, amount, optional note),
-  entered by hand; Kansha never fills it from its own balances. The
-  list is independent of accounts: deleting, closing, or never
-  importing an account does not change it. One value per month;
-  entering a month again replaces it (audited). Add, edit, and delete
-  in a Net Worth History dialog (a list; no graph). A recorded value
-  is the net worth at month end. The net worth graphs (Net Worth
-  report over time, RPT-110, and the dashboard, DSH-010) plot one
-  value per month: the recorded value if the month has one, else the
-  value Kansha computes from its accounts; a month with neither is a
-  gap. Recorded points are marked apart from computed ones by shape,
-  not color alone. A recorded point is a total only: no breakdown by
-  account group and no drill-down (RPT-030). The two sources are never
-  shown side by side.
-
-Spec 0.5.3 with an Appendix A row. Schema later, not with the spec
-edit: new table `net_worth_snapshot` (month `YYYY-MM` primary key,
-amount in cents, note), STRICT, in the next migration. **⚠ Schema
-change** when built.
-
-Decided (Stan, 2026-09-30): values are entered by hand only (no
-"record current net worth" button, no import tool; about 40 values
-from a spreadsheet). The graph takes the recorded value for a month
-first and falls back to Kansha's computed value (recent months).
-
-## Part C — Performance test (code on "proceed")
+## Part C — Performance test (built 2026-09-30)
 
 100,000 transactions over 12 accounts (NFR-040, NFR-050).
 
-- `crates/kansha-core/src/sample.rs`: add `SampleSpec.accounts`
-  (default 5, today's layout, output unchanged); above 5, add
-  checking, savings, and credit card accounts and spread daily events
-  across them.
+- `crates/kansha-core/src/sample.rs`: add
+  `SampleSpec.extra_accounts` (default 0, output unchanged); each adds
+  a checking, savings, or credit card account that shares the daily
+  events. The test uses 5 (7 standard + 5 = 12).
 - New test `crates/kansha-core/tests/integration/perf.rs`, `#[ignore]`
   so `just check` stays fast: 12 accounts, density set so the book
   holds at least 100,000 transactions over about 20 years. Measures
@@ -165,6 +139,12 @@ in `crates/kansha-core/src/reports/`, and the pattern of
 `register_with_10000_rows_opens_under_a_second` in
 `tests/integration/register.rs`.
 
+Result (2026-09-30): 108,662 transactions; Net Worth over 20 years
+by month took 11.2 s and the dashboard 2.6 s, both over the 2 s
+limit; everything else passed. Times and causes in
+`prototype-review.md`. Fix (one pass per account with running
+balances) not started.
+
 Known risk: the register's window function scans the whole account
 (phase-3 notes); 100,000 rows may expose it.
 
@@ -172,4 +152,3 @@ Known risk: the register's window function scans the whole account
 
 - `just check` green (perf test ignored there).
 - `just perf` runs; times reported; any miss becomes a finding.
-- Spec text filled at 72; version 0.5.3; Appendix A row.

@@ -16,6 +16,10 @@ test-rust:
 test-frontend:
     npm test
 
+# Large-book timings: 100,000+ transactions, 12 accounts (NFR-040, NFR-050)
+perf:
+    cargo test --release -p kansha-core --test integration perf:: -- --ignored --nocapture
+
 # Formatting, lints, type-checking, and tests: what CI runs
 check: fmt-check clippy typecheck test
 

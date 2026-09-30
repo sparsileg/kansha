@@ -68,6 +68,11 @@ pub struct SampleSpec {
     /// Everyday spending events per day, in percent: 100 is about one a
     /// day. Raise it to build a register of 10,000 rows quickly.
     pub density: u32,
+    /// Banking accounts beyond the standard five, taken in order from
+    /// [`EXTRA_ACCOUNTS`] (credit cards, a checking, a savings). They
+    /// share the everyday spending, so a large book spreads across many
+    /// registers (NFR-050). Zero gives the standard dataset unchanged.
+    pub extra_accounts: u32,
 }
 
 impl SampleSpec {
@@ -79,6 +84,7 @@ impl SampleSpec {
             end: today,
             today,
             density: 100,
+            extra_accounts: 0,
         }
     }
 }
@@ -411,6 +417,24 @@ const ACCOUNTS: &[(&str, AccountType, i64, Option<i64>)] = &[
 /// before yearly growth.
 const CUSHION: i64 = 400_000;
 
+/// Accounts added by [`SampleSpec::extra_accounts`], in order:
+/// (name, type, opening balance in cents, credit limit cents).
+pub const EXTRA_ACCOUNTS: &[(&str, AccountType, i64, Option<i64>)] = &[
+    (
+        "Mastercard",
+        AccountType::CreditCard,
+        -80_000,
+        Some(1_000_000),
+    ),
+    ("Joint Checking", AccountType::Checking, 300_000, None),
+    ("Discover", AccountType::CreditCard, -40_000, Some(800_000)),
+    ("Money Market", AccountType::Savings, 1_000_000, None),
+    ("Amex", AccountType::CreditCard, -60_000, Some(1_200_000)),
+    ("Store Card", AccountType::CreditCard, 0, Some(300_000)),
+    ("Second Checking", AccountType::Checking, 150_000, None),
+    ("Gas Card", AccountType::CreditCard, 0, Some(200_000)),
+];
+
 const CHECKING: usize = 0;
 const SAVINGS: usize = 1;
 const VISA: usize = 2;
@@ -430,6 +454,10 @@ struct Gen<'a, 'c> {
     payees: HashMap<&'static str, PayeeId>,
     tags: Vec<TagId>,
     check_num: i64,
+    /// Indexes into `accounts` of the extra accounts, by type.
+    extra_cards: Vec<usize>,
+    extra_checking: Vec<usize>,
+    extra_savings: Vec<usize>,
 }
 
 /// Fill an empty database with the dataset. Refuses a database that
@@ -437,6 +465,12 @@ struct Gen<'a, 'c> {
 pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
     if spec.end < spec.start {
         return Err(Error::Invalid("sample data: end is before start".into()));
+    }
+    if spec.extra_accounts as usize > EXTRA_ACCOUNTS.len() {
+        return Err(Error::Invalid(format!(
+            "sample data: at most {} extra accounts",
+            EXTRA_ACCOUNTS.len()
+        )));
     }
     if !accounts::list(tx.conn())?.is_empty() {
         return Err(Error::Invalid(
@@ -452,6 +486,9 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
         payees: HashMap::new(),
         tags: Vec::new(),
         check_num: 1000,
+        extra_cards: Vec::new(),
+        extra_checking: Vec::new(),
+        extra_savings: Vec::new(),
     };
     g.setup()?;
     g.run()?;
@@ -468,7 +505,8 @@ pub fn generate(tx: &Tx<'_>, spec: &SampleSpec) -> Result<SampleSummary> {
         accounts: len(g.accounts.len() + investment_accounts),
         categories: len(CATEGORIES.len()),
         payees: len(g.payees.len()),
-        txns: count("txn")?.saturating_sub(len(ACCOUNTS.len())),
+        // Less one opening balance per banking account.
+        txns: count("txn")?.saturating_sub(len(g.accounts.len())),
     })
 }
 
@@ -500,7 +538,14 @@ impl Gen<'_, '_> {
             self.tags
                 .push(tags::insert(self.tx, &TagFields::new(*name))?.id);
         }
-        for (name, kind, cents, limit) in ACCOUNTS {
+        let extras = &EXTRA_ACCOUNTS[..self.spec.extra_accounts as usize];
+        for (name, kind, cents, limit) in ACCOUNTS.iter().chain(extras) {
+            match kind {
+                _ if self.accounts.len() < ACCOUNTS.len() => {}
+                AccountType::CreditCard => self.extra_cards.push(self.accounts.len()),
+                AccountType::Checking => self.extra_checking.push(self.accounts.len()),
+                _ => self.extra_savings.push(self.accounts.len()),
+            }
             let mut f = AccountFields::new(*name, *kind);
             f.opening_date = Some(self.spec.start);
             f.credit_limit = limit.map(Money::from_cents);
@@ -686,6 +731,13 @@ impl Gen<'_, '_> {
                     .line(Target::Category(self.cat("Income:Salary")), amount);
                 self.post(entry, "Employer")?;
                 tithable += pay;
+                // A second earner pays into each extra checking account.
+                for i in self.extra_checking.clone() {
+                    let amount = Money::from_cents(grow(160_000));
+                    let entry = Entry::new(self.accounts[i], date, amount)
+                        .line(Target::Category(self.cat("Income:Salary")), amount);
+                    self.post(entry, "Employer")?;
+                }
             }
             if day.month() == 4 && dom == 15 && years > 0 {
                 let amount = Money::from_cents(124_000);
@@ -790,17 +842,28 @@ impl Gen<'_, '_> {
                 if owed > 0 {
                     self.transfer(CHECKING, VISA, date, "Visa Payment", owed)?;
                 }
+                for i in self.extra_cards.clone() {
+                    let owed =
+                        -ledger::balance(self.tx.conn(), self.accounts[i], Some(date))?.cents();
+                    if owed > 0 {
+                        self.transfer(CHECKING, i, date, "Visa Payment", owed)?;
+                    }
+                }
             }
             if last_of_month {
-                let balance = ledger::balance(self.tx.conn(), self.accounts[SAVINGS], Some(date))?;
-                // 4.10 % a year, paid monthly, rounded half-even.
-                let interest = Money::from_decimal(
-                    balance.to_decimal() * Decimal::new(41, 3) / Decimal::from(12),
-                )?;
-                if interest.cents() > 0 {
-                    let entry = Entry::new(self.accounts[SAVINGS], date, interest)
-                        .line(Target::Category(self.cat("Income:Other")), interest);
-                    self.post(entry, "Bank")?;
+                let mut savings = vec![SAVINGS];
+                savings.extend(&self.extra_savings);
+                for i in savings {
+                    let balance = ledger::balance(self.tx.conn(), self.accounts[i], Some(date))?;
+                    // 4.10 % a year, paid monthly, rounded half-even.
+                    let interest = Money::from_decimal(
+                        balance.to_decimal() * Decimal::new(41, 3) / Decimal::from(12),
+                    )?;
+                    if interest.cents() > 0 {
+                        let entry = Entry::new(self.accounts[i], date, interest)
+                            .line(Target::Category(self.cat("Income:Other")), interest);
+                        self.post(entry, "Bank")?;
+                    }
                 }
             }
 
@@ -872,11 +935,24 @@ impl Gen<'_, '_> {
         }
         let (name, cat, lo, hi, _, card) = *merchant;
         let cents = self.rng.between(lo, hi);
-        let account = if card && self.rng.chance(800) {
+        let mut account = if card && self.rng.chance(800) {
             VISA
         } else {
             CHECKING
         };
+        // Extra accounts take an even share with the standard one. No
+        // draw without them, so the standard dataset is unchanged.
+        let group = if account == VISA {
+            &self.extra_cards
+        } else {
+            &self.extra_checking
+        };
+        if !group.is_empty() {
+            let k = self.rng.below(group.len() as u64 + 1) as usize;
+            if k > 0 {
+                account = group[k - 1];
+            }
+        }
 
         // Refund now and then.
         if self.rng.chance(15) {
@@ -1375,6 +1451,7 @@ mod tests {
             end: end.parse().unwrap(),
             today: today.parse().unwrap(),
             density,
+            extra_accounts: 0,
         };
         let summary = db
             .write(&clock, Origin::System, |tx| generate(tx, &spec))
@@ -1409,6 +1486,40 @@ mod tests {
         ] {
             assert!(all.contains(&extra), "{extra}");
         }
+    }
+
+    #[test]
+    fn extra_accounts_share_the_spending_and_stay_consistent() {
+        let clock = FixedClock::new("2026-06-30".parse().unwrap());
+        let mut db = Db::open_in_memory(&clock).unwrap();
+        let today = "2026-06-30".parse().unwrap();
+        let mut spec = SampleSpec::new(7, "2025-01-01".parse().unwrap(), today);
+        spec.extra_accounts = 5;
+        let summary = db
+            .write(&clock, Origin::System, |tx| generate(tx, &spec))
+            .unwrap();
+        assert_eq!(summary.accounts, 12);
+        assert!(integrity::check(db.conn()).unwrap().is_clean());
+        for (name, ..) in &EXTRA_ACCOUNTS[..5] {
+            let rows: i64 = db
+                .conn()
+                .query_row(
+                    "SELECT count(*) FROM posting p JOIN account a ON a.id = p.account_id
+                     WHERE a.name = ?1",
+                    [name],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(rows > 12, "{name}: {rows} rows");
+        }
+        // Too many is refused.
+        let clock = FixedClock::new("2026-06-30".parse().unwrap());
+        let mut db = Db::open_in_memory(&clock).unwrap();
+        spec.extra_accounts = EXTRA_ACCOUNTS.len() as u32 + 1;
+        assert!(
+            db.write(&clock, Origin::System, |tx| generate(tx, &spec))
+                .is_err()
+        );
     }
 
     #[test]

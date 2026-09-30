@@ -193,6 +193,29 @@ Placeholders P-01–P-05 belong to Phase 9.
 - Dockable registers: three questions open (`shell.md`).
 - Engine error messages show ISO dates, not the user's format.
 
+## Large book (NFR-040, NFR-050)
+
+`just perf` (release, 2026-09-30, Linux): 108,662 transactions over 12
+accounts and 20 years; busiest register Checking, 19,042 rows. Book
+built in 146 s.
+
+| Measure | Time | Limit |
+|---|---|---|
+| Register, all rows | 247 ms | 1 s |
+| Register, first page | 206 ms | 1 s |
+| Register, text filter | 248 ms | 1 s |
+| Net Worth, 20 years by month | **11.2 s** | 2 s |
+| Net Worth, one year by month | 820 ms | 2 s |
+| Income/Expense by category, one year | 33 ms | 2 s |
+| Itemized Categories, one year | 36 ms | 2 s |
+| Dashboard | **2.6 s** | 2 s |
+| Integrity check | 1.7 s | none |
+
+Misses: Net Worth over many months (cost grows with months times
+postings) and the dashboard (likely its net worth graph). Not fixed.
+The first register page costs nearly as much as all rows: the window
+function scans the whole account (phase-3 notes).
+
 ## Stan's findings
 
 (to add)
