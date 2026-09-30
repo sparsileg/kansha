@@ -47,6 +47,10 @@ dev:
 build:
     npm run tauri build
 
+# Release exe only, no installers (target/release/)
+build-exe:
+    npm run tauri build -- --no-bundle
+
 # Regenerate src/lib/types/bindings.ts from the Rust command signatures
 bindings:
     cargo test -p kansha write_bindings -- --ignored
