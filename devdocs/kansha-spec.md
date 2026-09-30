@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.4.3 (draft) |
+| **Document version** | 0.4.4 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -1579,9 +1579,14 @@ Modeling choices that affect other sections:
   coming in positive, spending negative (a category or transfer amount
   is minus its posting). Void transactions and equity (opening
   balance) postings are left out. A category line belongs to the
-  transaction's investment account, else its first account posting,
-  whichever the account filter includes. Transfers are listed once
-  from each included side. Tax Schedule and Tax Summary take only
+  account a banking entry was written in, and is left out when the
+  account filter excludes it (0.4.4). For an investment transaction it
+  belongs to the investment account, else (linked-cash income and
+  fees) the account its cash went to, whichever the filter includes;
+  a linked-cash trade's lines stay with the investment account. A
+  linked-cash buy, sale, or return of capital is a transfer between
+  the cash account and the investment account (0.4.4). Transfers are
+  listed once from each included side. Tax Schedule and Tax Summary take only
   transactions of taxable accounts; a transfer counts when the account
   it moves money out of (or into) has a tax line for that
   direction. Capital Gains with no account filter shows taxable
@@ -1928,6 +1933,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.4.4 | 2026-09-30 | Code review of Phase 7; two fixes, both seen with an account filter. §18 report rules: a banking entry's category lines belong only to the account it was written in (a split with a transfer listed its expenses under the other account when its own was filtered out). A linked-cash buy, sale, or return of capital is now a transfer between the cash account and the investment account (it was missing from Itemized Categories); its realized gain stays with the investment account. No schema or API change. |
 | 0.4.3 | 2026-09-30 | Code review of Phase 4; one fix. REC-160: deleting a transaction whose occurrence a series edit left out of the series marks it skipped instead of returning it to Due (which left the schedule stuck: its only due item could not be entered). Checking whether a date is an upcoming occurrence no longer walks the series to the calendar's end. No schema or API change. |
 | 0.4.2 | 2026-09-30 | Code review of Phase 6; one fix. §18 investment rules: editing a split, sale, return of capital, share transfer, or shares removed no longer counts lots created later the same day (entry order), which could re-split a later buy or change a sale's lots and gain. No schema or API change. |
 | 0.4.1 | 2026-09-30 | Code review of Phases 1–2; four fixes. CAT-010: no `:` in a category name. RPT-020: merges and deletes update saved reports' filters (a merged ID becomes the survivor's; a deleted one is dropped). UI-070: one search line per transaction and account (an investment transaction once, not once per posting). §18 closed accounts: an open investment account's linked cash account cannot be closed. Hidden categories, payees, and tags stay a UI-only feature (the engine accepts them on new postings). No schema or API change. |

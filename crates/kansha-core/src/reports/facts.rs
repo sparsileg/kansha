@@ -205,19 +205,43 @@ impl TxnFacts {
             })
     }
 
-    /// The account a category line belongs to: the investment account,
-    /// else the first account posting, whichever the filter includes.
+    /// The account a category line belongs to, if the filter includes
+    /// it: the account a banking entry was written in; the investment
+    /// account of a trade whose cash is in a linked account (the cash is
+    /// a transfer, see [`TxnFacts::linked_cash`]); otherwise for an
+    /// investment transaction its account, else the account its cash
+    /// went to.
     pub fn home(&self, s: &ReportSettings) -> Option<AccountId> {
-        self.inv
-            .as_ref()
-            .map(|i| i.account)
-            .filter(|a| s.account_ok(*a))
-            .or_else(|| {
-                self.postings
-                    .iter()
-                    .filter_map(|p| p.account)
-                    .find(|a| s.account_ok(*a))
-            })
+        let Some(inv) = &self.inv else {
+            return self.main().map(|(_, a)| a).filter(|a| s.account_ok(*a));
+        };
+        let own = Some(inv.account).filter(|a| s.account_ok(*a));
+        if self.linked_cash().is_some() {
+            return own;
+        }
+        own.or_else(|| {
+            self.postings
+                .iter()
+                .filter_map(|p| p.account)
+                .find(|a| s.account_ok(*a))
+        })
+    }
+
+    /// A trade whose cash is in a linked account (INV-300): the cash
+    /// posting's index and account. Its holding changes in the
+    /// investment account, so the cash moves between the two.
+    pub fn linked_cash(&self) -> Option<(usize, AccountId)> {
+        let inv = self.inv.as_ref()?;
+        let holding = self
+            .postings
+            .iter()
+            .any(|p| p.account == Some(inv.account) && p.security.is_some());
+        if !holding {
+            return None;
+        }
+        self.account_postings()
+            .find(|(_, a, _)| *a != inv.account)
+            .map(|(i, a, _)| (i, a))
     }
 
     /// The main account (the register the entry was written in): the
@@ -463,6 +487,39 @@ pub(super) fn lines(
         match want {
             Want::All => {
                 if !s.transfers {
+                    continue;
+                }
+                // A linked-cash trade: from the cash account to the
+                // investment account (or back).
+                if let (Some((i, cash_acct)), Some(inv)) = (t.linked_cash(), &t.inv) {
+                    let p = &t.postings[i];
+                    if tags_ok(s, &t.tags_for(p)) {
+                        if s.account_ok(cash_acct) {
+                            let mut line = base(
+                                cash_acct,
+                                p,
+                                Section::Transfers,
+                                Target::Transfer(inv.account),
+                                format!("[{}]", lk.account_name(inv.account)),
+                            );
+                            line.amount = p.amount;
+                            out.push(line);
+                        }
+                        if s.account_ok(inv.account) {
+                            let mut line = base(
+                                inv.account,
+                                p,
+                                Section::Transfers,
+                                Target::Transfer(cash_acct),
+                                format!("[{}]", lk.account_name(cash_acct)),
+                            );
+                            line.amount = p
+                                .amount
+                                .checked_neg()
+                                .ok_or(crate::Error::Overflow("report"))?;
+                            out.push(line);
+                        }
+                    }
                     continue;
                 }
                 let Some((_, main)) = t.main() else {

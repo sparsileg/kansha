@@ -873,3 +873,101 @@ fn every_report_runs_on_the_sample_book_and_balances() {
         assert!(tax.contains(form), "{form} missing:\n{tax}");
     }
 }
+
+/// The CSV's last line: the report's overall total.
+fn overall(r: &Report) -> String {
+    reports::to_csv(r)
+        .lines()
+        .last()
+        .unwrap_or_default()
+        .rsplit(',')
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn a_split_lists_its_categories_under_the_account_it_was_entered_in() {
+    let mut b = Book::new(date("2026-06-30")).unwrap();
+    let chk = b.account("Checking", AccountType::Checking).unwrap();
+    let sav = b.account("Savings", AccountType::Savings).unwrap();
+    let food = b.category("Food", CategoryKind::Expense).unwrap();
+    b.opening_balance(chk, date("2026-01-01"), m("5000.00"))
+        .unwrap();
+    b.entry(chk, date("2026-02-01"))
+        .amount(m("-500.00"))
+        .split(Target::Category(food), m("-100.00"))
+        .split(Target::Account(sav), m("-400.00"))
+        .save()
+        .unwrap();
+    let run_for = |kind, account| {
+        let mut s = settings(kind);
+        s.accounts = Some(vec![account]);
+        reports::run(b.conn(), &s, date("2026-06-30")).unwrap()
+    };
+
+    // Savings got 400.00 and paid for no food.
+    let r = run_for(ReportKind::ItemizedCategories, sav);
+    assert!(!text(&r).contains("Food"), "{}", text(&r));
+    assert_eq!(overall(&r), "400.00");
+    let r = run_for(ReportKind::IncomeExpense, sav);
+    assert!(!text(&r).contains("Food"), "{}", text(&r));
+    // Checking paid both.
+    let r = run_for(ReportKind::ItemizedCategories, chk);
+    assert!(text(&r).contains("Food"));
+    assert_eq!(overall(&r), "-500.00");
+}
+
+#[test]
+fn linked_cash_trades_are_transfers_between_the_two_accounts() {
+    let mut b = Book::new(date("2026-06-30")).unwrap();
+    let chk = b.account("Checking", AccountType::Checking).unwrap();
+    b.opening_balance(chk, date("2026-01-01"), m("5000.00"))
+        .unwrap();
+    let mut f = AccountFields::new("Brokerage", AccountType::Brokerage);
+    if let Some(inv) = f.investment.as_mut() {
+        inv.cash_mode = kansha_core::accounts::CashMode::Linked;
+        inv.linked_cash_account = Some(chk);
+    }
+    let brk = b.account_with(&f).unwrap();
+    let vti = b.security("Total", "VTI", SecurityType::Etf).unwrap();
+    let trade = |action, d: &str, shares: &str, amount: &str| {
+        let mut i = InvInput::new(brk, action, date(d));
+        i.security = Some(vti);
+        i.quantity = Some(shares.parse::<Quantity>().unwrap());
+        i.amount = Some(m(amount));
+        i
+    };
+    b.invest(&trade(InvAction::Buy, "2026-03-01", "10", "1000.00"))
+        .unwrap();
+    b.invest(&trade(InvAction::Sell, "2026-04-01", "4", "480.00"))
+        .unwrap();
+    let mut div = InvInput::new(brk, InvAction::Dividend, date("2026-05-01"));
+    div.security = Some(vti);
+    div.amount = Some(m("7.00"));
+    b.invest(&div).unwrap();
+    let run_for = |kind, accounts: Option<Vec<AccountId>>| {
+        let mut s = settings(kind);
+        s.accounts = accounts;
+        reports::run(b.conn(), &s, date("2026-06-30")).unwrap()
+    };
+
+    // Checking: -1000 to Brokerage, +480 from it, +7 dividend.
+    let r = run_for(ReportKind::ItemizedCategories, Some(vec![chk]));
+    let t = text(&r);
+    assert!(t.contains("Brokerage"), "{t}");
+    assert!(!t.contains("Realized"), "{t}");
+    assert!(t.contains("Dividends"), "{t}");
+    assert_eq!(overall(&r), "-513.00");
+    // Brokerage: +1000 in, -480 out, +80 gain (its basis went up 600);
+    // a linked dividend counts as its income, as before (the cash went
+    // to Checking).
+    let r = run_for(ReportKind::ItemizedCategories, Some(vec![brk]));
+    let t = text(&r);
+    assert!(t.contains("Checking"), "{t}");
+    assert!(t.contains("Realized"), "{t}");
+    assert_eq!(overall(&r), "607.00");
+    // Every account: the transfers cancel out.
+    let r = run_for(ReportKind::ItemizedCategories, None);
+    assert_eq!(overall(&r), "87.00");
+}

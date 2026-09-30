@@ -264,3 +264,29 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
 - A window's scroll position resets each time it is shown (collapsed
   groups and hidden parts are kept).
 - Windows fill the view area; no moving or resizing.
+
+## Code review 2026-09-30 (spec 0.4.4)
+
+Phase 7 re-read against the code, with probes. Fixed in
+`reports/facts.rs`, with tests that failed first:
+
+- A banking split with a transfer (Checking -500 = Food -100,
+  [Savings] -400) listed Food under Savings when the report was
+  limited to Savings (Savings netted +300, not +400). `home` now gives
+  a banking entry's category lines only to the account it was written
+  in (test `a_split_lists_its_categories_under_the_account_it_was_entered_in`).
+- Linked-cash buys, sales, and returns of capital were in no report
+  line: Checking's Itemized Categories totaled -500 against a -750
+  change. `linked_cash` finds such a trade; it is listed as a transfer
+  from each included side, and its realized gain stays with the
+  investment account so a Checking-only report doesn't count it twice
+  (test `linked_cash_trades_are_transfers_between_the_two_accounts`).
+
+Unchanged by agreement: linked-cash dividends, interest, and fees post
+their category under the investment account when included, else under
+the cash account. So a Brokerage-only report counts a linked dividend
+as income although the cash went to Checking.
+
+Checked, no change: date presets, periods, whole-dollar rounding, Net
+Worth history, liability sign, voids and equity left out, tax report
+filters, Schedule D from lots, payee and tag filters, sorting.
