@@ -573,8 +573,20 @@ fn linked_accounts_must_be_the_right_kind() {
         inv.linked_cash_account = Some(sav2);
     }
     assert!(err_text(book.write(|tx| accounts::update(tx, brk, &f))).contains("closed"));
+    // The linked cash account of an open investment account can't close,
+    // confirmed or not; once Brokerage is closed it can.
+    for confirmed in [false, true] {
+        let r = book.write(|tx| ledger::close_account(tx, chk, date("2026-06-30"), confirmed));
+        assert!(
+            matches!(&r, Err(Error::Invalid(msg)) if msg.contains("\"Brokerage\"")),
+            "{r:?}"
+        );
+    }
+    book.write(|tx| ledger::close_account(tx, brk, date("2026-06-30"), false))
+        .unwrap();
     book.write(|tx| ledger::close_account(tx, chk, date("2026-06-30"), true))
         .unwrap();
+    book.write(|tx| accounts::reopen(tx, brk)).unwrap();
     let mut g = accounts::get(book.conn(), brk).unwrap().fields;
     g.notes = "still linked to closed checking".into();
     book.write(|tx| accounts::update(tx, brk, &g)).unwrap();

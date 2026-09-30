@@ -5,9 +5,10 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use super::ledger;
+use super::{ledger, reports};
 use crate::categories::{Merged, Payee, PayeeFields, PayeeId};
 use crate::error::{Error, Result};
+use crate::reports::FilterList;
 
 const COLUMNS: &str = "id, name, default_category_id, default_tag_id, default_memo, \
                        default_amount, hidden, created_at";
@@ -130,6 +131,7 @@ pub fn delete(tx: &Tx<'_>, id: PayeeId) -> Result<()> {
     tx.conn()
         .execute("DELETE FROM payee WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "payee", id.0))?;
+    reports::saved_replace_id(tx, FilterList::Payees, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Payee,
@@ -150,8 +152,8 @@ pub fn find_or_insert(tx: &Tx<'_>, name: &str) -> Result<Payee> {
     }
 }
 
-/// Merge `source` into `target` (PAY-030): transactions and schedules move
-/// to `target`; `source` is deleted.
+/// Merge `source` into `target` (PAY-030): transactions, schedules, and
+/// saved report filters move to `target`; `source` is deleted.
 pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
     let conn = tx.conn();
     if source == target {
@@ -181,6 +183,7 @@ pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
         },
     )?;
     conn.execute("DELETE FROM payee WHERE id = ?1", [source])?;
+    reports::saved_replace_id(tx, FilterList::Payees, source.0, Some(target.0))?;
     audit::record(
         tx,
         AuditEntity::Payee,

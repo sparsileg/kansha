@@ -141,6 +141,7 @@ pub fn delete(tx: &Tx<'_>, id: SecurityId) -> Result<()> {
     tx.conn()
         .execute("DELETE FROM security WHERE id = ?1", [id.0])
         .map_err(|e| super::accounts::in_use_or(e.into(), "security", id.0))?;
+    super::reports::saved_replace_id(tx, crate::reports::FilterList::Securities, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Security,

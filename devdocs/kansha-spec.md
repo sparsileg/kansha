@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.4 (draft) |
+| **Document version** | 0.4.1 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -170,7 +170,9 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 
 - **CAT-010** [1.0][S] Categories are either Income or Expense and
   support subcategories (at least two levels; recommend unlimited
-  depth [R]).
+  depth [R]). A name cannot contain `:`, which separates the levels
+  of a path (`Food:Dining`); a subcategory is made by choosing its
+  parent (0.4.1).
 - **CAT-020** [1.0][S] Create, rename, move (re-parent), and merge
   categories. Merging reassigns all postings from the source to the
   target and is recorded in the audit log.
@@ -671,7 +673,11 @@ This section is intentionally incomplete until export testing is done
   Columns), and a tab per filter (Accounts, Categories, Payees,
   Securities, Tags as the report uses them), each with Select All and
   Clear All. Closing a report whose settings changed since it was
-  opened or last saved asks whether to save it.
+  opened or last saved asks whether to save it. Merging or deleting
+  an account, category, payee, security, or tag updates saved
+  reports' filters: a merged record's ID becomes the survivor's, a
+  deleted one is dropped, and a filter left empty becomes no filter
+  (0.4.1).
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to
   show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month,
@@ -989,8 +995,10 @@ platform has one.
 - **UI-070** [1.0][R] Search box in the navigation bar: finds
   transactions by payee, category, memo, note, check number, account
   name, or amount, across all accounts or (from a register) in that
-  account only. Results are a list, newest first, one line each;
-  choosing one opens its account on that transaction.
+  account only. Results are a list, newest first, one line per
+  transaction and account (an investment transaction shows its cash
+  posting, or its holding's when it has none); choosing one opens its
+  account on that transaction.
 
 #### 14.2 Settings
 
@@ -1410,9 +1418,10 @@ Modeling choices that affect other sections:
   `reconciled`; an edit keeps an existing reconciled posting's
   reconciliation link.
 - **Closed accounts (ACCT-210):** closing requires no transactions
-  after the closing date and a zero balance or confirmation. A closed
-  account takes no new, edited, voided, deleted, or re-cleared
-  transactions until reopened.
+  after the closing date and a zero balance or confirmation. The
+  linked cash account of an open investment account cannot be closed,
+  confirmed or not (0.4.1). A closed account takes no new, edited,
+  voided, deleted, or re-cleared transactions until reopened.
 - **IPC conventions (Phase 3a):** types that cross IPC derive
   `specta::Type` behind kansha-core's `specta` feature (enabled only
   by src-tauri). Money, quantities, prices, rates, dates, and
@@ -1918,6 +1927,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.4.1 | 2026-09-30 | Code review of Phases 1–2; four fixes. CAT-010: no `:` in a category name. RPT-020: merges and deletes update saved reports' filters (a merged ID becomes the survivor's; a deleted one is dropped). UI-070: one search line per transaction and account (an investment transaction once, not once per posting). §18 closed accounts: an open investment account's linked cash account cannot be closed. Hidden categories, payees, and tags stay a UI-only feature (the engine accepts them on new postings). No schema or API change. |
 | 0.4 | 2026-09-29 | Prototype review (`devdocs/phase-notes/prototype-review.md`). Spec brought up to date: header status; ACCT-100 (no icon-bar flag); REG-080 (menu as built, with Split); INV-010 table restored; POS-030 old recommendation removed; DSH-030 (uncleared over 60 days); AUD-020 (account history); BAK-030 (Setup warns, not Settings); SET-050, SET-070 (font); UI-010, UI-020 (Accounts panel, navigation bar); §16.1 CI off; §16.3 R4, R5; §17.2–§17.4 modules and layout; §18 undo and price rules; §20.2; §23 rewritten as what was built; §24 Phase 6; §25 replaced by a pointer to CLAUDE.md; this log in one order, newest first. New or changed and built: **BAK-045** timed backup (split out of SET-050); **PRC-030** price list import (ticker, price, optional `MM/DD/YYYY`; date picker; file picker or drop; replaces the dated CSV import; QIF prices only through MIG-140); **PRC-040** price download, [1.0], D-40 decided (Yahoo first, latest price, off until enabled); **PRC-050** Holdings marks stale prices; **SECU-070** the download setting; **SET-040** default lot method for new investment accounts; **UI-060** undo of the last register change (Edit > Undo, Ctrl+Z). No schema change. **API change:** `price_import_preview`/`price_import` take a `date`; `account_defaults` reads the book (returns a result); `Settings.default_lot_method`, `Settings.price_download`; new commands `undo_status`, `undo_apply`, `prices_download`. |
 | 0.3.37 | 2026-09-29 | Backup file names are `kansha-YYYYMMDD-HHMMSSZ-<kind>.zip` (old names still read). BAK-035, BAK-040, SET-050: timed backups, kind `timeout` (5 minutes after the first change, setting `backup_timeout_minutes`, 0 = off; only the newest kept, deleted once any other backup is newer; status bar shows start and finish). UI-047: Help > About shows the version. The app is version 0.7.0. No schema change. **API change:** commands `backup_timed_due`, `backup_timed_run`; `Settings.backup_timeout_minutes`; `BackupKind` gains `timeout`. |
 | 0.3.36 | 2026-09-29 | SET-025: Font picker (System, Arial, Verdana, Courier New) beside theme and size; themes no longer set a font; Nordic Courier removed (a stored one becomes Nordic with Courier New). SET-010, SET-020 reworded. No schema change. **API change:** `appearance_get` and `appearance_set` carry a `font` field (per-computer config file, optional). |

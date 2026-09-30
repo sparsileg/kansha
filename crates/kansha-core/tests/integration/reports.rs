@@ -712,6 +712,64 @@ fn saved_reports_round_trip_with_audit() {
 }
 
 #[test]
+fn merges_and_deletes_update_saved_report_filters() {
+    use kansha_core::persistence::{accounts, payees, securities, tags};
+    let mut b = Book::new(date("2026-06-30")).unwrap();
+    let groceries = b.category("Food:Groceries", CategoryKind::Expense).unwrap();
+    let market = b.category("Food:Market", CategoryKind::Expense).unwrap();
+    let dining = b.category("Food:Dining", CategoryKind::Expense).unwrap();
+    let spare = b.category("Spare", CategoryKind::Expense).unwrap();
+    let costco = b.payee("Costco").unwrap();
+    let sams = b.payee("Sams").unwrap();
+    let trip = b.tag("Trip").unwrap();
+    let old = b.account("Old", AccountType::Checking).unwrap();
+    let chk = b.account("Checking", AccountType::Checking).unwrap();
+    let vti = b.security("Total", "VTI", SecurityType::Etf).unwrap();
+
+    let mut s = settings(ReportKind::ItemizedCategories);
+    s.categories = Some(vec![groceries, dining, spare]);
+    s.payees = Some(vec![costco, sams]);
+    s.tags = Some(vec![trip]);
+    s.accounts = Some(vec![old, chk]);
+    s.securities = Some(vec![vti]);
+    let saved = b.write(|tx| repo::saved_insert(tx, "Food", &s)).unwrap();
+    let filters = |b: &Book| repo::saved_get(b.conn(), saved.id).unwrap().settings;
+
+    // A merge puts the survivor in the source's place.
+    b.write(|tx| categories::merge(tx, groceries, market))
+        .unwrap();
+    assert_eq!(filters(&b).categories, Some(vec![market, dining, spare]));
+    // ... once, when the survivor was already there.
+    b.write(|tx| payees::merge(tx, costco, sams)).unwrap();
+    assert_eq!(filters(&b).payees, Some(vec![sams]));
+
+    // A delete drops the ID; a filter left empty means no filter.
+    b.write(|tx| categories::delete(tx, spare)).unwrap();
+    assert_eq!(filters(&b).categories, Some(vec![market, dining]));
+    b.write(|tx| tags::delete(tx, trip)).unwrap();
+    assert_eq!(filters(&b).tags, None);
+    b.write(|tx| accounts::delete(tx, old)).unwrap();
+    assert_eq!(filters(&b).accounts, Some(vec![chk]));
+    b.write(|tx| securities::delete(tx, vti)).unwrap();
+    assert_eq!(filters(&b).securities, None);
+
+    // Each change is audited on the saved report.
+    let history = audit::history(b.conn(), AuditEntity::SavedReport, saved.id.0).unwrap();
+    assert_eq!(history.len(), 7);
+    assert!(history[1..].iter().all(|h| h.action == AuditAction::Update));
+
+    // The report still finds what the merged category carried.
+    b.entry(chk, date("2026-02-01"))
+        .payee("Sams")
+        .amount(m("-40.00"))
+        .category(market)
+        .save()
+        .unwrap();
+    let r = reports::run(b.conn(), &filters(&b), date("2026-06-30")).unwrap();
+    assert!(reports::to_csv(&r).contains("40.00"));
+}
+
+#[test]
 fn settings_saved_by_an_older_version_still_load() {
     let json = r#"{"kind":"net_worth","title":"NW","range":{"preset":"year_to_date","from":null,"to":null}}"#;
     let s: ReportSettings = serde_json::from_str(json).unwrap();

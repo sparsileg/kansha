@@ -35,7 +35,28 @@ Date: 2026-09-24. Spec: 0.3.1. No schema change; no IPC change.
 - Register: filters/sort (REG-040), payee/category names in rows, NFR-040 timing — Phase 3.
 - `register_rows` uses correlated subqueries per row; measure against 10k txns in Phase 3.
 - Close investment account: open-position check — Phase 6.
-- Hidden categories/payees/tags still accepted on new postings (UI hides them).
+- Hidden categories/payees/tags still accepted on new postings (UI hides them). **Kept as a feature** (Stan, 2026-09-30; spec 0.4.1).
 - Integrity: lots/shares and reconciliation-history checks — Phases 5, 6.
 - ~~Merges don't write per-transaction audit entries~~ Done 2026-09-29 (spec 0.3.27): each changed transaction gets a `merge` entry (`persistence::ledger::audited_merge`; test `merges_write_an_audit_entry_on_each_changed_txn`).
 - Un-void (TXN-040) not offered: **not to be done** (Stan, 2026-09-29; spec 0.3.27).
+
+## Code review 2026-09-30 (spec 0.4.1)
+
+Phases 1–2 re-read against the code. Fixed, each with a test that
+failed first:
+
+- Search listed an investment transaction once per posting (cash and
+  holding); now once per account (`persistence::ledger::search`; test
+  `search_finds_an_investment_transaction_once_per_account`).
+- Saved reports kept IDs of merged or deleted accounts, categories,
+  payees, securities, and tags, so a filter silently lost what was
+  merged (`persistence::reports::saved_replace_id`,
+  `ReportSettings::replace_filter_id`; test
+  `merges_and_deletes_update_saved_report_filters`).
+- Category names may no longer contain `:` (test `category_rules`).
+- The linked cash account of an open investment account can't be
+  closed (test `linked_accounts_must_be_the_right_kind`).
+
+Checked, no change: money parsing and rounding, allocation, ledger
+validation, balances, running balance, audit on every write,
+migration runner, integrity queries.

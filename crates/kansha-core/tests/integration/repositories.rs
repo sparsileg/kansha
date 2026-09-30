@@ -410,6 +410,21 @@ fn category_rules() {
     });
     assert!(matches!(r, Err(Error::Invalid(_))));
 
+    // No ':' in a name (it separates path levels); rename refused too.
+    let r = write(&mut db, |tx| {
+        categories::insert(tx, &CategoryFields::new("Food:Out", CategoryKind::Expense))
+    });
+    assert!(
+        matches!(&r, Err(Error::Invalid(msg)) if msg.contains("Parent")),
+        "{r:?}"
+    );
+    let mut f = fuel.fields.clone();
+    f.name = "Fuel:Diesel".into();
+    assert!(matches!(
+        write(&mut db, |tx| categories::update(tx, fuel.id, &f)),
+        Err(Error::Invalid(_))
+    ));
+
     // No cycles.
     let mut f = auto.fields.clone();
     f.parent = Some(fuel.id);

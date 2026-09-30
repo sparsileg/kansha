@@ -7,6 +7,7 @@ use std::time::Instant;
 use kansha_core::accounts::AccountId;
 use kansha_core::audit;
 use kansha_core::categories::CategoryKind;
+use kansha_core::invest::{InvAction, InvInput};
 use kansha_core::ledger::{
     self, Cleared, Counterpart, RegisterQuery, RegisterSort, SearchQuery, Target,
 };
@@ -284,6 +285,58 @@ fn search_blank_finds_nothing_and_limit_caps_rows_not_the_count() {
     assert_eq!(p.rows[0].date.to_string(), "2026-07-04");
     // Text that is not a number never matches an amount, and vice versa.
     assert_eq!(search(&f, "12.5x", None).total, 0);
+}
+
+#[test]
+fn search_finds_an_investment_transaction_once_per_account() {
+    let mut book = Book::new(date("2026-06-30")).unwrap();
+    let brk = book
+        .account("Brokerage", kansha_core::accounts::AccountType::Brokerage)
+        .unwrap();
+    let vti = book
+        .security("Total", "VTI", kansha_core::securities::SecurityType::Etf)
+        .unwrap();
+    let opening = book.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    cash.amount = Some(m("1000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    book.invest(&cash).unwrap();
+    // A buy has a cash posting and a holding posting in the same account.
+    let mut buy = InvInput::new(brk, InvAction::Buy, date("2026-01-10"));
+    buy.security = Some(vti);
+    buy.quantity = Some("1".parse().unwrap());
+    buy.amount = Some(m("123.45"));
+    buy.memo = "zzbuy".into();
+    book.invest(&buy).unwrap();
+    // A reinvested dividend has only a holding posting.
+    let mut reinvest = InvInput::new(brk, InvAction::ReinvestDividend, date("2026-03-31"));
+    reinvest.security = Some(vti);
+    reinvest.quantity = Some("0.1".parse().unwrap());
+    reinvest.amount = Some(m("12.00"));
+    reinvest.memo = "zzreinvest".into();
+    book.invest(&reinvest).unwrap();
+
+    let find = |text: &str| {
+        ledger::search(
+            book.conn(),
+            &SearchQuery {
+                text: text.into(),
+                account: None,
+                limit: 100,
+            },
+        )
+        .unwrap()
+    };
+    // The buy shows its cash posting, once.
+    let p = find("zzbuy");
+    assert_eq!(p.total, 1);
+    assert_eq!(p.rows.len(), 1);
+    assert_eq!((p.rows[0].account, p.rows[0].amount), (brk, m("-123.45")));
+    assert_eq!(find("123.45").total, 1);
+    // With no cash posting, the holding's shows instead.
+    let p = find("zzreinvest");
+    assert_eq!(p.total, 1);
+    assert_eq!((p.rows[0].account, p.rows[0].amount), (brk, m("12.00")));
 }
 
 #[test]

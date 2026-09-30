@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::invest::InvAction;
 use crate::ledger::{Cleared, TxnId};
 use crate::money::{Money, Quantity};
-use crate::reports::{ReportKind, ReportSettings, SavedReport, SavedReportId};
+use crate::reports::{FilterList, ReportKind, ReportSettings, SavedReport, SavedReportId};
 use crate::securities::SecurityId;
 
 // ---------------------------------------------------------------------------
@@ -278,6 +278,37 @@ pub fn saved_update(
         )?;
     }
     Ok(after)
+}
+
+/// Keep saved reports' filters pointing at live records: after a merge
+/// `from` becomes `to`; after a delete (`to` is `None`) it is dropped.
+/// Each changed report gets an audit entry.
+pub(crate) fn saved_replace_id(
+    tx: &Tx<'_>,
+    list: FilterList,
+    from: i64,
+    to: Option<i64>,
+) -> Result<()> {
+    for before in saved_list(tx.conn())? {
+        let mut settings = before.settings.clone();
+        if !settings.replace_filter_id(list, from, to) {
+            continue;
+        }
+        tx.conn().execute(
+            "UPDATE saved_report SET settings_json = ?2, updated_at = ?3 WHERE id = ?1",
+            params![before.id, serde_json::to_string(&settings)?, tx.now()],
+        )?;
+        let after = saved_get(tx.conn(), before.id)?;
+        audit::record(
+            tx,
+            AuditEntity::SavedReport,
+            before.id.0,
+            AuditAction::Update,
+            Some(&before),
+            Some(&after),
+        )?;
+    }
+    Ok(())
 }
 
 /// Delete a saved report.

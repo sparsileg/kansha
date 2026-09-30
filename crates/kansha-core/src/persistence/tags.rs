@@ -5,9 +5,10 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use super::ledger;
+use super::{ledger, reports};
 use crate::categories::{Merged, Tag, TagFields, TagId};
 use crate::error::{Error, Result};
+use crate::reports::FilterList;
 
 const COLUMNS: &str = "id, name, hidden, created_at";
 
@@ -100,6 +101,7 @@ pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
     tx.conn()
         .execute("DELETE FROM tag WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "tag", id.0))?;
+    reports::saved_replace_id(tx, FilterList::Tags, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Tag,
@@ -112,8 +114,8 @@ pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
 }
 
 /// Merge `source` into `target` (TAG-020): tagged postings, schedule
-/// lines, and payee defaults move to `target`; `source` is deleted. A
-/// posting that had both keeps one.
+/// lines, payee defaults, and saved report filters move to `target`;
+/// `source` is deleted. A posting that had both keeps one.
 pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
     let conn = tx.conn();
     if source == target {
@@ -150,6 +152,7 @@ pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
         ..Merged::default()
     };
     conn.execute("DELETE FROM tag WHERE id = ?1", [source])?;
+    reports::saved_replace_id(tx, FilterList::Tags, source.0, Some(target.0))?;
     audit::record(
         tx,
         AuditEntity::Tag,

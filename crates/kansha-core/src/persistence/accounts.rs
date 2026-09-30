@@ -370,6 +370,7 @@ pub fn delete(tx: &Tx<'_>, id: AccountId) -> Result<()> {
     tx.conn()
         .execute("DELETE FROM account WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "account", id.0))?;
+    super::reports::saved_replace_id(tx, crate::reports::FilterList::Accounts, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Account,

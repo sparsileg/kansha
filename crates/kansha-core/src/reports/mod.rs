@@ -278,6 +278,56 @@ impl ReportSettings {
     fn account_ok(&self, id: AccountId) -> bool {
         Self::includes(&self.accounts, &id)
     }
+
+    /// Replace `from` with `to` in one filter list (a merge), or drop it
+    /// when `to` is `None` (a delete). A list left empty becomes no
+    /// filter. Returns whether the settings changed.
+    pub fn replace_filter_id(&mut self, list: FilterList, from: i64, to: Option<i64>) -> bool {
+        match list {
+            FilterList::Accounts => {
+                replace_id(&mut self.accounts, AccountId(from), to.map(AccountId))
+            }
+            FilterList::Categories => {
+                replace_id(&mut self.categories, CategoryId(from), to.map(CategoryId))
+            }
+            FilterList::Payees => replace_id(&mut self.payees, PayeeId(from), to.map(PayeeId)),
+            FilterList::Securities => {
+                replace_id(&mut self.securities, SecurityId(from), to.map(SecurityId))
+            }
+            FilterList::Tags => replace_id(&mut self.tags, TagId(from), to.map(TagId)),
+        }
+    }
+}
+
+/// A [`ReportSettings`] filter list that names records by ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterList {
+    Accounts,
+    Categories,
+    Payees,
+    Securities,
+    Tags,
+}
+
+/// `from` becomes `to` in place (dropped if `to` is already listed), or
+/// is dropped when `to` is `None`.
+fn replace_id<T: Copy + PartialEq>(filter: &mut Option<Vec<T>>, from: T, to: Option<T>) -> bool {
+    let Some(ids) = filter.as_mut() else {
+        return false;
+    };
+    let Some(at) = ids.iter().position(|id| *id == from) else {
+        return false;
+    };
+    match to {
+        Some(to) if !ids.contains(&to) => ids[at] = to,
+        _ => {
+            ids.remove(at);
+        }
+    }
+    if ids.is_empty() {
+        *filter = None;
+    }
+    true
 }
 
 /// A saved report (RPT-020).

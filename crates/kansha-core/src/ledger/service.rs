@@ -122,9 +122,10 @@ pub fn set_cleared(
 }
 
 /// Close an account as of `date` (ACCT-210). No transaction may be dated
-/// after `date`; a non-zero balance, or for an investment account cash or
-/// shares still held, needs `confirmed`. Closed accounts take no new or
-/// changed transactions until reopened.
+/// after `date`, and it may not be the linked cash account of an open
+/// investment account; a non-zero balance, or for an investment account
+/// cash or shares still held, needs `confirmed`. Closed accounts take no
+/// new or changed transactions until reopened.
 pub fn close_account(
     tx: &Tx<'_>,
     account: AccountId,
@@ -145,6 +146,20 @@ pub fn close_account(
                 acct.fields.name
             )));
         }
+    }
+    // Its investment account's cash would have nowhere to post.
+    let linked_from = accounts::list(tx.conn())?.into_iter().find(|a| {
+        a.status == AccountStatus::Open
+            && a.fields
+                .investment
+                .as_ref()
+                .is_some_and(|i| i.linked_cash_account == Some(account))
+    });
+    if let Some(inv) = linked_from {
+        return Err(Error::Invalid(format!(
+            "account {:?} is the linked cash account of {:?}; close that account first",
+            acct.fields.name, inv.fields.name
+        )));
     }
     if acct.fields.account_type.is_investment() {
         let cash = invest::cash_balance(tx.conn(), account, None)?;

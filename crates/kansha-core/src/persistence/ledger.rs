@@ -384,8 +384,8 @@ fn amount_cents(text: &str) -> Option<i64> {
 }
 
 /// Rows whose payee, memo, notes, check number, line memo, category, or
-/// amount matches `text`, one per (transaction, account) posting, newest
-/// first, and the count of all matches (search box).
+/// amount matches `text`, one per (transaction, account), newest first,
+/// and the count of all matches (search box).
 pub fn search(
     conn: &Connection,
     text: &str,
@@ -403,6 +403,11 @@ pub fn search(
                    p.id AS posting_id, p.account_id, p.amount
             FROM posting p JOIN txn t ON t.id = p.txn_id
             WHERE p.account_id IS NOT NULL AND (:account IS NULL OR p.account_id = :account)
+              -- One row per (transaction, account): an investment account's
+              -- cash posting, else its first holding posting.
+              AND p.id = (SELECT x.id FROM posting x
+                          WHERE x.txn_id = p.txn_id AND x.account_id = p.account_id
+                          ORDER BY x.security_id IS NOT NULL, x.line_no LIMIT 1)
         ),
         oc AS (
             SELECT txn_id, count(*) AS n FROM posting

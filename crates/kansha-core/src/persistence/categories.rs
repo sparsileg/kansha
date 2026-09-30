@@ -5,11 +5,12 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
 use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
-use super::ledger;
+use super::{ledger, reports};
 use crate::categories::{
     Category, CategoryFields, CategoryId, CategoryKind, Merged, SystemCategory,
 };
 use crate::error::{Error, Result};
+use crate::reports::FilterList;
 
 const COLUMNS: &str =
     "id, parent_id, kind, name, system_key, tax_related, tithable, giving, tax_line_id, hidden,
@@ -39,6 +40,12 @@ fn validate(conn: &Connection, id: Option<CategoryId>, f: &CategoryFields) -> Re
     use crate::categories::CategoryKind as K;
     if f.name.trim().is_empty() {
         return Err(Error::Invalid("category name is required".into()));
+    }
+    // ':' separates the levels of a category path (`Food:Dining`).
+    if f.name.contains(':') {
+        return Err(Error::Invalid(
+            "a category name cannot contain ':'; use Parent to make a subcategory".into(),
+        ));
     }
     if f.kind == K::Equity {
         return Err(Error::Invalid("equity categories are built in".into()));
@@ -254,6 +261,7 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
     tx.conn()
         .execute("DELETE FROM category WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "category", id.0))?;
+    reports::saved_replace_id(tx, FilterList::Categories, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Category,
@@ -266,9 +274,9 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
 }
 
 /// Merge `source` into `target` (CAT-020): postings, schedule lines, payee
-/// defaults, and subcategories move to `target`; `source` is deleted. Both
-/// must have the same kind; a built-in category can't be the source;
-/// `target` can't be inside `source`'s subtree.
+/// defaults, subcategories, and saved report filters move to `target`;
+/// `source` is deleted. Both must have the same kind; a built-in category
+/// can't be the source; `target` can't be inside `source`'s subtree.
 pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merged> {
     let conn = tx.conn();
     if source == target {
@@ -342,6 +350,7 @@ pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merg
         ..Merged::default()
     };
     conn.execute("DELETE FROM category WHERE id = ?1", [source])?;
+    reports::saved_replace_id(tx, FilterList::Categories, source.0, Some(target.0))?;
     audit::record(
         tx,
         AuditEntity::Category,
