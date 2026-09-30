@@ -1,8 +1,10 @@
 //! Security master and prices (SEC-010 … SEC-040, PRC-010 … PRC-050).
 //!
-//! Domain types. Storage is `persistence::securities`; price CSV import
-//! is [`import_prices`].
+//! Domain types. Storage is `persistence::securities`; the price list
+//! import is [`preview_prices`] / [`commit_prices`] (PRC-030); price
+//! download is [`download`] (PRC-040).
 
+pub mod download;
 mod import;
 
 pub use import::{PriceImportPreview, PriceImportRow, commit_prices, preview_prices};

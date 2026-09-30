@@ -43,7 +43,7 @@ Spec: 0.3.9. Engine, IPC, and UI in one pass. `just check` green.
 
 ## UI changes after the exit check (spec 0.3.10)
 
-- Date format setting (SET-030): `state/dateformat.svelte.ts`; `displayDate`/`parseDate` follow it; placeholders use `datePattern()`, messages `dateExample()`. Settings dialog has the choice. localStorage until SET-070.
+- Date format setting (SET-030): `state/dateformat.svelte.ts`; `displayDate`/`parseDate` follow it; placeholders use `datePattern()`, messages `dateExample()`. Settings dialog has the choice. Stored in the book since Phase 8.
 - Focus colors are theme variables on `.app` (`--focus-bg`, `--focus-fg`, `--focus-sel-bg`, `--focus-ring`, `--sel-bg`, `--sel-fg`, `--opt-bg`, `--opt-fg`); fields of every kind, buttons, the reconcile focus row, menus, dropdown lists, and text selection use them. Dark theme: white on deep blue with a yellow ring; `color-scheme` set per theme so native controls match. The ring is drawn inside the field's edge (a neighbouring register cell covered it outside), and a focused field's selected text keeps the focus text color on `--focus-sel-bg` (the general selection colors had replaced the focus look when tabbing).
 - Select-on-focus is app-wide: `ui/selectOnFocus.ts` is installed once on `document` by `App.svelte` (the per-field action is gone).
 - Register filter bar: inline labels, boxes sized to content, no stretching; wraps only when the window is too narrow.
@@ -53,11 +53,11 @@ Spec: 0.3.9. Engine, IPC, and UI in one pass. `just check` green.
 - `just test` not yet run on Windows (phase-end rule, spec §24).
 - No "mark all" beyond the header checkbox; no keyboard shortcuts beyond Space on a checkbox.
 - Reconciliation history is a table in the Reconcile view, not a tab on the account view (UI-030).
-- Investment cash reconciliation (RCN-010) and share reconciliation (RCN-070) wait for Phase 6.
-- Dashboard "unreconciled beyond threshold" warning (DSH-030): Phase 7.
+- ~~Investment cash reconciliation (RCN-010)~~ Done in Phase 6. Share reconciliation (RCN-070) is [Later].
+- ~~Dashboard "unreconciled beyond threshold" warning (DSH-030)~~ Built in Phase 7 as "uncleared transactions more than 60 days old" (spec 0.4 DSH-030).
 - Finish and Adjust do not audit per transaction, so AUD-020 history of a transaction does not show being reconciled.
 - Out-of-order statements (older than the last) are refused, not supported.
-- Register opens on the last page, which can hold only a few rows (e.g. 3 of 803). Decided (Stan, 2026-09-24): remove pagination; the register lazy-scrolls through all transactions. Not yet scheduled; must still meet NFR-040.
+- ~~Register opens on the last page, which can hold only a few rows.~~ Done 2026-09-28: continuous scroll, no pages (`phase-3.md`).
 - Engine error messages still show dates as ISO (`2026-08-31`), not in the user's format.
 - Changing the ending balance after adding a Balance Adjustment does not remove the adjustment; delete it in the register.
 

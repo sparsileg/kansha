@@ -69,7 +69,7 @@
   });
 
   async function pickType(t: AccountType) {
-    const d = await commands.accountDefaults(f?.name ?? "", t);
+    const d = await call(commands.accountDefaults(f?.name ?? "", t));
     // Keep what the user already typed; take the type's structure.
     f = f ? { ...d, ...keepTyped(f) } : d;
   }
@@ -304,7 +304,6 @@
 
       <label>Sort order <input type="number" bind:value={f.sort_order} /></label>
       <label class="check"><input type="checkbox" bind:checked={f.show_in_list} /> Show in account list</label>
-      <label class="check"><input type="checkbox" bind:checked={f.show_in_bar} /> Show in icon bar</label>
       <label>Notes <textarea rows="2" bind:value={f.notes}></textarea></label>
 
       {#if error}<p class="err" role="alert">{error}</p>{/if}
@@ -317,6 +316,7 @@
             <button type="button" onclick={reopen}>Reopen</button>
           {/if}
           <button type="button" onclick={remove}>Delete</button>
+          <button type="button" onclick={() => (dialogState.history = { entity: "account", id: account!.id })}>History…</button>
         {/if}
         <span class="spacer"></span>
         <button type="submit" disabled={busy}>Save</button>
@@ -331,25 +331,42 @@
     display: grid;
     gap: 0.5rem;
   }
+  /* minmax(0, …) and min-width: 0 let a long choice (a tax line) shrink
+     its control instead of widening the dialog past its edge. */
   label {
     display: grid;
-    grid-template-columns: 9rem 1fr;
+    grid-template-columns: 9rem minmax(0, 1fr);
     align-items: center;
     gap: 0.5rem;
   }
+  label > input,
+  label > select,
+  label > textarea {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
   label.check {
     display: block;
+  }
+  label.check > input {
+    width: auto;
   }
   .inline {
     display: flex;
     gap: 0.25rem;
   }
+  .inline {
+    min-width: 0;
+  }
   .inline input {
     flex: 1;
+    min-width: 0;
   }
   fieldset {
     display: grid;
     gap: 0.5rem;
+    min-width: 0;
   }
   .row {
     display: flex;

@@ -11,7 +11,9 @@ use std::sync::{Mutex, MutexGuard};
 
 use kansha_core::backup::{self, BackupKind, BackupTimer};
 use kansha_core::book::{BookFiles, OpenBook};
+use kansha_core::ledger::TxnId;
 use kansha_core::local_config::LocalConfig;
+use kansha_core::undo::{self, Undo};
 use kansha_core::{Clock, Db, Origin, SystemClock, Tx};
 use serde::Serialize;
 use specta::Type;
@@ -65,6 +67,13 @@ impl From<kansha_core::Error> for IpcError {
 }
 
 impl IpcError {
+    pub fn invalid(message: impl Into<String>) -> IpcError {
+        IpcError {
+            kind: ErrorKind::Invalid,
+            message: message.into(),
+        }
+    }
+
     pub fn internal(message: impl Into<String>) -> IpcError {
         IpcError {
             kind: ErrorKind::Internal,
@@ -82,6 +91,8 @@ pub struct AppState {
     pending_restore: Mutex<Option<backup::Opened>>,
     /// When a timed backup is due (SET-050).
     timer: Mutex<BackupTimer>,
+    /// The last register change, while it can be undone (UI-060).
+    undo: Mutex<Option<Undo>>,
     pub files: BookFiles,
     /// The per-computer config file (SET-070).
     pub config_path: PathBuf,
@@ -102,6 +113,7 @@ impl AppState {
             book: Mutex::new(None),
             pending_restore: Mutex::new(None),
             timer: Mutex::new(BackupTimer::default()),
+            undo: Mutex::new(None),
             files,
             config_path,
             downloads,
@@ -164,6 +176,61 @@ impl AppState {
         let done = self.with_book(|b| b.db.write(&clock, origin, f))?;
         self.note_change();
         Ok(done)
+    }
+
+    /// A register change that can be undone (UI-060): `txn` is the
+    /// transaction it changes (`None` when it creates one); `id_of` names
+    /// the changed transaction from `f`'s result. It becomes the undo,
+    /// replacing any earlier one.
+    pub fn write_undoable<T>(
+        &self,
+        txn: Option<TxnId>,
+        label: &str,
+        f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<T>,
+        id_of: impl FnOnce(&T) -> TxnId,
+    ) -> CmdResult<T> {
+        let (out, u) = self.write(|tx| {
+            let before = undo::before(tx.conn(), txn)?;
+            let out = f(tx)?;
+            let u = undo::after(tx.conn(), id_of(&out), before, label)?;
+            Ok((out, u))
+        })?;
+        if let Ok(mut slot) = self.undo.lock() {
+            *slot = u;
+        }
+        Ok(out)
+    }
+
+    /// The last change's label while it can still be undone.
+    pub fn undo_label(&self) -> CmdResult<Option<String>> {
+        let Some(u) = self.undo.lock().ok().and_then(|g| g.clone()) else {
+            return Ok(None);
+        };
+        let ok = self.with_book(|b| undo::available(b.db.conn(), &u))?;
+        Ok(ok.then(|| u.label().to_string()))
+    }
+
+    /// Undo the last change; returns the transaction it put back. Nothing
+    /// to undo is an error the UI shows.
+    pub fn undo(&self, confirmed: bool) -> CmdResult<TxnId> {
+        let u = self
+            .undo
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .ok_or_else(|| IpcError::invalid("There is nothing to undo."))?;
+        self.write(|tx| undo::apply(tx, &u, confirmed))?;
+        if let Ok(mut slot) = self.undo.lock() {
+            *slot = None;
+        }
+        Ok(u.txn())
+    }
+
+    /// Another book opened, or none: its undo does not apply.
+    pub fn forget_undo(&self) {
+        if let Ok(mut slot) = self.undo.lock() {
+            *slot = None;
+        }
     }
 
     /// A change was saved: a timed backup will be due (SET-050).
@@ -235,6 +302,8 @@ impl AppState {
             }
         }
         *guard = None;
+        drop(guard);
+        self.forget_undo();
     }
 
     pub fn load_config(&self) -> LocalConfig {

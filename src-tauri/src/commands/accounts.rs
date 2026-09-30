@@ -25,11 +25,16 @@ pub fn account_balances(state: State<'_, AppState>) -> CmdResult<Vec<AccountBala
 }
 
 /// A new account's fields with the type's defaults: group, tax treatment,
-/// investment or other-asset settings (ACCT-030, ACCT-240).
+/// investment or other-asset settings (ACCT-030, ACCT-240); an
+/// investment account takes the book's default lot method (SET-040).
 #[tauri::command]
 #[specta::specta]
-pub fn account_defaults(name: String, account_type: AccountType) -> AccountFields {
-    AccountFields::new(name, account_type)
+pub fn account_defaults(
+    state: State<'_, AppState>,
+    name: String,
+    account_type: AccountType,
+) -> CmdResult<AccountFields> {
+    state.read(|db, _| kansha_core::accounts::defaults(db.conn(), name, account_type))
 }
 
 /// An account number reduced to its last four characters (ACCT-150).

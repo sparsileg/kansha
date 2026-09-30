@@ -71,8 +71,8 @@ describe("investment rows", () => {
     stale.accounts[0].positions[0].stale = true;
     stale.accounts[0].totals.stale_prices = true;
     const rows = buildRows(stale, new Set(["a2"]), name);
-    expect(rows[2].priceWarn).toMatch(/more than a week old/);
-    expect(buildRows(stale, new Set(), name)[0].warn).toMatch(/week old/);
+    expect(rows[2].priceWarn).toMatch(/out of date/);
+    expect(buildRows(stale, new Set(), name)[0].warn).toMatch(/out of date/);
     const missing = structuredClone(pf);
     missing.total.missing_prices = true;
     expect(buildRows(missing, new Set(), name).at(-1)?.warn).toMatch(/no price/);

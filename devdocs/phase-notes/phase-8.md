@@ -7,7 +7,8 @@ Spec: 0.3.32 (design 0.3.30–0.3.31); changes since in the last section (now 0.
 book, compare, restore, reopen with the backup's passphrase, data
 identical row for row). **Open:** Stan's hands-on run of setup,
 conversion of the prototype database, backup on close, and restore in
-the app; review findings for spec 0.4; `just test` on Windows.
+the app; `just test` on Windows. Review findings for spec 0.4: done,
+`prototype-review.md`.
 
 **⚠ API change:** 18 new commands: `book_status`, `book_setup`,
 `book_unlock`, `backup_now`, `backup_info`, `backup_manifest`,
@@ -104,7 +105,8 @@ New dependencies: `age =0.12.1`, `zip =7.2.0` (newest for MSRV 1.85),
 - Not run in the real app yet (GUI flows tested with mocks only):
   restore and reload, the folder picker, window geometry, the timed
   backup, Help > About. (Setup, conversion, and unlock Stan has run.)
-- SET-040 default lot method stays per account (no book-wide setting).
+- ~~SET-040 default lot method stays per account~~ Done in 0.4: the
+  book's method is what a new investment account starts with.
 - SQLCipher logs "hmac check failed" to stderr on a wrong key (not an
   error in Kansha).
 

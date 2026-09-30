@@ -7,6 +7,7 @@
   import { formatPrice, parsePrice } from "../../format/quantity";
   import { LOT_METHODS } from "../../invest/form";
   import { confirmState } from "../../state/confirm.svelte";
+  import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import type {
@@ -46,7 +47,7 @@
   let priceDate = $state("");
   let priceValue = $state("");
   let priceError = $state<string | null>(null);
-  let importing = $state<"prices" | "lots" | null>(null);
+  let seeding = $state(false);
 
   $effect(() => {
     void investState.loadSecurities();
@@ -165,8 +166,8 @@
     <div class="row">
       <label>Find <input type="search" bind:value={filter} /></label>
       <button type="button" onclick={startNew}>New security</button>
-      <button type="button" onclick={() => (importing = "prices")}>Import prices…</button>
-      <button type="button" onclick={() => (importing = "lots")}>Seed lots…</button>
+      <button type="button" onclick={() => (dialogState.priceImport = true)}>Import prices…</button>
+      <button type="button" onclick={() => (seeding = true)}>Seed lots…</button>
     </div>
     <div class="list">
       <table>
@@ -254,7 +255,7 @@
   </div>
 </div>
 
-{#if importing}<CsvImportModal kind={importing} onclose={() => (importing = null)} />{/if}
+{#if seeding}<CsvImportModal onclose={() => (seeding = false)} />{/if}
 
 <style>
   .num {

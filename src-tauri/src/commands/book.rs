@@ -89,6 +89,7 @@ pub fn book_setup(
         settings::save(tx, &s)
     })?;
     *guard = Some(open);
+    state.forget_undo();
     drop(guard);
     remember_book(&state);
     Ok(())
@@ -116,6 +117,7 @@ pub fn book_unlock(state: State<'_, AppState>, passphrase: String) -> CmdResult<
         open.db.migrate(state.clock())?;
     }
     *guard = Some(open);
+    state.forget_undo();
     drop(guard);
     remember_book(&state);
     Ok(())
@@ -297,6 +299,7 @@ pub fn restore_apply(state: State<'_, AppState>) -> CmdResult<()> {
     *guard = None;
     let restored = book::install_restore(&state.files, &opened)?;
     *guard = Some(restored);
+    state.forget_undo();
     drop(guard);
     remember_book(&state);
     Ok(())

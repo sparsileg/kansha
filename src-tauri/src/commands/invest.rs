@@ -10,6 +10,7 @@ use kansha_core::invest::{
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
 use kansha_core::persistence::securities as repo;
+use kansha_core::securities::download::{self, DownloadSummary, Fetched, Provider};
 use kansha_core::securities::{
     self, PriceImportPreview, PricePoint, PriceSource, Security, SecurityFields, SecurityId,
     SecurityType,
@@ -17,7 +18,7 @@ use kansha_core::securities::{
 use kansha_core::{Date, Money, Origin, Price, Quantity};
 use tauri::State;
 
-use crate::state::{AppState, CmdResult};
+use crate::state::{AppState, CmdResult, IpcError};
 
 // ---------------------------------------------------------------------------
 // Securities and prices
@@ -91,22 +92,65 @@ pub fn price_delete(state: State<'_, AppState>, security: SecurityId, date: Date
     state.write(|tx| repo::delete_price(tx, security, date))
 }
 
-/// Check a price CSV without writing anything (PRC-030).
+/// Check a price list without writing anything (PRC-030).
 #[tauri::command]
 #[specta::specta]
 pub fn price_import_preview(
     state: State<'_, AppState>,
     text: String,
+    date: Date,
 ) -> CmdResult<PriceImportPreview> {
-    state.read(|db, _| securities::preview_prices(db.conn(), &text))
+    state.read(|db, _| securities::preview_prices(db.conn(), &text, date))
 }
 
-/// Import a price CSV, all or nothing. Returns the number of prices.
+/// Import a price list (PRC-030), all or nothing; lines without a date
+/// take `date`. Returns the number of prices.
 #[tauri::command]
 #[specta::specta]
-pub fn price_import(state: State<'_, AppState>, text: String) -> CmdResult<i64> {
+pub fn price_import(state: State<'_, AppState>, text: String, date: Date) -> CmdResult<i64> {
     state.backup(BackupKind::Import)?;
-    state.write(|tx| securities::commit_prices(tx, &text))
+    state.write(|tx| securities::commit_prices(tx, &text, date))
+}
+
+/// Download the latest price of every shown security with a ticker
+/// (PRC-040), once the book's setting allows it (SECU-070). The fetching
+/// runs off the main thread; the prices are stored in one transaction.
+#[tauri::command]
+#[specta::specta]
+pub async fn prices_download(state: State<'_, AppState>) -> CmdResult<DownloadSummary> {
+    let targets = state.read(|db, _| download::targets(db.conn()))?;
+    let fetched = tauri::async_runtime::spawn_blocking(move || fetch_all(Provider::Yahoo, targets))
+        .await
+        .map_err(|e| IpcError::internal(format!("price download stopped: {e}")))?;
+    state.write(|tx| download::store(tx, &fetched))
+}
+
+/// One request per security, 15 seconds each at most.
+fn fetch_all(provider: Provider, targets: Vec<download::Target>) -> Vec<Fetched> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(concat!("Kansha/", env!("CARGO_PKG_VERSION")))
+        .build();
+    targets
+        .into_iter()
+        .map(|target| {
+            let result = agent
+                .get(&provider.url(&target.ticker))
+                .call()
+                .map_err(|e| match e {
+                    ureq::Error::Status(404, r) => r
+                        .into_string()
+                        .ok()
+                        .and_then(|b| provider.parse(&b).err())
+                        .unwrap_or_else(|| "not found".into()),
+                    ureq::Error::Status(code, _) => format!("the server answered {code}"),
+                    ureq::Error::Transport(t) => format!("no connection ({})", t.kind()),
+                })
+                .and_then(|r| r.into_string().map_err(|e| e.to_string()))
+                .and_then(|body| provider.parse(&body));
+            Fetched { target, result }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +180,12 @@ pub fn inv_input(state: State<'_, AppState>, txn: TxnId) -> CmdResult<InvInput> 
 #[tauri::command]
 #[specta::specta]
 pub fn inv_create(state: State<'_, AppState>, input: InvInput) -> CmdResult<TxnId> {
-    state.write(|tx| invest::create(tx, &input).map(|t| t.txn.id))
+    state.write_undoable(
+        None,
+        "New transaction",
+        |tx| invest::create(tx, &input).map(|t| t.txn.id),
+        |id| *id,
+    )
 }
 
 /// Replace an investment transaction; a reconciled cash posting fails
@@ -149,13 +198,23 @@ pub fn inv_update(
     input: InvInput,
     confirmed: bool,
 ) -> CmdResult<()> {
-    state.write(|tx| invest::update(tx, txn, &input, confirmed).map(|_| ()))
+    state.write_undoable(
+        Some(txn),
+        "Edit",
+        |tx| invest::update(tx, txn, &input, confirmed).map(|_| ()),
+        |()| txn,
+    )
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn inv_delete(state: State<'_, AppState>, txn: TxnId, confirmed: bool) -> CmdResult<()> {
-    state.write(|tx| invest::delete(tx, txn, confirmed))
+    state.write_undoable(
+        Some(txn),
+        "Delete",
+        |tx| invest::delete(tx, txn, confirmed),
+        |()| txn,
+    )
 }
 
 /// Shares × price ± commission for the entry form; the UI does no money

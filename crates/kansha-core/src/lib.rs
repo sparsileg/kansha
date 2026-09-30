@@ -28,6 +28,7 @@ mod serde_impls;
 pub mod settings;
 pub mod testkit;
 mod text_enum;
+pub mod undo;
 
 pub use date::{Clock, Date, FixedClock, SystemClock, Timestamp};
 pub use error::{Error, Result};

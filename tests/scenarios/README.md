@@ -264,8 +264,9 @@ memo = "..."
 
 `invest_edit` takes the same fields with `ref` (and `confirm` for a
 reconciled cash posting); `invest_delete` takes `ref`. `price` records a
-price (`security`, `date`, `price`). `import_prices` takes `csv` text
-(optional `expect_count`); `seed_lots` takes `date` and `csv` text (MIG-120).
+price (`security`, `date`, `price`). `import_prices` takes `date`
+and a price list in `csv` (ticker, price, optional `MM/DD/YYYY`;
+PRC-030; optional `expect_count`); `seed_lots` takes `date` and `csv` text (MIG-120).
 Multi-line CSV goes in a `"""` string.
 
 A holding's sales, transfers, removals, splits, and returns of capital

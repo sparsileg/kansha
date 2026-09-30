@@ -14,7 +14,7 @@ vi.mock("../api", async (orig) => {
     ...real,
     commands: {
       backupInfo: () => ok(info),
-      settingsSet: (s: unknown) => ok(s),
+      settingsSet: vi.fn((s: unknown) => ok(s)),
       pickFolder: () => Promise.resolve(null),
     },
   };
@@ -66,5 +66,21 @@ describe("SettingsModal backups", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(dialogState.verify).toBe(true);
     expect(dialogState.settings).toBe(false);
+  });
+});
+
+describe("SettingsModal investments", () => {
+  it("sets the lot method for new accounts (SET-040) and allows price download (PRC-040)", async () => {
+    const { commands } = await import("../api");
+    render(SettingsModal);
+    const lot = screen.getByLabelText("Lot method for new investment accounts") as HTMLSelectElement;
+    expect(lot.value).toBe("fifo");
+    await fireEvent.change(lot, { target: { value: "hifo" } });
+    const dl = screen.getByLabelText("Allow price download (internet)") as HTMLInputElement;
+    expect(dl.checked).toBe(false);
+    await fireEvent.click(dl);
+    const calls = vi.mocked(commands.settingsSet).mock.calls.map((c) => c[0] as { default_lot_method: string; price_download: boolean });
+    expect(calls.some((c) => c.default_lot_method === "hifo")).toBe(true);
+    expect(calls.at(-1)?.price_download).toBe(true);
   });
 });

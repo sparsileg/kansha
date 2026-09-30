@@ -3,6 +3,7 @@
   // size are on the menu bar and stored per computer.
   import { onMount } from "svelte";
   import { call, commands } from "../api";
+  import { LOT_METHODS } from "../invest/form";
   import { startupChoices } from "../shell/nav";
   import { bookSettings } from "../state/booksettings.svelte";
   import { dialogState } from "../state/dialogs.svelte";
@@ -96,6 +97,23 @@
     <label>
       <span>Price is stale after (days)</span>
       <input type="number" min="1" max="365" value={s.stale_price_days} onchange={(e) => saveNumber("stale_price_days", e)} />
+    </label>
+    <label>
+      <span>Lot method for new investment accounts</span>
+      <select
+        value={s.default_lot_method}
+        onchange={(e) => save({ default_lot_method: e.currentTarget.value as Settings["default_lot_method"] })}
+      >
+        {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
+      </select>
+    </label>
+    <label>
+      <span>Allow price download (internet)</span>
+      <input
+        type="checkbox"
+        checked={s.price_download}
+        onchange={(e) => save({ price_download: e.currentTarget.checked })}
+      />
     </label>
     <label>
       <span>Dashboard shows items due within (days)</span>

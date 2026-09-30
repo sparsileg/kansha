@@ -22,7 +22,10 @@ import.
   `M/D/YYYY`.
 - `securities/`: `SecurityId`, `SecurityType`, `AssetClass`,
   `PriceSource`, `SecurityFields`, `Security`, `PricePoint`; price CSV
-  import (`preview_prices`, `commit_prices`).
+  import (`preview_prices`, `commit_prices`). Replaced in spec 0.4 by
+  the price list import (ticker, price, optional date; PRC-030), and
+  joined by price download (`securities/download.rs`, PRC-040); see
+  `prototype-review.md`.
 - `persistence/securities.rs`: security CRUD (ticker unique, CUSIP 9
   chars, delete only when unused, with its prices), prices (set/replace,
   delete, latest on or before), all audited.
@@ -74,6 +77,8 @@ import.
   Securities: securities and prices), `CsvImportModal.svelte` (price
   import, lot seeding: file or paste, preview, all or nothing),
   `views/Investments.svelte` (all investment accounts, allocation);
+  (0.4: `CsvImportModal` seeds lots only; prices have
+  `PriceImportModal`);
   `state/invest.svelte.ts`; `invest/form.ts`; `format/quantity.ts`.
   Tools > Securities; the navigation bar's Investments button works.
   Account dialog offers fifo and specific only.
@@ -113,7 +118,8 @@ schema change.
   Performance, and realized-gains views, the allocation section, and the
   Reconcile button (investment accounts) are gone from the UI; the
   engine reads and commands stay for Phase 7 reports.
-- Views persist in localStorage (`kansha.investViews`).
+- Views persisted in localStorage (`kansha.investViews`) until Phase 8;
+  they are now a book setting (`invest_views`).
 
 ## Decisions
 
@@ -141,12 +147,13 @@ schema change.
   shows "Dividends", not "--Split--".
 - Cash handling (internal/linked, linked account) is fixed once the
   account has investment transactions.
-- Default lot method (account, security) is fifo or specific; average,
-  HIFO, min-tax are refused everywhere until built.
+- Default lot method (account, security) was fifo or specific until
+  average, HIFO, and min-tax were built (0.3.18, below); all five are
+  offered now.
 - Account list value of an investment account = cash + market value
   today, a holding with no price at cost.
-- Stale price threshold fixed at 7 days (`DEFAULT_STALE_DAYS`) until
-  the SET-040 setting exists.
+- Stale price threshold was fixed at 7 days (`DEFAULT_STALE_DAYS`);
+  since Phase 8 it is the SET-040 setting (default 7).
 - Performance (POS-030, recommendation followed): total gain =
   unrealized + realized + income; return = total gain ÷ (basis held +
   basis sold). Reinvested income counts as income and as basis.
@@ -204,14 +211,14 @@ non-zero). **⚠ API change:** `AdjustmentKind::Average`; `ReportKind`
 - No replay: fixing an old trade after later sales means deleting and
   re-entering the later ones.
 - Return-of-capital excess gain has no holding period.
-- Stale threshold not a setting (SET-040).
+- ~~Stale threshold not a setting (SET-040).~~ Done in Phase 8.
 - IRR is annualized even for periods under a year; time-weighted
   return is not annualized. Security-level returns leave out account
   fees not tied to a security.
 - The Investments screen still shows no IRR or time-weighted columns
   (the report only, per Stan).
-- Price download (PRC-040) and QIF prices (PRC-030 QIF half, MIG-140)
-  not built.
+- ~~Price download (PRC-040)~~ Built in 0.4. QIF prices belong to the
+  Quicken import (MIG-140, Phase 9); PRC-030 no longer covers them.
 - Investment register loads each transaction separately; fine for the
   sample (hundreds), not measured at thousands (NFR-040).
 - The investment register is read-only in place: edits go through the
@@ -221,7 +228,8 @@ non-zero). **⚠ API change:** `AdjustmentKind::Average`; `ReportKind`
   from the sending account.
 - Closing an investment account ignores linked-cash income dates
   (those transactions post only to the linked account).
-- Search results in an investment account open the account's tabs, not
-  the transaction.
+- ~~Search results in an investment account open the account's tabs, not
+  the transaction.~~ Fixed in 0.4: the register selects and scrolls to
+  it.
 - Allocation by one asset class per security (SEC-050 multi-class
   later).

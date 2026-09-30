@@ -39,6 +39,7 @@ vi.mock("../../api", async (orig) => {
 import InvestmentAccount from "./InvestmentAccount.svelte";
 import { investState } from "../../state/invest.svelte";
 import { listsState } from "../../state/lists.svelte";
+import { registerState } from "../../state/register.svelte";
 
 const account = {
   id: 2, name: "Brokerage", status: "open", account_type: "brokerage", tax_treatment: "taxable",
@@ -95,5 +96,21 @@ describe("Investment account register (INV-030)", () => {
     render(InvestmentAccount, { account: { ...(account as object), status: "closed" } as never });
     await waitFor(() => expect(screen.getByText("-2,005.00")).toBeTruthy());
     expect(screen.queryByLabelText("New transaction")).toBeNull();
+  });
+
+  it("selects and reveals the transaction a search hit names", async () => {
+    registerState.accountId = 2;
+    registerState.selected = 10;
+    registerState.reveal = 10;
+    try {
+      const { container } = render(InvestmentAccount, { account });
+      await waitFor(() => expect(container.querySelector('tr[data-txn="10"]')?.classList.contains("sel")).toBe(true));
+      expect(container.querySelector('tr[data-txn="11"]')?.classList.contains("sel")).toBe(false);
+      await waitFor(() => expect(registerState.reveal).toBeNull());
+    } finally {
+      registerState.accountId = null;
+      registerState.selected = null;
+      registerState.reveal = null;
+    }
   });
 });

@@ -1,5 +1,5 @@
 id = "INV-011"
-description = "Prices: latest on or before the date, stale flag, no price, money market at $1.00; CSV import replaces, skips unknown securities, takes files without a header, and is all or nothing"
+description = "Prices: latest on or before the date, stale flag, no price, money market at $1.00; price list import (ticker, price, optional date) replaces, skips unknown tickers, and is all or nothing"
 requirements = ["PRC-010", "PRC-020", "PRC-030", "PRC-050", "INV-050", "POS-010"]
 as_of = "2026-06-30"
 
@@ -82,53 +82,73 @@ security = "VTI"
 quantity = "10"
 price = "250"
 
+# Price list (PRC-030): ticker, price, optional MM/DD/YYYY date; a line
+# without a date takes the dialog's date. Commas or whitespace separate.
 [[actions]]
 type = "import_prices"
+date = "2026-06-20"
 expect_count = 4
 csv = """
-Symbol,Date,Close
-VTI,2026-06-20,310
-AAPL,6/29/2026,215
-VTI,2026-06-01,305
-VTI,2026-07-05,999
+VTI,310
+AAPL 215 6/29/2026
+VTI	305	06/01/2026
+
+VTI, $999, 07/05/2026
 """
 
-# A security not in the book is skipped, not an error.
+# A ticker not in the book is skipped, not an error.
 [[actions]]
 type = "import_prices"
+date = "2026-06-25"
 expect_count = 1
 csv = """
-ticker,date,price
-ZZZZ,2026-06-25,1
-^IXIC,2026-06-25, 26967.0254
+ZZZZ,1
+^IXIC, 26967.0254
 """
 
-# No header line: ticker, date, price in that order.
 [[actions]]
 type = "import_prices"
+date = "2026-06-26"
 expect_count = 1
 csv = """
-^IXIC,6/26/2026, 26970.5
-ZZZZ,6/26/2026,2
+^ixic 26970.5
+ZZZZ 2
 """
 
-# A bad row still stops the whole import.
+# A bad line still stops the whole import.
 [[actions]]
 type = "import_prices"
+date = "2026-06-25"
 csv = """
-VTI,2026-06-25,320
-AAPL,2026-06-25,abc
+VTI,320
+AAPL,abc
 """
 expect_error = "nothing was imported"
 
 [[actions]]
 type = "import_prices"
+date = "2026-06-26"
 csv = """
-ticker,date,price
-VTI,2026-06-26,320
-VTI,2026-06-26,321
+VTI,320
+VTI,321,06/26/2026
 """
 expect_error = "appears twice"
+
+[[actions]]
+type = "import_prices"
+date = "2026-06-26"
+csv = """
+VTI,320,2026-06-26
+"""
+expect_error = "not MM/DD/YYYY"
+
+[[actions]]
+type = "import_prices"
+date = "2026-06-26"
+csv = """
+VTI 320 06/26/2026 extra
+"""
+expect_error = "found 4 fields"
 
 # VTI's 2026-06-20 price is 10 days old: stale. The July price is after
 # the valuation date. NOPR has none: no market value, left out of totals.

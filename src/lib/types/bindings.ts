@@ -64,9 +64,10 @@ export const commands = {
 	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
 	/**
 	 *  A new account's fields with the type's defaults: group, tax treatment,
-	 *  investment or other-asset settings (ACCT-030, ACCT-240).
+	 *  investment or other-asset settings (ACCT-030, ACCT-240); an
+	 *  investment account takes the book's default lot method (SET-040).
 	 */
-	accountDefaults: (name: string, accountType: AccountType) => __TAURI_INVOKE<AccountFields>("account_defaults", { name, accountType }),
+	accountDefaults: (name: string, accountType: AccountType) => typedError<AccountFields, IpcError>(__TAURI_INVOKE("account_defaults", { name, accountType })),
 	/**  An account number reduced to its last four characters (ACCT-150). */
 	accountNumberMasked: (number: string) => __TAURI_INVOKE<string>("account_number_masked", { number }),
 	accountCreate: (fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_create", { fields })),
@@ -153,6 +154,17 @@ export const commands = {
 	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
 	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
 	txnSetCleared: (txn: TxnId, account: AccountId, cleared: Cleared, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_set_cleared", { txn, account, cleared, confirmed })),
+	/**
+	 *  What Edit > Undo would undo ("Edit", "Delete", …), or `None` when the
+	 *  last register change can no longer be undone (UI-060).
+	 */
+	undoStatus: () => typedError<string | null, IpcError>(__TAURI_INVOKE("undo_status")),
+	/**
+	 *  Undo the last register change (UI-060); returns the transaction put
+	 *  back. A reconciled one fails with `confirmation_required` until
+	 *  `confirmed`.
+	 */
+	undoApply: (confirmed: boolean) => typedError<TxnId, IpcError>(__TAURI_INVOKE("undo_apply", { confirmed })),
 	/**
 	 *  `total` minus the sum of `parts`: the unassigned amount of a split
 	 *  (TXN-020). The UI does no money arithmetic, so it asks here.
@@ -302,10 +314,19 @@ export const commands = {
 	/**  Enter or replace the closing price on a date (PRC-020). */
 	priceSet: (security: SecurityId, date: string, price: string) => typedError<null, IpcError>(__TAURI_INVOKE("price_set", { security, date, price })),
 	priceDelete: (security: SecurityId, date: string) => typedError<null, IpcError>(__TAURI_INVOKE("price_delete", { security, date })),
-	/**  Check a price CSV without writing anything (PRC-030). */
-	priceImportPreview: (text: string) => typedError<PriceImportPreview, IpcError>(__TAURI_INVOKE("price_import_preview", { text })),
-	/**  Import a price CSV, all or nothing. Returns the number of prices. */
-	priceImport: (text: string) => typedError<number, IpcError>(__TAURI_INVOKE("price_import", { text })),
+	/**  Check a price list without writing anything (PRC-030). */
+	priceImportPreview: (text: string, date: string) => typedError<PriceImportPreview, IpcError>(__TAURI_INVOKE("price_import_preview", { text, date })),
+	/**
+	 *  Import a price list (PRC-030), all or nothing; lines without a date
+	 *  take `date`. Returns the number of prices.
+	 */
+	priceImport: (text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("price_import", { text, date })),
+	/**
+	 *  Download the latest price of every shown security with a ticker
+	 *  (PRC-040), once the book's setting allows it (SECU-070). The fetching
+	 *  runs off the main thread; the prices are stored in one transaction.
+	 */
+	pricesDownload: () => typedError<DownloadSummary, IpcError>(__TAURI_INVOKE("prices_download")),
 	/**  An investment account's register (INV-030). */
 	invRegister: (account: AccountId) => typedError<InvRegister, IpcError>(__TAURI_INVOKE("inv_register", { account })),
 	invGet: (txn: TxnId) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("inv_get", { txn })),
@@ -884,6 +905,19 @@ export type Disposal = {
 
 /**  Why shares left a lot. */
 export type DisposalKind = "sale" | "transfer_out" | "removed";
+
+/**  A ticker that got no price, and why. */
+export type DownloadFailure = {
+	ticker: string,
+	reason: string,
+};
+
+/**  The outcome of a download. */
+export type DownloadSummary = {
+	/**  Prices stored (a price already stored for that day is replaced). */
+	stored: number,
+	failed: DownloadFailure[],
+};
 
 /**  Where a figure comes from (RPT-030). */
 export type Drill = 
@@ -1556,7 +1590,7 @@ export type PriceImportPreview = {
 	good: number,
 	errors: number,
 	replaces: number,
-	/**  Rows left out because their security is not in the book. */
+	/**  Lines left out because their ticker is not in the book. */
 	skipped: number,
 };
 
@@ -1564,16 +1598,16 @@ export type PriceImportPreview = {
 export type PriceImportRow = {
 	/**  Line in the file (1-based). */
 	line: number,
-	/**  The security as written in the file. */
+	/**  The ticker as written in the file. */
 	label: string,
 	security: SecurityId | null,
 	date: string | null,
 	price: string | null,
 	/**  A price is already stored for this date and will be replaced. */
 	replaces: boolean,
-	/**  The security is not in the book: the row is left out. */
+	/**  The ticker is not in the book: the line is left out. */
 	skipped: boolean,
-	/**  Why the row cannot be imported. */
+	/**  Why the line cannot be imported. */
 	error: string | null,
 };
 
@@ -2104,6 +2138,16 @@ export type Settings = {
 	 *  security sets its own.
 	 */
 	stale_price_days: number,
+	/**
+	 *  Lot selection method a new investment account starts with
+	 *  (SET-040); each account and security keeps its own after that.
+	 */
+	default_lot_method: LotMethod,
+	/**
+	 *  Price download from the internet is allowed (PRC-040, SECU-070);
+	 *  off until the user turns it on.
+	 */
+	price_download: boolean,
 	/**  Days ahead the dashboard lists scheduled items (DSH-020). */
 	upcoming_days: number,
 	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */

@@ -45,7 +45,7 @@ function totalCells(t: PortfolioTotals): Row["cells"] {
 
 function warning(t: PortfolioTotals): string | undefined {
   if (t.missing_prices) return "Some holdings have no price and are left out.";
-  if (t.stale_prices) return "Some prices are more than a week old.";
+  if (t.stale_prices) return "Some prices are out of date (older than the stale-price limit).";
   return undefined;
 }
 
@@ -96,7 +96,7 @@ export function buildRows(
         toggleKey: pk,
         expanded: popen,
         cells: popen ? { ticker: p.ticker ?? "" } : positionCells(p),
-        priceWarn: !popen && p.stale ? `Price of ${p.price_date ? displayDate(p.price_date) : "?"} is more than a week old` : undefined,
+        priceWarn: !popen && p.stale ? `Price of ${p.price_date ? displayDate(p.price_date) : "?"} is out of date (older than the stale-price limit)` : undefined,
       });
       if (!popen) continue;
       for (const l of p.lots) {

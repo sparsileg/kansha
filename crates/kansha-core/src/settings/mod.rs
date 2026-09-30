@@ -13,6 +13,7 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+use crate::accounts::LotMethod;
 use crate::date::Timestamp;
 use crate::error::{Error, Result};
 use crate::persistence::{Tx, settings as repo};
@@ -65,6 +66,12 @@ pub struct Settings {
     /// A price older than this many days is stale (SET-040), unless the
     /// security sets its own.
     pub stale_price_days: i64,
+    /// Lot selection method a new investment account starts with
+    /// (SET-040); each account and security keeps its own after that.
+    pub default_lot_method: LotMethod,
+    /// Price download from the internet is allowed (PRC-040, SECU-070);
+    /// off until the user turns it on.
+    pub price_download: bool,
     /// Days ahead the dashboard lists scheduled items (DSH-020).
     pub upcoming_days: i64,
     /// Backup folder (SET-050, BAK-030); `None` = the Downloads folder.
@@ -90,6 +97,8 @@ impl Default for Settings {
             account_panel_side: PanelSide::Left,
             invest_views: None,
             stale_price_days: DEFAULT_STALE_DAYS,
+            default_lot_method: LotMethod::Fifo,
+            price_download: false,
             upcoming_days: 14,
             backup_folder: None,
             backup_keep_last: 10,
@@ -143,6 +152,8 @@ pub fn load(conn: &Connection) -> Result<Settings> {
             STALE_PRICE_DAYS,
             d.stale_price_days,
         )?,
+        default_lot_method: get(conn, "default_lot_method", d.default_lot_method)?,
+        price_download: get(conn, "price_download", d.price_download)?,
         upcoming_days: get_in(conn, "upcoming_days", UPCOMING_DAYS, d.upcoming_days)?,
         backup_folder: get_text(conn, "backup_folder")?,
         backup_keep_last: get_in(conn, "backup_keep_last", KEEP_LAST, d.backup_keep_last)?,
@@ -207,6 +218,8 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     repo::set(tx, "account_panel_side", s.account_panel_side.as_str())?;
     put_text(tx, "invest_views", s.invest_views.as_deref())?;
     repo::set(tx, "stale_price_days", &s.stale_price_days.to_string())?;
+    repo::set(tx, "default_lot_method", s.default_lot_method.as_str())?;
+    repo::set(tx, "price_download", &s.price_download.to_string())?;
     repo::set(tx, "upcoming_days", &s.upcoming_days.to_string())?;
     put_text(tx, "backup_folder", s.backup_folder.as_deref())?;
     repo::set(tx, "backup_keep_last", &s.backup_keep_last.to_string())?;

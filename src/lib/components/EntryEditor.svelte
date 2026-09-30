@@ -31,8 +31,15 @@
   let {
     txn = null,
     account,
+    split = false,
     ondone,
-  }: { txn?: number | null; account: AccountId; ondone?: (saved: boolean) => void } = $props();
+  }: {
+    txn?: number | null;
+    account: AccountId;
+    /** Edit with the split lines open (context menu Split, REG-080). */
+    split?: boolean;
+    ondone?: (saved: boolean) => void;
+  } = $props();
 
   let d = $state<Draft>(newDraft(listsState.today));
   let error = $state<string | null>(null);
@@ -83,6 +90,14 @@
         original = JSON.stringify($state.snapshot(d));
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
+      }
+      // `split` follows registerState.editSplit, so read it before
+      // clearing the request.
+      const wantSplit = split;
+      registerState.editSplit = false;
+      if (wantSplit && !error && !isSplit) {
+        await startSplit();
+        return;
       }
     }
     dateInput?.focus();

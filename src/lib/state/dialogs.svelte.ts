@@ -1,12 +1,12 @@
 // Which modal dialogs are open. Rendered once in App.svelte.
 
-import type { Account, AccountId, IntegrityReport, ScheduleFields, ScheduleId, TxnId } from "../types/bindings";
+import type { Account, IntegrityReport, ScheduleFields, ScheduleId } from "../types/bindings";
 
 class DialogState {
   /** `undefined` closed; `null` new account; an account to edit. */
   account = $state<Account | null | undefined>(undefined);
-  /** Transaction whose audit history is shown (AUD-020). */
-  history = $state<{ txn: TxnId; account: AccountId } | null>(null);
+  /** Transaction or account whose audit history is shown (AUD-020). */
+  history = $state<{ entity: "txn" | "account"; id: number } | null>(null);
   integrity = $state(false);
   /** The result an automatic check already has, shown without running
    * again; `null` for File > Integrity Check, which runs its own. */
@@ -22,6 +22,8 @@ class DialogState {
   passphrase = $state(false);
   /** Settings > Show database key… (SECU-020). */
   dbKey = $state(false);
+  /** Tools > Import Prices… (PRC-030). */
+  priceImport = $state(false);
   /** The Navigation Bar dialog (which buttons, in what order). */
   navbar = $state(false);
   /** Due, overdue, and auto-entered items (REC-130, REC-070). */

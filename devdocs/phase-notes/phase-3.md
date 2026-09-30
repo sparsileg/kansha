@@ -7,9 +7,9 @@ Spec: 0.3.4. Split into 3a (core queries, sample data, IPC) and 3b (Svelte UI), 
 | Sub-phase | State |
 |---|---|
 | 3a Core queries, sample data, IPC | Done. `just check` green. |
-| 3b Svelte UI | Built. `just check` green (114 frontend tests). Hands-on tests 1-8 done by Stan; open issues listed under "Phase 3 close-out summary". |
+| 3b Svelte UI | Built and committed. Hands-on tests 1-8 done by Stan; open issues listed under "Phase 3 close-out summary". |
 
-3a is committed. All of 3b is uncommitted in the working tree; Stan commits in GitKraken.
+Both 3a and 3b are committed.
 
 ## Phase 3 close-out summary
 
@@ -22,7 +22,7 @@ Spec: 0.3.4. Split into 3a (core queries, sample data, IPC) and 3b (Svelte UI), 
 **Known gaps and open issues:**
 - Shift+F10 and the Menu key do not open the row context menu in the running app. A native `contextmenu` fallback did not fix it. Cause unknown.
 - Right-click menu placement is still wrong near the bottom of the window despite viewport clamping in `ContextMenu.svelte`.
-- Settings are kept in localStorage, not with the book (SET-070); other gaps under "Known gaps from 3b".
+- ~~Settings are kept in localStorage, not with the book (SET-070)~~ Done in Phase 8: settings are in the book or the per-computer config file. Other gaps under "Known gaps from 3b".
 - Closed 2026-09-28: show-closed toggle and account panel redesign (done in the shell), paging (continuous scroll built, below), category and tag update/merge (covered by the managers), keyboard shortcut list and modal focus trap (Stan: not needed).
 - **Split button, split Tag cell, scrollbars (2026-09-28, spec 0.3.25):** Split button (`SPLIT_ICON` in `shell/icons.ts`) before Enter in `EntryEditor`; `register_query` shows a split's own tag only (`s.others <= 1 OR o.id = s.posting_id`). The scrollbar was covering the Balance column again: WebKitGTK now follows GTK overlay scrollbars (no layout width, so the measured width was 0). `App.svelte` styles `::-webkit-scrollbar` (12px, per-theme colors), which turns overlay off; the register also re-measures on resize.
 - **Split lines (built 2026-09-28):** each split line has a Tag picker (its first tag; further tags from an import are kept) and a read-only Clr column. A transfer line shows the other account's cleared mark (c or R); it is set in that account or by reconciling it, never from this side. Category lines have none. Pure helpers `splitTagValue`, `setSplitTag`, `splitCleared` in `register/draft.ts`.
@@ -91,7 +91,7 @@ No schema change. **⚠ API change:** 28 new IPC commands; `src/lib/types/bindin
 
 - `src/lib/state/lists.svelte.ts`: `listsState` holds `today`, accounts, balances, categories, tags, with id lookup maps, `isEmptyBook`, `loadAll`, `loadBalances`.
 - `src/lib/state/register.svelte.ts`: `registerState` holds the open account, filters, sort, page index, page, and summary. Methods: `open`, `close`, `reload`, `refresh` (rows, footer, balances), `setFilters`, `clearFilters`, `sortBy`, `goToPage`. (2026-09-28: paging removed, see "Continuous-scroll register"; `goToTransaction(account, txn)` selects and reveals.)
-- `src/lib/state/settings.svelte.ts`: `settingsState.pageSize` (100; removed 2026-09-28). Theme and font size stay in `theme.svelte.ts`. Settings are now kept in localStorage (`prefs.ts`) until SET-070.
+- `src/lib/state/settings.svelte.ts`: `settingsState.pageSize` (100; removed 2026-09-28). Theme and font size stay in `theme.svelte.ts`. Settings were kept in localStorage (`prefs.ts`) until Phase 8 moved them to the book (SET-070).
 - Tests: `src/lib/state/state.test.ts` (7), IPC mocked.
 
 ### Item 4 (shell)
@@ -209,10 +209,10 @@ Bugs found so far in hands-on use, all fixed and covered by tests (see "Bug foun
 
 - **Only partly exercised in the real app.** See "Hands-on testing". Automated checks are Vitest (jsdom, IPC mocked), `svelte-check`, and `vite build`; jsdom has no layout, so layout and focus fixes were confirmed only by hand.
 - Account reordering (ACCT-240) is by the Sort order number in the account modal; no drag and drop.
-- Settings (sidebar, theme, startup) are kept in localStorage, not with the book (SET-070).
+- ~~Settings (sidebar, theme, startup) are kept in localStorage, not with the book (SET-070).~~ Done in Phase 8.
 - Balances on credit and liability accounts show as stored (negative = owed). Stan, 2026-09-28: correct as is; not a gap.
 - Payee suggestions and the payee filter list load all payees; fine at hundreds, revisit if it grows.
-- Accessibility pass and the icon bar (UI-020) are not done.
+- Accessibility pass not done. ~~The icon bar (UI-020)~~ is the navigation bar, built in the shell (`shell.md`).
 
 ### 17 Docs and close-out
 

@@ -1,7 +1,11 @@
 // What running a menu item or navigation-bar button does, by id. Items
 // marked `disabled` never get here (the callers check).
 
-import { call, commands } from "../api";
+import { call, commands, DECLINED, withConfirmation } from "../api";
+import { confirmState } from "../state/confirm.svelte";
+import { investState } from "../state/invest.svelte";
+import { listsState } from "../state/lists.svelte";
+import { scheduleState } from "../state/schedule.svelte";
 import { MENU_REPORTS } from "../reports/meta";
 import { dialogState } from "../state/dialogs.svelte";
 import { reportState } from "../state/reports.svelte";
@@ -39,6 +43,9 @@ export function runAction(id: string): void {
       case "help.about":
         dialogState.about = true;
         break;
+      case "edit.undo":
+        void undoLast();
+        break;
       case "edit.settings":
         dialogState.settings = true;
         break;
@@ -69,6 +76,12 @@ export function runAction(id: string): void {
       case "tools.securities":
         viewState.navigate("manage", { tab: "securities" });
         break;
+      case "tools.import_prices":
+        dialogState.priceImport = true;
+        break;
+      case "tools.download_prices":
+        void downloadPrices();
+        break;
       case INVESTMENTS_ID:
         viewState.navigate("investments");
         break;
@@ -96,6 +109,46 @@ export async function backUpNow(): Promise<void> {
     statusState.show(m.text, m.kind);
   } catch (e) {
     statusState.show(`The backup failed: ${e instanceof Error ? e.message : String(e)}`, "alert");
+  }
+}
+
+/** Edit > Undo and Ctrl+Z (UI-060): undo the last register change, then
+ * refresh what shows it. The status bar says what happened. */
+export async function undoLast(): Promise<void> {
+  try {
+    const label = await call(commands.undoStatus());
+    if (label === null) {
+      statusState.show("There is nothing to undo.", "info");
+      return;
+    }
+    const done = await withConfirmation((c) => commands.undoApply(c), confirmState.ask);
+    if (done === DECLINED) return;
+    statusState.show(`Undone: ${label}.`, "info");
+  } catch (e) {
+    statusState.show(e instanceof Error ? e.message : String(e), "alert");
+  }
+  await Promise.all([
+    scheduleState.changed(),
+    investState.accountId !== null ? investState.refresh() : listsState.loadBalances(),
+  ]);
+}
+
+/** Tools > Download Prices (PRC-040): latest prices from the internet,
+ * when Settings allows it. Tickers that got none are named. */
+export async function downloadPrices(): Promise<void> {
+  statusState.show("Downloading prices…", "info");
+  try {
+    const r = await call(commands.pricesDownload());
+    const failed = r.failed.map((f) => `${f.ticker} (${f.reason})`).join(", ");
+    statusState.show(
+      `Downloaded ${r.stored} price${r.stored === 1 ? "" : "s"}.${failed ? ` No price for ${failed}.` : ""}`,
+      failed ? "alert" : "info",
+    );
+    await investState.loadSecurities();
+    if (investState.accountId !== null) await investState.refresh();
+    else await listsState.loadBalances();
+  } catch (e) {
+    statusState.show(`Price download failed: ${e instanceof Error ? e.message : String(e)}`, "alert");
   }
 }
 

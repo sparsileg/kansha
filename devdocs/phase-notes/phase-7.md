@@ -1,7 +1,8 @@
 # Phase 7 — Reports and dashboard
 
-Spec: 0.3.16 (0.3.13 first pass, 0.3.14 toolbar, 0.3.15 report
-windows). Engine, IPC, and UI in one pass. `just check` green.
+Spec: 0.3.13 first pass, 0.3.14 toolbar, 0.3.15 report windows,
+0.3.16–0.3.20 follow-ups. Engine, IPC, and UI in one pass. `just
+check` green.
 Built from `devdocs/reports.md`, Stan's Quicken samples in
 `report-samples/`, and the scope agreed in chat.
 
@@ -252,8 +253,10 @@ Stan's requests, 2026-09-28. No Rust, schema, or API change.
 - Report date comparison to a prior period (RPT-040) not built.
 - Wide reports (Net Worth by month) print as one wide table; Quicken
   splits columns across pages.
-- Last backup age warning (DSH-030) waits for backups (Phase 8).
-- Upcoming days (DSH-020) fixed at 14 until settings (SET).
+- ~~Last backup age warning (DSH-030) waits for backups~~ Done in Phase
+  8.
+- ~~Upcoming days (DSH-020) fixed at 14~~ A setting since Phase 8
+  (default 14).
 - The DAF gift of 7/15/2025 is a 0-gain sale, as in Quicken (Stan's
   choice). A separate charitable-gift disposal type is an unscheduled
   idea, not a gap.

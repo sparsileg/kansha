@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: Settings = {
   account_panel_side: "left",
   invest_views: null,
   stale_price_days: 7,
+  default_lot_method: "fifo",
+  price_download: false,
   upcoming_days: 14,
   backup_folder: null,
   backup_keep_last: 10,

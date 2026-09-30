@@ -14,6 +14,7 @@ vi.mock("../api", async (orig) => {
       entryGet: vi.fn(),
       entryUpdate: vi.fn(),
       payeeList: vi.fn(),
+      splitRemainder: vi.fn(),
     },
   };
 });
@@ -57,6 +58,7 @@ beforeEach(async () => {
   c.txnSetCleared.mockImplementation(() => ok(null));
   c.payeeList.mockImplementation(() => ok([]));
   c.entryUpdate.mockImplementation(() => ok(null));
+  c.splitRemainder.mockImplementation(() => ok("0.00"));
   c.entryGet.mockImplementation(() =>
     ok({
       account: 1, date: "2026-10-01", payee: null, check_num: "", memo: "", notes: "",
@@ -132,6 +134,18 @@ describe("RegisterGrid", () => {
     await fireEvent.keyDown(grid, { key: "ArrowDown" });
     await fireEvent.keyDown(grid, { key: "Enter" });
     expect(registerState.editing).toBe(4);
+  });
+
+  it("context menu Split opens the row with its split lines, the category as line 1 (REG-080)", async () => {
+    render(RegisterGrid, { account: 1 });
+    await fireEvent.contextMenu(document.getElementById("row-3")!, { clientX: 50, clientY: 50 });
+    const labels = screen.getAllByRole("menuitem").map((b) => b.textContent);
+    expect(labels.slice(0, 2)).toEqual(["Edit", "Split"]);
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Split" }));
+    expect(registerState.editing).toBe(3);
+    await waitFor(() => expect(screen.getByLabelText("Split 1 category")).toBeTruthy());
+    expect(screen.getByLabelText("Split 2 category")).toBeTruthy();
+    expect(registerState.editSplit).toBe(false);
   });
 
   it("Enter in an edited row saves and moves to the next row; the grid keeps focus", async () => {

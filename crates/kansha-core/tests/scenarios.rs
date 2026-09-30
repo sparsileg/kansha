@@ -244,6 +244,8 @@ enum Action {
     },
     /// Import prices from CSV text.
     ImportPrices {
+        /// Date for lines without one.
+        date: String,
         csv: String,
         expect_count: Option<i64>,
         expect_error: Option<String>,
@@ -1483,11 +1485,15 @@ impl Ctx<'_> {
                 self.book.write(|tx| securities::set_price(tx, &p))?;
             }
             Action::ImportPrices {
-                csv, expect_count, ..
+                date,
+                csv,
+                expect_count,
+                ..
             } => {
+                let date: Date = parse("date", date)?;
                 let n = self
                     .book
-                    .write(|tx| kansha_core::securities::commit_prices(tx, csv))?;
+                    .write(|tx| kansha_core::securities::commit_prices(tx, csv, date))?;
                 if let Some(want) = expect_count {
                     if n != *want {
                         return Err(ActErr::Harness(format!(

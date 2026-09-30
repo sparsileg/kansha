@@ -104,7 +104,7 @@
   /** The audit history (AUD-020) replaces this dialog. */
   function showHistory() {
     if (txn === null) return;
-    dialogState.history = { txn, account: account.id };
+    dialogState.history = { entity: "txn", id: txn };
     onclose();
   }
 

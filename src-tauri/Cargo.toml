@@ -27,6 +27,10 @@ specta.workspace = true
 specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 thiserror.workspace = true
+# Price download (PRC-040, D-40): blocking HTTPS, rustls; pinned for
+# MSRV 1.85. The core parses the reply; only this shell touches the
+# network (SECU-070).
+ureq = "=2.12.1"
 
 # Saving PDFs with the orientation set in code (RPT-050); the same
 # versions Tauri's wry already uses.

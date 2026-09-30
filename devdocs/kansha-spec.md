@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.3.37 (draft) |
+| **Document version** | 0.4 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
-| **Status** | Draft — schema defined in `0001_init.sql` (Phase 1); ledger engine built (Phase 2); IPC layer and sample data (Phase 3a); reconciliation engine and UI (Phase 5); investments engine and UI (Phase 6); reports and dashboard (Phase 7); encryption, backup, restore, and settings (Phase 8); D-20, D-50, D-60, D-100, D-110, D-140 decided |
+| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Next: Phase 9, Quicken import (MIG) |
 
 ---
 
@@ -127,9 +127,10 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 
 - **ACCT-100** [1.0][S] Common attributes for all accounts: name,
   description, account type, financial institution, account number,
-  contact phone, home page URL, tax treatment, opening date,
-  visibility flags (show in account bar, show in account list),
-  open/closed status.
+  contact phone, home page URL, tax treatment, opening date, show in
+  account list, open/closed status. (The navigation bar's buttons,
+  accounts included, are chosen in Edit > Navigation Bar, UI-020;
+  the schema's `account.show_in_bar` column is unused.)
 - **ACCT-110** [1.0][S] Checking/Savings/Money Market additional
   attributes: interest rate.
 - **ACCT-120** [1.0][S] Credit Card additional attributes: credit
@@ -268,8 +269,10 @@ had a combined column.
   every register (banking and investment) future rows are italic
   and their alternate rows use their own tint; their text is not
   dimmed. Reconciled rows have gray text.
-- **REG-080** [1.0][R] Right-click/context menu: edit, split, void,
-  delete, go to other side of transfer, show audit history.
+- **REG-080** [1.0][R] Right-click/context menu: Edit, Split (opens
+  the edit with its split lines, the category so far as line 1), Mark
+  cleared or unmarked, Go to other side of transfer, Schedule this…
+  (REC-140), History… (AUD-020), Void, Delete.
 
 ### 8. Scheduled and Recurring Transactions (REC) and Calendar (CAL)
 
@@ -415,38 +418,51 @@ common patterns.
 - **PRC-010** [1.0][S] Store historical prices per security (date,
   closing price) separately from the security master.
 - **PRC-020** [1.0][R] Manual price entry and editing.
-- **PRC-030** [1.0][R] Import prices from CSV and from Quicken QIF
-  price history (`!Type:Prices`).
-- **PRC-040** [TBD][S] Download of current and historical prices from
-an online source.  > **Recommendation:** make this [1.0] but pluggable
-behind a price-provider interface, since free quote sources change or
-disappear. Candidate sources need evaluation (D-40). Manual/CSV entry
-remains the fallback.
+- **PRC-030** [1.0][S] Import a price list, started by hand (Tools >
+  Import Prices…, or Import prices… in Securities): one price per line,
+  ticker, price, and optionally a date as `MM/DD/YYYY`, separated by a
+  comma or by spaces and tabs. The dialog has a date picker (default
+  today); a line without a date takes that date. The file is chosen
+  with a file picker or dropped on the dialog. A preview lists every
+  line; tickers not in the book are skipped; nothing is stored unless
+  every other line is good; a price already stored for that date is
+  replaced. Quicken's QIF price history is read only by the Quicken
+  import (MIG-140).
+- **PRC-040** [1.0][S] Download the latest price of every security
+  that is not hidden and has a ticker (Tools > Download Prices), dated
+  the market day it belongs to. Off until turned on in Settings
+  (SECU-070). The provider sits behind an interface, since free quote
+  sources change or disappear: Yahoo Finance's chart service now (no
+  key; stocks, ETFs, mutual funds), a keyed provider later (D-40). The
+  status bar reports the prices stored and names the tickers that got
+  none. Manual entry and PRC-030 remain the fallback.
 - **PRC-050** [1.0][R] Market value uses the most recent price on or
   before the valuation date; reports show the price date used and flag
-  stale prices (older than a configurable number of days).
+  stale prices (older than the stale-price setting, SET-040, unless the
+  security sets its own): Holdings marks them ⚠ and says so under the
+  report; the Investments screen and the dashboard warn too.
 
 #### 10.3 Investment transactions (INV)
 
 - **INV-010** [1.0][S] Supported investment transaction types:
 
-  | Type | Effect on shares | Effect on cash | Effect on basis/income
-  | |---|---|---|---| | Buy | + (new lot) | − | Lot basis = cost +
-  fees | | Sell | − (from lots) | + | Realized gain/loss | | Dividend
-  | none | + | Dividend income | | Interest | none | + | Interest
-  income | | Reinvest dividend | + (new lot) | none | Dividend
-  income + new lot | | Reinvest capital gain (ST/LT) | + (new lot) |
-  none | CG distribution income + new lot | | Capital gain
-  distribution (cash, ST/LT) [R] | none | + | CG distribution income |
-  | Return of capital | none | + | Reduces lot basis | | Stock split /
-  reverse split | ± quantity | none | Per-share basis adjusted; total
-  basis and dates unchanged | | Transfer shares in/out | ± | none |
-  Lots transferred with original dates and basis | | Shares added /
-  removed (opening position) [R] | ± | none | Creates a lot with
-  user-supplied date and basis | | Transfer cash in/out | none | ± |
-  none | | Fee | none | − | Investment expense | | Tax withholding
-  (federal/foreign) | none | − | Recorded for tax reporting | |
-  Miscellaneous income/expense [R] | none | ± | Categorized |
+  | Type | Effect on shares | Effect on cash | Effect on basis/income |
+  |---|---|---|---|
+  | Buy | + (new lot) | − | Lot basis = cost + fees |
+  | Sell | − (from lots) | + | Realized gain/loss |
+  | Dividend | none | + | Dividend income |
+  | Interest | none | + | Interest income |
+  | Reinvest dividend | + (new lot) | none | Dividend income + new lot |
+  | Reinvest capital gain (ST/LT) | + (new lot) | none | CG distribution income + new lot |
+  | Capital gain distribution (cash, ST/LT) [R] | none | + | CG distribution income |
+  | Return of capital | none | + | Reduces lot basis |
+  | Stock split / reverse split | ± quantity | none | Per-share basis adjusted; total basis and dates unchanged |
+  | Transfer shares in/out | ± | none | Lots transferred with original dates and basis |
+  | Shares added / removed (opening position) [R] | ± | none | Creates a lot with user-supplied date and basis |
+  | Transfer cash in/out | none | ± | none |
+  | Fee | none | − | Investment expense |
+  | Tax withholding (federal/foreign) | none | − | Recorded for tax reporting |
+  | Miscellaneous income/expense [R] | none | ± | Categorized |
 
 - **INV-020** [1.0][R] Each investment transaction records trade date
   and, optionally, settlement date.
@@ -540,10 +556,7 @@ cash (reinvested income moves nothing); an account's is money crossing
 its edge (cash in and out and register transfers, or with linked cash
 every trade's cash); shares moved without cash count at market
 value. The rest of an account (its cash, or with linked cash its other
-income and fees) is its own row, so the rows add up to the account.  >
-**Recommendation:** 1.0 includes simple measures (total gain, total
-return including income) per security and account. Time-weighted and
-money-weighted (IRR) returns are [Later].
+income and fees) is its own row, so the rows add up to the account.
 - **POS-040** [1.0][S] The Investments screen replaces per-account
   tabs. It lists the chosen investment accounts as collapsible rows;
   under each, its cash and current equities; under each equity, its
@@ -733,10 +746,10 @@ This section is intentionally incomplete until export testing is done
   month's income, expenses, and net.
 - **DSH-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
-- **DSH-030** [1.0][R] Warnings panel: stale prices, unreconciled
-  accounts beyond a threshold, integrity check results, last backup
-  age, date of the last full backup verification (BAK-080), backup
-  folder missing (BAK-030).
+- **DSH-030** [1.0][R] Warnings panel: missing and stale prices,
+  accounts with uncleared transactions more than 60 days old,
+  integrity check results, last backup age, date of the last full
+  backup verification (BAK-080), backup folder missing (BAK-030).
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -772,7 +785,8 @@ This section is intentionally incomplete until export testing is done
   recorded in an append-only audit log: timestamp, action, entity ID,
   before and after values, and origin (UI, import batch, scheduler).
 - **AUD-020** [1.0][R] View audit history for any transaction or
-  account from the UI.
+  account from the UI: History… in a register's context menu or an
+  investment transaction's dialog, and in the account dialog.
 - **AUD-030** [1.0][S] Corrections to historical data are explicit and
   visible, never silent.
 
@@ -786,13 +800,13 @@ platform has one.
 - **BAK-010** [1.0][S] Backups are a first-class feature.
 - **BAK-020** [1.0][R] Automatic backup on application close and
   before any import, schema migration, or bulk operation (merge, batch
-  rollback); and a timed backup a few minutes after a change (SET-050).
+  rollback); and a timed backup a few minutes after a change (BAK-045).
 - **BAK-030** [1.0][R] Manual "Back up now". Every backup, manual or
   automatic, is written to the backup folder chosen in Settings
   (SET-050); with none chosen, to the system Downloads folder. No
-  destination is asked for. Setup and Settings say that a backup
-  folder on the same computer (Downloads included) does not survive
-  the loss of the computer; a cloud-synced folder, network drive, or
+  destination is asked for. Setup says that a backup folder on the
+  same computer (Downloads included) does not survive the loss of the
+  computer; a cloud-synced folder, network drive, or
   USB drive does. Before each backup the folder is checked to be an
   existing folder. If it is not (e.g. after a restore on another
   computer), the backup goes to Downloads and the dashboard warns
@@ -813,7 +827,7 @@ platform has one.
   pruned by the same rules. The kind is `manual`, `close`,
   `migration`, `bulk` (before a merge), `import`, `restore` (the
   current book, before a restore replaces it), or `timeout` (a timed
-  backup, SET-050). The entries are
+  backup, BAK-045). The entries are
   `manifest.json`, `database.gz.age` (gzip, then `age`), and
   `private-key.age`.
 - **BAK-040** [1.0][R] Configurable retention (e.g., keep last 10
@@ -823,6 +837,15 @@ platform has one.
   backup is temporary and outside the count: only the newest one is
   kept, and only while no backup of any other kind (a manual one
   included) is newer.
+- **BAK-045** [1.0][S] **Timed backup:** a set number of minutes
+  after the first change since the last backup (Settings, default 5;
+  0 = off; SET-050), a backup of kind `timeout` is made. The clock runs
+  from the first change, not the last, so steady editing still gets a
+  backup; a backup of any kind resets it. The status bar says the
+  backup is starting and, when it is done, that it finished; a
+  failure, a missing folder, or integrity problems flash (UI-045).
+  After a failure the next try waits about 5 minutes. Retention keeps
+  only the newest timed backup (BAK-040).
 - **BAK-050** [1.0][R] Backups are consistent snapshots (SQLite online
   backup API, `VACUUM INTO`, or serialization), never a raw file copy
   of an open database. No unencrypted copy of the database is written
@@ -897,7 +920,9 @@ platform has one.
 - **SECU-060** [Withdrawn] Auto-lock after an idle period (withdrawn
   0.3.30; the desktop's screen lock serves). May return later.
 - **SECU-070** [1.0][R] No network access except explicitly enabled
-  features (price download). No telemetry.
+  features: price download (PRC-040), off until "Allow price download"
+  is turned on in Settings. Requests go from Rust, never from the
+  webview, and carry only the ticker. No telemetry.
 - **SECU-080** [1.0][R] First-run setup, one screen in order: (1)
   create a new database or restore from a backup (BAK-070); (2) choose
   the backup folder (default Downloads, with BAK-030's note); (3) set
@@ -913,12 +938,16 @@ platform has one.
 
 #### 14.1 Navigation and layout
 
-- **UI-010** [1.0][S] Account selector dropdown at the top of the main
-  window; can be toggled to a persistent sidebar alongside the
-  register.
-- **UI-020** [1.0][S] Icon bar with user-configurable shortcuts
-  (Reconcile, Investments, Calendar, Reports, Dashboard, Scheduled,
-  etc.).
+- **UI-010** [1.0][S] One "Accounts" panel beside the register,
+  left or right (Settings), with the grouped account list and "Show
+  closed accounts". Closed, only its button stays, and clicking it
+  drops the list down to pick an account ("Keep open" brings the panel
+  back). Open or closed is remembered.
+- **UI-020** [1.0][S] Navigation bar under the menu bar with
+  user-configurable buttons (Edit > Navigation Bar): Home, the
+  Investments screen, any menu item, or any account, in the user's
+  order, each with an icon and a text label; Reminders shows the
+  number due. The search box (UI-070) is at its right.
 - **UI-030** [1.0][S] Account-centric design: each account opens to
   its own view with tabs appropriate to its type (banking: Register |
   Scheduled | Reconcile history; investment: see POS-040).
@@ -946,9 +975,17 @@ platform has one.
   only that).
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions;
   full keyboard operation of the register.
-- **UI-060** [1.0][R] Undo for the most recent edit in the current
-  session (implemented as an explicit reversing change, recorded in
-  the audit log).
+- **UI-060** [1.0][R] Undo for the most recent register change in the
+  current session: creating, editing, voiding, or deleting a
+  transaction, or changing its cleared status, in banking and
+  investment registers. One level; Edit > Undo or Ctrl+Z (outside a
+  text field, where Ctrl+Z undoes typing). The transaction comes back
+  exactly as it was (same ID, postings, links, and lots), as an
+  explicit reversing change recorded in the audit log. Offered only
+  while nothing else has changed since; lost when the book closes.
+  Undoing a change to a reconciled transaction asks first. Deleting a
+  transaction entered from a schedule cannot be undone (it gives the
+  occurrence back, REC-160).
 - **UI-070** [1.0][R] Search box in the navigation bar: finds
   transactions by payee, category, memo, note, check number, account
   name, or amount, across all accounts or (from a register) in that
@@ -978,29 +1015,26 @@ platform has one.
   follows it; a four-digit year typed first is always accepted. Logs
   and histories show timestamps as `YYYY-MM-DDTHH:MM:SSZ` (UTC). First
   day of week.
-- **SET-040** [1.0][R] Default lot selection method; stale-price
-  threshold. (Tithing percentage withdrawn, 0.3.22.)
+- **SET-040** [1.0][R] Default lot selection method, which a new
+  investment account starts with (each account and security then
+  keeps its own, LOT-100); stale-price threshold in days (default 7; a
+  security's own value wins). (Tithing percentage withdrawn, 0.3.22.)
 - **SET-050** [1.0][R] Backup folder (default: the system Downloads
-  folder; BAK-030), retention, and schedule. Change backup passphrase
-  (SECU-040); Show database key (SECU-020); Verify backup… (BAK-080).
-  The schedule is one number: minutes after the first change since the
-  last backup, when a timed backup is made (default 5; 0 = off). The
-  clock runs from the first change, not the last, so steady editing
-  still gets a backup; a backup of any kind resets it. The status bar
-  says the backup is starting and, when it is done, that it finished
-  (a failure, a missing folder, or integrity problems flash, UI-045).
-  Settings offers Verify backup…, Change backup passphrase…, and Show
-  database key… in one "Backup tools" list with an Apply button.
+  folder; BAK-030), retention (BAK-040), and the timed backup's delay
+  in minutes (BAK-045; default 5, 0 = off). Change backup passphrase
+  (SECU-040); Show database key (SECU-020); Verify backup… (BAK-080):
+  Settings offers these three in one "Backup tools" list with an Apply
+  button. Allow price download (PRC-040, SECU-070; default off).
 - **SET-060** [1.0][R] Startup behavior: "On startup open to:" the
   dashboard, Investments, Reminders, Calendar, Accounts, or any
   account (every new view or account joins the list); run integrity
   check at startup. The Home button always opens the dashboard.
 - **SET-070** [1.0][R] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
-  except per-computer ones: theme, font size (the passphrase screen
-  needs them before a book is open), window geometry, and the recent
-  books list with their paths. Those are kept in a config file in the
-  OS configuration folder, written by Rust. Browser storage
+  except per-computer ones: theme, font, font size (the passphrase
+  screen needs them before a book is open), window geometry, and the
+  recent books list with their paths. Those are kept in a config file
+  in the OS configuration folder, written by Rust. Browser storage
   (localStorage) is not used for settings.
 
 ---
@@ -1111,7 +1145,7 @@ run Kansha in parallel with Quicken until results agree.
 | Numeric | Integer minor units; `rust_decimal` for intermediate math |
 | Database | SQLite via `rusqlite` with `bundled-sqlcipher-vendored-openssl` (SQLCipher with its own OpenSSL; no system crypto library needed; encryption per D-20/D-110) |
 | Testing | `cargo test`, `proptest`, `insta`, Vitest, Svelte Testing Library |
-| Source control / CI | Git + GitHub; GitHub Actions |
+| Source control / CI | Git + GitHub; GitHub Actions (workflow in the repository, disabled since 2026-09-24 until Stan turns it back on) |
 
 #### 16.2 Decision record
 
@@ -1212,11 +1246,18 @@ compiles against Tauri v2 and generates a matching
 - Folder and file pickers (backup folder, restore):
   `tauri-plugin-dialog`, called from Rust only, so the webview gets
   no dialog permission.
+- Price download (PRC-040): `ureq` (blocking HTTPS with `rustls`),
+  pinned `=2.12.1` (MSRV 1.71), in `src-tauri` only. The reply is
+  read in `kansha-core` with `serde_json`'s `raw_value` feature, so
+  numbers keep their written text and never pass through a float.
 - Testing: see Section 20.
 
 **R5 — Tauri security configuration.**  Tauri v2 capabilities expose
-only Kansha's own commands to the frontend; no remote content; network
-permission limited to the price provider when enabled.
+only Kansha's own commands to the frontend; no remote content. The
+webview has no network permission: price download (PRC-040) runs in
+Rust, and only when enabled (SECU-070). The window's own file
+drag-and-drop is off (`dragDropEnabled: false`) so a dropped file
+reaches the page (PRC-030).
 
 ### 17. Architecture
 
@@ -1251,18 +1292,20 @@ permission limited to the price provider when enabled.
 | Module | Responsibilities | Depends on |
 |---|---|---|
 | `accounts` | Account CRUD, types, attributes, lifecycle | persistence |
-| `ledger` | Transactions, postings, splits, transfers, voids, balances | accounts, categories |
-| `categories` | Categories, payees, tags, memorized payees | persistence |
+| `ledger` | Transactions, postings, splits, transfers, voids, balances, search | accounts, categories |
+| `categories` | Categories, payees, tags, memorized payees, tax lines | persistence |
 | `schedule` | Scheduled transactions, recurrence rules, occurrence generation | ledger |
 | `reconcile` | Reconciliation sessions and history | ledger |
-| `securities` | Security master, prices, price providers | persistence |
-| `investments` | Investment transactions, lots, cost basis, positions | ledger, securities |
-| `reports` | Report definitions, queries, saved reports | ledger, investments |
-| `import` | Staging, parsers (QIF, CSV, later QXF/OFX), mapping, commit, rollback | ledger, investments, categories |
+| `securities` | Security master, prices, price list import, price download | persistence |
+| `invest` | Investment transactions, lots, cost basis, positions, returns, lot seeding | ledger, securities |
+| `reports` | Report definitions, queries, saved reports, dashboard | ledger, invest |
+| `import` | Staging, parsers (QIF, CSV, later QXF/OFX), mapping, commit, rollback (Phase 9; not built) | ledger, invest, categories |
 | `integrity` | Invariant checks | all read-only |
-| `audit` | Append-only change log | persistence |
-| `backup` | Snapshot, retention, verify, restore | persistence |
-| `settings` | Preferences | persistence |
+| `audit` | Append-only change log, per-field history | persistence |
+| `undo` | Undo of the last register change (UI-060) | ledger, invest |
+| `backup` | Snapshot, retention, verify, restore, timed backup | persistence |
+| `book`, `security` | Book files, setup, unlock; key file, passphrase, database key | persistence, backup |
+| `settings`, `local_config` | Book settings; per-computer settings | persistence |
 
 Rule: modules interact only through their public APIs; only
 `persistence` issues SQL against another module's tables.
@@ -1279,11 +1322,13 @@ Rule: modules interact only through their public APIs; only
   integers or decimal strings and are never converted through floating
   point.
 - `src/lib/state/` — Svelte 5 rune-based state modules (current view,
-  open tabs, settings).
+  open windows, settings).
 - `src/lib/components/` — reusable components (register grid, split
   editor, money input, date input, modal, account picker).
-- `src/views/` — top-level views (Dashboard, Account, Scheduled,
-  Calendar, Reconcile, Reports, Settings).
+- `src/views/` — top-level views (Dashboard, Account, Accounts,
+  Investments, Scheduled, Calendar, Reconcile, Manage, Search, the
+  start screen). Reports open in windows
+  (`src/lib/components/reports/`); Settings is a dialog.
 
 #### 17.4 Repository layout [R]
 
@@ -1303,19 +1348,19 @@ kansha/
 │       │   ├── error.rs
 │       │   ├── persistence/   # Db, migrate, audit, repositories, migrations/*.sql
 │       │   ├── accounts/  ledger/  categories/  schedule/
-│       │   ├── reconcile/  securities/  investments/
-│       │   ├── reports/  import/  integrity/  audit/  backup/
+│       │   ├── reconcile/  securities/  invest/
+│       │   ├── reports/  integrity/  audit/  backup/  settings/
+│       │   ├── undo.rs        # undo of the last register change (UI-060)
 │       │   ├── book.rs        # book files: setup, unlock, restore install
 │       │   ├── security.rs    # key file, passphrase, database key
-│       │   ├── local_config.rs # per-computer config file (SET-070)
-│       │   └── settings/
+│       │   └── local_config.rs # per-computer config file (SET-070)
 │       └── tests/
 │           ├── scenarios.rs   # scenario runner
 │           ├── properties.rs  # proptest invariants
 │           └── integration/   # main.rs + fixture, migrations, schema, repositories
 ├── tests/
 │   └── scenarios/             # TOML scenario files by area
-│       └── ledger/  schedule/  reconcile/  lots/  reports/
+│       └── harness/  ledger/  schedule/  reconcile/  invest/
 ├── src-tauri/                 # Tauri shell: command handlers + specta builder only
 │   ├── src/lib.rs             # run(), specta_builder()
 │   ├── src/commands/          # #[tauri::command] handlers, one file per area
@@ -1325,7 +1370,7 @@ kansha/
 ├── package.json
 ├── vite.config.ts
 ├── justfile                   # `just test`, `just dev`, `just check`, `just bindings`
-└── .github/workflows/ci.yml
+└── .github/workflows/ci.yml   # disabled on GitHub (TEST-140)
 ```
 
 ### 18. Data Model
@@ -1357,7 +1402,8 @@ Modeling choices that affect other sections:
   amount becomes zero and status is `void`. Original amounts live in
   the audit entry. A void can be deleted but not edited. Un-void is
   not offered and will not be (Stan, 2026-09-29): re-enter the
-  transaction instead.
+  transaction instead. Undo (UI-060) right after voiding puts it back,
+  as it does any last register change.
 - **Reconciled edits (TXN-050):** edit, void, delete, or un-reconcile
   of a transaction with a reconciled posting requires explicit
   confirmation. Only reconciliation (or an import, MIG-090) sets
@@ -1502,11 +1548,11 @@ Modeling choices that affect other sections:
   it in the same account (with confirmation). In an account that holds
   money market funds as cash, they cannot be bought, sold, or moved as
   securities; one with no price is worth $1.00. Market value uses the
-  latest price on or before the date; a price more than 7 days old is
-  stale (the SET-040 setting comes later). The account list shows an
-  investment account's cash plus market value, a holding with no price
-  at cost. Closing an investment account with cash or open positions
-  needs confirmation. An investment account that keeps its own cash
+  latest price on or before the date; a price older than the
+  stale-price setting (SET-040, default 7 days) is stale. The account
+  list shows an investment account's cash plus market value, a holding
+  with no price at cost. Closing an investment account with cash or
+  open positions needs confirmation. An investment account that keeps its own cash
   reconciles that cash (RCN-010); holdings are never listed; statement
   interest and fees become investment transactions (Interest, Fee, or
   misc income or expense for other categories). Lot seeding (MIG-120)
@@ -1538,6 +1584,21 @@ Modeling choices that affect other sections:
   `tax_line`, `category.tax_line_id`, `account.tax_line_out_id` and
   `tax_line_in_id`, and maps the built-in interest, dividend, and
   capital gain distribution categories.
+- **Undo (UI-060, 0.4):** around each register change the engine
+  takes every row the transaction owns (header, postings and their
+  tags, and for an investment transaction its detail row and the lots,
+  disposals, and adjustments it made) before and after. Undo writes
+  the "before" rows back with their IDs (the header is updated in
+  place, so a schedule occurrence's link holds) and records a `create`,
+  `update`, or `delete` audit entry with origin `ui`. It runs only
+  while the newest audit entry is still the change's own and the rows
+  are still as the change left them; otherwise it is refused. The undo
+  lives in the running app, not the book. No schema change.
+- **Prices (0.4):** the price list import (PRC-030) and price
+  download (PRC-040) store prices with source `csv` and `download`. A
+  download's date is the provider's market time in the exchange's time
+  zone; its price is rounded half-even to 6 decimals from the reply's
+  text.
 - **Audit log** is append-only, enforced by triggers.
 - **Account type** is fixed at creation.
 
@@ -1630,13 +1691,13 @@ not an add-on. The engine's tests define what "correct" means.
   application window (e.g., WebdriverIO with `tauri-driver`; note
   `tauri-driver` does not support macOS).
 
-#### 20.2 Scenario file format (illustrative; finalized in Phase 0)
+#### 20.2 Scenario file format
 
 All amounts, quantities, and prices are written as strings to avoid
-TOML floating-point parsing. The implemented format — setup, actions,
-and expectations per area — is documented in
-`tests/scenarios/README.md`; the examples below show the intended
-shape for later phases.
+TOML floating-point parsing. The format — setup, actions, and
+expectations per area — is defined in `tests/scenarios/README.md`.
+The examples below show its shape only; they predate it, and some
+field names differ (`tests/scenarios/*/` has working files).
 
 ```toml
 id = "LOT-FIFO-001"
@@ -1769,7 +1830,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-20 | Encryption: SQLCipher vs. disk-level only | **Decided** (2026-09-29) | SQLCipher with a random key in a key file encrypted to the backup public key; one backup passphrase at startup; public-key encrypted backups; no OS keyring (SECU-010, SECU-020, BAK-060) |
 | D-30 | Accounting engine in Rust vs. TypeScript | **Decided** | Rust (DR-01) |
 | D-35 | UI framework | **Decided** | Svelte 5 + Vite, no SvelteKit (DR-02) |
-| D-40 | Price download in 1.0, and which provider | Open | Yes, pluggable; provider to be evaluated |
+| D-40 | Price download in 1.0, and which provider | **Decided** (2026-09-29) | In 1.0 behind a provider interface; Yahoo Finance's chart service first (no key), a keyed provider later; latest price only, on demand, off until enabled (PRC-040, SECU-070) |
 | D-50 | Money market funds: security or cash | **Decided** | Per-account option (`account.mmf_mode`) |
 | D-60 | Lot selection methods | **Decided** | `fifo`, `specific`, `average` (LOT-110, migration 0004), `hifo`, and `min_tax` (LOT-115), all built |
 | D-70 | Share/price decimal precision | Open | 6 decimal places; confirm with brokerage data |
@@ -1815,15 +1876,15 @@ all IPC and never performs money arithmetic.
 
 ### 23. Prototype Scope
 
-**In scope:** ACCT, CAT, PAY, TAG, TXN, REG, REC, CAL, RCN, SEC, PRC
-(manual and CSV), INV, LOT (FIFO and specific ID), POS, RPT (1.0 list
-except PDF export), DSH, INT, AUD, BAK (manual backup/restore and
-backup-on-close), SECU (Phase 8), UI, SET, TEST.
-
-**Out of scope for the prototype:** MIG (all, except MIG-120
-lot-seeding mechanics on synthetic data), PRC-040 (price download),
-BAK-040 (retention policy), RPT PDF export, and all
-[Later] items.
+**Built in the prototype (Phases 0–8):** ACCT, CAT, PAY, TAG, TXN,
+REG, REC, CAL, RCN, SEC, PRC (manual, price list import, download),
+INV, LOT (all five methods), POS, RPT, DSH, INT, AUD, BAK, SECU, UI,
+SET, TEST, and MIG-120's lot seeding on synthetic data. Not built:
+MIG (Phase 9) and the [1.0] items listed as missing in
+`devdocs/phase-notes/prototype-review.md`, which keep their status
+until decided (RPT-040 comparison, RPT-120, RPT-190, RPT-200,
+TAG-030 grouping, UI-030 tabs, UI-050, TEST-070, TEST-090, TEST-150,
+and TEST-140 while CI is off). [Later] items are out of scope.
 
 ### 24. Phases
 
@@ -1839,38 +1900,17 @@ delivered as migration 0001 in Phase 1.
 | **3 — Register UI** | Account list/sidebar, account modal, register with keyboard entry, splits, transfers, filters, memorized payees, category, tag, and payee management screens, audit view; synthetic dataset generator | Stan enters a month of transactions by keyboard; generator loads a multi-year dataset; register meets NFR-040 |
 | **4 — Scheduling and calendar** | Recurrence engine; occurrences; enter/skip/edit-one; due and overdue list; scheduled list; calendar | Recurrence suite passes (month-end, leap years, Nth weekday, twice-monthly, weekend shifting, # left, end dates) |
 | **5 — Reconciliation** | Reconcile workflow, save/resume, history, change detection, explicit adjustments | Reconciliation scenarios pass; Stan completes a reconciliation on synthetic data |
-| **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID); splits; return of capital; share transfers; positions; investment account tabs; lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
+| **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID; later average, HIFO, minimum tax); splits; return of capital; share transfers; positions; the Investments screen (POS-040); lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
 | **7 — Reports and dashboard** | 1.0 report list; saved reports; drill-down; CSV export; charts; dashboard | Report snapshot tests pass; drill-down reaches transactions for every figure |
 | **8 — Encryption, backup, settings, review** | Database encryption and first-run setup (SECU); encrypted backups, manual and on close; restore with comparison window; verification; settings; performance check; prototype review | Restore drill passes; review findings recorded for spec 0.4 |
 
-### 25. Chat Workflow (no Claude Code)
+### 25. Workflow
 
-- The spec and CONVENTIONS.md are stored in the Claude Project's
-  files; they are not pasted into chats.
-- One fresh chat per phase, or per sub-phase if a phase is large, to
-  keep context small.
-- Each phase chat starts with the kickoff template below.
-- New files, or files changed so extensively that regeneration is more
-  economical, are delivered complete. All other changes are delivered
-  as a single unified patch per request, applied from the repository
-  root with `git apply`.
-- Stan runs tests locally and pastes back only failing test names and
-  assertion messages.
-- At the end of each phase, a short phase summary (files created,
-  decisions made, known gaps) is committed to
-  `devdocs/phase-notes/phase-N.md`, and later chats read that rather
-  than earlier transcripts.
-
-**Kickoff template:**
-
-```
-Kansha — Phase N: <name>
-Spec: devdocs/kansha-spec.md v<x> (Project files)
-Conventions: devdocs/CONVENTIONS.md (Project files)
-Previous phase notes: <paste devdocs/phase-notes/phase-(N-1).md>
-Current tree: <paste `tree -I 'node_modules|target' -L 3`>
-Goal for this chat: <sub-scope>
-```
+Kansha is built with Claude Code in the repository. `CLAUDE.md` holds
+the working rules (it replaces the chat workflow of spec 0.2–0.3,
+with its zip and patch delivery); `devdocs/CONVENTIONS.md` §3–§8 are
+binding. Each phase ends with `devdocs/phase-notes/phase-N.md`: files
+created, decisions made, known gaps.
 
 ---
 
@@ -1878,17 +1918,7 @@ Goal for this chat: <sub-scope>
 
 | Version | Date | Changes |
 |---|---|---|
-| 0.1 | 2026-09-23 | Restructured from initial notes; added requirement IDs, release/source tags, recommendations, design rationale, open decisions, and migration placeholders. |
-| 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
-| 0.2.1 | 2026-09-24 | D-120 decided: `tauri-specta`/`specta`/`specta-typescript` pinned to `2.0.0-rc.25` (DR-03), verified against Tauri v2 in Phase 0. §17.3 and §17.4 updated to reflect the built `src-tauri` layout and committed `bindings.ts`. §25 patch command corrected to `git apply` (matches CONVENTIONS.md; the draft had said `patch -p1`). |
-| 0.3 | 2026-09-24 | Phase 1. §18 replaced by a pointer to `migrations/0001_init.sql` (the schema is now defined in SQL) and a short list of modeling choices. D-50, D-60, D-100, D-110 decided; D-10 marked schema-neutral. ACCT-020 and INV-050 accepted ([S]). LOT-115 added (HIFO and minimum-tax lot selection). LOT-110 notes that the schema accepts `average`. TEST-020: `Clock` also supplies UTC timestamps. §16.1: `bundled-sqlcipher-vendored-openssl`. §17.4 layout updated. |
-| 0.3.1 | 2026-09-24 | Phase 2 (ledger engine). §18 gains modeling choices for the register entry view, void, reconciled edits, closed accounts, and investment-account postings. TEST-110 names `testkit::Book`. §20.2 points to `tests/scenarios/README.md` for the implemented scenario format. |
-| 0.3.2 | 2026-09-24 | Phase 3a. §18 gains IPC conventions, register query, payee memorization, and audit view choices. `sample` module provides the synthetic dataset (TEST-110, D-130); NFR-040 measured (see phase-notes/phase-3.md). |
-| 0.3.3 | 2026-09-24 | D-10 decided: separate Payment and Deposit columns (REG-010). |
-| 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |
-| 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
-| 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
-| 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.4 | 2026-09-29 | Prototype review (`devdocs/phase-notes/prototype-review.md`). Spec brought up to date: header status; ACCT-100 (no icon-bar flag); REG-080 (menu as built, with Split); INV-010 table restored; POS-030 old recommendation removed; DSH-030 (uncleared over 60 days); AUD-020 (account history); BAK-030 (Setup warns, not Settings); SET-050, SET-070 (font); UI-010, UI-020 (Accounts panel, navigation bar); §16.1 CI off; §16.3 R4, R5; §17.2–§17.4 modules and layout; §18 undo and price rules; §20.2; §23 rewritten as what was built; §24 Phase 6; §25 replaced by a pointer to CLAUDE.md; this log in one order, newest first. New or changed and built: **BAK-045** timed backup (split out of SET-050); **PRC-030** price list import (ticker, price, optional `MM/DD/YYYY`; date picker; file picker or drop; replaces the dated CSV import; QIF prices only through MIG-140); **PRC-040** price download, [1.0], D-40 decided (Yahoo first, latest price, off until enabled); **PRC-050** Holdings marks stale prices; **SECU-070** the download setting; **SET-040** default lot method for new investment accounts; **UI-060** undo of the last register change (Edit > Undo, Ctrl+Z). No schema change. **API change:** `price_import_preview`/`price_import` take a `date`; `account_defaults` reads the book (returns a result); `Settings.default_lot_method`, `Settings.price_download`; new commands `undo_status`, `undo_apply`, `prices_download`. |
 | 0.3.37 | 2026-09-29 | Backup file names are `kansha-YYYYMMDD-HHMMSSZ-<kind>.zip` (old names still read). BAK-035, BAK-040, SET-050: timed backups, kind `timeout` (5 minutes after the first change, setting `backup_timeout_minutes`, 0 = off; only the newest kept, deleted once any other backup is newer; status bar shows start and finish). UI-047: Help > About shows the version. The app is version 0.7.0. No schema change. **API change:** commands `backup_timed_due`, `backup_timed_run`; `Settings.backup_timeout_minutes`; `BackupKind` gains `timeout`. |
 | 0.3.36 | 2026-09-29 | SET-025: Font picker (System, Arial, Verdana, Courier New) beside theme and size; themes no longer set a font; Nordic Courier removed (a stored one becomes Nordic with Courier New). SET-010, SET-020 reworded. No schema change. **API change:** `appearance_get` and `appearance_set` carry a `font` field (per-computer config file, optional). |
 | 0.3.35 | 2026-09-29 | SET-010: Nordic theme (from lostsheep; filled navigation bar like Classic; light-blue OK, amber problem) and Nordic Courier (same, Courier New). Nordic is the default theme; the OS light/dark preference no longer picks one. No schema or API change. |
@@ -1919,3 +1949,14 @@ Goal for this chat: <sub-scope>
 | 0.3.10 | 2026-09-24 | SET-030: three date formats (MM/DD/YYYY default, DD/MM/YYYY, YYYY-MM-DD) for every user-facing date; logs and histories use `YYYY-MM-DDTHH:MM:SSZ`. NFR-080: theme focus colors (background and text) and select-on-focus, app-wide. |
 | 0.3.9 | 2026-09-24 | Reconciliation uses statement sign: a credit card's ending balance is entered and shown as the statement prints it (owed = positive); charges positive, payments negative. Ledger sign unchanged elsewhere. |
 | 0.3.8 | 2026-09-24 | Phase 5 (reconciliation). §18 gains reconciliation rules (check marks are cleared status, Finish scope, opening balance and change detection from the audit log, statement items, Balance Adjustment, abandon). INT-030 reconciled-balance check implemented. No schema change; 11 IPC commands added. Scenarios under `tests/scenarios/reconcile/`. |
+| 0.3.7 | 2026-09-24 | Navigation bar search (UI-070) replaces the register's text-search box; REG-040 no longer lists text search among the register filters. |
+| 0.3.6 | 2026-09-24 | Phase 4b. REC-030: skipping an occurrence uses up one of "# left", like entering it (confirmed by Stan; §18 already said so). |
+| 0.3.5 | 2026-09-24 | Phase 4a. §18 gains schedule rules (in-order handling, "# left" on skip, nominal vs. due date, one-time overrides, auto-enter review flag, soft delete). Migration 0002 adds `schedule_occurrence.needs_review`. Recurrence scenarios under `tests/scenarios/schedule/`. |
+| 0.3.4 | 2026-09-24 | Phase 3 scope (§24) now names the category, tag, and payee management screens. |
+| 0.3.3 | 2026-09-24 | D-10 decided: separate Payment and Deposit columns (REG-010). |
+| 0.3.2 | 2026-09-24 | Phase 3a. §18 gains IPC conventions, register query, payee memorization, and audit view choices. `sample` module provides the synthetic dataset (TEST-110, D-130); NFR-040 measured (see phase-notes/phase-3.md). |
+| 0.3.1 | 2026-09-24 | Phase 2 (ledger engine). §18 gains modeling choices for the register entry view, void, reconciled edits, closed accounts, and investment-account postings. TEST-110 names `testkit::Book`. §20.2 points to `tests/scenarios/README.md` for the implemented scenario format. |
+| 0.3 | 2026-09-24 | Phase 1. §18 replaced by a pointer to `migrations/0001_init.sql` (the schema is now defined in SQL) and a short list of modeling choices. D-50, D-60, D-100, D-110 decided; D-10 marked schema-neutral. ACCT-020 and INV-050 accepted ([S]). LOT-115 added (HIFO and minimum-tax lot selection). LOT-110 notes that the schema accepts `average`. TEST-020: `Clock` also supplies UTC timestamps. §16.1: `bundled-sqlcipher-vendored-openssl`. §17.4 layout updated. |
+| 0.2.1 | 2026-09-24 | D-120 decided: `tauri-specta`/`specta`/`specta-typescript` pinned to `2.0.0-rc.25` (DR-03), verified against Tauri v2 in Phase 0. §17.3 and §17.4 updated to reflect the built `src-tauri` layout and committed `bindings.ts`. §25 patch command corrected to `git apply` (matches CONVENTIONS.md; the draft had said `patch -p1`). |
+| 0.2 | 2026-09-23 | D-30 decided (Rust engine) and D-35 decided (Svelte 5 + Vite); Section 16 rewritten with decision record; layer diagram label updated; Sections 17.3 (frontend structure) and 17.4 (repository layout, `kansha-core` crate, `devdocs/`) added; Section 20 replaced with Testing Framework (TEST-010–160, including TEST-105 import tests) and scenario format; decisions table gains Status column and D-110–D-140; Part VI Prototype Plan added, including the single-patch convention for changes. |
+| 0.1 | 2026-09-23 | Restructured from initial notes; added requirement IDs, release/source tags, recommendations, design rationale, open decisions, and migration placeholders. |

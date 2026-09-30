@@ -2,24 +2,25 @@
   import { onMount } from "svelte";
   import { call, commands } from "../api";
   import { dialogState } from "../state/dialogs.svelte";
-  import type { AuditEntry, TxnId } from "../types/bindings";
+  import type { AuditEntry } from "../types/bindings";
   import Modal from "./Modal.svelte";
 
-  let { txn }: { txn: TxnId } = $props();
+  // Audit history of a transaction or an account (AUD-020), newest first.
+  let { entity, id }: { entity: "txn" | "account"; id: number } = $props();
 
   let entries = $state<AuditEntry[] | null>(null);
   let error = $state<string | null>(null);
 
   onMount(async () => {
     try {
-      entries = await call(commands.auditHistory("txn", txn));
+      entries = await call(commands.auditHistory(entity, id));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
   });
 </script>
 
-<Modal title="Transaction history" wide onclose={() => (dialogState.history = null)}>
+<Modal title={entity === "txn" ? "Transaction history" : "Account history"} wide onclose={() => (dialogState.history = null)}>
   {#if error}
     <p class="err">{error}</p>
   {:else if entries === null}

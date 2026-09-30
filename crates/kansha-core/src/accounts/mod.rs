@@ -275,6 +275,20 @@ pub struct Account {
 }
 
 /// Account number masked to its last four characters (ACCT-150).
+/// Fields for a new account: the type's defaults, and for an investment
+/// account the book's default lot method (SET-040).
+pub fn defaults(
+    conn: &rusqlite::Connection,
+    name: impl Into<String>,
+    account_type: AccountType,
+) -> crate::error::Result<AccountFields> {
+    let mut f = AccountFields::new(name, account_type);
+    if let Some(inv) = f.investment.as_mut() {
+        inv.default_lot_method = crate::settings::load(conn)?.default_lot_method;
+    }
+    Ok(f)
+}
+
 pub fn masked_account_number(number: &str) -> String {
     let chars: Vec<char> = number.chars().collect();
     if chars.len() <= 4 {

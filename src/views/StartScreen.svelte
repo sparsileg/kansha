@@ -108,7 +108,7 @@
               {#if folder}<button type="button" onclick={() => (folder = null)}>Use Downloads</button>{/if}
             </p>
             <p class="note">
-              Backups are made on closing and when you ask. A folder on this computer, Downloads included, is lost
+              Backups are made on closing, a few minutes after a change, and when you ask. A folder on this computer, Downloads included, is lost
               with the computer; a cloud-synced folder, network drive, or USB drive is not.
             </p>
           </fieldset>

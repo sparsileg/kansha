@@ -50,6 +50,9 @@ class RegisterState {
   /** Highlighted row, and the row being edited in place (REG-030). */
   selected = $state<TxnId | null>(null);
   editing = $state<TxnId | null>(null);
+  /** Open the edit with the split lines showing (context menu Split,
+   * REG-080). */
+  editSplit = $state(false);
   loading = $state(false);
   /** A scheduled occurrence to enter: the new-entry row takes the entry as
    * its draft, then clears this (REC-110). */

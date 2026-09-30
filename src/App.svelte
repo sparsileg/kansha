@@ -2,6 +2,7 @@
   import type { Component } from "svelte";
   import { onMount } from "svelte";
   import { selectOnFocus } from "./lib/ui/selectOnFocus";
+  import { installUndoKey } from "./lib/ui/undoKey";
   import Account from "./views/Account.svelte";
   import Accounts from "./views/Accounts.svelte";
   import AccountModal from "./lib/components/AccountModal.svelte";
@@ -9,6 +10,7 @@
   import DueDialog from "./lib/components/DueDialog.svelte";
   import HistoryModal from "./lib/components/HistoryModal.svelte";
   import AboutModal from "./lib/components/AboutModal.svelte";
+  import PriceImportModal from "./lib/components/invest/PriceImportModal.svelte";
   import IntegrityModal from "./lib/components/IntegrityModal.svelte";
   import ScheduleModal from "./lib/components/ScheduleModal.svelte";
   import NavBarModal from "./lib/components/NavBarModal.svelte";
@@ -22,7 +24,7 @@
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import ThemePicker from "./lib/components/shell/ThemePicker.svelte";
-  import { runAction } from "./lib/shell/actions";
+  import { runAction, undoLast } from "./lib/shell/actions";
   import DbKeyModal from "./lib/components/backup/DbKeyModal.svelte";
   import PassphraseModal from "./lib/components/backup/PassphraseModal.svelte";
   import RestoreModal from "./lib/components/backup/RestoreModal.svelte";
@@ -53,6 +55,7 @@
   $effect(() => applyTheme(document.documentElement, themeState.theme, themeState.fontSize, themeState.font));
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
+  onMount(() => installUndoKey(document, () => void undoLast()));
   // The close box asks to save changed reports, like File > Exit.
   onMount(() => void guardWindowClose());
 
@@ -97,10 +100,11 @@
   {#if dialogState.account !== undefined}
     {#key dialogState.account?.id ?? "new"}<AccountModal account={dialogState.account} />{/key}
   {/if}
-  {#if dialogState.history}<HistoryModal txn={dialogState.history.txn} />{/if}
+  {#if dialogState.history}<HistoryModal entity={dialogState.history.entity} id={dialogState.history.id} />{/if}
   {#if dialogState.integrity}<IntegrityModal />{/if}
   {#if dialogState.settings}<SettingsModal />{/if}
   {#if dialogState.about}<AboutModal />{/if}
+  {#if dialogState.priceImport}<PriceImportModal onclose={() => (dialogState.priceImport = false)} />{/if}
   {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
   {#if dialogState.schedule !== undefined}

@@ -6,8 +6,8 @@ Spec: 0.3.5. Split into 4a (engine, persistence, IPC, scenarios) and 4b (Svelte 
 
 | Sub-phase | State |
 |---|---|
-| 4a Recurrence engine, schedules, occurrences, IPC | Built. `just check` green. Uncommitted. |
-| 4b UI: scheduled list, due-and-overdue dialog, calendar, "Schedule this" | Built. `just check` green (frontend tests added). Not yet hands-on tested by Stan. Uncommitted. |
+| 4a Recurrence engine, schedules, occurrences, IPC | Built and committed. |
+| 4b UI: scheduled list, due-and-overdue dialog, calendar, "Schedule this" | Built and committed. Stan's hands-on tests 1–12 passed (below). |
 
 **⚠ API change:** 15 new commands (below); `just bindings` run. **⚠ Schema change:** migration 0002 adds `schedule_occurrence.needs_review`.
 

@@ -60,12 +60,17 @@ pub fn entry_create(
     mut entry: Entry,
     payee_name: Option<String>,
 ) -> CmdResult<TxnId> {
-    state.write(|tx| {
-        resolve_payee(tx, &mut entry, payee_name.as_deref())?;
-        let txn = ledger::create_entry(tx, &entry)?;
-        ledger::memorize_payee(tx, &entry)?;
-        Ok(txn.id)
-    })
+    state.write_undoable(
+        None,
+        "New transaction",
+        |tx| {
+            resolve_payee(tx, &mut entry, payee_name.as_deref())?;
+            let txn = ledger::create_entry(tx, &entry)?;
+            ledger::memorize_payee(tx, &entry)?;
+            Ok(txn.id)
+        },
+        |id| *id,
+    )
 }
 
 /// Replace a transaction (TXN-030: from either side of a transfer);
@@ -80,10 +85,15 @@ pub fn entry_update(
     payee_name: Option<String>,
     confirmed: bool,
 ) -> CmdResult<()> {
-    state.write(|tx| {
-        resolve_payee(tx, &mut entry, payee_name.as_deref())?;
-        ledger::update_entry(tx, txn, &entry, confirmed).map(|_| ())
-    })
+    state.write_undoable(
+        Some(txn),
+        "Edit",
+        |tx| {
+            resolve_payee(tx, &mut entry, payee_name.as_deref())?;
+            ledger::update_entry(tx, txn, &entry, confirmed).map(|_| ())
+        },
+        |()| txn,
+    )
 }
 
 fn resolve_payee(tx: &Tx<'_>, entry: &mut Entry, name: Option<&str>) -> kansha_core::Result<()> {
@@ -100,13 +110,23 @@ fn resolve_payee(tx: &Tx<'_>, entry: &mut Entry, name: Option<&str>) -> kansha_c
 #[tauri::command]
 #[specta::specta]
 pub fn txn_void(state: State<'_, AppState>, txn: TxnId, confirmed: bool) -> CmdResult<()> {
-    state.write(|tx| ledger::void(tx, txn, confirmed).map(|_| ()))
+    state.write_undoable(
+        Some(txn),
+        "Void",
+        |tx| ledger::void(tx, txn, confirmed).map(|_| ()),
+        |()| txn,
+    )
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn txn_delete(state: State<'_, AppState>, txn: TxnId, confirmed: bool) -> CmdResult<()> {
-    state.write(|tx| ledger::delete(tx, txn, confirmed))
+    state.write_undoable(
+        Some(txn),
+        "Delete",
+        |tx| ledger::delete(tx, txn, confirmed),
+        |()| txn,
+    )
 }
 
 /// Mark the posting to `account` unmarked or cleared (the Clr column).
@@ -119,7 +139,12 @@ pub fn txn_set_cleared(
     cleared: Cleared,
     confirmed: bool,
 ) -> CmdResult<()> {
-    state.write(|tx| ledger::set_cleared(tx, txn, account, cleared, confirmed).map(|_| ()))
+    state.write_undoable(
+        Some(txn),
+        "Cleared status",
+        |tx| ledger::set_cleared(tx, txn, account, cleared, confirmed).map(|_| ()),
+        |()| txn,
+    )
 }
 
 /// `total` minus the sum of `parts`: the unassigned amount of a split
@@ -146,4 +171,21 @@ pub fn audit_history(
 #[specta::specta]
 pub fn integrity_check(state: State<'_, AppState>) -> CmdResult<IntegrityReport> {
     state.read(|db, _| integrity::check(db.conn()))
+}
+
+/// What Edit > Undo would undo ("Edit", "Delete", …), or `None` when the
+/// last register change can no longer be undone (UI-060).
+#[tauri::command]
+#[specta::specta]
+pub fn undo_status(state: State<'_, AppState>) -> CmdResult<Option<String>> {
+    state.undo_label()
+}
+
+/// Undo the last register change (UI-060); returns the transaction put
+/// back. A reconciled one fails with `confirmation_required` until
+/// `confirmed`.
+#[tauri::command]
+#[specta::specta]
+pub fn undo_apply(state: State<'_, AppState>, confirmed: bool) -> CmdResult<TxnId> {
+    state.undo(confirmed)
 }

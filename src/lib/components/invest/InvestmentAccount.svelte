@@ -3,13 +3,14 @@
   // account's. Starting to type in the empty line opens the entry dialog.
   // Positions, lots, and performance are on the Investments screen. Every
   // figure comes from Rust.
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import InvEntryModal from "./InvEntryModal.svelte";
   import { displayDate } from "../../format/date";
   import { formatMoney } from "../../format/money";
   import { formatPrice, formatQuantity } from "../../format/quantity";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
+  import { registerState } from "../../state/register.svelte";
   import type { Account, Cleared, TxnId } from "../../types/bindings";
 
   let { account }: { account: Account } = $props();
@@ -27,6 +28,30 @@
   const money = (m: string | null | undefined) => (m == null ? "" : formatMoney(m));
   const cleared = (c: Cleared | null) => (c === "reconciled" ? "R" : c === "cleared" ? "c" : "");
   const r = $derived(investState.register);
+  let pane: HTMLDivElement | undefined;
+
+  /** The highlighted transaction: a search hit or drill-down sends one
+   * here through `registerState.goToTransaction`. */
+  const selected = $derived(registerState.accountId === account.id ? registerState.selected : null);
+
+  // Scroll the transaction a search hit or drill-down names into view,
+  // once its rows are loaded.
+  $effect(() => {
+    const want = registerState.reveal;
+    const rows = r?.rows;
+    if (want === null || registerState.accountId !== account.id || !rows?.some((x) => x.txn_id === want)) return;
+    untrack(() => {
+      registerState.reveal = null;
+      void tick().then(() =>
+        pane?.querySelector(`tr[data-txn="${want}"]`)?.scrollIntoView?.({ block: "center" }),
+      );
+    });
+  });
+
+  function openRow(txn: TxnId, incoming: boolean) {
+    registerState.selected = txn;
+    entry = incoming ? undefined : txn;
+  }
 
   /** Any key that starts entering data; navigation keys do not. */
   function onBlankKey(e: KeyboardEvent) {
@@ -40,14 +65,21 @@
 
 {#if investState.error}<p class="err" role="alert">{investState.error}</p>{/if}
 
-<div class="pane">
+<div class="pane" bind:this={pane}>
   <table class="reg">
     <thead>
       <tr><th>Date</th><th>Action</th><th>Security</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Comm.</th><th class="num">Amount</th><th class="num">Cash</th><th>Clr</th><th>Memo</th></tr>
     </thead>
     <tbody>
       {#each r?.rows ?? [] as row, i (`${row.txn_id}-${row.incoming}`)}
-        <tr class:alt={i % 2 === 1} class:future={row.future} class:reconciled={row.cleared === "reconciled"} onclick={() => (entry = row.incoming ? undefined : row.txn_id)} title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
+        <tr
+          data-txn={row.txn_id}
+          class:alt={i % 2 === 1}
+          class:future={row.future}
+          class:reconciled={row.cleared === "reconciled"}
+          class:sel={row.txn_id === selected}
+          onclick={() => openRow(row.txn_id, row.incoming)}
+          title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
           <td>{displayDate(row.date)}</td>
           <td>{row.action_label}{#if row.split}&nbsp;{row.split.new}:{row.split.old}{/if}</td>
           <td>{row.security_label}{#if row.other_account !== null && row.action === "transfer_shares"} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
@@ -131,6 +163,9 @@
   }
   .reg tbody tr:hover {
     background: var(--hover-bg);
+  }
+  .reg tbody tr.sel {
+    background: var(--row-sel-bg);
   }
   .blank input {
     width: 100%;

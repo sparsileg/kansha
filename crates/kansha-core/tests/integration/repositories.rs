@@ -580,3 +580,33 @@ fn import_origin_is_recorded_in_audit() {
         ("import", Some(batch))
     );
 }
+
+/// SET-040: the book's default lot method is what a new investment
+/// account starts with; other accounts are unaffected. PRC-040: price
+/// download is off until turned on.
+#[test]
+fn book_lot_method_is_the_new_account_default() {
+    use kansha_core::settings as book;
+    let mut db = db();
+    let s = book::load(db.conn()).unwrap();
+    assert_eq!(s.default_lot_method, LotMethod::Fifo);
+    assert!(!s.price_download);
+    let f =
+        kansha_core::accounts::defaults(db.conn(), "Brokerage", AccountType::Brokerage).unwrap();
+    assert_eq!(f.investment.unwrap().default_lot_method, LotMethod::Fifo);
+
+    write(&mut db, |tx| {
+        let mut s = book::load(tx.conn())?;
+        s.default_lot_method = LotMethod::Hifo;
+        s.price_download = true;
+        book::save(tx, &s)
+    })
+    .unwrap();
+    let s = book::load(db.conn()).unwrap();
+    assert_eq!(s.default_lot_method, LotMethod::Hifo);
+    assert!(s.price_download);
+    let f = kansha_core::accounts::defaults(db.conn(), "Roth", AccountType::RothIra).unwrap();
+    assert_eq!(f.investment.unwrap().default_lot_method, LotMethod::Hifo);
+    let f = kansha_core::accounts::defaults(db.conn(), "Checking", AccountType::Checking).unwrap();
+    assert!(f.investment.is_none());
+}

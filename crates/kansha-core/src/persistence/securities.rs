@@ -200,6 +200,17 @@ pub fn find_by_label(conn: &Connection, text: &str) -> Result<Option<Security>> 
         .optional()?)
 }
 
+/// The security whose ticker is `text` (ignoring case).
+pub fn find_by_ticker(conn: &Connection, text: &str) -> Result<Option<Security>> {
+    let sql = format!(
+        "SELECT {COLUMNS} FROM security WHERE ticker = ?1 COLLATE NOCASE ORDER BY id LIMIT 1"
+    );
+    Ok(conn
+        .prepare_cached(&sql)?
+        .query_row([text.trim()], from_row)
+        .optional()?)
+}
+
 // ---------------------------------------------------------------------------
 // Prices
 // ---------------------------------------------------------------------------

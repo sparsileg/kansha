@@ -646,3 +646,66 @@ fn portfolio_flags_positions_without_a_price() {
     assert_eq!(pf.total.basis, m("2000.00"));
     assert_eq!(pf.total.market_value, m("8000.00"));
 }
+
+/// PRC-040, SECU-070: download targets are the shown securities with a
+/// ticker, only once the setting is on; quotes are stored with source
+/// `download`, and failures are listed, not stored.
+#[test]
+fn price_download_targets_and_store() {
+    use kansha_core::securities::download::{self, Fetched, Quote};
+    let mut book = book();
+    let vti = book
+        .security("Total Stock Market", "VTI", SecurityType::Etf)
+        .unwrap();
+    let hidden = book
+        .security("Old Fund", "OLDX", SecurityType::MutualFund)
+        .unwrap();
+    let mut f = SecurityFields::new("A CD", SecurityType::Cd);
+    f.ticker = None;
+    book.security_with(&f).unwrap();
+    book.write(|tx| {
+        let mut s = securities::get(tx.conn(), hidden)?.fields;
+        s.hidden = true;
+        securities::update(tx, hidden, &s).map(|_| ())
+    })
+    .unwrap();
+
+    let off = download::targets(book.conn()).unwrap_err().to_string();
+    assert!(off.contains("turn it on in Settings"), "{off}");
+    book.write(|tx| {
+        let mut s = kansha_core::settings::load(tx.conn())?;
+        s.price_download = true;
+        kansha_core::settings::save(tx, &s)
+    })
+    .unwrap();
+    let t = download::targets(book.conn()).unwrap();
+    assert_eq!(t.len(), 1);
+    assert_eq!((t[0].security, t[0].ticker.as_str()), (vti, "VTI"));
+
+    let fetched = vec![
+        Fetched {
+            target: t[0].clone(),
+            result: Ok(Quote {
+                price: p("310.25"),
+                date: date("2026-06-29"),
+            }),
+        },
+        Fetched {
+            target: download::Target {
+                security: hidden,
+                ticker: "OLDX".into(),
+            },
+            result: Err("No data found".into()),
+        },
+    ];
+    let sum = book.write(|tx| download::store(tx, &fetched)).unwrap();
+    assert_eq!(sum.stored, 1);
+    assert_eq!(sum.failed.len(), 1);
+    assert_eq!(sum.failed[0].ticker, "OLDX");
+    let stored = securities::find_price(book.conn(), vti, date("2026-06-29"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.price, p("310.25"));
+    assert_eq!(stored.source, PriceSource::Download);
+    assert!(securities::prices(book.conn(), hidden).unwrap().is_empty());
+}

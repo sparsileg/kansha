@@ -230,6 +230,7 @@ pub(super) fn holdings_columns() -> Vec<Column> {
         ("shares", "Shares", K::Quantity),
         ("price", "Price", K::Quantity),
         ("price_date", "Price Date", K::Date),
+        ("stale", "Stale", K::Text),
         ("basis", "Cost Basis", K::Money),
         ("value", "Market Value", K::Money),
         ("gain", "Gain/Loss", K::Money),
@@ -250,8 +251,10 @@ pub(super) fn holdings(
     let money = money_columns(&columns);
     let mut rows = Vec::new();
     let mut missing = false;
+    let mut stale = false;
+    let stale_days = crate::settings::stale_price_days(conn)?;
     for a in accounts(&lk, s) {
-        let h = invest::holdings(conn, a.id, range.to, None)?;
+        let h = invest::holdings(conn, a.id, range.to, Some(stale_days))?;
         let drill = Some(Drill::Account { account: a.id });
         let mut kids = Vec::new();
         for p in &h.positions {
@@ -259,6 +262,7 @@ pub(super) fn holdings(
                 continue;
             }
             missing |= p.market_value.is_none();
+            stale |= p.stale;
             let pct = p
                 .unrealized
                 .and_then(|g| invest::percent_of(g, p.basis))
@@ -270,6 +274,7 @@ pub(super) fn holdings(
                     p.shares.to_string(),
                     p.price.map_or_else(String::new, |x| x.to_string()),
                     p.price_date.map_or_else(String::new, |d| d.to_string()),
+                    if p.stale { "⚠".into() } else { String::new() },
                     p.basis.to_string(),
                     p.market_value.map_or_else(String::new, |m| m.to_string()),
                     p.unrealized.map_or_else(String::new, |m| m.to_string()),
@@ -280,7 +285,7 @@ pub(super) fn holdings(
         }
         if let Some(cash) = h.cash.filter(|c| !c.is_zero()) {
             let mut cells = vec![String::new(); width];
-            cells[5] = cash.to_string();
+            cells[6] = cash.to_string();
             kids.push(detail("Cash", cells, drill.clone()));
         }
         if kids.is_empty() {
@@ -299,10 +304,18 @@ pub(super) fn holdings(
     }
     let mut out = report(s, range, columns, rows);
     out.as_of = true;
-    if missing {
-        out.note =
-            "(A holding with no price has no market value and is left out of the totals)".into();
+    let mut notes = Vec::new();
+    if stale {
+        notes.push(format!(
+            "(⚠ The price is more than {stale_days} days old on the report date)"
+        ));
     }
+    if missing {
+        notes.push(
+            "(A holding with no price has no market value and is left out of the totals)".into(),
+        );
+    }
+    out.note = notes.join(" ");
     Ok(out)
 }
 

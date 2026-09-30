@@ -40,7 +40,8 @@ export const MENUS: Menu[] = [
     id: "edit",
     label: "Edit",
     items: [
-      { id: "edit.settings", label: "Settings…" },
+      { id: "edit.undo", label: "Undo (Ctrl+Z)" },
+      { id: "edit.settings", label: "Settings…", divider: true },
       { id: "edit.navbar", label: "Navigation Bar…" },
       { id: "edit.renaming", label: "Renaming…", disabled: later("to be defined") },
     ],
@@ -56,6 +57,8 @@ export const MENUS: Menu[] = [
       { id: "tools.categories", label: "Categories" },
       { id: "tools.tags", label: "Tags" },
       { id: "tools.securities", label: "Securities" },
+      { id: "tools.import_prices", label: "Import Prices…" },
+      { id: "tools.download_prices", label: "Download Prices" },
       { id: "tools.reconcile", label: "Reconcile", divider: true },
     ],
   },

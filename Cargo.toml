@@ -17,7 +17,7 @@ rusqlite = { version = "0.40", default-features = false, features = ["bundled-sq
 serde = { version = "1", features = ["derive"] }
 # Optional in kansha-core (feature `specta`); pinned exactly (D-120, DR-03).
 specta = { version = "=2.0.0-rc.25", features = ["derive", "std"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 tempfile = "3"
 thiserror = "2"
 toml = "0.9"

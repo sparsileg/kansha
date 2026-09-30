@@ -15,7 +15,7 @@ vi.mock("./lib/api", async (orig) => {
   const DEFAULT_SETTINGS = {
     date_format: "mdy", week_start: "sunday", startup: "dashboard", integrity_at_startup: false,
     nav_items: null, account_panel_open: true, account_panel_side: "left", invest_views: null,
-    stale_price_days: 7, upcoming_days: 14, backup_folder: null, backup_keep_last: 10, backup_keep_months: 12,
+    stale_price_days: 7, default_lot_method: "fifo", price_download: false, upcoming_days: 14, backup_folder: null, backup_keep_last: 10, backup_keep_months: 12,
     backup_timeout_minutes: 5,
   };
   const acct = { id: 1, name: "Savings", account_type: "savings", group: "banking", status: "open", show_in_list: true, sort_order: 0, investment: null };

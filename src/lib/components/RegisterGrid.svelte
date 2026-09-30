@@ -196,7 +196,7 @@
   }
 
   async function deleteTxn(r: RegisterRow) {
-    if (!(await confirmState.ask("Delete this transaction? This cannot be undone."))) return;
+    if (!(await confirmState.ask("Delete this transaction? (Edit > Undo brings it back.)"))) return;
     await run(() =>
       withConfirmation((c) => commands.txnDelete(r.txn_id, c), confirmState.ask),
     );
@@ -216,9 +216,15 @@
     }
   }
 
+  function edit(r: RegisterRow, split: boolean) {
+    registerState.editSplit = split;
+    registerState.editing = r.txn_id;
+  }
+
   function menuItems(r: RegisterRow): MenuItem[] {
     return [
-      { label: "Edit", action: () => (registerState.editing = r.txn_id) },
+      { label: "Edit", action: () => edit(r, false) },
+      { label: "Split", action: () => edit(r, true), disabled: r.status === "void" },
       {
         label: r.cleared === "unmarked" ? "Mark cleared" : "Mark unmarked",
         action: () => void toggleCleared(r),
@@ -229,7 +235,7 @@
         disabled: r.counterpart.kind !== "transfer",
       },
       { label: "Schedule this…", action: () => void scheduleThis(r) },
-      { label: "History…", action: () => (dialogState.history = { txn: r.txn_id, account }) },
+      { label: "History…", action: () => (dialogState.history = { entity: "txn", id: r.txn_id }) },
       { label: "Void", action: () => void voidTxn(r), disabled: r.status === "void" },
       { label: "Delete", action: () => void deleteTxn(r) },
     ];
@@ -266,7 +272,7 @@
         newEntry?.focus();
         return;
       case "edit":
-        if (sel) registerState.editing = sel.txn_id;
+        if (sel) edit(sel, false);
         return;
       case "delete":
         if (sel) void deleteTxn(sel);
@@ -314,7 +320,7 @@
       {@const i = range.from + k}
       {#if todayLineBefore(i)}<div class="today" aria-label="Today"><span>Today</span></div>{/if}
       {#if registerState.editing === r.txn_id}
-        <EntryEditor txn={r.txn_id} {account} ondone={(saved) => afterEdit(r.txn_id, saved)} />
+        <EntryEditor txn={r.txn_id} {account} split={registerState.editSplit} ondone={(saved) => afterEdit(r.txn_id, saved)} />
       {:else}
         {@const pd = splitPaymentDeposit(r.amount)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -330,7 +336,7 @@
           tabindex="-1"
           aria-selected={registerState.selected === r.txn_id}
           onclick={() => (registerState.selected = r.txn_id)}
-          ondblclick={() => (registerState.editing = r.txn_id)}
+          ondblclick={() => edit(r, false)}
           oncontextmenu={(e) => {
             e.preventDefault();
             e.stopPropagation();

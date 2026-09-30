@@ -326,12 +326,12 @@ fn income_holdings_and_allocation_reports() {
     assert_eq!(
         text(&h),
         "\
-+ Brokerage |  |  |  |  | 2100.00 | 15340.00 | 320.00 | 
-  - Total Stock Market | VTI | 20 | 121 | 2026-12-31 | 2100.00 | 2420.00 | 320.00 | 15.24
-  - Cash |  |  |  |  |  | 12920.00 |  | 
-+ Linked |  |  |  |  | 1000.00 | 1210.00 | 210.00 | 
-  - Total Stock Market | VTI | 10 | 121 | 2026-12-31 | 1000.00 | 1210.00 | 210.00 | 21.00
-= OVERALL TOTAL |  |  |  |  | 3100.00 | 16550.00 | 530.00 | "
++ Brokerage |  |  |  |  |  | 2100.00 | 15340.00 | 320.00 | 
+  - Total Stock Market | VTI | 20 | 121 | 2026-12-31 |  | 2100.00 | 2420.00 | 320.00 | 15.24
+  - Cash |  |  |  |  |  |  | 12920.00 |  | 
++ Linked |  |  |  |  |  | 1000.00 | 1210.00 | 210.00 | 
+  - Total Stock Market | VTI | 10 | 121 | 2026-12-31 |  | 1000.00 | 1210.00 | 210.00 | 21.00
+= OVERALL TOTAL |  |  |  |  |  | 3100.00 | 16550.00 | 530.00 | "
     );
     let a = run(&fx, ReportKind::AssetAllocation);
     assert_eq!(
@@ -350,6 +350,28 @@ fn income_holdings_and_allocation_reports() {
             asset_class: kansha_core::securities::AssetClass::UsEquity
         })
     );
+}
+
+/// PRC-050: Holdings marks a price older than the stale threshold (the
+/// book setting, 7 days by default) as of the report date, and says so.
+#[test]
+fn holdings_flags_stale_prices() {
+    let fx = fixture();
+    let mut s = ReportSettings::defaults(ReportKind::Holdings);
+    s.range = DateRange {
+        preset: DatePreset::Custom,
+        from: Some(date("2027-01-01")),
+        to: Some(date("2027-01-20")),
+    };
+    let r = reports::run(fx.book.conn(), &s, date("2027-01-20")).unwrap();
+    let col = r.columns.iter().position(|c| c.id == "stale").unwrap();
+    let vti = &r.rows[0].children[0];
+    assert_eq!(vti.cells[col], "⚠");
+    assert!(r.note.contains("more than 7 days old"), "{}", r.note);
+    // On the price's own date nothing is stale and there is no note.
+    let fresh = run(&fx, ReportKind::Holdings);
+    assert_eq!(fresh.rows[0].children[0].cells[col], "");
+    assert!(fresh.note.is_empty());
 }
 
 #[test]
