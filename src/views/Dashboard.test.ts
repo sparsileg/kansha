@@ -37,6 +37,7 @@ vi.mock("../lib/api", async (orig) => {
 vi.mock("../lib/shell/nav", () => ({ openAccount: (id: number) => openAcct(id) }));
 
 import Dashboard from "./Dashboard.svelte";
+import { CARDS } from "../lib/dashboard/cards";
 import { listsState } from "../lib/state/lists.svelte";
 
 beforeEach(() => {
@@ -59,5 +60,14 @@ describe("Dashboard", () => {
     expect(screen.getByText(/Last backup: 2026-09-26T22:00:00Z\. Last full verification:\s+never\./)).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: /uncleared/ }));
     expect(openAcct).toHaveBeenCalledWith(1);
+  });
+
+  it("shows each card, in order, named by its ID and heading", async () => {
+    const { container } = render(Dashboard);
+    await screen.findByText("10,019,506.27");
+    const ids = [...container.querySelectorAll("[data-card]")].map((e) => e.getAttribute("data-card"));
+    expect(ids).toEqual(CARDS.map((c) => c.id));
+    expect(screen.getByRole("article", { name: "Net worth" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Due in the next 14 days" })).toBeTruthy();
   });
 });

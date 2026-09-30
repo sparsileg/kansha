@@ -43,7 +43,7 @@
   const NUMERIC = new Set(["price", "shares", "cost_basis", "market_value", "gain", "day_gain", "day_percent"]);
 </script>
 
-<section>
+<section class="inv">
   <div class="bar">
     <label>
       View:
@@ -59,17 +59,17 @@
   {#if st.available.length === 0}
     <p>No investment accounts. Add one with Tools &gt; Accounts.</p>
   {:else}
-    <div class="scroll">
+    <div class="scroll sheet">
       <table>
         <thead>
           <tr>
-            <th>Name</th>
+            <th class="name">Name</th>
             {#each columns as c (c)}<th class:num={NUMERIC.has(c)}>{columnLabel(c)}</th>{/each}
           </tr>
         </thead>
         <tbody>
-          {#each rows as row (row.key)}
-            <tr class={row.kind}>
+          {#each rows as row, i (row.key)}
+            <tr class={row.kind} class:alt={i % 2 === 1 && row.kind !== "total"}>
               <td class="name">
                 {#if row.toggleKey !== undefined}
                   <button
@@ -123,11 +123,25 @@
     gap: 0.35rem;
     align-items: center;
   }
+  .inv {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  /* A sheet (base.css) filling the window, like a report's page. */
   .scroll {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
   }
+  /* Full width; Name takes the room the figures do not need. */
   table {
     border-collapse: collapse;
+    width: 100%;
+  }
+  th.name {
+    width: 100%;
   }
   th,
   td {
@@ -136,7 +150,15 @@
     white-space: nowrap;
   }
   thead th {
+    position: sticky;
+    top: 0;
+    background: var(--head-bg);
+    color: var(--head-fg);
     border-bottom: 1px solid var(--line);
+  }
+  /* Stripes by position, as in the registers. */
+  tbody tr.alt {
+    background: var(--row-alt);
   }
   .num {
     text-align: right;

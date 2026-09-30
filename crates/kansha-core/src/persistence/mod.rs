@@ -252,6 +252,31 @@ impl Db {
         tx.inner.commit()?;
         Ok(value)
     }
+
+    /// Run an import in one IMMEDIATE transaction (MIG-080): stage its
+    /// batch, then run `f` with origin `Import(batch)`. `f` marks the batch
+    /// committed; if it fails, nothing is left, not even the batch.
+    pub fn write_import<T>(
+        &mut self,
+        clock: &dyn Clock,
+        batch: &imports::NewBatch,
+        f: impl FnOnce(&Tx<'_>, i64) -> Result<T>,
+    ) -> Result<T> {
+        let inner = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let now = clock.now();
+        let id = imports::insert_row(&inner, batch, now)?;
+        let tx = Tx {
+            inner,
+            now,
+            origin: Origin::Import(id),
+        };
+        imports::record_staged(&tx, id)?;
+        let value = f(&tx, id)?;
+        tx.inner.commit()?;
+        Ok(value)
+    }
 }
 
 /// A write transaction in progress. Dropping it without commit (an `Err`
@@ -275,6 +300,32 @@ impl Tx<'_> {
 
     pub fn origin(&self) -> Origin {
         self.origin
+    }
+
+    /// Run `f` inside a savepoint: if it fails, only its own changes are
+    /// undone and the transaction goes on (one import record, one delete
+    /// attempt).
+    pub fn savepoint<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.inner.execute_batch("SAVEPOINT kansha_step")?;
+        match f() {
+            Ok(v) => {
+                self.inner.execute_batch("RELEASE kansha_step")?;
+                Ok(v)
+            }
+            Err(e) => {
+                // A failure SQLite answers by rolling back the whole
+                // transaction leaves no savepoint: keep the first error.
+                if let Err(undo) = self
+                    .inner
+                    .execute_batch("ROLLBACK TO kansha_step; RELEASE kansha_step")
+                {
+                    return Err(Error::Database(format!(
+                        "{e}; undoing the step then failed: {undo}"
+                    )));
+                }
+                Err(e)
+            }
+        }
     }
 }
 

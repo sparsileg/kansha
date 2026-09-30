@@ -33,7 +33,7 @@ export const MENUS: Menu[] = [
       { id: "file.rename", label: "Rename Book…" },
       { id: "file.backup", label: "Back Up Now", divider: true },
       { id: "file.restore", label: "Restore…" },
-      { id: "file.import", label: "Import…", disabled: later("import"), divider: true },
+      { id: "file.import", label: "Import…", divider: true },
       { id: "file.export", label: "Export…", disabled: later("export") },
       { id: "file.integrity", label: "Integrity Check", divider: true },
       { id: "file.exit", label: "Exit", divider: true },

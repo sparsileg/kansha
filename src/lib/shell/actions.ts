@@ -46,6 +46,9 @@ export function runAction(id: string): void {
       case "file.restore":
         dialogState.restore = true;
         break;
+      case "file.import":
+        dialogState.qifImport = true;
+        break;
       case "file.integrity":
         dialogState.integrityReport = null;
         dialogState.integrity = true;

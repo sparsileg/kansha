@@ -166,7 +166,7 @@ impl fmt::Debug for PublicKey {
 pub struct PrivateKey(age::x25519::Identity);
 
 impl PrivateKey {
-    fn generate() -> PrivateKey {
+    pub(crate) fn generate() -> PrivateKey {
         PrivateKey(age::x25519::Identity::generate())
     }
 

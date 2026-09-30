@@ -5,9 +5,16 @@
     title,
     onclose,
     wide = false,
+    fit = false,
     children,
-  }: { title: string; onclose: () => void; wide?: boolean; children: Snippet } =
-    $props();
+  }: {
+    title: string;
+    onclose: () => void;
+    wide?: boolean;
+    /** As wide as its widest row (up to the window), never narrower than `wide`. */
+    fit?: boolean;
+    children: Snippet;
+  } = $props();
 
   let dialog: HTMLDivElement;
 
@@ -31,6 +38,7 @@
   <div
     class="modal"
     class:wide
+    class:fit
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -67,6 +75,11 @@
   }
   .modal.wide {
     width: min(56rem, 96vw);
+  }
+  .modal.fit {
+    width: max-content;
+    min-width: min(56rem, 96vw);
+    max-width: 96vw;
   }
   header {
     display: flex;

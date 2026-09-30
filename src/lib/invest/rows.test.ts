@@ -44,12 +44,12 @@ describe("investment rows", () => {
     expect(rows[1].cells.market_value).toBe("10,050.00");
   });
 
-  it("expanded account: blank header, cash, and collapsed equities with all figures", () => {
+  it("expanded account: blank header, collapsed equities with all figures, then cash", () => {
     const rows = buildRows(pf, new Set(["a2"]), name);
-    expect(rows.map((r) => r.kind)).toEqual(["account", "cash", "position", "total"]);
+    expect(rows.map((r) => r.kind)).toEqual(["account", "position", "cash", "total"]);
     expect(rows[0].cells).toEqual({});
-    expect(rows[1].cells).toEqual({ market_value: "6,900.00" });
-    expect(rows[2].cells).toEqual({
+    expect(rows[2].cells).toEqual({ market_value: "6,900.00" });
+    expect(rows[1].cells).toEqual({
       ticker: "VTI", price: "210.00", shares: "15", cost_basis: "3,100.00",
       market_value: "3,150.00", gain: "50.00", day_gain: "150.00", day_percent: "5.00%",
     });
@@ -64,6 +64,8 @@ describe("investment rows", () => {
     expect(lots[1].cells.day_gain).toBe("");
     expect(lots[1].cells.gain).toBe("-50.00");
     expect(rows.find((r) => r.kind === "position")?.cells).toEqual({ ticker: "VTI" });
+    // Cash follows the equities' lots.
+    expect(rows.map((r) => r.kind).slice(-2)).toEqual(["cash", "total"]);
   });
 
   it("flags stale and missing prices in words available to a tooltip", () => {
@@ -71,7 +73,7 @@ describe("investment rows", () => {
     stale.accounts[0].positions[0].stale = true;
     stale.accounts[0].totals.stale_prices = true;
     const rows = buildRows(stale, new Set(["a2"]), name);
-    expect(rows[2].priceWarn).toMatch(/out of date/);
+    expect(rows[1].priceWarn).toMatch(/out of date/);
     expect(buildRows(stale, new Set(), name)[0].warn).toMatch(/out of date/);
     const missing = structuredClone(pf);
     missing.total.missing_prices = true;

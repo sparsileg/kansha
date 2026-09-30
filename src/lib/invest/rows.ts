@@ -1,6 +1,6 @@
 // The Investments screen's rows, flattened from Rust's overview: account
-// rows, then cash, positions and (when expanded) lots, then Totals. Only
-// display formatting happens here; every figure comes from Rust.
+// rows, then positions and (when expanded) lots, then cash, then Totals.
+// Only display formatting happens here; every figure comes from Rust.
 
 import { displayDate } from "../format/date";
 import { formatMoney } from "../format/money";
@@ -83,9 +83,6 @@ export function buildRows(
       warn: open ? undefined : warning(a.totals),
     });
     if (!open) continue;
-    if (a.cash !== null) {
-      rows.push({ key: `c${a.account}`, kind: "cash", name: "Cash", cells: { market_value: money(a.cash) } });
-    }
     for (const p of a.positions) {
       const pk = positionKey(a.account, p.security);
       const popen = expanded.has(pk);
@@ -115,6 +112,10 @@ export function buildRows(
           },
         });
       }
+    }
+    // Cash closes the account, below its equities.
+    if (a.cash !== null) {
+      rows.push({ key: `c${a.account}`, kind: "cash", name: "Cash", cells: { market_value: money(a.cash) } });
     }
   }
   rows.push({ key: "total", kind: "total", name: "Totals:", cells: totalCells(pf.total), warn: warning(pf.total) });

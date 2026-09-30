@@ -11,6 +11,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use kansha_core::backup::{self, BackupKind, BackupTimer};
 use kansha_core::book::{BookFiles, OpenBook};
+use kansha_core::import::Staged;
 use kansha_core::ledger::TxnId;
 use kansha_core::local_config::LocalConfig;
 use kansha_core::undo::{self, Undo};
@@ -93,6 +94,8 @@ pub struct AppState {
     timer: Mutex<BackupTimer>,
     /// The last register change, while it can be undone (UI-060).
     undo: Mutex<Option<Undo>>,
+    /// A Quicken file read and waiting to be imported (MIG-040).
+    pending_import: Mutex<Option<Staged>>,
     /// The book's files: the open book's, or the one the passphrase
     /// screen or setup is for. Changes when another book is opened.
     files: Mutex<BookFiles>,
@@ -116,6 +119,7 @@ impl AppState {
             pending_restore: Mutex::new(None),
             timer: Mutex::new(BackupTimer::default()),
             undo: Mutex::new(None),
+            pending_import: Mutex::new(None),
             files: Mutex::new(files),
             config_path,
             downloads,
@@ -159,6 +163,19 @@ impl AppState {
         self.pending_restore
             .lock()
             .map_err(|_| IpcError::internal("restore lock poisoned; restart Kansha"))
+    }
+
+    pub fn pending_import(&self) -> CmdResult<MutexGuard<'_, Option<Staged>>> {
+        self.pending_import
+            .lock()
+            .map_err(|_| IpcError::internal("import lock poisoned; restart Kansha"))
+    }
+
+    /// An import or rollback changed the book: a timed backup will be
+    /// due, and the last register change can no longer be undone.
+    pub fn note_import(&self) {
+        self.note_change();
+        self.forget_undo();
     }
 
     /// Run `f` with the open book; `locked` when there is none.

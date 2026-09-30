@@ -68,7 +68,7 @@
 <div class="pane" bind:this={pane}>
   <table class="reg">
     <thead>
-      <tr><th>Date</th><th>Action</th><th>Security</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Comm.</th><th class="num">Amount</th><th class="num">Cash</th><th>Clr</th><th>Memo</th></tr>
+      <tr><th>Date</th><th>Action</th><th class="grow">Security</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Comm.</th><th class="num">Amount</th><th class="num">Cash</th><th>Clr</th><th class="grow">Memo</th></tr>
     </thead>
     <tbody>
       {#each r?.rows ?? [] as row, i (`${row.txn_id}-${row.incoming}`)}
@@ -82,14 +82,14 @@
           title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
           <td>{displayDate(row.date)}</td>
           <td>{row.action_label}{#if row.split}&nbsp;{row.split.new}:{row.split.old}{/if}</td>
-          <td>{row.security_label}{#if row.other_account !== null && row.action === "transfer_shares"} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
+          <td class="clip">{row.security_label}{#if row.other_account !== null && row.action === "transfer_shares"} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
           <td class="num">{row.quantity ? formatQuantity(row.quantity) : ""}</td>
           <td class="num">{row.price ? formatPrice(row.price) : ""}</td>
           <td class="num">{row.commission === "0.00" ? "" : money(row.commission)}</td>
           <td class="num">{row.amount === "0.00" ? "" : money(row.amount)}</td>
           <td class="num">{money(row.cash_balance)}</td>
           <td>{cleared(row.cleared)}</td>
-          <td>{row.memo}</td>
+          <td class="clip" title={row.memo}>{row.memo}</td>
         </tr>
       {/each}
       {#if account.status === "open"}
@@ -124,9 +124,21 @@
     overflow: auto;
     margin-top: 0.5rem;
   }
+  /* Full width, as the banking register: Security and Memo share the
+     room the other columns do not need. */
   table {
     border-collapse: collapse;
+    width: 100%;
     margin-bottom: 0.75rem;
+  }
+  th.grow {
+    width: 50%;
+  }
+  /* Cut to their share with "…" rather than widen the table. */
+  td.clip {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   th,
   td {
@@ -137,8 +149,12 @@
   thead th {
     position: sticky;
     top: 0;
-    background: var(--bg);
+    background: var(--head-bg);
+    color: var(--head-fg);
     border-bottom: 1px solid var(--line);
+  }
+  .reg tbody {
+    background: var(--row-bg);
   }
   .num {
     text-align: right;

@@ -1,10 +1,12 @@
 <script lang="ts">
   // The household dashboard (DSH-010 … DSH-030): net worth and its parts,
   // this month's income and spending, a year of net worth, what is due,
-  // and what needs attention. Every figure comes from Rust.
-  import { onMount } from "svelte";
+  // and what needs attention, each a card (`lib/dashboard/cards.ts`).
+  // Every figure comes from Rust.
+  import { onMount, type Snippet } from "svelte";
   import { call, commands } from "../lib/api";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
+  import { CARDS, type CardId } from "../lib/dashboard/cards";
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
   import { openAccount } from "../lib/shell/nav";
@@ -35,95 +37,108 @@
 
   const payeeName = (id: number | null) => (id === null ? "" : (listsState.payee(id)?.name ?? ""));
   const accountName = (id: number) => listsState.account(id)?.name ?? `#${id}`;
+
+  /** Each card's contents, by card ID (see `cards.ts`). */
+  const bodies: Record<CardId, Snippet<[Dashboard]>> = {
+    net_worth: netWorth,
+    this_month: thisMonth,
+    net_worth_trend: trend,
+    upcoming,
+    attention,
+  };
 </script>
 
 <section class="dash">
   <h1>Dashboard</h1>
   {#if error}<p class="err" role="alert">{error}</p>{/if}
   {#if data}
-    <div class="tiles">
-      <div class="tile">
-        <h2>Net worth</h2>
-        <p class="big">{formatMoney(data.net_worth)}</p>
-        <table>
-          <tbody>
-            <tr><td>Cash and bank</td><td class="num">{formatMoney(data.cash)}</td></tr>
-            <tr><td>Investments</td><td class="num">{formatMoney(data.investments)}</td></tr>
-            <tr><td>Other assets</td><td class="num">{formatMoney(data.other_assets)}</td></tr>
-            <tr><td>Liabilities</td><td class="num">−{formatMoney(data.liabilities)}</td></tr>
-          </tbody>
-        </table>
-        <button type="button" class="link" onclick={() => openReport("net_worth")}>Net Worth report</button>
-      </div>
-      <div class="tile">
-        <h2>This month</h2>
-        <p class="sub">{displayDate(data.month_from)} to {displayDate(data.today)}</p>
-        <table>
-          <tbody>
-            <tr><td>Income</td><td class="num">{formatMoney(data.income)}</td></tr>
-            <tr><td>Spending</td><td class="num">{formatMoney(data.expenses)}</td></tr>
-            <tr class="net"><td>Net</td><td class="num">{formatMoney(data.net)}</td></tr>
-          </tbody>
-        </table>
-        <button type="button" class="link" onclick={() => openReport("income_expense")}>Income/Expense report</button>
-      </div>
-      <div class="tile wide">
-        <h2>Net worth, last 12 months</h2>
-        <ReportChart chart={data.trend} height={200} />
-      </div>
-    </div>
-
-    <div class="lists">
-      <div class="tile">
-        <h2>Due in the next {data.upcoming_days} days</h2>
-        {#if data.upcoming.length}
-          <table>
-            <tbody>
-              {#each data.upcoming as o (`${o.schedule}-${o.nominal}`)}
-                <tr>
-                  <td>{displayDate(o.date)}</td>
-                  <td>{#if o.overdue}<strong>Overdue</strong>{/if}</td>
-                  <td>{payeeName(o.payee)}</td>
-                  <td>{accountName(o.account)}</td>
-                  <td class="num">{formatMoney(o.amount)}{o.estimated ? " (est.)" : ""}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {:else}
-          <p class="sub">Nothing due.</p>
-        {/if}
-        <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
-      </div>
-      <div class="tile">
-        <h2>Needs attention</h2>
-        {#if data.warnings.length}
-          <ul class="warn">
-            {#each data.warnings as w, i (i)}
-              <li>
-                <span aria-hidden="true">⚠</span>
-                {#if w.account !== null}
-                  <button type="button" class="link" onclick={() => openAccount(w.account!)}>{w.message}</button>
-                {:else}
-                  {w.message}
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="sub">All clear.</p>
-        {/if}
-        <p class="sub">
-          Last backup: {data.backup.last_at ?? "none yet"}. Last full verification:
-          {data.backup.last_verified_at ?? "never"}.
-        </p>
-      </div>
+    {@const d = data}
+    <div class="cards">
+      {#each CARDS as c (c.id)}
+        <article class="card sheet" class:wide={c.wide} data-card={c.id} aria-labelledby={`card-${c.id}`}>
+          <header><h2 id={`card-${c.id}`}>{c.id === "upcoming" ? `Due in the next ${d.upcoming_days} days` : c.label}</h2></header>
+          <div class="body">{@render bodies[c.id](d)}</div>
+        </article>
+      {/each}
     </div>
   {:else if !error}
     <p class="sub">Loading…</p>
   {/if}
   <p class="ver">Kansha {version}</p>
 </section>
+
+{#snippet netWorth(d: Dashboard)}
+  <p class="big">{formatMoney(d.net_worth)}</p>
+  <table>
+    <tbody>
+      <tr><td>Cash and bank</td><td class="num">{formatMoney(d.cash)}</td></tr>
+      <tr><td>Investments</td><td class="num">{formatMoney(d.investments)}</td></tr>
+      <tr><td>Other assets</td><td class="num">{formatMoney(d.other_assets)}</td></tr>
+      <tr><td>Liabilities</td><td class="num">−{formatMoney(d.liabilities)}</td></tr>
+    </tbody>
+  </table>
+  <button type="button" class="link" onclick={() => openReport("net_worth")}>Net Worth report</button>
+{/snippet}
+
+{#snippet thisMonth(d: Dashboard)}
+  <p class="sub">{displayDate(d.month_from)} to {displayDate(d.today)}</p>
+  <table>
+    <tbody>
+      <tr><td>Income</td><td class="num">{formatMoney(d.income)}</td></tr>
+      <tr><td>Spending</td><td class="num">{formatMoney(d.expenses)}</td></tr>
+      <tr class="net"><td>Net</td><td class="num">{formatMoney(d.net)}</td></tr>
+    </tbody>
+  </table>
+  <button type="button" class="link" onclick={() => openReport("income_expense")}>Income/Expense report</button>
+{/snippet}
+
+{#snippet trend(d: Dashboard)}
+  <ReportChart chart={d.trend} height={200} />
+{/snippet}
+
+{#snippet upcoming(d: Dashboard)}
+  {#if d.upcoming.length}
+    <table>
+      <tbody>
+        {#each d.upcoming as o (`${o.schedule}-${o.nominal}`)}
+          <tr>
+            <td>{displayDate(o.date)}</td>
+            <td>{#if o.overdue}<strong>Overdue</strong>{/if}</td>
+            <td>{payeeName(o.payee)}</td>
+            <td>{accountName(o.account)}</td>
+            <td class="num">{formatMoney(o.amount)}{o.estimated ? " (est.)" : ""}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {:else}
+    <p class="sub">Nothing due.</p>
+  {/if}
+  <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
+{/snippet}
+
+{#snippet attention(d: Dashboard)}
+  {#if d.warnings.length}
+    <ul class="warn">
+      {#each d.warnings as w, i (i)}
+        <li>
+          <span aria-hidden="true">⚠</span>
+          {#if w.account !== null}
+            <button type="button" class="link" onclick={() => openAccount(w.account!)}>{w.message}</button>
+          {:else}
+            {w.message}
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <p class="sub">All clear.</p>
+  {/if}
+  <p class="sub">
+    Last backup: {d.backup.last_at ?? "none yet"}. Last full verification:
+    {d.backup.last_verified_at ?? "never"}.
+  </p>
+{/snippet}
 
 <style>
   .dash {
@@ -137,21 +152,32 @@
   }
   h2 {
     font-size: var(--fs-ui);
-    margin: 0 0 0.4rem;
   }
-  .tiles,
-  .lists {
+  /* Cards: sheets (base.css) on the window's background, each with a
+     shaded title band. */
+  .cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     gap: 0.75rem;
   }
-  .tile {
-    border: 1px solid var(--line);
+  .card {
     border-radius: 6px;
-    padding: 0.6rem 0.8rem;
+    overflow: hidden;
   }
-  .tile.wide {
+  .card.wide {
     grid-column: 1 / -1;
+  }
+  .card header {
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0.35rem 0.8rem;
+  }
+  .card h2 {
+    margin: 0;
+  }
+  .body {
+    padding: 0.5rem 0.8rem 0.6rem;
   }
   .big {
     font-size: var(--fs-title);

@@ -1,8 +1,8 @@
 # Import proposal (Phase 9) — plan, not built
 
-Status: plan agreed in chat 2026-09-30. Nothing here is implemented.
-Part C (performance test) is built; Part A feeds the Phase 9 spec
-(MIG) and settles placeholders P-01 and P-03.
+Status: plan agreed in chat 2026-09-30. Part C (performance test) is
+built; Part A is in spec 0.6 (§11, settles P-01, P-03, P-05) and built
+in Phase 9 (`phase-9.md`) except the A4 true-up (MIG-115).
 
 ## Context
 

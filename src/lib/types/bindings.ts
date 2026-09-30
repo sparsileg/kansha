@@ -399,6 +399,23 @@ export const commands = {
 	 *  number of lots created.
 	 */
 	lotSeed: (fileName: string, text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("lot_seed", { fileName, text, date })),
+	/**  Choose a QIF file. */
+	pickImportFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_import_file", { start }),
+	/**  Read and stage a file; its preview with the default mapping. */
+	importOpen: (path: string) => typedError<ImportPreview, IpcError>(__TAURI_INVOKE("import_open", { path })),
+	/**  The staged file's preview with this mapping (MIG-050, MIG-060). */
+	importPreview: (options: ImportOptions) => typedError<ImportPreview, IpcError>(__TAURI_INVOKE("import_preview", { options })),
+	/**
+	 *  Import the staged file (MIG-080), or with `dry_run` try it and roll it
+	 *  back. A real run backs up first and keeps an encrypted copy of the
+	 *  file (MIG-170); once committed, the staged file is let go.
+	 */
+	importRun: (options: ImportOptions, dryRun: boolean) => typedError<ImportResult, IpcError>(__TAURI_INVOKE("import_run", { options, dryRun })),
+	importCancel: () => typedError<null, IpcError>(__TAURI_INVOKE("import_cancel")),
+	/**  Every import batch, newest first. */
+	importBatches: () => typedError<ImportBatch[], IpcError>(__TAURI_INVOKE("import_batches")),
+	/**  Roll a committed import back (MIG-080), after a backup. */
+	importRollback: (batch: number) => typedError<RollbackResult, IpcError>(__TAURI_INVOKE("import_rollback", { batch })),
 	/**  A report's standard settings. */
 	reportDefaults: (kind: ReportKind) => __TAURI_INVOKE<ReportSettings>("report_defaults", { kind }),
 	/**  The columns a report can show, for the Customize dialog. */
@@ -444,6 +461,14 @@ export type AccountBalance = {
 	ending: string,
 };
 
+/**  Where a QIF account goes (MIG-060). */
+export type AccountChoice = 
+/**
+ *  Not imported. Transfers to it are recorded against Opening
+ *  Balance, so the other account's balance stays right.
+ */
+{ kind: "skip" } | { kind: "existing"; id: AccountId } | { kind: "create"; name: string; account_type: AccountType };
+
 /**
  *  Editable attributes of an account (ACCT-100 … ACCT-160). Used to
  *  create and to update.
@@ -488,6 +513,48 @@ export type AccountGroup = "banking" | "credit" | "investments" | "retirement" |
 
 /**  Row ID of an account. */
 export type AccountId = number;
+
+/**  One QIF account in the preview (MIG-050). */
+export type AccountPreview = {
+	name: string,
+	/**
+	 *  As the file says (`Bank`, `CCard`, `Invst`, …); empty when the
+	 *  account is only named by transfers.
+	 */
+	qif_type: string,
+	investment: boolean,
+	/**  Named in the file's account list (not only by transfers). */
+	defined: boolean,
+	/**  Its transactions in the file. */
+	records: number,
+	first_date: string | null,
+	last_date: string | null,
+	/**
+	 *  What the import adds to the account's balance (cash, for an
+	 *  investment account): its own records plus transfers into it.
+	 */
+	total: string,
+	choice: AccountChoice,
+	/**  The account type a new account gets by default. */
+	default_type: AccountType,
+};
+
+/**  One account after the import (MIG-100: compare with Quicken). */
+export type AccountResult = {
+	account: AccountId,
+	/**  The QIF account's name. */
+	qif_name: string,
+	/**
+	 *  What the file says the import adds (cash, for an investment
+	 *  account).
+	 */
+	expected: string,
+	/**  Balance (cash) before and after. */
+	before: string,
+	after: string,
+	/**  `after − before` is not `expected`: some records were not imported. */
+	differs: boolean,
+};
 
 /**  One database's figures for one account. */
 export type AccountSide = {
@@ -658,6 +725,8 @@ export type BackupStatus = {
 	folder_missing: boolean,
 };
 
+export type BatchStatus = "staged" | "committed" | "rolled_back";
+
 /**  What is on disk (SECU-080, SECU-090). */
 export type BookState = 
 /**  No database: first-run setup (create or restore). */
@@ -710,6 +779,12 @@ export type Category = {
 	created_at: string,
 } & CategoryFields;
 
+/**
+ *  Where a QIF category goes: an existing one (rename or merge on the way
+ *  in), or a new one at a path.
+ */
+export type CategoryChoice = { kind: "existing"; id: CategoryId } | { kind: "create"; path: string; category_kind: CategoryKind };
+
 /**  Editable attributes of a category. */
 export type CategoryFields = {
 	parent: CategoryId | null,
@@ -730,6 +805,21 @@ export type CategoryId = number;
 
 /**  Category kind (CAT-010). `Equity` is system-only (opening balances). */
 export type CategoryKind = "income" | "expense" | "equity";
+
+export type CategoryPreview = {
+	/**  As the file writes it (`Food:Dining`); `""` for no category. */
+	name: string,
+	/**  Named in the file's category list. */
+	listed: boolean,
+	kind: CategoryKind,
+	/**  Lines that use it. */
+	used: number,
+	/**  Σ of those lines as postings: spending positive, income negative. */
+	total: string,
+	choice: CategoryChoice,
+	/**  Created or mapped: used, or kept. */
+	imported: boolean,
+};
 
 /**  A reconciled transaction changed since the last statement (RCN-030). */
 export type ChangedTxn = {
@@ -893,6 +983,13 @@ export type Dashboard = {
 
 /**  How dates are shown and typed (SET-030). */
 export type DateFormat = "mdy" | "dmy" | "ymd";
+
+/**  Order of the day and month in the file's dates. */
+export type DateOrder = 
+/**  Month first (US): `1/5'26` is 5 January 2026. */
+"mdy" | 
+/**  Day first: `1/5'26` is 1 May 2026. */
+"dmy";
 
 /**  Date range presets (RPT-040). */
 export type DatePreset = "all_dates" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
@@ -1102,6 +1199,117 @@ export type Holdings = {
 	/**  Some position has no price, so the totals leave it out. */
 	missing_prices: boolean,
 	stale_prices: boolean,
+};
+
+export type ImportBatch = {
+	id: number,
+	source_file: string,
+	format: ImportFormat,
+	status: BatchStatus,
+	created_at: string,
+	committed_at: string | null,
+	rolled_back_at: string | null,
+	/**  SHA-256 of the file, hex. */
+	source_sha256: string | null,
+	/**
+	 *  The file's copy in the import archive (MIG-170): a name in the
+	 *  book's archive folder.
+	 */
+	archive_path: string | null,
+	/**  Transactions it created that still exist. */
+	txns: number,
+};
+
+/**  Source file format of an import. */
+export type ImportFormat = "qif" | "qxf" | "csv" | "ofx" | "qfx";
+
+/**  A problem or remark, tied to a line of the file when there is one. */
+export type ImportNote = {
+	line: number | null,
+	/**  The QIF account the record belongs to; empty for the file. */
+	account: string,
+	message: string,
+};
+
+/**
+ *  The mapping step's answers. Anything left out gets its default, which
+ *  the preview shows.
+ */
+export type ImportOptions = {
+	/**  Day/month order of the file's dates; `None` decides from the file. */
+	date_order: DateOrder | null,
+	/**  By QIF account name. */
+	accounts: { [key in string]: AccountChoice },
+	/**  By QIF category name; `""` is transactions with no category. */
+	categories: { [key in string]: CategoryChoice },
+	/**  By QIF security name. */
+	securities: { [key in string]: SecurityChoice },
+	/**
+	 *  Categories, tags, and securities to create although no imported
+	 *  transaction uses them (A5: unused ones start unticked).
+	 */
+	keep_categories: string[],
+	keep_tags: string[],
+	keep_securities: string[],
+	/**  Import the price history of the securities kept (MIG-140). */
+	prices: boolean,
+	/**
+	 *  Import everything else when some records cannot be imported (they
+	 *  are listed); otherwise any such record stops the whole import. A
+	 *  mapping problem (a note with no line) always stops it.
+	 */
+	skip_errors: boolean,
+};
+
+/**  What an import would do (MIG-050). */
+export type ImportPreview = {
+	file_name: string,
+	date_order: DateOrder,
+	/**
+	 *  No date in the file showed which comes first; month first was
+	 *  assumed.
+	 */
+	date_ambiguous: boolean,
+	first_date: string | null,
+	last_date: string | null,
+	accounts: AccountPreview[],
+	categories: CategoryPreview[],
+	tags: TagPreview[],
+	securities: SecurityPreview[],
+	/**  Transactions the import would create. */
+	transactions: number,
+	/**  Transfers found on both sides and imported once (MIG-070). */
+	transfers_matched: number,
+	new_payees: number,
+	prices: number,
+	memorized_skipped: number,
+	warnings: ImportNote[],
+	/**  Records that cannot be imported, and mapping problems. */
+	errors: ImportNote[],
+	/**  The same file was imported before: when. */
+	imported_before: string | null,
+};
+
+/**  What an import did, or would do (a dry run, or one stopped by errors). */
+export type ImportResult = {
+	/**  The batch, when the import was kept. */
+	batch: number | null,
+	/**
+	 *  Written to the book. False for a dry run and for an import stopped
+	 *  by errors: then nothing was written.
+	 */
+	committed: boolean,
+	dry_run: boolean,
+	transactions: number,
+	accounts_created: number,
+	categories_created: number,
+	tags_created: number,
+	securities_created: number,
+	payees_created: number,
+	prices: number,
+	/**  Records not imported, and why. */
+	errors: ImportNote[],
+	accounts: AccountResult[],
 };
 
 /**  Income by security, with totals. */
@@ -1953,6 +2161,19 @@ export type RestorePreview_Serialize = {
 	comparison: Comparison,
 };
 
+export type RollbackResult = {
+	batch: number,
+	/**  Transactions deleted. */
+	transactions: number,
+	/**
+	 *  Accounts, categories, payees, tags, and securities the import
+	 *  created and nothing else uses now: deleted.
+	 */
+	removed: number,
+	/**  Ones still used by something entered since: kept. */
+	kept: number,
+};
+
 /**
  *  One row. `cells` line up with the report's columns; empty text is an
  *  empty cell. A group's money cells hold its totals.
@@ -2095,6 +2316,9 @@ export type Security = {
 	created_at: string,
 } & SecurityFields;
 
+/**  Where a QIF security goes. */
+export type SecurityChoice = { kind: "existing"; id: SecurityId } | { kind: "create"; name: string; ticker: string | null; security_type: SecurityType };
+
 /**  Editable attributes of a security (SEC-010 … SEC-030). */
 export type SecurityFields = {
 	name: string,
@@ -2113,6 +2337,17 @@ export type SecurityFields = {
 
 /**  Row ID of a security. */
 export type SecurityId = number;
+
+export type SecurityPreview = {
+	name: string,
+	symbol: string | null,
+	qif_type: string,
+	used: number,
+	/**  Prices in the file for it. */
+	prices: number,
+	choice: SecurityChoice,
+	imported: boolean,
+};
 
 /**  Kind of security (SEC-010). */
 export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "other";
@@ -2288,6 +2523,14 @@ export type TagFields = {
 
 /**  Row ID of a tag. */
 export type TagId = number;
+
+export type TagPreview = {
+	name: string,
+	used: number,
+	/**  A tag of that name is already in the book. */
+	existing: boolean,
+	imported: boolean,
+};
 
 /**  What a posting is to. */
 export type Target = { kind: "account"; id: AccountId } | { kind: "category"; id: CategoryId };

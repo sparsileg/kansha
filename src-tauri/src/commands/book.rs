@@ -584,7 +584,7 @@ pub fn appearance_set(state: State<'_, AppState>, appearance: Appearance) -> Cmd
     state.save_config(&cfg)
 }
 
-fn picked(p: Option<tauri_plugin_dialog::FilePath>) -> Option<String> {
+pub(crate) fn picked(p: Option<tauri_plugin_dialog::FilePath>) -> Option<String> {
     p.and_then(|p| p.into_path().ok())
         .map(|p: PathBuf| p.display().to_string())
 }

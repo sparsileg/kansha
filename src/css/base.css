@@ -115,6 +115,15 @@ body {
     padding-inline: calc(var(--col-gap) / 2);
 }
 
+/* ── Sheets ───────────────────────────────────────────────────────── */
+/* Content on the rows' surface (white in the light themes), set off
+   from the window by its edge and the window's padding around it: the
+   calendar, the Investments screen, the dashboard's cards. */
+.sheet {
+    background: var(--row-bg);
+    border: 1px solid var(--line);
+}
+
 /* ── Focus & selection ────────────────────────────────────────────── */
 /* The field being typed in must be unmistakable (keyboard entry): its
    background and text take the theme's focus colors. Buttons reached by

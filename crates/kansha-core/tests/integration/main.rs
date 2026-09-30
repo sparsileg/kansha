@@ -9,6 +9,7 @@
 mod backup;
 mod encryption;
 mod fixture;
+mod import;
 mod integrity;
 mod invest;
 mod ipc_json;

@@ -11,6 +11,7 @@
   import HistoryModal from "./lib/components/HistoryModal.svelte";
   import AboutModal from "./lib/components/AboutModal.svelte";
   import PriceImportModal from "./lib/components/invest/PriceImportModal.svelte";
+  import ImportModal from "./lib/components/import/ImportModal.svelte";
   import IntegrityModal from "./lib/components/IntegrityModal.svelte";
   import ScheduleModal from "./lib/components/ScheduleModal.svelte";
   import NavBarModal from "./lib/components/NavBarModal.svelte";
@@ -133,6 +134,7 @@
   {#if dialogState.settings}<SettingsModal />{/if}
   {#if dialogState.about}<AboutModal />{/if}
   {#if dialogState.priceImport}<PriceImportModal onclose={() => (dialogState.priceImport = false)} />{/if}
+  {#if dialogState.qifImport}<ImportModal onclose={() => (dialogState.qifImport = false)} />{/if}
   {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
   {#if dialogState.schedule !== undefined}

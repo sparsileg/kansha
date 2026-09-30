@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.5.2 (draft) |
+| **Document version** | 0.6.1 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
-| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Next: Phase 9, Quicken import (MIG) |
+| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) and verification reports (MIG-100) next |
 
 ---
 
@@ -580,8 +580,8 @@ value. The rest of an account (its cash, or with linked cash its other
 income and fees) is its own row, so the rows add up to the account.
 - **POS-040** [1.0][S] The Investments screen replaces per-account
   tabs. It lists the chosen investment accounts as collapsible rows;
-  under each, its cash and current equities; under each equity, its
-  open lots. Columns: Name (always), Ticker Symbol, Quote/Price,
+  under each, its current equities, then its cash; under each equity,
+  its open lots. Columns: Name (always), Ticker Symbol, Quote/Price,
   Shares, Cost Basis, Market Value, Gain/Loss, Day Gain/Loss, Price
   Day Change (%). A collapsed account shows rolled-up Cost Basis,
   Market Value, Gain/Loss, Day Gain/Loss, and Day %; a collapsed
@@ -602,58 +602,110 @@ income and fees) is its own row, so the rows add up to the account.
 
 ### 11. Data Migration from Quicken (MIG)
 
-This section is intentionally incomplete until export testing is done
-(P-01 through P-05).
+Decided 2026-09-30 (`devdocs/phase-notes/import-proposal.md`, Part A);
+built in Phase 9 (`devdocs/phase-notes/phase-9.md`) except where a
+requirement says not built. P-02 and P-04 stay open.
 
-#### 11.1 Known facts and assumptions
+#### 11.1 Known facts and decisions
 
-- Stan's Quicken 2013 holds about 5–6 years of active data (older data
-  archived) [S].
-- Quicken 2013 can export QIF and QXF [S].
-- QIF is a documented plain-text format covering accounts, categories,
-  classes/tags, banking transactions, investment transactions,
-  securities, and prices [R].
-- QXF is Quicken's proprietary transfer format; no reliable public
-  specification is known [R].
-- QIF does not reliably carry specific-lot assignments for past sales,
-  so open lots should be seeded from brokerage cost-basis reports, not
-  reconstructed from Quicken history [S/R].
+- Stan has used Quicken for about 20 years with cutoffs: at each one
+  the data file was saved and a new one started. The current file
+  holds every transaction of the active banking and credit card
+  accounts (some back to 2015), hidden accounts kept for net worth
+  history, and the full investment history (a brokerage account back
+  to 2000) [S].
+- Quicken 2013 exports QIF and QXF. QXF is undocumented [S].
+- A per-account QIF holds only that account's transactions
+  (`!Type:Invst`, `!Type:CCard`, …), with no account name, categories,
+  tags, securities, or prices. A whole-file QIF holds the account list,
+  categories, tags, securities, prices, memorized transactions, and
+  every account's transactions, so both sides of each transfer (P-05,
+  P-01 settled) [S].
+- The import source is **one whole-file QIF** of the current file, all
+  of it: no start date, no stitching of older archive files (archive
+  books maybe later, separately) [S].
+- Hidden (dead) accounts are left out. QIF has no hidden flag, so
+  Stan unticks them in the mapping step; transfers to them go to
+  Opening Balance. Long-term net worth stays in Stan's spreadsheet [S].
+- Investment history is imported in full and Kansha's lot engine
+  rebuilds the lots. QIF carries no lot IDs, so rebuilt lots can differ
+  from the broker's; at cutover they are compared with each broker's
+  cost-basis CSV and trued up (MIG-115) [S].
+- Each trial imports into a throwaway named book (UI-080); to rerun,
+  delete the book. The live book gets the final import only [S].
 - Quicken scheduled transactions may not export in any usable format
   and may need manual re-entry ⟨PLACEHOLDER P-04⟩ [R].
 
 #### 11.2 Requirements
 
-- **MIG-010** [1.0][S] Import income/expense history (banking and
-  credit card accounts) from Quicken. ⟨PLACEHOLDER P-01: source format
-  (QIF vs. QXF) to be decided after export testing.⟩
-- **MIG-020** [1.0][S] Import the category list, including hierarchy.
-- **MIG-030** [1.0][R] Import tags/classes.
-- **MIG-040** [1.0][R] All imports go through a **staging area**:
-  parse → preview → map/resolve → commit. Nothing touches the live
-  ledger until the user commits.
-- **MIG-050** [1.0][R] Preview shows counts by account, date range,
-  and per-account totals, plus any warnings (unparseable lines,
-  unknown categories, ambiguous dates).
-- **MIG-060** [1.0][R] Mapping step: map unknown categories to
-  existing categories or create them; map Quicken account names to
-  Kansha accounts.
-- **MIG-070** [1.0][R] Transfers exported from both sides (e.g., the
-  checking side and the savings side) are matched and imported once,
-  not twice.
-- **MIG-080** [1.0][R] Each import commit is atomic and tagged with an
-  import batch ID; a whole batch can be rolled back.
-- **MIG-090** [1.0][R] Imported cleared/reconciled status is
-  preserved.
+- **MIG-010** [1.0][S] Import income/expense history (banking, cash,
+  credit card, other asset and liability accounts) from a Quicken
+  whole-file QIF export (File > Import…). A per-account QIF also
+  imports (its records go to an account named after the file), for
+  trials.
+- **MIG-020** [1.0][S] Import the category list, including hierarchy
+  (`Parent:Child`) and the tax-related flag. A category missing from
+  the list takes its kind from the file's `I`/`E` mark, else from the
+  sign of its amounts. Lines with no category go to `Uncategorized`.
+- **MIG-030** [1.0][S] Import tags (QIF classes, `Category/Tag`;
+  several separated by `:`). A simple transaction's tag goes on the
+  transaction, a split line's on the line.
+- **MIG-040** [1.0][S] All imports go through a **staging area**:
+  parse → preview → map/resolve → commit. The file waits in memory;
+  nothing touches the book until the user imports. A **test import**
+  runs the whole import and rolls it back, to show the result.
+- **MIG-050** [1.0][S] Preview shows the date range and order, counts
+  (transactions, transfers matched, new payees, prices, memorized
+  skipped), per account its records, dates, and what it adds to the
+  balance (cash for an investment account), plus notes (sections not
+  imported, transfers to accounts left out, one-sided transfers,
+  ambiguous dates) and records that cannot be imported with their line
+  numbers. Day/month order comes from the file's dates (a day over 12
+  decides), or is chosen; when no date decides, month first is assumed
+  and the preview says so.
+- **MIG-060** [1.0][S] Mapping step: each QIF account is skipped,
+  mapped to an existing account, or created with a chosen name and
+  type (default: the book's account of that name, else a new one of
+  the QIF type if the file has transactions for it, else skipped).
+  Each category maps to an existing category (rename or merge on the
+  way in) or a path to create. Each security maps to an existing one
+  (default: by ticker, then name) or a new one with ticker and type.
+  Only what imported transactions use is created; the preview lists
+  the unused categories, tags, and securities unticked, to keep if
+  wanted. Mapping problems (two QIF accounts onto one account, a
+  banking account onto an investment one, a taken name or ticker, a
+  category under one of the other kind) stop the import.
+- **MIG-070** [1.0][S] Transfers exported from both sides are matched
+  (same date, opposite amounts, each naming the other) and imported
+  once. Rules in §18 (import rules).
+- **MIG-080** [1.0][S] Each import commit is atomic and tagged with an
+  import batch ID; a whole batch can be rolled back (File > Import… >
+  Past imports…). A record that cannot be imported stops the whole
+  import unless the user chooses to leave such records out; they are
+  then listed. Both an import and a rollback back up the book first.
+- **MIG-090** [1.0][S] Imported cleared/reconciled status is
+  preserved, on both sides of a transfer (`*`/`c` cleared, `X`/`R`
+  reconciled).
 - **MIG-100** [1.0][R] **Verification after import:** compare Kansha
   account balances as of the export date and category totals by year
   against Quicken reports. Stan exports the Quicken reports; Kansha
-  provides matching report layouts so comparison is
-  direct. ⟨PLACEHOLDER P-02: which Quicken reports to export as the
+  provides matching report layouts so comparison is direct. Built so
+  far: the import result lists each account's balance (cash for
+  investment accounts) before and after, against what the file says it
+  adds, marking any difference; the existing reports (Net Worth,
+  Income/Expense by Category by year, Holdings) do the rest.
+  ⟨PLACEHOLDER P-02: which Quicken reports to export as the
   reference.⟩
-- **MIG-110** [1.0][S] Investment data: seed current open lots per
-  taxable account.  ⟨PLACEHOLDER P-03: seeding source — brokerage
-  cost-basis CSV (recommended), Quicken QIF per account, or manual
-  entry.⟩
+- **MIG-110** [1.0][S] Investment data: the full QIF investment
+  history is imported and lots are rebuilt by the lot engine, with each
+  account's lot method (P-03 settled: no seeding for Stan's accounts;
+  MIG-120 stays for anyone who needs it).
+- **MIG-115** [1.0][S] **Lot true-up** (not built): at cutover, compare
+  Kansha's open lots per account and security (shares, basis) with the
+  broker's cost-basis CSV and fix each difference by a dated, audited
+  true-up, a new lot adjustment kind (schema change). Tax-deferred and
+  tax-exempt accounts: shares must match; basis differences are
+  ignored.
 - **MIG-120** [1.0][R] Lot seeding via CSV template (account,
   security, acquisition date, quantity, cost basis), with preview and
   validation, creating "shares added" transactions dated at the
@@ -661,20 +713,31 @@ This section is intentionally incomplete until export testing is done
 - **MIG-130** [1.0][S] Tax-deferred/exempt accounts may be seeded with
   position totals only (quantity and total basis per security) rather
   than lot detail.
-- **MIG-140** [1.0][R] Import securities list and price history from
-  QIF where available.
+- **MIG-140** [1.0][S] Import securities list and price history from
+  QIF where available: prices only of the securities kept (an option),
+  source `qif`, one per security and date. Thinning them by the PRC-060
+  rule waits for PRC-060.
 - **MIG-150** [1.0][R] Scheduled transactions: ⟨PLACEHOLDER P-04:
   import if Quicken exports them usably; otherwise manual re-entry,
   supported by a "Quicken schedule checklist" to confirm all were
   recreated.⟩
-- **MIG-160** [1.0][R] Known QIF pitfalls the parser must handle:
-  two-digit-year and apostrophe date formats (e.g., `1/5'26`),
-  locale-dependent date order, amounts with commas, split lines
-  (`S`/`E`/`$`), bracketed transfer categories (`[Account Name]`),
-  category/tag syntax (`Category/Tag`), and memorized-transaction
-  sections that must not be imported as transactions.
-- **MIG-170** [1.0][R] Keep original import files in a protected
-  import archive alongside the database for audit purposes.
+- **MIG-160** [1.0][S] Known QIF pitfalls the parser must handle:
+  two-digit-year and apostrophe date formats (`1/5'26` is 2026,
+  `1/5/98` is 1998; padded `1/ 5'26`), locale-dependent date order,
+  amounts with commas, split lines (`S`/`E`/`$`), bracketed transfer
+  categories (`[Account Name]`), category/tag syntax (`Category/Tag`),
+  and memorized-transaction sections that must not be imported as
+  transactions. Also: Windows-1252 text, fractional prices
+  (`12 1/2`), voids (`**VOID**` payee, zero amount: imported void),
+  sections Kansha does not import (budgets and the like: skipped with
+  a note).
+- **MIG-170** [1.0][S] Keep original import files in a protected
+  import archive alongside the database for audit purposes: each
+  committed import's file, encrypted to the backup key like a backup,
+  in `<book>-imports/` beside the book, named
+  `<UTC stamp>-<file name>.age`; the batch records the name and the
+  file's SHA-256. The preview warns when a file with that SHA-256 was
+  imported before.
 - **MIG-200** [Later][S] OFX/QFX/CSV import of new transactions from
   institutions, with duplicate detection and matching (shares the
   staging area of MIG-040).
@@ -775,6 +838,11 @@ This section is intentionally incomplete until export testing is done
   accounts with uncleared transactions more than 60 days old,
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
+- **DSH-040** [Later][R] The dashboard is a set of cards, each with a
+  stable ID and name (net worth, this month, net worth trend, due soon,
+  needs attention). The user chooses which cards show and their order;
+  new kinds of card can be added. Until built, every card shows in a
+  fixed order.
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -1299,8 +1367,9 @@ compiles against Tauri v2 and generates a matching
   No OS keyring (SECU-010). Both pinned (`=0.12.1`, `=7.2.0`, the
   newest for MSRV 1.85). The database key comes from `getrandom`;
   the snapshot is gzipped with `flate2` (both already under `age` and
-  `zip`).
-- Folder and file pickers (backup folder, restore):
+  `zip`). Import files are hashed with `sha2` (`=0.10.9`, already
+  under `age`; MIG-170).
+- Folder and file pickers (backup folder, restore, import):
   `tauri-plugin-dialog`, called from Rust only, so the webview gets
   no dialog permission.
 - Price download (PRC-040): `ureq` (blocking HTTPS with `rustls`),
@@ -1356,7 +1425,7 @@ reaches the page (PRC-030).
 | `securities` | Security master, prices, price list import, price download | persistence |
 | `invest` | Investment transactions, lots, cost basis, positions, returns, lot seeding | ledger, securities |
 | `reports` | Report definitions, queries, saved reports, dashboard | ledger, invest |
-| `import` | Staging, parsers (QIF, CSV, later QXF/OFX), mapping, commit, rollback (Phase 9; not built) | ledger, invest, categories |
+| `import` | Staging, QIF parser, mapping, commit, rollback, archive (Phase 9); later OFX/CSV (MIG-200) | ledger, invest, categories, securities |
 | `integrity` | Invariant checks | all read-only |
 | `audit` | Append-only change log, per-field history | persistence |
 | `undo` | Undo of the last register change (UI-060) | ledger, invest |
@@ -1406,7 +1475,7 @@ kansha/
 │       │   ├── persistence/   # Db, migrate, audit, repositories, migrations/*.sql
 │       │   ├── accounts/  ledger/  categories/  schedule/
 │       │   ├── reconcile/  securities/  invest/
-│       │   ├── reports/  integrity/  audit/  backup/  settings/
+│       │   ├── reports/  integrity/  audit/  backup/  settings/  import/
 │       │   ├── undo.rs        # undo of the last register change (UI-060)
 │       │   ├── book.rs        # book files: setup, unlock, restore install
 │       │   ├── security.rs    # key file, passphrase, database key
@@ -1668,6 +1737,42 @@ Modeling choices that affect other sections:
   download's date is the provider's market time in the exchange's time
   zone; its price is rounded half-even to 6 decimals from the reply's
   text.
+- **Import rules (Phase 9, MIG):** an import stages its batch and
+  writes everything in one transaction with origin `import`, each
+  record in its own savepoint, all through the engine (so imported data
+  obeys the rules typed data does); a failure leaves nothing, not even
+  the batch. Transactions are written in date order, file order within
+  a day. Transfers: a transfer to the account itself (Quicken's opening
+  balance) or to an account left out posts to Opening Balance. A
+  transfer seen from both sides (same date, opposite amounts, each
+  naming the other; or several split lines to one account against one
+  entry for their sum) is imported once: the side with more lines keeps
+  it, else the first in the file; an investment record always keeps it
+  (only the investments engine posts to an investment account). The
+  dropped side's cleared status goes onto the kept transaction's
+  posting. A banking transfer into an investment account with no
+  record on that side becomes a Cash In or Cash Out there. Cash moved
+  between two investment accounts has no one-transaction form: each
+  side posts against Opening Balance, with a note. Two lines of one
+  entry to the same account merge. Investment actions: `Buy`, `Sell`,
+  `Div`, `IntInc`, `CGLong`/`CGMid` (long), `CGShort`, `ReinvDiv`,
+  `ReinvLg`/`ReinvMd`, `ReinvSh`, `ShrsIn` (Shares Added, basis `T` or
+  shares × price, dated the trade date), `ShrsOut`, `StkSplit` (`Q` new
+  shares per 10 old), `RtrnCap`, `MiscInc`/`MiscExp` (their `L`
+  category, else the built-in one), `MargInt` (misc expense), `XIn`,
+  `XOut`, `ContribX`, `WithdrwX`, `Cash` (Cash In/Out against its `L`,
+  else misc income/expense); an `X` action adds its transfer as a Cash
+  In before it (buys, expenses) or a Cash Out after it (sales, income),
+  for `$` (else `T`); `ReinvInt` is Interest then Buy; income with no
+  security is misc income in the action's built-in category;
+  `Reminder` is skipped with a note; anything else cannot be imported.
+  The payee of an investment record goes into its memo. New
+  investment accounts hold cash themselves and treat money market funds
+  as securities. Rollback deletes the batch's transactions newest first
+  (refused while any of its postings was reconciled in Kansha, or when
+  later entries stand in the way), then each account, category, payee,
+  tag, and security it created that nothing uses now, and marks the
+  batch `rolled_back`. No schema change.
 - **Audit log** is append-only, enforced by triggers.
 - **Account type** is fixed at creation.
 
@@ -1915,11 +2020,11 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 
 | ID | Placeholder | Needed to resolve |
 |---|---|---|
-| P-01 | Source format for income/expense history (QIF vs. QXF) | Export a small account in both formats and inspect them in a text editor |
+| P-01 | ~~Source format for income/expense history (QIF vs. QXF)~~ Settled 0.6: one whole-file QIF (§11.1) | — |
 | P-02 | Quicken reports used as reference for import verification | Choose reports (e.g., account balances as of export date; category totals by year) |
-| P-03 | Source for seeding investment lots | Check each brokerage's cost-basis/unrealized-gain CSV export |
+| P-03 | ~~Source for seeding investment lots~~ Settled 0.6: full QIF history, trued up to the broker's cost-basis CSV (MIG-110, MIG-115) | Check each brokerage's CSV layout when MIG-115 is built |
 | P-04 | Whether Quicken scheduled transactions can be exported | Test export; otherwise plan manual re-entry |
-| P-05 | Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form | Test full QIF export |
+| P-05 | ~~Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form~~ Settled 0.6: the whole-file export does; per-account ones do not (§11.1) | — |
 
 ---
 
@@ -1948,8 +2053,10 @@ all IPC and never performs money arithmetic.
 **Built in the prototype (Phases 0–8):** ACCT, CAT, PAY, TAG, TXN,
 REG, REC, CAL, RCN, SEC, PRC (manual, price list import, download),
 INV, LOT (all five methods), POS, RPT, DSH, INT, AUD, BAK, SECU, UI,
-SET, TEST, and MIG-120's lot seeding on synthetic data. Not built:
-MIG (Phase 9) and the [1.0] items listed as missing in
+SET, TEST, and MIG-120's lot seeding on synthetic data. Phase 9
+(after the prototype) built the Quicken QIF import (MIG, except
+MIG-115 and the open P-02/P-04 parts). Not built: the [1.0] items
+listed as missing in
 `devdocs/phase-notes/prototype-review.md`, which keep their status
 until decided (RPT-040 comparison, RPT-120, RPT-190, RPT-200,
 TAG-030 grouping, UI-030 tabs, UI-050, TEST-070, TEST-090, TEST-150,
@@ -1972,6 +2079,7 @@ delivered as migration 0001 in Phase 1.
 | **6 — Investments** | Securities; manual/CSV prices; investment transactions; lots (FIFO, specific ID; later average, HIFO, minimum tax); splits; return of capital; share transfers; positions; the Investments screen (POS-040); lot seeding via CSV (MIG-120 mechanics only, synthetic data) | Lot scenario suite and basis-conservation properties pass; Stan reviews lot scenarios |
 | **7 — Reports and dashboard** | 1.0 report list; saved reports; drill-down; CSV export; charts; dashboard | Report snapshot tests pass; drill-down reaches transactions for every figure |
 | **8 — Encryption, backup, settings, review** | Database encryption and first-run setup (SECU); encrypted backups, manual and on close; restore with comparison window; verification; settings; performance check; prototype review | Restore drill passes; review findings recorded for spec 0.4 |
+| **9 — Quicken import** | QIF parser; staging, preview, mapping, test import, commit, rollback, archive (MIG-010 … MIG-110, MIG-140, MIG-160, MIG-170); later in the phase: lot true-up (MIG-115), verification reports (MIG-100, P-02) | Synthetic QIF tests pass (TEST-105); Stan's trial imports into a throwaway book match Quicken's balances, category totals by year, and holdings |
 
 ### 25. Workflow
 
@@ -1987,6 +2095,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.1 | 2026-09-30 | POS-040: an expanded account lists its equities, then its cash. New **DSH-040** [Later]: dashboard cards with stable IDs, chosen and ordered by the user. No schema or API change. |
+| 0.6 | 2026-09-30 | Phase 9: Quicken QIF import built (`phase-notes/phase-9.md`), from the decisions in `phase-notes/import-proposal.md` Part A. §11 rewritten: facts and decisions (whole-file QIF, all of it, hidden accounts unticked, full investment history then a true-up); P-01, P-03, P-05 settled. MIG-010 … MIG-090, MIG-110, MIG-140, MIG-160, MIG-170 → [S] and detailed (test import, skip bad records, mapping problems stop the import, archive encrypted to the backup key, same-file warning). New **MIG-115** lot true-up (not built). MIG-100 partly built (import result per account). §18 import rules. §17.2, §17.4, §23, §24 (Phase 9 row). File > Import… enabled. No schema change. **API change:** new commands `pick_import_file`, `import_open`, `import_preview`, `import_run`, `import_cancel`, `import_batches`, `import_rollback`. New dependency `sha2 =0.10.9` (already built for `age`). |
 | 0.5.2 | 2026-09-30 | UI-040: the Investments screen is a window, one at most, so it can wait in the dock. PRC-040: Download Prices moves from the Tools menu to a button beside Customize on the Investments screen and downloads for its As of date (the latest price for today, else the close of the last trading day on or before it); downloaded prices round half-even to 4 decimals. New **PRC-060** [Later]: price pruning to weekly, month-end, and year-end closes. No schema change. **API change:** `prices_download` takes a `date`. |
 | 0.5.1 | 2026-09-30 | Code review of Phases 3 and 5; two fixes in the register entry row, then Stan's four review decisions and schedule splits. CAT-030: a payee's memorized default no longer keeps a category or tag from being deleted; the delete clears it (audited on the payee). §18 closed accounts: an account with a reconciliation in progress cannot be closed. INT-030: the reconciled-balance check counts cash postings only, as reconciliation does. Amounts typed with thousands commas must group by three ("1,2,3" is refused). REC-010: "method" is now "transaction type" (the schedule dialog's label); a schedule's split line may go the other way (a paycheck deduction), typed with a leading `-`. §18 register entry view: a split line may go the other way from the total (typed with a leading `-`), and a split may total zero; before, split amounts were magnitudes only, so a paycheck with deductions could not be entered, and editing one (from a schedule or an import) showed every line positive and could not be saved. Enter on the Tag field while a save was running saved the entry twice. No schema or API change. |
 | 0.5 | 2026-09-30 | Named books (`devdocs/phase-notes/books.md`), which closes the Phase 8 review's open finding (two books sharing a backup folder pruned each other's backups). New **UI-080** Books: `<name>.db`/`<name>.key` in any folder, name rules, File > New, Open, Recent, Rename Book, one book open at a time, start in the most recent book, window title. SECU-010 and SECU-080: named files; setup names the first book. BAK-035: backups are `<book>-…zip`, manifest records the book. BAK-040: only the open book's backups are pruned. BAK-070: another book's backup is flagged. SET-070: recent books. App identifier changed from `org.sparsile.kansha` to `tools.astryx.kansha` (moves the default data and config folders). No schema change. **API change:** new commands `book_new`, `book_open`, `book_rename`, `book_recent`, `pick_book_file`; `book_setup` takes `name` and `folder`; `BookStatus` gains `name` and `folder`; `Manifest.book`. |

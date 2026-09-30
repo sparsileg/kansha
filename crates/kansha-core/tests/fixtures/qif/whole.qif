@@ -1,0 +1,251 @@
+!Type:Tag
+NVacation
+DTrips
+^
+NUnused Tag
+^
+!Type:Cat
+NFood
+DFood
+E
+^
+NFood:Groceries
+E
+^
+NSalary
+T
+I
+^
+NUtilities
+E
+^
+NInterest Inc
+I
+^
+NNever Used
+E
+^
+!Option:AutoSwitch
+!Account
+NChecking
+TBank
+DMain account
+^
+NSavings
+TBank
+^
+NVisa
+TCCard
+L5,000.00
+^
+NBrokerage
+TInvst
+^
+NIRA
+TInvst
+^
+NOld Account
+TBank
+^
+!Clear:AutoSwitch
+!Account
+NChecking
+TBank
+^
+!Type:Bank
+D1/ 1'25
+T1,000.00
+CX
+POpening Balance
+L[Checking]
+^
+D1/ 5'25
+T-184.32
+C*
+N101
+PGrocer
+MWeekly shop
+LFood:Groceries/Vacation
+^
+D1/10'25
+T2,500.00
+PEmployer
+LSalary
+SSalary
+EGross pay
+$3,000.00
+SUtilities
+$-500.00
+^
+D1/15'25
+T-500.00
+CX
+PTo savings
+L[Savings]
+^
+D1/20'25
+T-200.00
+PVisa payment
+L[Visa]
+^
+D1/25'25
+T0.00
+P**VOID**Bad check
+LFood:Groceries
+^
+D2/ 1'25
+T-1,000.00
+C*
+PFund purchase
+L[Brokerage]
+^
+D2/ 2'25
+T-50.00
+POld stuff
+L[Old Account]
+^
+D2/ 3'25
+T-10.00
+PMystery
+^
+!Account
+NSavings
+TBank
+^
+!Type:Bank
+D1/ 1'25
+T100.00
+POpening Balance
+L[Savings]
+^
+D1/15'25
+T500.00
+C*
+PFrom checking
+L[Checking]
+^
+D2/10'25
+T1.23
+PBank
+LInterest Inc
+^
+D4/ 1'25
+T300.00
+PFrom brokerage
+L[Brokerage]
+^
+D12/31/98
+T0.00
+PNothing
+^
+!Account
+NVisa
+TCCard
+^
+!Type:CCard
+D1/ 3'25
+T-45.67
+PRestaurant
+LFood:Dining
+^
+D1/20'25
+T200.00
+CX
+PPayment
+L[Checking]
+^
+!Account
+NOld Account
+TBank
+^
+!Type:Bank
+D2/ 2'25
+T50.00
+L[Checking]
+^
+!Type:Memorized
+KC
+T-5.00
+PSome payee
+^
+!Type:Security
+NVanguard Total
+SVTI
+TMutual Fund
+^
+NApple
+SAAPL
+TStock
+^
+!Type:Prices
+"VTI",100,"1/ 2'25"
+"VTI",101 1/2,"3/ 2'25"
+"AAPL",200,"1/ 2'25"
+^
+!Account
+NBrokerage
+TInvst
+^
+!Type:Invst
+D2/ 1'25
+NBuyX
+YVanguard Total
+I100
+Q10
+T1,000.00
+CX
+L[Checking]
+$1,000.00
+^
+D3/ 1'25
+NDiv
+YVanguard Total
+T12.34
+^
+D3/ 2'25
+NReinvDiv
+YVanguard Total
+I101
+Q0.5
+T50.50
+^
+D3/ 3'25
+NStkSplit
+YVanguard Total
+Q20
+^
+D4/ 1'25
+NSellX
+YVanguard Total
+I60
+Q5
+T300.00
+O0.00
+L[Savings]
+$300.00
+^
+D4/ 5'25
+NXOut
+PTo IRA
+T100.00
+L[IRA]
+^
+D4/ 6'25
+NMargInt
+T2.00
+^
+D4/ 7'25
+NFoo
+YVanguard Total
+T1.00
+^
+!Account
+NIRA
+TInvst
+^
+!Type:Invst
+D4/ 5'25
+NXIn
+T100.00
+L[Brokerage]
+^

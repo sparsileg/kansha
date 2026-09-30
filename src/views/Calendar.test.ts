@@ -70,10 +70,9 @@ describe("Calendar day with more than three items", () => {
     await fireEvent.click(more);
     await waitFor(() => expect(within(cell).getAllByText(/Payee \d/)).toHaveLength(5));
     expect(within(cell).queryByRole("button", { name: /more/ })).toBeNull();
-    // The day panel lists every item too, one line each.
-    const panel = screen.getByLabelText("Day");
-    expect(within(panel).getAllByRole("button", { name: /Payee \d/ })).toHaveLength(5);
-    expect(within(panel).queryByRole("button", { name: "Skip" })).toBeNull();
+    // It only shows them: no dialog opens, and there is no day panel.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByLabelText("Day")).toBeNull();
   });
 
   it("clicking a transaction opens its day's dialog with it chosen", async () => {
@@ -105,17 +104,20 @@ describe("Calendar day with more than three items", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("double-clicking a day's blank space opens its dialog; New Schedule starts on that day", async () => {
+  it("clicking a day's blank space opens its dialog; New Schedule starts on that day", async () => {
     occurrences = [item(1), item(2)];
     render(Calendar);
     const cell = await screen.findByRole("gridcell", { name: displayDate("2026-09-24") });
-    await fireEvent.dblClick(cell);
+    await fireEvent.click(cell);
     const dialog = await screen.findByRole("dialog");
     const options = await within(dialog).findAllByRole("option");
     expect(options[0].getAttribute("aria-selected")).toBe("true");
     await fireEvent.click(within(dialog).getByRole("button", { name: "New Schedule" }));
     expect(dialogState.schedule).toEqual({ id: null, fields: null, start: "2026-09-24" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The keyboard opens it too.
+    await fireEvent.keyDown(cell, { key: "Enter" });
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("register transactions show with Show entered transactions, and always in the day's dialog", async () => {

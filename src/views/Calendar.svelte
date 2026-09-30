@@ -5,7 +5,6 @@
   import { formatMoney } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
   import DayModal from "../lib/components/DayModal.svelte";
-  import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { scheduleState } from "../lib/state/schedule.svelte";
   import { mergeItems, type CalItem } from "../lib/calendar/items";
@@ -27,7 +26,6 @@
   let balances = $state<DayBalance[]>([]);
   let error = $state<string | null>(null);
   let seq = 0;
-  let panel: HTMLElement | undefined;
 
   const grid = $derived(monthGrid(month, weekStart));
   const byDay = $derived.by(() => {
@@ -36,7 +34,6 @@
     return m;
   });
   const balanceByDay = $derived(new Map(balances.map((b) => [b.date, b.balance])));
-  const dayItems = $derived(selected ? (byDay.get(selected) ?? []) : []);
   const keyOf = (v: CalItem) => v.key;
 
   async function load() {
@@ -75,17 +72,12 @@
     dayOpen = { day: v.date, pick: keyOf(v) };
   }
 
-  /** Double-click on a day's blank space: its dialog, nothing chosen. */
-  function openDay(day: string, e: MouseEvent) {
+  /** A click on a day's blank space: its dialog, nothing chosen. */
+  function openDay(day: string, e: Event) {
     if ((e.target as HTMLElement).closest(".chip, .more")) return;
     selected = day;
     dayOpen = { day, pick: null };
   }
-
-  // On a narrow window the day panel sits below the grid: bring it into view.
-  $effect(() => {
-    if (selected) panel?.scrollIntoView?.({ block: "nearest" });
-  });
 
   const inMonth = (d: string) => d.slice(0, 7) === month.slice(0, 7);
   const payeeOf = (v: CalItem) =>
@@ -114,80 +106,56 @@
   </header>
   {#if error}<p class="err">{error}</p>{/if}
 
-  <div class="layout">
-    <div class="grid" role="grid" aria-label="Month">
-      {#each WEEK as w (w)}<div class="dow" role="columnheader">{w}</div>{/each}
-      {#each grid as day (day)}
-        {@const list = byDay.get(day) ?? []}
-        <div
-          class="day"
-          class:other={!inMonth(day)}
-          class:today={day === listsState.today}
-          class:sel={day === selected}
-          role="gridcell"
-          tabindex="0"
-          aria-label={displayDate(day)}
-          onclick={() => (selected = day)}
-          ondblclick={(e) => openDay(day, e)}
-          onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (selected = day)}
-        >
-          <span class="num">{Number(day.slice(8, 10))}</span>
-          <!-- The selected day shows every item; others show three and "+n more". -->
-          {#each day === selected ? list : list.slice(0, 3) as v (v.key)}
-            <span
-              class="chip"
-              class:overdue={v.overdue}
-              class:done={v.status !== "pending"}
-              class:skipped={v.status === "skipped"}
-              class:go={v.actionable && v.status === "pending"}
-              role="button"
-              tabindex="0"
-              title={`${payeeOf(v)} ${formatMoney(v.amount)} (click for this day's transactions)`}
-              onclick={(e) => open(v, e)}
-              onkeydown={(e) => (e.key === "Enter" || e.key === " ") && open(v, e)}
-            >
-              {#if v.overdue}<b class="od">Overdue</b>{/if}
-              {payeeOf(v)} <AccountBalance amount={v.amount} />
-            </span>
-          {/each}
-          {#if list.length > 3 && day !== selected}
-            <button
-              type="button"
-              class="more"
-              title="Show all {list.length} items for this day"
-              onclick={(e) => {
-                e.stopPropagation();
-                selected = day;
-              }}>+{list.length - 3} more</button
-            >
-          {/if}
-          {#if projection && balanceByDay.has(day)}
-            <span class="proj">{formatMoney(balanceByDay.get(day) ?? "0.00")}</span>
-          {/if}
-        </div>
-      {/each}
-    </div>
-
-    <aside aria-label="Day" bind:this={panel}>
-      {#if selected}
-        <h2>{displayDate(selected)}</h2>
-        {#each dayItems as v (keyOf(v))}
-          {@const who = `${payeeOf(v)} · ${listsState.account(v.account)?.name ?? ""}`}
-          <button type="button" class="line" title={who} onclick={() => (dayOpen = { day: v.date, pick: keyOf(v) })}>
-            <span class="d">{displayDate(v.date)}</span>
-            <span class="who">{who}</span>
-            <AccountBalance amount={v.amount} />
-          </button>
-        {:else}
-          <p>Nothing on this day.</p>
+  <div class="grid sheet" role="grid" aria-label="Month">
+    {#each WEEK as w (w)}<div class="dow" role="columnheader">{w}</div>{/each}
+    {#each grid as day (day)}
+      {@const list = byDay.get(day) ?? []}
+      <div
+        class="day"
+        class:other={!inMonth(day)}
+        class:today={day === listsState.today}
+        class:sel={day === selected}
+        role="gridcell"
+        tabindex="0"
+        aria-label={displayDate(day)}
+        onclick={(e) => openDay(day, e)}
+        onkeydown={(e) => (e.key === "Enter" || e.key === " ") && openDay(day, e)}
+      >
+        <span class="num">{Number(day.slice(8, 10))}</span>
+        <!-- The selected day shows every item; others show three and "+n more". -->
+        {#each day === selected ? list : list.slice(0, 3) as v (v.key)}
+          <span
+            class="chip"
+            class:overdue={v.overdue}
+            class:done={v.status !== "pending"}
+            class:skipped={v.status === "skipped"}
+            class:go={v.actionable && v.status === "pending"}
+            role="button"
+            tabindex="0"
+            title={`${payeeOf(v)} ${formatMoney(v.amount)} (click for this day's transactions)`}
+            onclick={(e) => open(v, e)}
+            onkeydown={(e) => (e.key === "Enter" || e.key === " ") && open(v, e)}
+          >
+            {#if v.overdue}<b class="od">Overdue</b>{/if}
+            {payeeOf(v)} <AccountBalance amount={v.amount} />
+          </span>
         {/each}
-        <button type="button" onclick={() => dialogState.newSchedule(selected)}>
-          New schedule on this date
-        </button>
-      {:else}
-        <p>Click a day to see its items.</p>
-      {/if}
-    </aside>
+        {#if list.length > 3 && day !== selected}
+          <button
+            type="button"
+            class="more"
+            title="Show all {list.length} items for this day"
+            onclick={(e) => {
+              e.stopPropagation();
+              selected = day;
+            }}>+{list.length - 3} more</button
+          >
+        {/if}
+        {#if projection && balanceByDay.has(day)}
+          <span class="proj">{formatMoney(balanceByDay.get(day) ?? "0.00")}</span>
+        {/if}
+      </div>
+    {/each}
   </div>
 </section>
 
@@ -218,21 +186,23 @@
     min-width: 9rem;
     text-align: center;
   }
-  .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
-    gap: 1rem;
-    min-height: 0;
-    flex: 1;
-    overflow: auto;
-  }
+  /* The month is a sheet (base.css): its edge is the outer border; the
+     cells draw the lines between them. */
+  /* The month fills the window: six weeks share its height. */
   .grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    grid-auto-rows: minmax(5.5rem, auto);
-    border-top: 1px solid var(--line-soft);
-    border-left: 1px solid var(--line-soft);
-    align-self: start;
+    grid-template-rows: auto repeat(6, minmax(5.5rem, 1fr));
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+  /* Last column (every 7th cell, headings included) and last week. */
+  .grid > :nth-child(7n) {
+    border-right: none;
+  }
+  .grid > :nth-last-child(-n + 7) {
+    border-bottom: none;
   }
   .dow {
     grid-row: 1;
@@ -304,40 +274,7 @@
     font-variant-numeric: tabular-nums;
     opacity: 0.8;
   }
-  aside {
-    align-self: start;
-    position: sticky;
-    top: 0;
-  }
-  /* One line per item; the details open in a modal. */
-  .line {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.5rem;
-    width: 100%;
-    text-align: left;
-    font-size: var(--fs-register);
-    margin-bottom: 0.2rem;
-    align-items: baseline;
-  }
-  .line .d {
-    font-variant-numeric: tabular-nums;
-  }
-  .line .who {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  aside h2 {
-    margin: 0 0 0.5rem;
-    font-size: var(--fs-heading);
-  }
   .err {
     color: var(--bad);
-  }
-  @media (max-width: 800px) {
-    .layout {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
