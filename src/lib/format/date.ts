@@ -185,3 +185,18 @@ export function weekdayNames(weekStart: 0 | 1 = 0): string[] {
 export function monthShort(iso: string): string {
   return monthLabel(iso).replace(/^(\w{3})\w*/, "$1");
 }
+
+/** Month and day in the user's order, without the year: "9/23",
+ * "23/9", or "09-23". */
+export function dayShort(iso: string): string {
+  const m = ISO.exec(iso);
+  if (!m) return iso;
+  switch (dateFormatState.value) {
+    case "dmy":
+      return `${Number(m[3])}/${Number(m[2])}`;
+    case "ymd":
+      return `${m[2]}-${m[3]}`;
+    default:
+      return `${Number(m[2])}/${Number(m[3])}`;
+  }
+}

@@ -3,7 +3,8 @@
   // scale; this only turns positions into pixels. Series differ by shape
   // and pattern as well as color (solid bars, hatched bars, a line with
   // square marks), so they read without color vision.
-  import { displayDate, monthShort } from "../../format/date";
+  import { displayDate } from "../../format/date";
+  import { dateLabels } from "../../reports/axis";
   import { formatMoney } from "../../format/money";
   import type { Chart } from "../../types/bindings";
 
@@ -19,18 +20,24 @@
   const y = (pos: number) => TOP + plotH - (pos / 10000) * plotH;
 
   // A graph by category (asset class) names its bars; one over dates
-  // shows months.
+  // names days, months, or years, as Rust says (XUnit).
   const byLabel = $derived(chart.labels.length > 0);
   const n = $derived(Math.max(byLabel ? chart.labels.length : chart.dates.length, 1));
   const xName = (i: number) => (byLabel ? chart.labels[i] : displayDate(chart.dates[i]));
-  const xTick = (i: number) => (byLabel ? chart.labels[i] : monthShort(chart.dates[i]));
   const slot = $derived(plotW / n);
   const bars = $derived(chart.series.filter((s) => s.style === "bar"));
   const lines = $derived(chart.series.filter((s) => s.style === "line"));
   const barW = $derived((slot * 0.7) / Math.max(bars.length, 1));
   const cx = (i: number) => LEFT + slot * i + slot / 2;
-  // Label every date when they fit, else every k-th.
+  // Category names: every one when they fit, else every k-th.
   const every = $derived(Math.max(1, Math.ceil(n / 12)));
+  const xLabels = $derived(
+    byLabel
+      ? chart.labels.map((text, i) => ({ i, text })).filter((l) => l.i % every === 0)
+      : dateLabels(chart.dates, chart.x_unit),
+  );
+  // Many points: small marks, so the line shows between them.
+  const markSize = $derived(n > 60 ? 3 : 8);
 
   const FILLS = ["url(#k-solid-1)", "url(#k-hatch-2)", "url(#k-dots-3)"];
   const barFill = (i: number) => FILLS[i % FILLS.length];
@@ -75,16 +82,14 @@
     {#each lines as s (s.name)}
       <polyline class="line" points={s.pos.map((p, i) => `${cx(i)},${y(p)}`).join(" ")} />
       {#each s.pos as p, i (i)}
-        <rect class="mark" x={cx(i) - 4} y={y(p) - 4} width="8" height="8"
+        <rect class="mark" x={cx(i) - markSize / 2} y={y(p) - markSize / 2} width={markSize} height={markSize}
           ><title>{s.name}, {xName(i)}: {formatMoney(s.values[i])}</title></rect
         >
       {/each}
     {/each}
 
-    {#each { length: n } as _, i (i)}
-      {#if i % every === 0 && (byLabel ? i < chart.labels.length : i < chart.dates.length)}
-        <text class="tick" x={cx(i)} y={height - 8} text-anchor="middle">{xTick(i)}</text>
-      {/if}
+    {#each xLabels as l (l.i)}
+      <text class="tick" x={cx(l.i)} y={height - 8} text-anchor="middle">{l.text}</text>
     {/each}
   </svg>
   <figcaption class="legend">

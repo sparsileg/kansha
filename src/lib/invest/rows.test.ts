@@ -23,6 +23,7 @@ const pf: Portfolio = {
             { lot: 7, acquired: "2026-02-01", shares: "10", basis: "2000.00", market_value: "2100.00", gain: "100.00", day_gain: "100.00" },
             { lot: 8, acquired: "2026-03-01", shares: "5", basis: "1100.00", market_value: "1050.00", gain: "-50.00", day_gain: null },
           ],
+          sales: [],
         },
       ],
     },
@@ -78,5 +79,18 @@ describe("investment rows", () => {
     const missing = structuredClone(pf);
     missing.total.missing_prices = true;
     expect(buildRows(missing, new Set(), name).at(-1)?.warn).toMatch(/no price/);
+  });
+
+  it("sales (Show closed lots): each after the open lots, even part of a lot", () => {
+    const closed = structuredClone(pf);
+    closed.accounts[0].positions[0].sales = [
+      { lot: 7, acquired: "2022-02-02", sold: "2024-03-01", shares: "150", basis: "1500.00", proceeds: "1800.00", gain: "300.00", term: "long" },
+    ];
+    const rows = buildRows(closed, new Set(["a2", "p2:1"]), name);
+    expect(rows.map((r) => r.kind)).toEqual(["account", "position", "lot", "lot", "sale", "cash", "total"]);
+    const sale = rows[4];
+    expect(sale.name).toBe("Sold 03/01/2024 (lot 02/02/2022)");
+    expect(sale.cells).toEqual({ shares: "150", cost_basis: "1,500.00", market_value: "1,800.00", gain: "300.00" });
+    expect(rows[1].security).toBe(1);
   });
 });

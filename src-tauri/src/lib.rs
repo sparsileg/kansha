@@ -61,6 +61,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::accounts::account_number_masked,
             commands::accounts::account_create,
             commands::accounts::account_update,
+            commands::accounts::account_arrange,
             commands::accounts::account_close,
             commands::accounts::account_reopen,
             commands::accounts::account_delete,
@@ -124,6 +125,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reconcile::reconcile_history,
             commands::reconcile::reconcile_history_items,
             commands::invest::security_list,
+            commands::invest::security_transactions,
+            commands::invest::security_chart,
             commands::invest::security_defaults,
             commands::invest::security_create,
             commands::invest::security_update,
@@ -168,6 +171,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::saved_report_delete,
             commands::reports::tax_line_list,
             commands::reports::dashboard,
+            commands::reports::net_worth,
             commands::pdf::report_save_pdf,
         ])
 }

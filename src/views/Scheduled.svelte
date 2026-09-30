@@ -16,7 +16,7 @@
         : "Deposit";
 </script>
 
-<section>
+<section class="reminders">
   <header>
     <button type="button" onclick={() => dialogState.newSchedule()}>New schedule</button>
     <button type="button" onclick={() => (dialogState.due = true)}>
@@ -27,7 +27,8 @@
   {#if scheduleState.rows.length === 0}
     <p>No scheduled transactions yet.</p>
   {:else}
-    <div class="wrap">
+    <!-- The list on a sheet (base.css), the window's color around it. -->
+    <div class="wrap sheet">
       <table>
         <thead>
           <tr>
@@ -36,9 +37,10 @@
           </tr>
         </thead>
         <tbody>
-          {#each scheduleState.rows as r (r.schedule.id)}
+          {#each scheduleState.rows as r, i (r.schedule.id)}
             {@const f = r.schedule.fields}
             <tr
+              class:alt={i % 2 === 1}
               class:dim={r.schedule.status !== "active"}
               tabindex="0"
               onclick={() => dialogState.editSchedule(r.schedule.id, f)}
@@ -63,13 +65,33 @@
 </section>
 
 <style>
+  .reminders {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex: 1;
+    min-height: 0;
+  }
   header {
     display: flex;
     gap: 1rem;
     align-items: baseline;
   }
+  /* Fills the window, like a report's page; the heading row stays. */
   .wrap {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line);
+  }
+  tbody tr.alt {
+    background: var(--row-alt);
   }
   table {
     border-collapse: collapse;

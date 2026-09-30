@@ -1,6 +1,8 @@
 //! The investments overview (POS-010, LOT-150): each account's positions
 //! and their open lots on one date, with day changes and rolled-up
-//! totals. Every figure is worked out here; the UI only shows them.
+//! totals; on request also each sale from a lot up to that date, and the
+//! securities sold out (POS-040 "Show closed lots"). Every figure is
+//! worked out here; the UI only shows them.
 //!
 //! Values use the latest price on or before the date (PRC-050). The day
 //! change needs a price dated exactly on the date and an earlier one to
@@ -13,7 +15,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 use super::reads::{internal_cash, labels, ratio_percent, valuation};
-use super::{LotId, investment_account};
+use super::{LotId, Term, investment_account};
 use crate::accounts::AccountId;
 use crate::date::Date;
 use crate::error::{Error, Result};
@@ -32,6 +34,22 @@ pub struct PortfolioLot {
     pub market_value: Option<Money>,
     pub gain: Option<Money>,
     pub day_gain: Option<Money>,
+}
+
+/// Shares sold from one lot (a whole lot or part of one).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct PortfolioSale {
+    pub lot: LotId,
+    /// The lot's acquisition date.
+    pub acquired: Date,
+    pub sold: Date,
+    pub shares: Quantity,
+    pub basis: Money,
+    pub proceeds: Money,
+    /// Realized gain.
+    pub gain: Money,
+    pub term: Term,
 }
 
 /// One security held in one account, with its lots.
@@ -54,6 +72,9 @@ pub struct PortfolioPosition {
     /// The price's change since the previous price, in percent.
     pub day_percent: Option<String>,
     pub lots: Vec<PortfolioLot>,
+    /// Sales from its lots up to the date, oldest first; empty unless
+    /// asked for. A security sold out has no shares, only these.
+    pub sales: Vec<PortfolioSale>,
 }
 
 /// Rolled-up figures for an account or for everything shown.
@@ -164,12 +185,15 @@ fn day_change(
 }
 
 /// The overview on `as_of` for `accounts`, in that order; `securities`
-/// limits it to those securities (all when `None`).
+/// limits it to those securities (all when `None`). With `closed`, each
+/// position lists its sales up to `as_of`, and securities sold out show
+/// with their sales (they add nothing to the totals).
 pub fn portfolio(
     conn: &Connection,
     accounts: &[AccountId],
     securities: Option<&[SecurityId]>,
     as_of: Date,
+    closed: bool,
 ) -> Result<Portfolio> {
     let secs = labels(conn)?;
     let mut all = Sums::default();
@@ -191,9 +215,28 @@ pub fn portfolio(
                 by_security.entry(l.lot.security).or_default().push(l);
             }
         }
+        let mut sales: BTreeMap<SecurityId, Vec<PortfolioSale>> = BTreeMap::new();
+        if closed {
+            for x in repo::sales(conn, Some(account), None, Some(as_of))? {
+                if securities.is_none_or(|s| s.contains(&x.security)) {
+                    by_security.entry(x.security).or_default();
+                    sales.entry(x.security).or_default().push(PortfolioSale {
+                        lot: x.lot,
+                        acquired: x.acquired,
+                        sold: x.sale_date,
+                        shares: x.quantity,
+                        basis: x.basis,
+                        proceeds: x.proceeds,
+                        gain: x.gain,
+                        term: x.term,
+                    });
+                }
+            }
+        }
         let stale_days = crate::settings::stale_price_days(conn)?;
         let mut positions = Vec::with_capacity(by_security.len());
         for (id, mut rows) in by_security {
+            let sales = sales.remove(&id).unwrap_or_default();
             let s = secs.get(&id).ok_or(Error::NotFound {
                 entity: "security",
                 id: id.0,
@@ -229,6 +272,26 @@ pub fn portfolio(
                     market_value,
                 });
             }
+            // Sold out: shown for its sales, worth nothing, in no total.
+            if rows.is_empty() {
+                positions.push(PortfolioPosition {
+                    security: id,
+                    name: s.fields.name.clone(),
+                    ticker: s.fields.ticker.clone(),
+                    shares: Quantity::ZERO,
+                    basis: Money::ZERO,
+                    price: val.map(|v| v.0),
+                    price_date: val.and_then(|v| v.1),
+                    stale: false,
+                    market_value: Some(Money::ZERO),
+                    gain: None,
+                    day_gain: None,
+                    day_percent: None,
+                    lots,
+                    sales,
+                });
+                continue;
+            }
             let market_value = value(shares)?;
             let gain = market_value.and_then(|mv| mv.checked_sub(basis));
             let day_gain = day(shares)?;
@@ -261,6 +324,7 @@ pub fn portfolio(
                 day_gain,
                 day_percent: change.map(|c| c.1),
                 lots,
+                sales,
             });
         }
         positions.sort_by(|a, b| {

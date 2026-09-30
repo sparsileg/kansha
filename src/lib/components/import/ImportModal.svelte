@@ -4,6 +4,7 @@
   // import, then import it as one batch. Past imports can be rolled back.
   // Every figure comes from Rust; this only shows it and collects the
   // mapping.
+  import { SECURITY_TYPES } from "../../invest/securityTypes";
   import Modal from "../Modal.svelte";
   import { call, commands } from "../../api";
   import { displayDate } from "../../format/date";
@@ -46,15 +47,6 @@
     ["other_liability", "Other liability"],
     ["loan", "Loan"],
   ];
-  const SECURITY_TYPES: [SecurityType, string][] = [
-    ["stock", "Stock"],
-    ["etf", "ETF"],
-    ["mutual_fund", "Mutual fund"],
-    ["bond", "Bond"],
-    ["money_market", "Money market"],
-    ["cd", "CD"],
-    ["other", "Other"],
-  ];
 
   let options = $state<ImportOptions>({
     date_order: null,
@@ -64,6 +56,7 @@
     keep_categories: [],
     keep_tags: [],
     keep_securities: [],
+    show_securities: [],
     prices: true,
     skip_errors: false,
   });
@@ -167,6 +160,14 @@
   function toggleKeep(list: "keep_categories" | "keep_tags" | "keep_securities", name: string, on: boolean) {
     options[list] = on ? [...options[list], name] : options[list].filter((n) => n !== name);
     void refresh();
+  }
+
+  /** A new security no account holds afterwards is created hidden; this
+   * keeps it shown. Nothing in the preview depends on it. */
+  function toggleShown(name: string, on: boolean) {
+    options.show_securities = on
+      ? [...options.show_securities, name]
+      : options.show_securities.filter((n) => n !== name);
   }
 
   function setOrder(v: string) {
@@ -391,6 +392,10 @@
                     <select aria-label={`Security type for ${s.name}`} value={ch.security_type} onchange={(e) => setSecurity(s, { ...ch, security_type: e.currentTarget.value as SecurityType })}>
                       {#each SECURITY_TYPES as [t, label] (t)}<option value={t}>{label}</option>{/each}
                     </select>
+                    <label class="inline" title="A new security that no account holds afterwards is created hidden; tick to keep it shown.">
+                      <input type="checkbox" aria-label={`Keep ${s.name} shown`} checked={options.show_securities.includes(s.name)} onchange={(e) => toggleShown(s.name, e.currentTarget.checked)} />
+                      Keep shown
+                    </label>
                   {:else}
                     <select aria-label={`Security for ${s.name}`} value={s.choice.id} onchange={(e) => setSecurity(s, { kind: "existing", id: Number(e.currentTarget.value) })}>
                       {#each investState.securities as x (x.id)}<option value={x.id}>{investState.label(x.id)}</option>{/each}
@@ -437,6 +442,10 @@
       <p>
         New: {result.accounts_created} accounts, {result.categories_created} categories, {result.payees_created} payees,
         {result.tags_created} tags, {result.securities_created} securities, {result.prices} prices.
+        {#if result.securities_hidden > 0}
+          {result.securities_hidden} of the new securities are no longer held, so they are hidden and prices are not
+          downloaded for them (Tools &gt; Securities shows them).
+        {/if}
       </p>
       <table>
         <thead>

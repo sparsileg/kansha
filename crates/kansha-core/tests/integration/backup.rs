@@ -552,6 +552,37 @@ fn timed_backup_delay_is_a_setting() {
     assert!(bad.is_err());
 }
 
+/// DSH-040: the dashboard's card choice is a stored setting; clearing it
+/// returns to the default.
+#[test]
+fn dashboard_cards_is_a_setting() {
+    use kansha_core::settings;
+    let dir = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    assert_eq!(
+        settings::load(open.db.conn()).unwrap().dashboard_cards,
+        None
+    );
+    let set = |db: &mut Db, v: Option<&str>| {
+        db.write(&clock(), Origin::Ui, |tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.dashboard_cards = v.map(String::from);
+            settings::save(tx, &s)
+        })
+        .unwrap();
+    };
+    set(&mut open.db, Some(r#"{"order":["upcoming"],"hidden":[]}"#));
+    assert_eq!(
+        settings::load(open.db.conn()).unwrap().dashboard_cards,
+        Some(r#"{"order":["upcoming"],"hidden":[]}"#.into())
+    );
+    set(&mut open.db, None);
+    assert_eq!(
+        settings::load(open.db.conn()).unwrap().dashboard_cards,
+        None
+    );
+}
+
 /// `path` with `suffix` appended to its name.
 fn with_suffix(path: &Path, suffix: &str) -> std::path::PathBuf {
     let mut s = path.as_os_str().to_owned();

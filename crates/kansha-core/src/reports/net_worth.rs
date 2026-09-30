@@ -52,11 +52,12 @@ pub(super) fn shown_balance(conn: &Connection, a: &Account, date: Date) -> Resul
     }
 }
 
-const GROUPS: [(AccountGroup, &str); 6] = [
+const GROUPS: [(AccountGroup, &str); 7] = [
     (AccountGroup::Banking, "Cash and Bank Accounts"),
     (AccountGroup::Assets, "Other Assets"),
     (AccountGroup::Investments, "Investments"),
     (AccountGroup::Retirement, "Retirement"),
+    (AccountGroup::Other, "Other"),
     (AccountGroup::Credit, "Credit Cards"),
     (AccountGroup::Liabilities, "Other Liabilities"),
 ];

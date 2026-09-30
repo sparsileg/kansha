@@ -8,6 +8,7 @@ vi.mock("../../state/register.svelte", async () => {
 });
 
 import AccountBar from "./AccountBar.svelte";
+import AccountPanel from "./AccountPanel.svelte";
 import { listsState } from "../../state/lists.svelte";
 import { registerState } from "../../state/register.svelte";
 import { bookSettings } from "../../state/booksettings.svelte";
@@ -112,5 +113,21 @@ describe("AccountBar", () => {
     statusState.show("Hello");
     expect(await screen.findByText("Hello")).toBeTruthy();
     listsState.loaded = false;
+  });
+
+  it("the gear opens Arrange accounts", async () => {
+    render(AccountBar);
+    await fireEvent.click(screen.getByRole("button", { name: "Arrange accounts" }));
+    expect(screen.getByRole("dialog", { name: "Arrange accounts" })).toBeTruthy();
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("the panel ends with Net Worth from Rust", async () => {
+    listsState.netWorth = "-1234.50";
+    render(AccountPanel);
+    const foot = screen.getByText("Net Worth").parentElement!;
+    expect(foot.textContent).toContain("-1,234.50");
+    listsState.netWorth = null;
   });
 });

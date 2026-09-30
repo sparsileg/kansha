@@ -34,7 +34,7 @@ use super::{
     AccountChoice, AccountPreview, CategoryChoice, CategoryPreview, ImportNote, ImportOptions,
     ImportPreview, SecurityChoice, SecurityPreview, TagPreview,
 };
-use crate::accounts::{AccountStatus, AccountType};
+use crate::accounts::{Account, AccountStatus, AccountType};
 use crate::categories::{CategoryId, CategoryKind, SystemCategory, TagId};
 use crate::date::Date;
 use crate::error::Result;
@@ -308,6 +308,32 @@ pub(crate) fn build(conn: &Connection, file: &QifFile, options: &ImportOptions) 
     })
 }
 
+/// A name's letters and digits, lowercased: what stays the same when file
+/// names drop the spaces and punctuation of account names.
+fn squash(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The book's account `name` names: one of exactly that name (any case),
+/// else the only one with the same letters and digits.
+fn book_account<'a>(book: &'a [Account], name: &str) -> Option<&'a Account> {
+    if let Some(b) = book
+        .iter()
+        .find(|b| b.fields.name.eq_ignore_ascii_case(name))
+    {
+        return Some(b);
+    }
+    let key = squash(name);
+    let mut same = book.iter().filter(|b| squash(&b.fields.name) == key);
+    match (same.next(), same.next()) {
+        (Some(b), None) if !key.is_empty() => Some(b),
+        _ => None,
+    }
+}
+
 fn line_no(n: usize) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
 }
@@ -461,7 +487,10 @@ impl Builder<'_> {
     }
 
     /// The account named by a transfer, added if the file has no record
-    /// of it.
+    /// of it. A per-account export's own account is named by its file
+    /// (`FidelityIRA510`) but by transfers as Quicken names it (`Fidelity
+    /// IRA 510`): the same letters and digits make it the same account,
+    /// and it takes the name transfers use.
     fn account_ref(&mut self, name: &str) -> usize {
         let name = name.trim();
         if let Some(i) = self
@@ -469,6 +498,15 @@ impl Builder<'_> {
             .iter()
             .position(|a| a.name.eq_ignore_ascii_case(name))
         {
+            return i;
+        }
+        let key = squash(name);
+        if let Some(i) = self
+            .accounts
+            .iter()
+            .position(|a| a.kind.is_some() && !a.defined && squash(&a.name) == key)
+        {
+            self.accounts[i].name = name.to_string();
             return i;
         }
         self.accounts.push(PlanAccount {
@@ -739,7 +777,12 @@ impl Builder<'_> {
             "shrsin" => {
                 let mut i = item(InvAction::SharesAdded);
                 i.security = Some(need_security()?);
-                let q = need_shares()?;
+                // Quicken writes "0 shares added to account" with no
+                // shares: nothing to add.
+                let Some(q) = r.quantity else {
+                    warnings.push(format!("{} has no shares; skipped", r.action));
+                    return Ok((Vec::new(), warnings));
+                };
                 i.quantity = Some(q);
                 i.price = r.price;
                 i.amount = match (amount, r.price) {
@@ -804,9 +847,15 @@ impl Builder<'_> {
             }
             "xin" | "contribx" | "xout" | "withdrwx" | "cash" => {
                 let signed = match act.as_str() {
-                    "cash" => r
-                        .amount
-                        .ok_or_else(|| format!("{} needs an amount", r.action))?,
+                    // Quicken's empty opening entry (no amount, a transfer
+                    // to the account itself): nothing to record.
+                    "cash" => match r.amount {
+                        Some(a) => a,
+                        None => {
+                            warnings.push(format!("{} has no amount; skipped", r.action));
+                            return Ok((Vec::new(), warnings));
+                        }
+                    },
                     "xin" | "contribx" => need_amount()?,
                     _ => need_amount()?.checked_neg().ok_or("amount too large")?,
                 };
@@ -907,10 +956,7 @@ impl Builder<'_> {
             a.default_type = default_type(a.kind, &a.qif_type);
             a.choice = match wanted.get(&a.name.to_lowercase()) {
                 Some(c) => (*c).clone(),
-                None => match book
-                    .iter()
-                    .find(|b| b.fields.name.eq_ignore_ascii_case(&a.name))
-                {
+                None => match book_account(&book, &a.name) {
                     Some(b) => AccountChoice::Existing { id: b.id },
                     None if a.records > 0 => AccountChoice::Create {
                         name: a.name.clone(),

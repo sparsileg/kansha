@@ -97,6 +97,12 @@ export const commands = {
 	/**  The account type cannot change after creation. */
 	accountUpdate: (id: AccountId, fields: AccountFields) => typedError<Account, IpcError>(__TAURI_INVOKE("account_update", { id, fields })),
 	/**
+	 *  Arrange the account list: runs of accounts by group, in list order
+	 *  (ACCT-240).
+	 *  Returns every account.
+	 */
+	accountArrange: (groups: GroupOrder[]) => typedError<Account[], IpcError>(__TAURI_INVOKE("account_arrange", { groups })),
+	/**
 	 *  Close as of `date` (ACCT-210). A non-zero balance fails with
 	 *  `confirmation_required` until `confirmed` is true.
 	 */
@@ -326,6 +332,17 @@ export const commands = {
 	reconcileHistoryItems: (id: ReconciliationId) => typedError<Item[], IpcError>(__TAURI_INVOKE("reconcile_history_items", { id })),
 	/**  Every security, hidden ones included, by name. */
 	securityList: () => typedError<Security[], IpcError>(__TAURI_INVOKE("security_list")),
+	/**
+	 *  The Security Details window's history: every transaction of the
+	 *  security in every investment account, oldest first (SEC-060).
+	 */
+	securityTransactions: (security: SecurityId) => typedError<SecurityTxn[], IpcError>(__TAURI_INVOKE("security_transactions", { security })),
+	/**
+	 *  The Security Details window's graph: market value or price over a span
+	 *  ending today, or from `from` to `to` for a custom span (SEC-060).
+	 *  `fitted` sizes the money axis to the data instead of reaching zero.
+	 */
+	securityChart: (security: SecurityId, kind: SecurityChartKind, span: ChartSpan, from: string | null, to: string | null, fitted: boolean) => typedError<Chart, IpcError>(__TAURI_INVOKE("security_chart", { security, kind, span, from, to, fitted })),
 	/**  A new security's fields with the type's default asset class. */
 	securityDefaults: (name: string, securityType: SecurityType) => __TAURI_INVOKE<SecurityFields>("security_defaults", { name, securityType }),
 	securityCreate: (fields: SecurityFields) => typedError<Security, IpcError>(__TAURI_INVOKE("security_create", { fields })),
@@ -389,9 +406,11 @@ export const commands = {
 	/**
 	 *  The investments overview on `as_of` (today when left out): `accounts`
 	 *  in the order given, their positions and lots, day changes, and totals;
-	 *  `securities` limits it to those (all when left out) (POS-010, LOT-150).
+	 *  `securities` limits it to those (all when left out); `closed` adds
+	 *  each lot's sales and the securities sold out (POS-010, POS-040,
+	 *  LOT-150).
 	 */
-	invPortfolio: (accounts: AccountId[], securities: SecurityId[] | null, asOf: string | null) => typedError<Portfolio, IpcError>(__TAURI_INVOKE("inv_portfolio", { accounts, securities, asOf })),
+	invPortfolio: (accounts: AccountId[], securities: SecurityId[] | null, asOf: string | null, closed: boolean) => typedError<Portfolio, IpcError>(__TAURI_INVOKE("inv_portfolio", { accounts, securities, asOf, closed })),
 	/**  Check a lot-seeding CSV without writing anything. */
 	lotSeedPreview: (text: string, date: string) => typedError<SeedPreview, IpcError>(__TAURI_INVOKE("lot_seed_preview", { text, date })),
 	/**
@@ -436,6 +455,8 @@ export const commands = {
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
 	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
 	dashboard: (upcomingDays: number) => typedError<Dashboard, IpcError>(__TAURI_INVOKE("dashboard", { upcomingDays })),
+	/**  Net worth today, for the foot of the account list (ACCT-240). */
+	netWorth: () => typedError<string, IpcError>(__TAURI_INVOKE("net_worth")),
 	/**
 	 *  Save the window's page as a PDF in the Downloads folder and open it
 	 *  in the PDF viewer; returns the file's path.
@@ -508,8 +529,11 @@ export type AccountFields = {
 	tax_line_in: TaxLineId | null,
 };
 
-/**  Account list groups (ACCT-240). */
-export type AccountGroup = "banking" | "credit" | "investments" | "retirement" | "assets" | "liabilities";
+/**
+ *  Account list groups (ACCT-240). Other holds health savings
+ *  accounts, and anything the user puts there.
+ */
+export type AccountGroup = "banking" | "credit" | "investments" | "retirement" | "assets" | "liabilities" | "other";
 
 /**  Row ID of an account. */
 export type AccountId = number;
@@ -849,7 +873,12 @@ export type Chart = {
 	ticks: Tick[],
 	/**  Where zero sits: bars grow from here. */
 	zero: number,
+	/**  What the date axis names (a graph over dates). */
+	x_unit: XUnit,
 };
+
+/**  The graph's span, ending today (Custom: the dates given). */
+export type ChartSpan = "week" | "month" | "three_months" | "year_to_date" | "year" | "two_years" | "five_years" | "custom";
 
 /**  Which invariant failed. */
 export type Check = 
@@ -1173,6 +1202,12 @@ export type FieldChange = {
  */
 export type Frequency = "once" | "daily" | "weekly" | "twice_monthly" | "monthly" | "monthly_last_day" | "monthly_nth_weekday" | "yearly";
 
+/**  A run of accounts in one account-list group, in list order (ACCT-240). */
+export type GroupOrder = {
+	group: AccountGroup,
+	accounts: AccountId[],
+};
+
 /**  One row of the reconciliation history (RCN-060). */
 export type HistoryRow = {
 	reconciliation: Reconciliation,
@@ -1251,6 +1286,11 @@ export type ImportOptions = {
 	keep_categories: string[],
 	keep_tags: string[],
 	keep_securities: string[],
+	/**
+	 *  Securities the import creates that stay shown although no account
+	 *  holds them afterwards (otherwise those are created hidden).
+	 */
+	show_securities: string[],
 	/**  Import the price history of the securities kept (MIG-140). */
 	prices: boolean,
 	/**
@@ -1305,6 +1345,11 @@ export type ImportResult = {
 	categories_created: number,
 	tags_created: number,
 	securities_created: number,
+	/**
+	 *  Of those, the ones no account holds once the import is done:
+	 *  created hidden, so price download passes them over (SEC-040).
+	 */
+	securities_hidden: number,
 	payees_created: number,
 	prices: number,
 	/**  Records not imported, and why. */
@@ -1775,6 +1820,25 @@ export type PortfolioPosition = {
 	/**  The price's change since the previous price, in percent. */
 	day_percent: string | null,
 	lots: PortfolioLot[],
+	/**
+	 *  Sales from its lots up to the date, oldest first; empty unless
+	 *  asked for. A security sold out has no shares, only these.
+	 */
+	sales: PortfolioSale[],
+};
+
+/**  Shares sold from one lot (a whole lot or part of one). */
+export type PortfolioSale = {
+	lot: LotId,
+	/**  The lot's acquisition date. */
+	acquired: string,
+	sold: string,
+	shares: string,
+	basis: string,
+	proceeds: string,
+	/**  Realized gain. */
+	gain: string,
+	term: Term,
 };
 
 /**  Rolled-up figures for an account or for everything shown. */
@@ -2316,6 +2380,9 @@ export type Security = {
 	created_at: string,
 } & SecurityFields;
 
+/**  What the graph shows. */
+export type SecurityChartKind = "market_value" | "price_history";
+
 /**  Where a QIF security goes. */
 export type SecurityChoice = { kind: "existing"; id: SecurityId } | { kind: "create"; name: string; ticker: string | null; security_type: SecurityType };
 
@@ -2349,8 +2416,26 @@ export type SecurityPreview = {
 	imported: boolean,
 };
 
+/**  One transaction of the security, in one account. */
+export type SecurityTxn = {
+	account: AccountId,
+	txn_id: TxnId,
+	date: string,
+	action: InvAction,
+	action_label: string,
+	quantity: string | null,
+	price: string | null,
+	commission: string,
+	/**  Cash in (+) or out (−) of the account. */
+	amount: string,
+	memo: string,
+	/**  Shares arriving from another account. */
+	incoming: boolean,
+	future: boolean,
+};
+
 /**  Kind of security (SEC-010). */
-export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "other";
+export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "donor_advised_fund" | "other";
 
 export type SeedPreview = {
 	/**  The date the Shares Added transactions get. */
@@ -2438,6 +2523,11 @@ export type Settings = {
 	 *  default.
 	 */
 	invest_views: string | null,
+	/**
+	 *  Which dashboard cards show and in what order (DSH-040), as the UI's
+	 *  JSON; `None` = every card, in the default order.
+	 */
+	dashboard_cards: string | null,
 	/**
 	 *  A price older than this many days is stale (SET-040), unless the
 	 *  security sets its own.
@@ -2631,6 +2721,13 @@ export type WeekStart = "sunday" | "monday";
 
 /**  What to do when a due date falls on a weekend (REC-050). */
 export type WeekendRule = "none" | "previous" | "next";
+
+/**
+ *  What the date axis names: each day (a span of three months or
+ *  less), each month, or each year (a span over three years, or points
+ *  most of a year apart).
+ */
+export type XUnit = "day" | "month" | "year";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

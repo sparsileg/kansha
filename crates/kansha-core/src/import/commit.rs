@@ -61,6 +61,9 @@ pub struct ImportResult {
     pub categories_created: i64,
     pub tags_created: i64,
     pub securities_created: i64,
+    /// Of those, the ones no account holds once the import is done:
+    /// created hidden, so price download passes them over (SEC-040).
+    pub securities_hidden: i64,
     pub payees_created: i64,
     pub prices: i64,
     /// Records not imported, and why.
@@ -92,7 +95,7 @@ pub(super) fn run(
     }
     let mut undone: Option<ImportResult> = None;
     let outcome = db.write_import(clock, batch, |tx, id| {
-        let mut r = write(tx, plan)?;
+        let mut r = write(tx, plan, options)?;
         r.dry_run = dry_run;
         let mut errors = plan.errors.clone();
         errors.append(&mut r.errors);
@@ -125,7 +128,7 @@ struct Ids {
     payees: HashMap<String, PayeeId>,
 }
 
-fn write(tx: &Tx<'_>, plan: &Plan) -> Result<ImportResult> {
+fn write(tx: &Tx<'_>, plan: &Plan, options: &ImportOptions) -> Result<ImportResult> {
     let conn = tx.conn();
     let mut r = ImportResult::default();
 
@@ -285,6 +288,8 @@ fn write(tx: &Tx<'_>, plan: &Plan) -> Result<ImportResult> {
         }
     }
 
+    r.securities_hidden = hide_sold_out(tx, plan, options, &ids)?;
+
     for (i, a) in plan.accounts.iter().enumerate() {
         let Some(id) = ids.accounts[i] else {
             continue;
@@ -303,6 +308,35 @@ fn write(tx: &Tx<'_>, plan: &Plan) -> Result<ImportResult> {
         });
     }
     Ok(r)
+}
+
+/// Hide each security the import created that no account holds now: an
+/// old holding, kept for its history. Those the mapping step lists in
+/// `show_securities` stay shown. Returns how many were hidden.
+fn hide_sold_out(tx: &Tx<'_>, plan: &Plan, options: &ImportOptions, ids: &Ids) -> Result<i64> {
+    let end = crate::date::Date::from_ymd(9999, 12, 31)?;
+    let shown: Vec<String> = options
+        .show_securities
+        .iter()
+        .map(|n| n.trim().to_lowercase())
+        .collect();
+    let mut hidden = 0;
+    for (i, s) in plan.securities.iter().enumerate() {
+        let (SecurityChoice::Create { .. }, Some(id)) = (&s.choice, ids.securities[i]) else {
+            continue;
+        };
+        if shown.contains(&s.name.to_lowercase()) {
+            continue;
+        }
+        if !invest_repo::open_lots(tx.conn(), None, Some(id), end)?.is_empty() {
+            continue;
+        }
+        let mut f = securities::get(tx.conn(), id)?.fields;
+        f.hidden = true;
+        securities::update(tx, id, &f)?;
+        hidden += 1;
+    }
+    Ok(hidden)
 }
 
 /// `e` with where it happened, for a database failure; others unchanged.

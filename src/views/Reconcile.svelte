@@ -203,6 +203,8 @@
 
   {#if reconcileState.error}<p class="err" role="alert">{reconcileState.error}</p>{/if}
 
+  <!-- The content on a sheet (base.css), the window's color around it. -->
+  <div class="page sheet">
   {#if account === undefined}
     <p>{accounts.length === 0 ? "No account can be reconciled yet." : "Choose an account."}</p>
   {:else if session}
@@ -347,6 +349,7 @@
       </table>
     {/if}
   {/if}
+  </div>
 </section>
 
 <style>
@@ -356,10 +359,23 @@
     gap: 0.75rem;
     min-height: 0;
   }
-  /* In a session the view fills the window: statement, totals, and
-     buttons stay put; each item list scrolls on its own. */
-  .reconcile.in-session {
+  /* The sheet fills the window. In a session, statement, totals, and
+     buttons stay put and each item list scrolls on its own; otherwise
+     the sheet scrolls. */
+  .reconcile {
     flex: 1;
+  }
+  .page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    overflow: auto;
+  }
+  .in-session .page {
+    overflow: hidden;
   }
   header {
     display: flex;
@@ -447,11 +463,21 @@
     border-collapse: collapse;
     width: 100%;
   }
+  .scroll thead th,
+  .history thead th {
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line);
+  }
   .scroll thead th {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--bg);
+  }
+  /* Stripes by position, as in the registers. */
+  .scroll tbody tr:nth-child(even) td,
+  .history > tbody > tr:nth-child(even) td {
+    background: var(--row-alt);
   }
   .scroll tbody tr {
     cursor: pointer;
@@ -485,8 +511,9 @@
   td.r {
     text-align: right;
   }
-  tr.checked td {
-    background: color-mix(in srgb, var(--good) 14%, transparent);
+  /* Over the stripes. */
+  .scroll tbody tr.checked td {
+    background: color-mix(in srgb, var(--good) 14%, var(--row-bg));
   }
   .start {
     display: flex;

@@ -3,7 +3,10 @@
   // account with its equities, cash, and lots on one date. Views pick the
   // columns, accounts, and equities. Every figure comes from Rust.
   import { untrack } from "svelte";
+  import ContextMenu from "../lib/components/ContextMenu.svelte";
+  import GearButton from "../lib/components/GearButton.svelte";
   import CustomizeViewModal from "../lib/components/invest/CustomizeViewModal.svelte";
+  import SecurityDetailsModal from "../lib/components/invest/SecurityDetailsModal.svelte";
   import DatePicker from "../lib/components/invest/DatePicker.svelte";
   import { buildRows } from "../lib/invest/rows";
   import { columnLabel } from "../lib/invest/views";
@@ -14,6 +17,15 @@
 
   let customizing = $state(false);
   let downloading = $state(false);
+  /** The security whose details are open. */
+  let details = $state<number | null>(null);
+  /** Where the gear's menu opens, while it is open. */
+  let menu = $state<{ x: number; y: number } | null>(null);
+
+  function openMenu(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = menu ? null : { x: r.right, y: r.bottom };
+  }
 
   /** Prices for the As of date (PRC-040): the latest when it is today,
    * else that day's close. Then the figures follow. */
@@ -52,9 +64,21 @@
       </select>
     </label>
     <DatePicker value={st.asOf || listsState.today} today={listsState.today} label="As of" onchange={(iso) => (st.asOf = iso)} />
-    <button type="button" onclick={() => (customizing = true)}>Customize</button>
     <button type="button" disabled={downloading} onclick={() => void download()}>Download Prices</button>
+    <span class="grow"></span>
+    <GearButton label="Investments options" onclick={openMenu} />
   </div>
+  {#if menu}
+    <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      onclose={() => (menu = null)}
+      items={[
+        { label: "Customize…", action: () => (customizing = true) },
+        { label: `${st.showClosed ? "✓ " : ""}Show closed lots`, action: () => st.setShowClosed(!st.showClosed) },
+      ]}
+    />
+  {/if}
   {#if st.error}<p class="err" role="alert">{st.error}</p>{/if}
   {#if st.available.length === 0}
     <p>No investment accounts. Add one with Tools &gt; Accounts.</p>
@@ -82,6 +106,8 @@
                 {/if}
                 {#if row.kind === "account"}
                   <button type="button" class="link" onclick={() => void openAccount(row.account!)}>{row.name}</button>
+                {:else if row.security !== undefined}
+                  <button type="button" class="link" title="Security details" onclick={() => (details = row.security!)}>{row.name}</button>
                 {:else}
                   {row.name}
                 {/if}
@@ -98,6 +124,10 @@
     </div>
   {/if}
 </section>
+
+{#if details !== null}
+  <SecurityDetailsModal security={details} onclose={() => (details = null)} />
+{/if}
 
 {#if customizing}
   <CustomizeViewModal
@@ -117,6 +147,9 @@
     gap: 0.75rem;
     align-items: center;
     margin-bottom: 0.6rem;
+  }
+  .grow {
+    flex: 1;
   }
   .bar label {
     display: inline-flex;
@@ -176,6 +209,13 @@
   }
   .lot td {
     opacity: 0.9;
+  }
+  .sale .name {
+    padding-left: 3.2rem;
+  }
+  .sale td {
+    font-style: italic;
+    opacity: 0.85;
   }
   .total td {
     border-top: 1px solid var(--line);

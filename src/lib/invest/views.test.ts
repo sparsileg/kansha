@@ -39,6 +39,12 @@ describe("investment views", () => {
     expect(parseViews("null")).toEqual(defaultViews());
   });
 
+  it("keeps Show closed lots per view; anything but true is off", () => {
+    const s = parseViews(JSON.stringify({ views: [{ showClosed: true }, { showClosed: "yes" }, {}] }));
+    expect(s.views.map((v) => v.showClosed).slice(0, 4)).toEqual([true, false, false, false]);
+    expect(parseViews(serializeViews(s)).views[0].showClosed).toBe(true);
+  });
+
   it("drops unknown or repeated columns and blank names", () => {
     const s = parseViews(
       JSON.stringify({ views: [{ name: "  ", columns: ["shares", "bogus", "shares"] }], selected: 99 }),

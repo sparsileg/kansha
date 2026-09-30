@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
@@ -155,6 +156,13 @@ pub fn tax_line_list(state: State<'_, AppState>) -> CmdResult<Vec<TaxLine>> {
 #[specta::specta]
 pub fn dashboard(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<Dashboard> {
     state.read(|db, today| reports::dashboard(db.conn(), today, upcoming_days))
+}
+
+/// Net worth today, for the foot of the account list (ACCT-240).
+#[tauri::command]
+#[specta::specta]
+pub fn net_worth(state: State<'_, AppState>) -> CmdResult<Money> {
+    state.read(|db, today| reports::net_worth(db.conn(), today))
 }
 
 #[cfg(test)]

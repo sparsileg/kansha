@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.1 (draft) |
+| **Document version** | 0.6.5 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
@@ -160,9 +160,17 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   protects history (see Section 13).
 - **ACCT-230** [1.0][S] Account balance is always derived from
   transactions, never stored as authoritative data (see Section 15.1).
-- **ACCT-240** [1.0][R] Accounts can be reordered and grouped
-  (Banking, Credit, Investments, Retirement, Assets, Liabilities) in
-  the account list.
+- **ACCT-240** [1.0][R] Accounts can be reordered and grouped in the
+  account list. Groups: Banking, Credit, Investments, Retirement,
+  Assets, Liabilities, Other (an HSA's default; migration 0005 moves
+  HSAs still in Retirement there). The list shows six sections:
+  BANKING, CREDIT, INVESTMENTS, RETIREMENT, ASSETS & DEBT (Assets and
+  Liabilities, which the Net Worth report keeps apart), and OTHER. Its
+  header ("Accounts" and its toggle at the start) is as wide as the
+  list; a gear at its end opens Arrange accounts: every section with
+  its accounts, each moved up or down within its section or to
+  another, stored on Save (an account's place is its `sort_order`).
+  The list ends with "Net Worth" and today's net worth (as DSH-010).
 
 ### 6. Categories, Payees, and Tags (CAT, PAY, TAG)
 
@@ -363,12 +371,14 @@ common patterns.
   lists them.
 - **CAL-030** [1.0][R] Click a day to see its items; enter, skip, or
   edit occurrences directly from the calendar; create a new schedule
-  on a chosen date. Clicking a transaction, or double-clicking a day's
-  blank space, opens a dialog listing that day's transactions:
+  on a chosen date. Clicking a transaction, or clicking a day's blank
+  space (or Enter on the day), opens a dialog listing that day's
+  transactions:
   scheduled ones, open and done (entered or skipped), and register
   transactions (CAL-020), with Enter, Edit, Skip, and Close, and New
   Schedule set apart. Edit opens an entered or register transaction in
-  its register, otherwise its schedule.
+  its register, otherwise its schedule. The month fills the window's
+  width and height; there is no day panel beside it (0.6.2).
 - **CAL-040** [1.0][R] Filter the calendar by account(s).
 - **CAL-050** [1.0][R] Optional projected daily balance for a selected
   account, based on current balance plus scheduled items.
@@ -408,7 +418,8 @@ common patterns.
 
 - **SEC-010** [1.0][S] Maintain a list of securities with: name,
   ticker symbol, security type (stock, ETF, mutual fund, bond, money
-  market fund, CD, other), asset class (e.g., US Equity, International
+  market fund, CD, donor advised fund (DAF; asset class Other by
+  default; migration 0006), other), asset class (e.g., US Equity, International
   Equity, Bond, Cash), and notes.
 - **SEC-020** [1.0][R] Optional CUSIP field (helps match brokerage
   cost-basis reports).
@@ -418,6 +429,16 @@ common patterns.
   referenced by any transaction.
 - **SEC-050** [Later][R] Multiple asset-class allocations per security
   (e.g., a balanced fund that is 60% equity/40% bond).
+- **SEC-060** [1.0][R] **Security Details**: clicking a security on the
+  Investments screen opens a window with a dropdown of every security,
+  set to the one clicked, and three cards: the security's name, ticker,
+  and type, with Edit; a graph of Market Value (shares held in every
+  account × the price on each price date) or Price History over Week,
+  Month, Three Months, Year to Date, Year, 2 Years, 5 Years, or Custom
+  (two dates); and its transactions in every account. The graph's
+  "Fit graph to data" box (on to start) sizes the money axis to the
+  data's own range, in steps down to a cent, so a price that moves a few
+  cents shows the movement; off, the axis reaches zero.
 
 #### 10.2 Prices (PRC)
 
@@ -592,7 +613,15 @@ income and fees) is its own row, so the rows add up to the account.
   exactly that day and an earlier one exists. Ten named views
   (Default, Custom 2 to Custom 10, renamable) keep the columns and
   their order, the accounts and their order, and the equities shown;
-  Reset View restores a view. An investment account opens as a
+  Reset View restores a view. A gear at the end of the screen's bar
+  opens a menu: Customize (the view dialog; its tabs are Columns,
+  Accounts, and Securities) and Show closed lots, which each view
+  keeps for itself. With
+  Show closed lots, each sale from a lot shows under its equity after
+  the open lots, even when only part of the lot was sold (the rest
+  stays an open lot): sale and acquisition dates, shares, cost basis,
+  proceeds, and realized gain; equities sold out show with no shares.
+  They change no total. An investment account opens as a
   register like a checking account's; typing in its empty line opens
   the entry dialog. Income, Performance, and realized gains move to
   the reports (Phase 7).
@@ -665,8 +694,13 @@ requirement says not built. P-02 and P-04 stay open.
   and the preview says so.
 - **MIG-060** [1.0][S] Mapping step: each QIF account is skipped,
   mapped to an existing account, or created with a chosen name and
-  type (default: the book's account of that name, else a new one of
-  the QIF type if the file has transactions for it, else skipped).
+  type (default: the book's account of that name, else the only one
+  with the same letters and digits (a file name drops the spaces:
+  `FidelityIRA510.QIF` is "Fidelity IRA 510"), else a new one of the
+  QIF type if the file has transactions for it, else skipped). In a
+  per-account export, the account the file names by its file name and
+  transfers name as Quicken writes it is one account, with the name
+  transfers use.
   Each category maps to an existing category (rename or merge on the
   way in) or a path to create. Each security maps to an existing one
   (default: by ticker, then name) or a new one with ticker and type.
@@ -716,7 +750,12 @@ requirement says not built. P-02 and P-04 stay open.
 - **MIG-140** [1.0][S] Import securities list and price history from
   QIF where available: prices only of the securities kept (an option),
   source `qif`, one per security and date. Thinning them by the PRC-060
-  rule waits for PRC-060.
+  rule waits for PRC-060. A security the import creates that no account
+  holds once the import is done (an old holding) is created hidden
+  (SEC-040), so price download passes it over; the import result says
+  how many. The mapping step can keep any such security shown. Records
+  that say nothing to import, Quicken's empty opening `Cash` (no amount)
+  and a `ShrsIn` with no shares, are warnings, not bad records.
 - **MIG-150** [1.0][R] Scheduled transactions: ⟨PLACEHOLDER P-04:
   import if Quicken exports them usably; otherwise manual re-entry,
   supported by a "Quicken schedule checklist" to confirm all were
@@ -747,7 +786,9 @@ requirement says not built. P-02 and P-04 stay open.
 #### 12.1 General report features
 
 - **RPT-010** [1.0][S] Reports offer both tables and graphs where
-  meaningful.
+  meaningful. A graph's date axis names days (a span of three months
+  or less), months, or years (a span over three years, or points most
+  of a year apart), each at its first point, at most twelve labels.
 - **RPT-020** [1.0][S] Report settings (date range, accounts,
   categories, tags, grouping, columns) can be saved as named reports
   and rerun. Every report has one Customize dialog: date range, a
@@ -835,14 +876,21 @@ requirement says not built. P-02 and P-04 stay open.
 - **DSH-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
 - **DSH-030** [1.0][R] Warnings panel: missing and stale prices,
-  accounts with uncleared transactions more than 60 days old,
+  accounts with uncleared transactions more than 60 days old (each
+  banking, credit, and asset account by name; investment accounts,
+  which are not reconciled, in one line naming none),
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
-- **DSH-040** [Later][R] The dashboard is a set of cards, each with a
+- **DSH-040** [1.0][R] The dashboard is a set of cards, each with a
   stable ID and name (net worth, this month, net worth trend, due soon,
-  needs attention). The user chooses which cards show and their order;
-  new kinds of card can be added. Until built, every card shows in a
-  fixed order.
+  needs attention). A gear in the dashboard's title band opens
+  Customize: tick the cards to show and move them up or down. The
+  choice is kept in the book (`dashboard_cards`); none stored, or the
+  default, shows every card in the default order. A card added by a
+  later release shows after the others until hidden. The cards sit in
+  one outlined sheet whose shaded top band holds the title "Dashboard"
+  (the UI convention: a view's title sits in a shaded band at the top
+  of its sheet; other views follow later).
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -2095,6 +2143,10 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.5 | 2026-09-30 | **DSH-040** built (was [Later]): Customize from a gear on the dashboard; the dashboard is one sheet with its title in a shaded band (view-title convention, Dashboard only for now). SEC-060: "Fit graph to data" box (fitted money axis in sub-dollar steps). POS-040: Show closed lots is kept per view. MIG-060: a file name matches the book's account and a transfer-named account by letters and digits. MIG-140: mapping step can keep sold-out new securities shown; empty opening `Cash` and `ShrsIn` with no shares are warnings. No schema change. **API change:** `security_chart` gains `fitted`; `Settings` gains `dashboard_cards`; `ImportOptions` gains `show_securities`. |
+| 0.6.4 | 2026-09-30 | DSH-030: investment accounts with old uncleared transactions are one line, naming none. Reconcile and Reminders show their content on a sheet. No schema or API change. |
+| 0.6.3 | 2026-09-30 | SEC-010: security type Donor Advised Fund (DAF). MIG-140: securities the import creates and no account holds afterwards are created hidden. RPT-010: date axis names days, months, or years. POS-040: the Customize dialog's Equities tab is named Securities. **Schema change:** migration 0006 (security type `donor_advised_fund`; the security table is rebuilt with foreign keys off). **API change:** `Chart` gains `x_unit`; `ImportResult` gains `securities_hidden`; `SecurityType` gains `donor_advised_fund`. |
+| 0.6.2 | 2026-09-30 | ACCT-240: groups gain Other (HSA default); the account list shows six sections with Assets & Debt, a panel-wide header with a gear opening Arrange accounts, and Net Worth at its foot. POS-040: the Investments bar's gear menu (Customize, Show closed lots; the Customize button goes); sales from lots, partial ones included, and sold-out equities. New **SEC-060** Security Details window. CAL-030: a click on a day opens its dialog; the day panel goes. **Schema change:** migration 0005 (account group `other`; the account table is rebuilt, with foreign keys off for that migration only). **API change:** `inv_portfolio` takes `closed`; new commands `account_arrange`, `net_worth`, `security_transactions`, `security_chart`. |
 | 0.6.1 | 2026-09-30 | POS-040: an expanded account lists its equities, then its cash. New **DSH-040** [Later]: dashboard cards with stable IDs, chosen and ordered by the user. No schema or API change. |
 | 0.6 | 2026-09-30 | Phase 9: Quicken QIF import built (`phase-notes/phase-9.md`), from the decisions in `phase-notes/import-proposal.md` Part A. §11 rewritten: facts and decisions (whole-file QIF, all of it, hidden accounts unticked, full investment history then a true-up); P-01, P-03, P-05 settled. MIG-010 … MIG-090, MIG-110, MIG-140, MIG-160, MIG-170 → [S] and detailed (test import, skip bad records, mapping problems stop the import, archive encrypted to the backup key, same-file warning). New **MIG-115** lot true-up (not built). MIG-100 partly built (import result per account). §18 import rules. §17.2, §17.4, §23, §24 (Phase 9 row). File > Import… enabled. No schema change. **API change:** new commands `pick_import_file`, `import_open`, `import_preview`, `import_run`, `import_cancel`, `import_batches`, `import_rollback`. New dependency `sha2 =0.10.9` (already built for `age`). |
 | 0.5.2 | 2026-09-30 | UI-040: the Investments screen is a window, one at most, so it can wait in the dock. PRC-040: Download Prices moves from the Tools menu to a button beside Customize on the Investments screen and downloads for its As of date (the latest price for today, else the close of the last trading day on or before it); downloaded prices round half-even to 4 decimals. New **PRC-060** [Later]: price pruning to weekly, month-end, and year-end closes. No schema change. **API change:** `prices_download` takes a `date`. |

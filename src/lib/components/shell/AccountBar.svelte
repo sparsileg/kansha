@@ -2,7 +2,9 @@
   import { listsState } from "../../state/lists.svelte";
   import { settingsState } from "../../state/settings.svelte";
   import { statusState } from "../../state/status.svelte";
+  import GearButton from "../GearButton.svelte";
   import AccountList from "./AccountList.svelte";
+  import ArrangeAccountsModal from "./ArrangeAccountsModal.svelte";
 
   /**
    * The thin bar under the navigation bar, at the account panel's side.
@@ -11,11 +13,15 @@
    * (click to drop the list down and pick an account). The drop-down has a
    * "Keep this list open" button to bring the panel back.
    *
+   * The button's box is as wide as the panel, so it heads the panel; a
+   * gear at its other end arranges the list's sections (ACCT-240).
+   *
    * The same row is the status bar: messages from statusState show on the
    * side away from the button, and clear themselves. An empty book has
    * no button, only the bar.
    */
   let drop = $state(false);
+  let arranging = $state(false);
   let root: HTMLElement;
   const open = $derived(settingsState.accountPanelOpen);
 
@@ -43,7 +49,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="bar" class:right={settingsState.accountPanelSide === "right"} bind:this={root} {onkeydown} role="group" aria-label="Account list">
   {#if !listsState.isEmptyBook}
-  <span class="anchor">
+  <span class="anchor" class:open>
     <button
       type="button"
       class="head"
@@ -55,6 +61,7 @@
       <svg viewBox="0 0 10 10" aria-hidden="true" class:down={open || drop}><path d="M2.5 1.5l5 3.5-5 3.5z" /></svg>
       Accounts
     </button>
+    <GearButton label="Arrange accounts" onclick={() => ((drop = false), (arranging = true))} />
     {#if drop && !open}
       <div class="drop" role="menu" aria-label="Accounts">
         <button type="button" class="keep" onclick={keepOpen}>Keep open</button>
@@ -69,26 +76,51 @@
   </span>
 </div>
 
+{#if arranging}<ArrangeAccountsModal onclose={() => (arranging = false)} />{/if}
+
 <style>
   .bar {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 2rem;
     min-height: 1.6rem;
-    padding: 0.1rem 0.5rem;
+    padding: 0 0.5rem 0 0;
     border-bottom: 1px solid var(--line-soft);
     font-size: var(--fs-ui);
   }
   .bar.right {
     flex-direction: row-reverse;
+    padding: 0 0 0 0.5rem;
   }
+  /* As wide as the panel: the toggle at its start, the gear at its end.
+     While the panel is open it takes the panel's color and edge. */
   .anchor {
     position: relative;
+    box-sizing: border-box;
+    width: var(--account-panel-w);
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.1rem 0.5rem;
+    border-right: 1px solid transparent;
+  }
+  .anchor.open {
+    background: var(--panel-bg);
+    border-right-color: var(--line-soft);
+  }
+  .right .anchor {
+    border-right: 0;
+    border-left: 1px solid transparent;
+  }
+  .right .anchor.open {
+    border-left-color: var(--line-soft);
   }
   /* The message is pushed to the far side from the button: right when the
      button is on the left, left (against the window edge) when it is on
      the right. The gap keeps it clear of the button. */
   .status {
+    align-self: center;
     margin-left: auto;
     min-width: 0;
     text-align: right;

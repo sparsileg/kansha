@@ -408,3 +408,133 @@ fn migration_0004_keeps_lot_adjustments_and_accepts_average() {
     assert!(insert(0, -100).is_ok());
     assert!(insert(0, 100).is_ok());
 }
+
+#[test]
+fn migration_0005_adds_the_other_group_and_moves_hsa_accounts() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 4).unwrap();
+    let c = db.conn();
+    c.execute_batch(
+        "INSERT INTO account (name, type, account_group, tax_treatment, sort_order, created_at)
+             VALUES ('Checking', 'checking', 'banking', 'taxable', 3, '2026-06-30T12:00:00Z');
+         INSERT INTO account (name, type, account_group, tax_treatment, cash_mode, mmf_mode,
+                 default_lot_method, created_at)
+             VALUES ('HSA', 'hsa', 'retirement', 'tax_exempt', 'internal', 'security', 'fifo',
+                 '2026-06-30T12:00:00Z');
+         INSERT INTO account (name, type, account_group, tax_treatment, cash_mode, mmf_mode,
+                 default_lot_method, created_at)
+             VALUES ('HSA kept in assets', 'hsa', 'assets', 'tax_exempt', 'internal', 'security',
+                 'fifo', '2026-06-30T12:00:00Z');
+         INSERT INTO schedule (account_id, frequency, start_date, next_due, created_at)
+             VALUES (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let groups: Vec<(String, String, i64)> = {
+        let mut st = c
+            .prepare("SELECT name, account_group, sort_order FROM account ORDER BY id")
+            .unwrap();
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    assert_eq!(
+        groups,
+        vec![
+            ("Checking".into(), "banking".into(), 3),
+            // An HSA in Retirement (the old default) moves to Other; one
+            // the user put elsewhere stays.
+            ("HSA".into(), "other".into(), 0),
+            ("HSA kept in assets".into(), "assets".into(), 0),
+        ]
+    );
+    // References to accounts survive the rebuild, and are enforced.
+    assert_eq!(count(&db, "schedule"), 1);
+    let fk: i64 = c
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(fk, 1);
+    assert!(
+        c.execute(
+            "INSERT INTO schedule (account_id, frequency, start_date, next_due, created_at)
+             VALUES (99, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .is_err()
+    );
+    assert!(c.execute("DELETE FROM account WHERE id = 1", []).is_err());
+    assert!(
+        c.execute(
+            "UPDATE account SET account_group = 'nowhere' WHERE id = 1",
+            []
+        )
+        .is_err()
+    );
+    let indexes: i64 = c
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'index'
+             AND name IN ('account_linked_cash', 'account_linked_liability')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(indexes, 2);
+}
+
+#[test]
+fn migration_0006_accepts_donor_advised_funds_and_keeps_securities() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 5).unwrap();
+    let c = db.conn();
+    c.execute_batch(
+        "INSERT INTO security (name, ticker, type, asset_class, hidden, created_at)
+             VALUES ('Fund', 'FND', 'mutual_fund', 'us_equity', 1, '2026-06-30T12:00:00Z');
+         INSERT INTO price (security_id, price_date, price, source)
+             VALUES (1, '2026-06-30', 12000000, 'manual');",
+    )
+    .unwrap();
+    assert!(
+        c.execute(
+            "INSERT INTO security (name, type, asset_class, created_at)
+             VALUES ('Giving', 'donor_advised_fund', 'other', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .is_err()
+    );
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let kept: (String, String, i64) = c
+        .query_row(
+            "SELECT name, ticker, hidden FROM security WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(kept, ("Fund".into(), "FND".into(), 1));
+    assert_eq!(count(&db, "price"), 1);
+    c.execute(
+        "INSERT INTO security (name, type, asset_class, created_at)
+         VALUES ('Giving', 'donor_advised_fund', 'other', '2026-06-30T12:00:00Z')",
+        [],
+    )
+    .unwrap();
+    // Tickers stay unique (ignoring case), and prices need a security.
+    assert!(
+        c.execute(
+            "INSERT INTO security (name, ticker, type, asset_class, created_at)
+             VALUES ('Dup', 'fnd', 'etf', 'us_equity', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .is_err()
+    );
+    assert!(
+        c.execute(
+            "INSERT INTO price (security_id, price_date, price, source)
+             VALUES (99, '2026-06-30', 1, 'manual')",
+            [],
+        )
+        .is_err()
+    );
+}

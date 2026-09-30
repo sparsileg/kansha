@@ -5,7 +5,8 @@ use rusqlite::{Connection, OptionalExtension, Row, named_params};
 use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
 use crate::accounts::{
-    Account, AccountFields, AccountId, AccountStatus, InvestmentSettings, OtherAssetSettings,
+    Account, AccountFields, AccountId, AccountStatus, GroupOrder, InvestmentSettings,
+    OtherAssetSettings,
 };
 use crate::date::Date;
 use crate::error::{Error, Result};
@@ -316,6 +317,33 @@ pub fn update(tx: &Tx<'_>, id: AccountId, f: &AccountFields) -> Result<Account> 
         )?;
     }
     Ok(after)
+}
+
+/// Arrange the account list (ACCT-240): each listed account goes to its
+/// group, and takes its place in the whole arrangement as `sort_order`
+/// (0, 1, 2, …), so a list section showing two groups (Assets & Debt)
+/// keeps its order: list its runs of each group in turn. Accounts not
+/// listed keep theirs. Only the accounts that change are written, each
+/// with its audit entry.
+pub fn arrange(tx: &Tx<'_>, groups: &[GroupOrder]) -> Result<Vec<Account>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut place: i64 = 0;
+    for g in groups {
+        for id in &g.accounts {
+            if !seen.insert(*id) {
+                return Err(Error::Invalid(format!("account {} is listed twice", id.0)));
+            }
+            let a = get(tx.conn(), *id)?;
+            if a.fields.group != g.group || a.fields.sort_order != place {
+                let mut f = a.fields;
+                f.group = g.group;
+                f.sort_order = place;
+                update(tx, *id, &f)?;
+            }
+            place += 1;
+        }
+    }
+    list(tx.conn())
 }
 
 /// Mark an account closed as of `date`. Callers use

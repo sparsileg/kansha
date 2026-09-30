@@ -6,6 +6,7 @@
   import { dateExample, datePattern, displayDate, parseDate } from "../../format/date";
   import { formatPrice, parsePrice } from "../../format/quantity";
   import { LOT_METHODS } from "../../invest/form";
+  import { SECURITY_TYPES as TYPES } from "../../invest/securityTypes";
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
@@ -19,15 +20,6 @@
     SecurityType,
   } from "../../types/bindings";
 
-  const TYPES: [SecurityType, string][] = [
-    ["stock", "Stock"],
-    ["etf", "ETF"],
-    ["mutual_fund", "Mutual fund"],
-    ["bond", "Bond"],
-    ["money_market", "Money market fund"],
-    ["cd", "CD"],
-    ["other", "Other"],
-  ];
   const CLASSES: [AssetClass, string][] = [
     ["us_equity", "US equity"],
     ["intl_equity", "International equity"],

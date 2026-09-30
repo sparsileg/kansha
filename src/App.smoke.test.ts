@@ -29,6 +29,7 @@ vi.mock("./lib/api", async (orig) => {
     account_panel_open: true,
     account_panel_side: "left",
     invest_views: null,
+    dashboard_cards: null,
     stale_price_days: 7,
     default_lot_method: "fifo",
     price_download: false,

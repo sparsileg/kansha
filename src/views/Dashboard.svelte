@@ -1,12 +1,16 @@
 <script lang="ts">
   // The household dashboard (DSH-010 … DSH-030): net worth and its parts,
   // this month's income and spending, a year of net worth, what is due,
-  // and what needs attention, each a card (`lib/dashboard/cards.ts`).
-  // Every figure comes from Rust.
+  // and what needs attention, each a card (`lib/dashboard/cards.ts`). The
+  // gear chooses which cards show and their order (DSH-040). Every figure
+  // comes from Rust.
   import { onMount, type Snippet } from "svelte";
   import { call, commands } from "../lib/api";
+  import ContextMenu from "../lib/components/ContextMenu.svelte";
+  import CustomizeDashboardModal from "../lib/components/CustomizeDashboardModal.svelte";
+  import GearButton from "../lib/components/GearButton.svelte";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
-  import { CARDS, type CardId } from "../lib/dashboard/cards";
+  import { parseLayout, shownCards, storedLayout, type CardId, type CardLayout } from "../lib/dashboard/cards";
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
   import { openAccount } from "../lib/shell/nav";
@@ -20,6 +24,21 @@
   let data = $state<Dashboard | null>(null);
   let error = $state<string | null>(null);
   let version = $state("");
+  let menu = $state<{ x: number; y: number } | null>(null);
+  let customizing = $state(false);
+
+  const layout = $derived(parseLayout(bookSettings.value.dashboard_cards));
+  const cards = $derived(shownCards(layout));
+
+  function openMenu(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = menu ? null : { x: r.right, y: r.bottom };
+  }
+
+  function saveLayout(l: CardLayout) {
+    customizing = false;
+    void bookSettings.update({ dashboard_cards: storedLayout(l) });
+  }
 
   onMount(async () => {
     version = await commands.appVersion();
@@ -48,23 +67,40 @@
   };
 </script>
 
-<section class="dash">
-  <h1>Dashboard</h1>
-  {#if error}<p class="err" role="alert">{error}</p>{/if}
-  {#if data}
-    {@const d = data}
-    <div class="cards">
-      {#each CARDS as c (c.id)}
-        <article class="card sheet" class:wide={c.wide} data-card={c.id} aria-labelledby={`card-${c.id}`}>
-          <header><h2 id={`card-${c.id}`}>{c.id === "upcoming" ? `Due in the next ${d.upcoming_days} days` : c.label}</h2></header>
-          <div class="body">{@render bodies[c.id](d)}</div>
-        </article>
-      {/each}
-    </div>
-  {:else if !error}
-    <p class="sub">Loading…</p>
+<section class="dash view-sheet" aria-labelledby="dash-title">
+  <header class="view-title">
+    <h1 id="dash-title">Dashboard</h1>
+    <GearButton label="Dashboard options" onclick={openMenu} />
+  </header>
+  {#if menu}
+    <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      onclose={() => (menu = null)}
+      items={[{ label: "Customize…", action: () => (customizing = true) }]}
+    />
   {/if}
-  <p class="ver">Kansha {version}</p>
+  {#if customizing}
+    <CustomizeDashboardModal {layout} onsave={saveLayout} onclose={() => (customizing = false)} />
+  {/if}
+  <div class="view-body">
+    {#if error}<p class="err" role="alert">{error}</p>{/if}
+    {#if data}
+      {@const d = data}
+      <div class="cards">
+        {#each cards as c (c.id)}
+          <article class="card sheet" class:wide={c.wide} data-card={c.id} aria-labelledby={`card-${c.id}`}>
+            <header><h2 id={`card-${c.id}`}>{c.id === "upcoming" ? `Due in the next ${d.upcoming_days} days` : c.label}</h2></header>
+            <div class="body">{@render bodies[c.id](d)}</div>
+          </article>
+        {/each}
+      </div>
+      {#if cards.length === 0}<p class="sub">No cards chosen. Use the gear to choose some.</p>{/if}
+    {:else if !error}
+      <p class="sub">Loading…</p>
+    {/if}
+    <p class="ver">Kansha {version}</p>
+  </div>
 </section>
 
 {#snippet netWorth(d: Dashboard)}
@@ -141,43 +177,14 @@
 {/snippet}
 
 <style>
-  .dash {
-    display: grid;
-    gap: 0.75rem;
-    align-content: start;
-  }
-  h1 {
-    font-size: var(--fs-title);
-    margin: 0;
-  }
-  h2 {
-    font-size: var(--fs-ui);
-  }
-  /* Cards: sheets (base.css) on the window's background, each with a
-     shaded title band. */
+  /* Cards (base.css) inside the dashboard's sheet. */
   .cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     gap: 0.75rem;
   }
-  .card {
-    border-radius: 6px;
-    overflow: hidden;
-  }
   .card.wide {
     grid-column: 1 / -1;
-  }
-  .card header {
-    background: var(--head-bg);
-    color: var(--head-fg);
-    border-bottom: 1px solid var(--line-soft);
-    padding: 0.35rem 0.8rem;
-  }
-  .card h2 {
-    margin: 0;
-  }
-  .body {
-    padding: 0.5rem 0.8rem 0.6rem;
   }
   .big {
     font-size: var(--fs-title);

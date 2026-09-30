@@ -10,6 +10,7 @@ use kansha_core::invest::{
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
 use kansha_core::persistence::securities as repo;
+use kansha_core::reports::{self, Chart, ChartSpan, SecurityChartKind, SecurityTxn};
 use kansha_core::securities::download::{self, DownloadSummary, Fetched, Provider};
 use kansha_core::securities::{
     self, PriceImportPreview, PricePoint, PriceSource, Security, SecurityFields, SecurityId,
@@ -23,6 +24,37 @@ use crate::state::{AppState, CmdResult, IpcError};
 // ---------------------------------------------------------------------------
 // Securities and prices
 // ---------------------------------------------------------------------------
+
+/// The Security Details window's history: every transaction of the
+/// security in every investment account, oldest first (SEC-060).
+#[tauri::command]
+#[specta::specta]
+pub fn security_transactions(
+    state: State<'_, AppState>,
+    security: SecurityId,
+) -> CmdResult<Vec<SecurityTxn>> {
+    state.read(|db, today| reports::security_transactions(db.conn(), security, today))
+}
+
+/// The Security Details window's graph: market value or price over a span
+/// ending today, or from `from` to `to` for a custom span (SEC-060).
+/// `fitted` sizes the money axis to the data instead of reaching zero.
+#[tauri::command]
+#[specta::specta]
+pub fn security_chart(
+    state: State<'_, AppState>,
+    security: SecurityId,
+    kind: SecurityChartKind,
+    span: ChartSpan,
+    from: Option<Date>,
+    to: Option<Date>,
+    fitted: bool,
+) -> CmdResult<Chart> {
+    state.read(|db, today| {
+        let (from, to) = reports::span_dates(span, today, from, to)?;
+        reports::security_chart(db.conn(), security, kind, from, to, fitted)
+    })
+}
 
 /// Every security, hidden ones included, by name.
 #[tauri::command]
@@ -290,7 +322,9 @@ pub fn inv_performance(state: State<'_, AppState>, account: AccountId) -> CmdRes
 
 /// The investments overview on `as_of` (today when left out): `accounts`
 /// in the order given, their positions and lots, day changes, and totals;
-/// `securities` limits it to those (all when left out) (POS-010, LOT-150).
+/// `securities` limits it to those (all when left out); `closed` adds
+/// each lot's sales and the securities sold out (POS-010, POS-040,
+/// LOT-150).
 #[tauri::command]
 #[specta::specta]
 pub fn inv_portfolio(
@@ -298,6 +332,7 @@ pub fn inv_portfolio(
     accounts: Vec<AccountId>,
     securities: Option<Vec<SecurityId>>,
     as_of: Option<Date>,
+    closed: bool,
 ) -> CmdResult<Portfolio> {
     state.read(|db, today| {
         invest::portfolio(
@@ -305,6 +340,7 @@ pub fn inv_portfolio(
             &accounts,
             securities.as_deref(),
             as_of.unwrap_or(today),
+            closed,
         )
     })
 }

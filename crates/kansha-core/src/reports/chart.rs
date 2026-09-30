@@ -33,6 +33,42 @@ pub struct Series {
     pub pos: Vec<i64>,
 }
 
+text_enum! {
+    /// What the date axis names: each day (a span of three months or
+    /// less), each month, or each year (a span over three years, or points
+    /// most of a year apart).
+    pub enum XUnit {
+        Day = "day",
+        Month = "month",
+        Year = "year",
+    }
+}
+
+/// Days up to which the axis names days.
+const DAY_SPAN: i64 = 92;
+/// Days beyond which the axis names years.
+const YEAR_SPAN: i64 = 1100;
+/// Average days between points from which the axis names years.
+const YEAR_GAP: i64 = 300;
+
+/// The axis unit for `dates` (oldest first).
+pub fn x_unit(dates: &[Date]) -> XUnit {
+    let (Some(first), Some(last)) = (dates.first(), dates.last()) else {
+        return XUnit::Month;
+    };
+    let span = (last.naive() - first.naive()).num_days();
+    let gaps = i64::try_from(dates.len().saturating_sub(1))
+        .unwrap_or(i64::MAX)
+        .max(1);
+    if span <= DAY_SPAN {
+        XUnit::Day
+    } else if span > YEAR_SPAN || span / gaps >= YEAR_GAP {
+        XUnit::Year
+    } else {
+        XUnit::Month
+    }
+}
+
 /// An axis mark.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -56,12 +92,14 @@ pub struct Chart {
     pub ticks: Vec<Tick>,
     /// Where zero sits: bars grow from here.
     pub zero: i64,
+    /// What the date axis names (a graph over dates).
+    pub x_unit: XUnit,
 }
 
 /// A round step near a fifth of `span` cents: 1, 2, 2.5, or 5 times a
-/// power of ten, at least one dollar.
-fn step_for(span: i128) -> i128 {
-    let raw = (span / 5).max(100);
+/// power of ten, at least `min_step` cents.
+fn step_for(span: i128, min_step: i128) -> i128 {
+    let raw = (span / 5).max(min_step);
     let mut p: i128 = 1;
     while p * 10 <= raw {
         p *= 10;
@@ -105,16 +143,51 @@ pub fn build_labeled(
     Ok(c)
 }
 
-/// Build a graph. Every series has one value per date.
+/// Build a graph. Every series has one value per date. The axis always
+/// includes zero and steps by at least a dollar.
 pub fn build(dates: Vec<Date>, series: Vec<(String, SeriesStyle, Vec<Money>)>) -> Result<Chart> {
+    build_range(dates, series, false)
+}
+
+/// Build a graph whose axis fits the data's own range instead of reaching
+/// zero, with steps down to a cent, so a price that moves a few cents
+/// shows the movement. The line never touches the top or bottom.
+pub fn build_fitted(
+    dates: Vec<Date>,
+    series: Vec<(String, SeriesStyle, Vec<Money>)>,
+) -> Result<Chart> {
+    build_range(dates, series, true)
+}
+
+fn build_range(
+    dates: Vec<Date>,
+    series: Vec<(String, SeriesStyle, Vec<Money>)>,
+    fitted: bool,
+) -> Result<Chart> {
     let all = series
         .iter()
         .flat_map(|(_, _, v)| v.iter().map(|m| i128::from(m.cents())));
-    let lo = all.clone().min().unwrap_or(0).min(0);
-    let hi = all.max().unwrap_or(0).max(0);
-    let step = step_for((hi - lo).max(1));
-    let lo_t = lo.div_euclid(step) * step;
+    let (mut lo, mut hi) = (all.clone().min().unwrap_or(0), all.max().unwrap_or(0));
+    if !fitted {
+        lo = lo.min(0);
+        hi = hi.max(0);
+    } else if lo == hi {
+        // A flat line: room above and below.
+        let pad = (lo.abs() / 20).max(1);
+        lo -= pad;
+        hi += pad;
+    }
+    let step = step_for((hi - lo).max(1), if fitted { 1 } else { 100 });
+    let mut lo_t = lo.div_euclid(step) * step;
     let mut hi_t = -((-hi).div_euclid(step)) * step;
+    if fitted {
+        if lo_t == lo {
+            lo_t -= step;
+        }
+        if hi_t == hi {
+            hi_t += step;
+        }
+    }
     if hi_t <= lo_t {
         hi_t = lo_t + step;
     }
@@ -145,11 +218,13 @@ pub fn build(dates: Vec<Date>, series: Vec<(String, SeriesStyle, Vec<Money>)>) -
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(Chart {
+        x_unit: x_unit(&dates),
         dates,
         labels: Vec::new(),
         series,
         ticks,
-        zero: pos(0)?,
+        // Off the plot when a fitted range leaves zero out: keep it on the edge.
+        zero: pos(0)?.clamp(0, SCALE),
     })
 }
 
@@ -200,9 +275,80 @@ mod tests {
         assert_eq!(c.series[1].pos[0], 9583);
     }
 
+    fn prices(list: &[&str]) -> Chart {
+        let d: Date = "2026-01-31".parse().unwrap();
+        build_fitted(
+            vec![d; list.len()],
+            vec![(
+                "Price".into(),
+                SeriesStyle::Line,
+                list.iter().map(|s| m(s)).collect(),
+            )],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_fitted_axis_follows_the_data_in_sub_dollar_steps() {
+        let c = prices(&["10.10", "10.50", "10.30"]);
+        let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["10", "10.1", "10.2", "10.3", "10.4", "10.5", "10.6"]
+        );
+        assert_eq!(c.ticks[0].pos, 0);
+        assert_eq!(c.ticks.last().unwrap().pos, SCALE);
+        // The line stays off the top and bottom.
+        let pos = &c.series[0].pos;
+        assert!(pos.iter().all(|p| *p > 0 && *p < SCALE));
+        // Zero is off the plot: kept on the bottom edge.
+        assert_eq!(c.zero, 0);
+    }
+
+    #[test]
+    fn a_fitted_axis_can_name_quarter_steps() {
+        let c = prices(&["10.00", "11.25"]);
+        let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
+        assert!(labels.contains(&"10.25") || labels.contains(&"10.5"));
+        assert!(c.series[0].pos[0] > 0 && c.series[0].pos[1] < SCALE);
+    }
+
+    #[test]
+    fn a_fitted_flat_series_gets_room_each_side() {
+        let c = prices(&["10.00", "10.00"]);
+        assert!(c.ticks.len() >= 3);
+        let p = c.series[0].pos[0];
+        assert!(p > 0 && p < SCALE);
+        assert_eq!(p, c.series[0].pos[1]);
+        let zero = prices(&["0.00"]);
+        assert!(zero.ticks.len() >= 2);
+    }
+
+    #[test]
+    fn a_fitted_axis_through_zero_keeps_zero_in_place() {
+        let c = prices(&["-2.00", "3.00"]);
+        assert!(c.zero > 0 && c.zero < SCALE);
+    }
+
     #[test]
     fn empty_chart_still_has_an_axis() {
         let c = build(Vec::new(), Vec::new()).unwrap();
         assert_eq!(c.ticks.len(), 2);
+    }
+
+    #[test]
+    fn the_date_axis_names_days_months_or_years() {
+        let d = |s: &str| -> Date { s.parse().unwrap() };
+        let unit = |ds: &[&str]| x_unit(&ds.iter().map(|s| d(s)).collect::<Vec<_>>());
+        assert_eq!(unit(&["2026-09-23", "2026-09-30"]), XUnit::Day);
+        assert_eq!(unit(&["2026-07-01", "2026-09-30"]), XUnit::Day);
+        assert_eq!(
+            unit(&["2025-09-30", "2026-03-31", "2026-09-30"]),
+            XUnit::Month
+        );
+        assert_eq!(unit(&["2021-09-30", "2026-09-30"]), XUnit::Year);
+        // Year-end points two years apart.
+        assert_eq!(unit(&["2024-12-31", "2025-12-31"]), XUnit::Year);
+        assert_eq!(unit(&[]), XUnit::Month);
     }
 }

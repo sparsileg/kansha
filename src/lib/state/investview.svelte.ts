@@ -1,7 +1,8 @@
 // The Investments screen: its named views, the as-of date, and the
 // overview Rust works out (POS-010, LOT-150). Views are kept in the book
 // (SET-070) through booksettings.svelte.ts; `applyStored` reads them when
-// a book opens. Which rows are expanded is kept while the app runs.
+// a book opens. Whether closed lots show is part of each view. Which rows
+// are expanded is kept while the app runs.
 
 import { call, commands } from "../api";
 import {
@@ -34,6 +35,9 @@ class InvestViewState {
   #seq = 0;
 
   view = $derived(this.views[this.selected]);
+  /** Show each lot's sales and the securities sold out (POS-040); kept
+   * per view. */
+  showClosed = $derived(this.view.showClosed);
   /** Open investment accounts, in the account list's order. */
   available = $derived(
     listsState.accounts.filter((a) => a.investment && a.status === "open").map((a) => a.id),
@@ -70,6 +74,10 @@ class InvestViewState {
     return defaultView(this.selected);
   }
 
+  setShowClosed(on: boolean) {
+    this.update({ ...this.view, showClosed: on });
+  }
+
   toggle(key: string) {
     const next = new Set(this.expanded);
     if (!next.delete(key)) next.add(key);
@@ -87,7 +95,7 @@ class InvestViewState {
         this.view,
         investState.securities.map((s) => s.id),
       );
-      const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null));
+      const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null, this.showClosed));
       if (seq !== this.#seq) return;
       this.portfolio = p;
       this.error = null;

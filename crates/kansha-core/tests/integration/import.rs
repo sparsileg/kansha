@@ -730,6 +730,177 @@ T10.00
     );
 }
 
+/// A security the import creates and no account holds when it is done is
+/// created hidden, so price download passes it over (SEC-040, PRC-040);
+/// its history stays. One held, or one already in the book, is left as
+/// it is.
+#[test]
+fn securities_no_longer_held_are_hidden() {
+    let text = "!Account
+NInv
+TInvst
+^
+!Type:Invst
+D1/2'25
+NBuy
+YHeld Fund
+Q10
+I10
+T100.00
+^
+D1/2'25
+NBuy
+YSold Fund
+Q5
+I20
+T100.00
+^
+D3/3'25
+NSell
+YSold Fund
+Q5
+I22
+T110.00
+^
+";
+    let mut db = db();
+    let s = Staged::new("inv.qif", text.as_bytes().to_vec());
+    let r = s
+        .run(&mut db, &clock(), &ImportOptions::default(), false, None)
+        .unwrap();
+    assert!(r.committed, "{:?}", r.errors);
+    assert_eq!((r.securities_created, r.securities_hidden), (2, 1));
+    let hidden = |name: &str| {
+        kansha_core::persistence::securities::list(db.conn())
+            .unwrap()
+            .into_iter()
+            .find(|x| x.fields.name == name)
+            .unwrap()
+            .fields
+            .hidden
+    };
+    assert!(hidden("Sold Fund"));
+    assert!(!hidden("Held Fund"));
+}
+
+/// The mapping step can keep a sold-out security the import creates
+/// shown, instead of hidden.
+#[test]
+fn a_sold_out_security_can_be_kept_shown() {
+    let text = "!Account
+NInv
+TInvst
+^
+!Type:Invst
+D1/2'25
+NBuy
+YSold Fund
+Q5
+I20
+T100.00
+^
+D3/3'25
+NSell
+YSold Fund
+Q5
+I22
+T110.00
+^
+";
+    let mut db = db();
+    let s = Staged::new("inv.qif", text.as_bytes().to_vec());
+    let o = ImportOptions {
+        show_securities: vec!["sold fund".into()],
+        ..ImportOptions::default()
+    };
+    let r = s.run(&mut db, &clock(), &o, false, None).unwrap();
+    assert!(r.committed, "{:?}", r.errors);
+    assert_eq!((r.securities_created, r.securities_hidden), (1, 0));
+    let sold = kansha_core::persistence::securities::list(db.conn())
+        .unwrap()
+        .into_iter()
+        .find(|x| x.fields.name == "Sold Fund")
+        .unwrap();
+    assert!(!sold.fields.hidden);
+}
+
+/// Quicken's per-account export: the file name drops the spaces ("FidelityIRA510")
+/// that transfers keep ("Fidelity IRA 510"), so the account is one, named as
+/// transfers name it. Its empty opening `Cash` and `ShrsIn` with no shares
+/// are warnings, not bad records.
+#[test]
+fn a_per_account_export_is_one_account_and_its_empty_entries_are_warnings() {
+    let text = "!Type:Invst
+D1/2'25
+NCash
+L[Fidelity IRA 510]
+^
+D1/3'25
+NShrsIn
+YSome Fund
+M0 shares added to account
+^
+D1/4'25
+NCash
+CR
+U5.00
+T5.00
+MBalance Adjustment
+L[Fidelity IRA 510]
+^
+";
+    let mut db = db();
+    let s = Staged::new("FidelityIRA510.QIF", text.as_bytes().to_vec());
+    let p = s.preview(db.conn(), &ImportOptions::default()).unwrap();
+    assert!(p.errors.is_empty(), "{:?}", p.errors);
+    let names: Vec<_> = p.accounts.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(names, ["Fidelity IRA 510"]);
+    let said: Vec<_> = p.warnings.iter().map(|w| w.message.as_str()).collect();
+    assert!(
+        said.iter().any(|w| w.contains("ShrsIn has no shares")),
+        "{said:?}"
+    );
+    assert!(
+        said.iter().any(|w| w.contains("Cash has no amount")),
+        "{said:?}"
+    );
+    let r = s
+        .run(&mut db, &clock(), &ImportOptions::default(), false, None)
+        .unwrap();
+    assert!(r.committed, "{:?}", r.errors);
+    let ira = account(&db, "Fidelity IRA 510");
+    assert_eq!(
+        kansha_core::persistence::invest::cash_balance(db.conn(), ira, None).unwrap(),
+        m("5.00")
+    );
+}
+
+/// The book's account matches a file name by its letters and digits, when
+/// only one does.
+#[test]
+fn a_file_name_finds_the_books_account_without_spaces() {
+    let mut book = kansha_core::testkit::Book::new(date("2026-06-30")).unwrap();
+    let sav = book.account("Savings 676", AccountType::Savings).unwrap();
+    let text = "!Type:Bank
+D1/5'26
+T10.00
+PX
+LFood
+^
+";
+    let s = Staged::new("Savings676.QIF", text.as_bytes().to_vec());
+    let p = s
+        .preview(book.db_mut().conn(), &ImportOptions::default())
+        .unwrap();
+    assert_eq!(p.accounts[0].choice, AccountChoice::Existing { id: sav });
+    // Two books' accounts with the same letters: no guess.
+    book.account("Savings-676", AccountType::Savings).unwrap();
+    let p = s
+        .preview(book.db_mut().conn(), &ImportOptions::default())
+        .unwrap();
+    assert!(matches!(p.accounts[0].choice, AccountChoice::Create { .. }));
+}
+
 /// Timing for a large file (NFR-050): 20 years, a checking entry on 28
 /// days a month and a transfer to savings every week (7,680
 /// transactions). `cargo test --release -p

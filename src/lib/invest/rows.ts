@@ -1,6 +1,7 @@
 // The Investments screen's rows, flattened from Rust's overview: account
-// rows, then positions and (when expanded) lots, then cash, then Totals.
-// Only display formatting happens here; every figure comes from Rust.
+// rows, then positions and (when expanded) their open lots and, when
+// asked for, their sales; then cash, then Totals. Only display
+// formatting happens here; every figure comes from Rust.
 
 import { displayDate } from "../format/date";
 import { formatMoney } from "../format/money";
@@ -8,7 +9,7 @@ import { formatPrice, formatQuantity } from "../format/quantity";
 import type { Portfolio, PortfolioPosition, PortfolioTotals } from "../types/bindings";
 import type { ColumnId } from "./views";
 
-export type RowKind = "account" | "cash" | "position" | "lot" | "total";
+export type RowKind = "account" | "cash" | "position" | "lot" | "sale" | "total";
 
 export interface Row {
   key: string;
@@ -21,6 +22,8 @@ export interface Row {
   expanded?: boolean;
   /** Account rows: the account to open. */
   account?: number;
+  /** Position rows: the security, for its details. */
+  security?: number;
   /** A tooltip for the market value: prices missing or old. */
   warn?: string;
   /** Text to flag the price cell: an old price. */
@@ -90,6 +93,7 @@ export function buildRows(
         key: pk,
         kind: "position",
         name: p.name,
+        security: p.security,
         toggleKey: pk,
         expanded: popen,
         cells: popen ? { ticker: p.ticker ?? "" } : positionCells(p),
@@ -109,6 +113,21 @@ export function buildRows(
             gain: money(l.gain),
             day_gain: money(l.day_gain),
             day_percent: percent(p.day_percent),
+          },
+        });
+      }
+      // Sales (Show closed lots): proceeds under Market Value, the
+      // realized gain under Gain/Loss.
+      for (const x of p.sales) {
+        rows.push({
+          key: `s${x.lot}:${x.sold}:${x.shares}`,
+          kind: "sale",
+          name: `Sold ${displayDate(x.sold)} (lot ${displayDate(x.acquired)})`,
+          cells: {
+            shares: formatQuantity(x.shares),
+            cost_basis: money(x.basis),
+            market_value: money(x.proceeds),
+            gain: money(x.gain),
           },
         });
       }

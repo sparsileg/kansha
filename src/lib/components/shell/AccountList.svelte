@@ -24,7 +24,7 @@
     <input type="checkbox" bind:checked={settingsState.showClosedAccounts} />
     Show closed accounts
   </label>
-  {#each groups as g (g.group)}
+  {#each groups as g (g.section)}
     <h3>{g.label}</h3>
     <ul>
       {#each g.accounts as a (a.id)}

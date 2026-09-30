@@ -18,6 +18,7 @@ const portfolio = {
           price: "210", price_date: "2026-06-30", stale: false, market_value: "3150.00", gain: "50.00",
           day_gain: "150.00", day_percent: "5.00",
           lots: [{ lot: 7, acquired: "2026-02-01", shares: "15", basis: "3100.00", market_value: "3150.00", gain: "50.00", day_gain: "150.00" }],
+          sales: [],
         },
       ],
     },
@@ -36,7 +37,9 @@ vi.mock("../lib/api", async (orig) => {
       pricesDownload: (...a: unknown[]) => pricesDownload(...a),
       invAccounts: () => ok([]),
       accountBalances: () => ok([]),
-      securityList: () => ok([{ id: 1, name: "Total Stock Market", ticker: "VTI", hidden: false }]),
+      securityList: () => ok([{ id: 1, name: "Total Stock Market", ticker: "VTI", hidden: false, security_type: "etf" }]),
+      securityTransactions: () => ok([]),
+      securityChart: () => ok({ dates: [], labels: [], series: [], ticks: [], zero: 0, x_unit: "month" }),
     },
   };
 });
@@ -61,13 +64,18 @@ beforeEach(() => {
   investViewState.portfolio = null;
 });
 
+/** Customize, from the gear's menu. */
+async function customize() {
+  await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
+  await fireEvent.click(screen.getByRole("menuitem", { name: "Customize…" }));
+}
+
 describe("Investments view", () => {
-  it("Download Prices, beside Customize, downloads for the As of date (PRC-040)", async () => {
+  it("Download Prices downloads for the As of date (PRC-040); Customize is in the gear's menu", async () => {
     investViewState.asOf = "2026-06-12";
     render(Investments);
     await screen.findByText("Brokerage");
-    const buttons = screen.getAllByRole("button").map((b) => b.textContent?.trim());
-    expect(buttons.indexOf("Download Prices")).toBe(buttons.indexOf("Customize") + 1);
+    expect(screen.queryByRole("button", { name: "Customize" })).toBeNull();
     invPortfolio.mockClear();
     await fireEvent.click(screen.getByRole("button", { name: "Download Prices" }));
     await waitFor(() => expect(pricesDownload).toHaveBeenCalledWith("2026-06-12"));
@@ -93,7 +101,7 @@ describe("Investments view", () => {
     expect(screen.getByText("Totals:")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: /View/ })).toBeTruthy();
     expect((screen.getByLabelText("As of") as HTMLInputElement).value).toBe("06/30/2026");
-    expect(invPortfolio).toHaveBeenCalledWith([2], null, "2026-06-30");
+    expect(invPortfolio).toHaveBeenCalledWith([2], null, "2026-06-30", false);
   });
 
   it("expands an account, then an equity, to its lots", async () => {
@@ -119,14 +127,14 @@ describe("Investments view", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Next month" }));
     expect(screen.getByText("July 2026")).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: "07/04/2026" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-07-04"));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-07-04", false));
     expect((screen.getByLabelText("As of") as HTMLInputElement).value).toBe("07/04/2026");
   });
 
   it("Customize: move Cost Basis in, rename, and the view follows", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
-    await fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+    await customize();
     const dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.input(within(dlg).getByLabelText("Name of view"), { target: { value: "Mine" } });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Cost Basis" }));
@@ -143,13 +151,13 @@ describe("Investments view", () => {
   it("Reset View restores the defaults; Cancel changes nothing", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
-    await fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+    await customize();
     let dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Ticker Symbol" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "<<Remove" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "Cancel" }));
     expect(screen.getAllByRole("columnheader")).toHaveLength(8);
-    await fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+    await customize();
     dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Ticker Symbol" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "<<Remove" }));
@@ -159,14 +167,48 @@ describe("Investments view", () => {
     expect(screen.getAllByRole("columnheader")).toHaveLength(8);
   });
 
-  it("Accounts and Equities tabs hide what is unchecked", async () => {
+  it("Accounts and Securities tabs hide what is unchecked", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
-    await fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+    await customize();
     const dlg = screen.getByRole("dialog", { name: "Customize view" });
-    await fireEvent.click(within(dlg).getByRole("tab", { name: "Equities" }));
+    await fireEvent.click(within(dlg).getByRole("tab", { name: "Securities" }));
     await fireEvent.click(within(dlg).getByRole("checkbox", { name: /Total Stock Market/ }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "OK" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], [], "2026-06-30"));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], [], "2026-06-30", false));
+  });
+
+  it("the gear's Show closed lots asks Rust for sales, and shows it is on", async () => {
+    render(Investments);
+    await screen.findByText("Brokerage");
+    await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Show closed lots" }));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+    await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
+    expect(screen.getByRole("menuitem", { name: "✓ Show closed lots" })).toBeTruthy();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "✓ Show closed lots" }));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false));
+  });
+
+  it("Show closed lots is kept per view: another view starts without it", async () => {
+    render(Investments);
+    await screen.findByText("Brokerage");
+    await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Show closed lots" }));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+    expect(investViewState.views[0].showClosed).toBe(true);
+    investViewState.select(1);
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false));
+    investViewState.select(0);
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+  });
+
+  it("clicking a security opens its details", async () => {
+    render(Investments);
+    await screen.findByText("Brokerage");
+    await fireEvent.click(screen.getByRole("button", { name: "Expand Brokerage" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Total Stock Market" }));
+    const dlg = await screen.findByRole("dialog", { name: "Security Details" });
+    expect((within(dlg).getByRole("combobox", { name: "Security" }) as HTMLSelectElement).value).toBe("1");
   });
 });

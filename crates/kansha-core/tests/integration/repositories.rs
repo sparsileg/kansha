@@ -279,6 +279,80 @@ fn accounts_list_in_group_then_sort_order() {
     assert_eq!(names, ["Checking", "Savings", "Visa"]);
 }
 
+/// ACCT-240: each account takes its group and its place in the whole
+/// arrangement; only what changes is written and audited; an account
+/// listed twice is refused.
+#[test]
+fn arranging_sets_groups_and_order() {
+    use kansha_core::accounts::GroupOrder;
+    let mut db = db();
+    let ids = write(&mut db, |tx| {
+        ["Checking", "Savings", "HSA"]
+            .into_iter()
+            .map(|n| {
+                let t = match n {
+                    "HSA" => AccountType::Hsa,
+                    "Savings" => AccountType::Savings,
+                    _ => AccountType::Checking,
+                };
+                Ok(accounts::insert(tx, &AccountFields::new(n, t))?.id)
+            })
+            .collect::<kansha_core::Result<Vec<AccountId>>>()
+    })
+    .unwrap();
+    let (chk, sav, hsa) = (ids[0], ids[1], ids[2]);
+    assert_eq!(
+        accounts::get(db.conn(), hsa).unwrap().fields.group,
+        AccountGroup::Other
+    );
+    let audits = count(&db, "audit_log");
+    let all = write(&mut db, |tx| {
+        accounts::arrange(
+            tx,
+            &[
+                GroupOrder {
+                    group: AccountGroup::Banking,
+                    accounts: vec![sav, chk],
+                },
+                GroupOrder {
+                    group: AccountGroup::Retirement,
+                    accounts: vec![hsa],
+                },
+            ],
+        )
+    })
+    .unwrap();
+    let got: Vec<_> = all
+        .iter()
+        .map(|a| (a.fields.name.as_str(), a.fields.group, a.fields.sort_order))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("Savings", AccountGroup::Banking, 0),
+            ("Checking", AccountGroup::Banking, 1),
+            ("HSA", AccountGroup::Retirement, 2),
+        ]
+    );
+    // Savings stays at 0; Checking moves to 1 and HSA to Retirement: two
+    // updates. The same arrangement again writes nothing.
+    assert_eq!(count(&db, "audit_log"), audits + 2);
+    let again = [GroupOrder {
+        group: AccountGroup::Banking,
+        accounts: vec![sav, chk],
+    }];
+    write(&mut db, |tx| accounts::arrange(tx, &again)).unwrap();
+    assert_eq!(count(&db, "audit_log"), audits + 2);
+    let twice = [GroupOrder {
+        group: AccountGroup::Banking,
+        accounts: vec![sav, sav],
+    }];
+    assert!(matches!(
+        write(&mut db, |tx| accounts::arrange(tx, &twice)),
+        Err(Error::Invalid(_))
+    ));
+}
+
 #[test]
 fn missing_account_is_not_found() {
     let db = db();

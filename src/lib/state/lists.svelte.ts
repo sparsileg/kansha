@@ -20,6 +20,9 @@ class ListsState {
   today = $state("");
   accounts = $state<Account[]>([]);
   balances = $state<AccountBalance[]>([]);
+  /** Net worth today, from Rust, for the foot of the account list;
+   * `null` until loaded or when it could not be. */
+  netWorth = $state<string | null>(null);
   categories = $state<Category[]>([]);
   tags = $state<Tag[]>([]);
   payees = $state<Payee[]>([]);
@@ -89,6 +92,7 @@ class ListsState {
       this.payees = payees;
       this.taxLines = taxLines;
       this.error = null;
+      void this.loadNetWorth();
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -110,6 +114,17 @@ class ListsState {
       this.balances = await call(commands.accountBalances());
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
+    }
+    await this.loadNetWorth();
+  }
+
+  /** Net worth changes with balances and prices. A failure only blanks
+   * the figure: the rest of the list still works. */
+  async loadNetWorth(): Promise<void> {
+    try {
+      this.netWorth = await call(commands.netWorth());
+    } catch {
+      this.netWorth = null;
     }
   }
 }

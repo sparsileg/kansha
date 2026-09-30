@@ -21,13 +21,17 @@ mod investing;
 mod itemized;
 mod net_worth;
 mod range;
+mod security;
 mod tax;
 mod tree;
 
-pub use chart::{Chart, Series, SeriesStyle, Tick};
+pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;
-pub use dashboard::{Dashboard, Warning, WarningKind, dashboard};
+pub use dashboard::{Dashboard, Warning, WarningKind, dashboard, net_worth};
 pub use range::{period_label, periods, resolve};
+pub use security::{
+    ChartSpan, SecurityChartKind, SecurityTxn, security_chart, security_transactions, span_dates,
+};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

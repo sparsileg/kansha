@@ -18,6 +18,10 @@ pub struct Migration {
     pub version: u32,
     pub description: &'static str,
     pub sql: &'static str,
+    /// Runs with foreign keys off: it rebuilds a table other tables
+    /// reference (SQLite's documented way to change its constraints).
+    /// Every reference is checked before the migration commits.
+    pub foreign_keys_off: bool,
 }
 
 /// All migrations, in order. Versions are 1, 2, 3, … with no gaps.
@@ -27,21 +31,37 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 1,
         description: "initial schema",
         sql: include_str!("migrations/0001_init.sql"),
+        foreign_keys_off: false,
     },
     Migration {
         version: 2,
         description: "occurrence review flag",
         sql: include_str!("migrations/0002_occurrence_review.sql"),
+        foreign_keys_off: false,
     },
     Migration {
         version: 3,
         description: "tax lines",
         sql: include_str!("migrations/0003_tax_lines.sql"),
+        foreign_keys_off: false,
     },
     Migration {
         version: 4,
         description: "average cost lot adjustments",
         sql: include_str!("migrations/0004_average_cost.sql"),
+        foreign_keys_off: false,
+    },
+    Migration {
+        version: 5,
+        description: "other account group",
+        sql: include_str!("migrations/0005_other_group.sql"),
+        foreign_keys_off: true,
+    },
+    Migration {
+        version: 6,
+        description: "donor advised fund security type",
+        sql: include_str!("migrations/0006_donor_advised_fund.sql"),
+        foreign_keys_off: true,
     },
 ];
 
@@ -122,29 +142,44 @@ pub fn migrate_to(conn: &mut Connection, clock: &dyn Clock, target: u32) -> Resu
         .iter()
         .filter(|m| m.version > start && m.version <= target)
     {
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        tx.execute_batch(m.sql).map_err(|e| {
-            Error::Database(format!("migration {} ({}): {e}", m.version, m.description))
-        })?;
-        tx.execute(
-            "INSERT INTO schema_version (version, description, applied_at) VALUES (?1, ?2, ?3)",
-            rusqlite::params![m.version, m.description, clock.now()],
-        )?;
-        // Leave no dangling references behind (FKs are checked per
-        // statement, but a migration may rebuild tables).
-        let dangling: Option<String> = tx
-            .query_row("PRAGMA foreign_key_check", [], |r| r.get(0))
-            .optional()?;
-        if let Some(table) = dangling {
-            return Err(Error::Database(format!(
-                "migration {} left a foreign key violation in {table}",
-                m.version
-            )));
+        // The pragma has no effect inside a transaction: set it first,
+        // and turn foreign keys back on whatever happens.
+        if m.foreign_keys_off {
+            conn.pragma_update(None, "foreign_keys", false)?;
         }
-        tx.commit()?;
+        let applied = apply(conn, clock, m);
+        if m.foreign_keys_off {
+            conn.pragma_update(None, "foreign_keys", true)?;
+        }
+        applied?;
         current = m.version;
     }
     Ok(current)
+}
+
+/// One migration and its `schema_version` row, in one transaction.
+fn apply(conn: &mut Connection, clock: &dyn Clock, m: &Migration) -> Result<()> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute_batch(m.sql).map_err(|e| {
+        Error::Database(format!("migration {} ({}): {e}", m.version, m.description))
+    })?;
+    tx.execute(
+        "INSERT INTO schema_version (version, description, applied_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![m.version, m.description, clock.now()],
+    )?;
+    // Leave no dangling references behind (FKs are checked per
+    // statement, but a migration may rebuild tables).
+    let dangling: Option<String> = tx
+        .query_row("PRAGMA foreign_key_check", [], |r| r.get(0))
+        .optional()?;
+    if let Some(table) = dangling {
+        return Err(Error::Database(format!(
+            "migration {} left a foreign key violation in {table}",
+            m.version
+        )));
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]

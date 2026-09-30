@@ -124,6 +124,98 @@ under `age`).
   after reopening. Books belong on a local disk (WAL needs working
   shared memory and locks); the earlier "out of memory" may be the
   same cause.
+- Securities the import creates that no account holds afterwards
+  (Stan's IRA: Floating Rate) are created hidden (MIG-140), so price
+  download skips them. Books imported before this keep theirs shown:
+  hide them in Tools > Securities, or roll back and import again.
+- Per-account exports carry no `!Type:Security` list, so tickers and
+  types come in empty/Other; type them in the mapping step or export
+  with Security lists ticked.
+
+## Alongside Phase 9 (2026-09-30, spec 0.6.1 … 0.6.4)
+
+UI and investment work Stan asked for during the import trials; not
+MIG scope.
+
+Files created:
+- `src/lib/components/GearButton.svelte`: the gear used on screens'
+  bars.
+- `src/lib/components/invest/SecurityDetailsModal.svelte` (+ test):
+  SEC-060.
+- `src/lib/components/shell/ArrangeAccountsModal.svelte` (+ test):
+  ACCT-240.
+- `src/lib/dashboard/cards.ts` (+ test): dashboard card IDs and the
+  stored layout (DSH-040); `CustomizeDashboardModal.svelte`.
+- `src/lib/invest/securityTypes.ts`, `src/lib/reports/axis.ts` (+ test).
+- `crates/kansha-core/src/reports/security.rs`: security transactions,
+  graph, spans.
+- Migrations `0005_other_group.sql` (account group `other`),
+  `0006_donor_advised_fund.sql` (security type). Both rebuild a table
+  others reference, so `Migration` gained `foreign_keys_off`: the
+  runner turns foreign keys off around that migration and still runs
+  `foreign_key_check` before commit.
+
+Decisions:
+1. **Sheets and cards:** `.sheet` and `.card` in `base.css`; surfaces
+   use the theme's row color (white in Classic; flat in dark themes).
+   Reports stay forced light (paper).
+2. **Account list:** groups stay seven in the data; the list shows six
+   sections, Assets & Debt = Assets + Liabilities (the Net Worth report
+   keeps them apart). Arrange stores each account's place in the whole
+   arrangement as `sort_order`, runs of one group at a time, so a mixed
+   section keeps its order.
+3. **Net Worth** at the list's foot: `reports::net_worth`, the
+   dashboard's figure, reloaded with balances.
+4. **Show closed lots:** `portfolio(.., closed)` adds `lot_disposal`
+   sales (kind `sale`) up to the date under each position, and
+   sold-out positions (zero shares, market value 0, in no total).
+   Transfers out are not shown as sales. Kept per view (0.6.5:
+   `ViewDef.showClosed`, inside the `invest_views` JSON).
+5. **Security Details graph:** points are the security's price dates in
+   the span (at most 250), market value = shares in every account ×
+   latest price (MMF $1.00); prices drawn on the money axis rounded to
+   cents. 0.6.5: a "Fit graph to data" box (on to start) asks Rust for
+   `chart::build_fitted`: the axis follows the data's min..max with
+   steps down to a cent and room above and below; off, the old axis
+   from zero. `security_chart` gained `fitted` (API change).
+6. **Date axis:** Rust picks the unit (`Chart.x_unit`); the UI labels
+   the first point of each day/month/year, at most twelve.
+7. **Import order** (decision 7 above): sales after the day's other
+   records.
+8. **Reconcile and Reminders** (0.6.4) on sheets like the other views:
+   shaded sticky headings, striped rows; a ticked reconcile row keeps
+   its tint over the stripe.
+9. **Needs Attention** (DSH-030, 0.6.4): investment accounts with old
+   uncleared transactions are one line naming none (they are not
+   reconciled); banking, credit, and asset accounts are still named.
+10. **Convention (Stan):** a view's title sits in a shaded band at the
+    top of the view's sheet (`.view-sheet`, `.view-title`,
+    `.view-body` in `base.css`). Built for the Dashboard only (0.6.5);
+    the other views keep their title in WindowFrame's band until Stan
+    says to move them.
+11. **DSH-040** (0.6.5): `Settings.dashboard_cards`, JSON
+    `{order, hidden}` of card IDs; `null` = default. Unknown IDs drop;
+    a card the list lacks shows last, so a new card appears without a
+    migration. To add a card: `CardId`, `CARDS`, a body in
+    `Dashboard.svelte`. Gear in the title band > Customize.
+12. **Importer** (0.6.5): (a) `ShrsIn` with no shares and Quicken's
+    `Cash` with no amount (its empty opening entry) are warnings and
+    skipped; (b) in a per-account export the file-name account
+    (`FidelityIRA510`) and the name transfers use (`Fidelity IRA 510`)
+    are one account, named as transfers name it (same letters and
+    digits, undefined account with records); the book's account is
+    found the same way when only one matches; (c)
+    `ImportOptions.show_securities`: a "Keep shown" box per new
+    security keeps it from being created hidden when sold out.
+
+Gaps:
+- Calendar, Investments, dashboard: checked by Stan in the app only by
+  eye; no visual tests.
+- Security Details opens only from the Investments screen.
+- Only the Dashboard has its title in its sheet (decision 10).
+- Importer fixes (decision 12) were tested with synthetic records
+  shaped like Stan's Fidelity and Vanguard exports, not re-run on the
+  real files.
 
 ## Known gaps
 

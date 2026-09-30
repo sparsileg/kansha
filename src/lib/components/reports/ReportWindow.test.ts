@@ -250,7 +250,7 @@ describe("Itemized report toolbar", () => {
 describe("Report windows", () => {
   const withChart = {
     ...report,
-    chart: { dates: ["2025-12-31"], labels: [], series: [], ticks: [], zero: 0 },
+    chart: { dates: ["2025-12-31"], labels: [], series: [], ticks: [], zero: 0, x_unit: "month" },
   };
 
   it("opens in a window on top, and reruns each time it is shown", async () => {

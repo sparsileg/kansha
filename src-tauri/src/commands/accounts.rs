@@ -2,7 +2,7 @@
 
 use kansha_core::Date;
 use kansha_core::accounts::{
-    Account, AccountFields, AccountId, AccountType, masked_account_number,
+    Account, AccountFields, AccountId, AccountType, GroupOrder, masked_account_number,
 };
 use kansha_core::ledger::{self, AccountBalance};
 use kansha_core::persistence::accounts;
@@ -59,6 +59,18 @@ pub fn account_update(
     fields: AccountFields,
 ) -> CmdResult<Account> {
     state.write(|tx| accounts::update(tx, id, &fields))
+}
+
+/// Arrange the account list: runs of accounts by group, in list order
+/// (ACCT-240).
+/// Returns every account.
+#[tauri::command]
+#[specta::specta]
+pub fn account_arrange(
+    state: State<'_, AppState>,
+    groups: Vec<GroupOrder>,
+) -> CmdResult<Vec<Account>> {
+    state.write(|tx| accounts::arrange(tx, &groups))
 }
 
 /// Close as of `date` (ACCT-210). A non-zero balance fails with

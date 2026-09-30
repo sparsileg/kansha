@@ -84,30 +84,62 @@ fn add(a: Money, b: Money) -> Result<Money> {
     a.checked_add(b).ok_or(Error::Overflow("dashboard"))
 }
 
-pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<Dashboard> {
-    let all = accounts::list(conn)?;
-    let mut cash = Money::ZERO;
-    let mut investments = Money::ZERO;
-    let mut other_assets = Money::ZERO;
-    let mut liabilities = Money::ZERO;
-    for a in &all {
-        let v = shown_balance(conn, a, today)?;
-        let t = a.fields.account_type;
-        let slot = if t.is_liability() {
-            &mut liabilities
-        } else if t.is_investment() {
-            &mut investments
-        } else if t.is_cash_bearing() {
-            &mut cash
-        } else {
-            &mut other_assets
+/// Net worth's parts today: cash, investments, other assets, and
+/// liabilities (owed, positive), every account counted.
+struct Parts {
+    cash: Money,
+    investments: Money,
+    other_assets: Money,
+    liabilities: Money,
+}
+
+impl Parts {
+    fn load(conn: &Connection, today: Date) -> Result<Parts> {
+        let mut p = Parts {
+            cash: Money::ZERO,
+            investments: Money::ZERO,
+            other_assets: Money::ZERO,
+            liabilities: Money::ZERO,
         };
-        *slot = add(*slot, v)?;
+        for a in &accounts::list(conn)? {
+            let v = shown_balance(conn, a, today)?;
+            let t = a.fields.account_type;
+            let slot = if t.is_liability() {
+                &mut p.liabilities
+            } else if t.is_investment() {
+                &mut p.investments
+            } else if t.is_cash_bearing() {
+                &mut p.cash
+            } else {
+                &mut p.other_assets
+            };
+            *slot = add(*slot, v)?;
+        }
+        Ok(p)
     }
-    let assets = add(add(cash, investments)?, other_assets)?;
-    let net_worth = assets
-        .checked_sub(liabilities)
-        .ok_or(Error::Overflow("dashboard"))?;
+
+    fn net_worth(&self) -> Result<Money> {
+        add(add(self.cash, self.investments)?, self.other_assets)?
+            .checked_sub(self.liabilities)
+            .ok_or(Error::Overflow("dashboard"))
+    }
+}
+
+/// Net worth today, as the dashboard shows it (DSH-010): for the foot of
+/// the account list (ACCT-240).
+pub fn net_worth(conn: &Connection, today: Date) -> Result<Money> {
+    Parts::load(conn, today)?.net_worth()
+}
+
+pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<Dashboard> {
+    let parts = Parts::load(conn, today)?;
+    let net_worth = parts.net_worth()?;
+    let Parts {
+        cash,
+        investments,
+        other_assets,
+        liabilities,
+    } = parts;
 
     // This month's income and spending.
     let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
@@ -149,6 +181,7 @@ pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<D
             .into_iter()
             .map(|(_, end)| end),
     );
+    let all = accounts::list(conn)?;
     let mut values = Vec::with_capacity(dates.len());
     for d in &dates {
         let mut total = Money::ZERO;
@@ -233,11 +266,18 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
     }
     out.extend(prices.into_values());
 
-    // Accounts with old uncleared transactions.
+    // Accounts with old uncleared transactions: each banking and credit
+    // account by name; investment accounts, which are not reconciled,
+    // in one line.
     let before = schedule::add_days(today, -UNCLEARED_DAYS).unwrap_or(today);
+    let mut investment = false;
     for id in repo::accounts_with_old_uncleared(conn, before)? {
         let Some(a) = lk.account(id) else { continue };
         if a.status != AccountStatus::Open {
+            continue;
+        }
+        if a.fields.account_type.is_investment() {
+            investment = true;
             continue;
         }
         out.push(Warning {
@@ -247,6 +287,15 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
                 a.fields.name
             ),
             account: Some(id),
+        });
+    }
+    if investment {
+        out.push(Warning {
+            kind: WarningKind::Unreconciled,
+            message: format!(
+                "Some investment accounts have uncleared transactions more than {UNCLEARED_DAYS} days old."
+            ),
+            account: None,
         });
     }
 

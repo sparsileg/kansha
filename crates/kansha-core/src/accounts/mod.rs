@@ -38,7 +38,8 @@ text_enum! {
 }
 
 text_enum! {
-    /// Account list groups (ACCT-240).
+    /// Account list groups (ACCT-240). Other holds health savings
+    /// accounts, and anything the user puts there.
     pub enum AccountGroup {
         Banking = "banking",
         Credit = "credit",
@@ -46,6 +47,7 @@ text_enum! {
         Retirement = "retirement",
         Assets = "assets",
         Liabilities = "liabilities",
+        Other = "other",
     }
 }
 
@@ -159,14 +161,22 @@ impl AccountType {
             | AccountType::MoneyMarket => AccountGroup::Banking,
             AccountType::CreditCard => AccountGroup::Credit,
             AccountType::Brokerage => AccountGroup::Investments,
-            AccountType::TraditionalIra
-            | AccountType::RothIra
-            | AccountType::Hsa
-            | AccountType::Retirement401k => AccountGroup::Retirement,
+            AccountType::TraditionalIra | AccountType::RothIra | AccountType::Retirement401k => {
+                AccountGroup::Retirement
+            }
+            AccountType::Hsa => AccountGroup::Other,
             AccountType::OtherAsset => AccountGroup::Assets,
             AccountType::OtherLiability | AccountType::Loan => AccountGroup::Liabilities,
         }
     }
+}
+
+/// A run of accounts in one account-list group, in list order (ACCT-240).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct GroupOrder {
+    pub group: AccountGroup,
+    pub accounts: Vec<AccountId>,
 }
 
 /// Settings only investment accounts have (ACCT-130, INV-300, D-50).
@@ -317,6 +327,7 @@ mod tests {
             TaxTreatment::Taxable
         );
         assert_eq!(AccountType::Loan.default_group(), AccountGroup::Liabilities);
+        assert_eq!(AccountType::Hsa.default_group(), AccountGroup::Other);
         assert!(
             AccountFields::new("B", AccountType::Brokerage)
                 .investment

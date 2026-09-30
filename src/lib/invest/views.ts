@@ -38,6 +38,8 @@ export interface ViewDef {
   accountOrder: number[];
   hiddenAccounts: number[];
   hiddenSecurities: number[];
+  /** Show each lot's sales and the securities sold out (POS-040). */
+  showClosed: boolean;
 }
 
 export interface ViewsState {
@@ -54,6 +56,7 @@ export function defaultView(slot: number): ViewDef {
     accountOrder: [],
     hiddenAccounts: [],
     hiddenSecurities: [],
+    showClosed: false,
   };
 }
 
@@ -77,6 +80,7 @@ function cleanView(v: unknown, slot: number): ViewDef {
     accountOrder: isIds(o.accountOrder) ? o.accountOrder : [],
     hiddenAccounts: isIds(o.hiddenAccounts) ? o.hiddenAccounts : [],
     hiddenSecurities: isIds(o.hiddenSecurities) ? o.hiddenSecurities : [],
+    showClosed: o.showClosed === true,
   };
 }
 

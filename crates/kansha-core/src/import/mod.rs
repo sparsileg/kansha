@@ -99,6 +99,9 @@ pub struct ImportOptions {
     pub keep_categories: Vec<String>,
     pub keep_tags: Vec<String>,
     pub keep_securities: Vec<String>,
+    /// Securities the import creates that stay shown although no account
+    /// holds them afterwards (otherwise those are created hidden).
+    pub show_securities: Vec<String>,
     /// Import the price history of the securities kept (MIG-140).
     pub prices: bool,
     /// Import everything else when some records cannot be imported (they

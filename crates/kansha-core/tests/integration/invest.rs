@@ -583,7 +583,7 @@ fn portfolio_rolls_up_lots_and_day_change() {
     b.price(vti, date("2026-06-29"), p("200")).unwrap();
     b.price(vti, date("2026-06-30"), p("210")).unwrap();
 
-    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30")).unwrap();
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), false).unwrap();
     let acct = &pf.accounts[0];
     assert_eq!(acct.cash, Some(m("6900.00")));
     let pos = &acct.positions[0];
@@ -614,7 +614,7 @@ fn portfolio_rolls_up_lots_and_day_change() {
     assert_eq!(pf.total, acct.totals);
 
     // No price dated exactly that day: valued at the latest, no day change.
-    let later = invest::portfolio(b.conn(), &[brk], None, date("2026-07-05")).unwrap();
+    let later = invest::portfolio(b.conn(), &[brk], None, date("2026-07-05"), false).unwrap();
     assert_eq!(
         later.accounts[0].positions[0].market_value,
         Some(m("3150.00"))
@@ -623,13 +623,84 @@ fn portfolio_rolls_up_lots_and_day_change() {
     assert_eq!(later.total.day_gain, None);
     assert_eq!(later.total.day_percent, None);
     // A first price has nothing to compare with.
-    let first = invest::portfolio(b.conn(), &[brk], None, date("2026-06-29")).unwrap();
+    let first = invest::portfolio(b.conn(), &[brk], None, date("2026-06-29"), false).unwrap();
     assert_eq!(first.accounts[0].positions[0].day_gain, None);
 
     // Limited to other securities: no positions, cash stays.
-    let none = invest::portfolio(b.conn(), &[brk], Some(&[other]), date("2026-06-30")).unwrap();
+    let none =
+        invest::portfolio(b.conn(), &[brk], Some(&[other]), date("2026-06-30"), false).unwrap();
     assert!(none.accounts[0].positions.is_empty());
     assert_eq!(none.total.market_value, m("6900.00"));
+}
+
+/// POS-040 "Show closed lots": each sale from a lot, even a partial one,
+/// under its security; the lot's rest stays open. A security sold out
+/// shows with no shares and its sales, and adds nothing to the totals.
+#[test]
+fn portfolio_shows_sales_when_asked() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let bnd = b.security("Bond Fund", "BND", SecurityType::Etf).unwrap();
+    b.invest(&buy(brk, vti, "2026-02-02", "40", "4000.00"))
+        .unwrap();
+    b.invest(&buy(brk, bnd, "2026-02-03", "10", "1000.00"))
+        .unwrap();
+    let sell = |s: SecurityId, d: &str, shares: &str, amount: &str| {
+        let mut i = InvInput::new(brk, InvAction::Sell, date(d));
+        i.security = Some(s);
+        i.quantity = Some(q(shares));
+        i.amount = Some(m(amount));
+        i
+    };
+    b.invest(&sell(vti, "2026-03-01", "15", "1800.00")).unwrap();
+    b.invest(&sell(bnd, "2026-04-01", "10", "900.00")).unwrap();
+    b.price(vti, date("2026-06-30"), p("110")).unwrap();
+    b.price(bnd, date("2026-06-30"), p("95")).unwrap();
+
+    let open = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), false).unwrap();
+    assert_eq!(open.accounts[0].positions.len(), 1);
+    assert!(open.accounts[0].positions[0].sales.is_empty());
+
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), true).unwrap();
+    let acct = &pf.accounts[0];
+    let names: Vec<_> = acct.positions.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, vec!["Bond Fund", "Total Stock Market"]);
+    let (sold_out, held) = (&acct.positions[0], &acct.positions[1]);
+    assert_eq!(held.shares, q("25"));
+    assert_eq!(held.lots.len(), 1);
+    assert_eq!(held.lots[0].shares, q("25"));
+    let sale = &held.sales[0];
+    assert_eq!(
+        (
+            sale.acquired,
+            sale.sold,
+            sale.shares,
+            sale.basis,
+            sale.proceeds,
+            sale.gain
+        ),
+        (
+            date("2026-02-02"),
+            date("2026-03-01"),
+            q("15"),
+            m("1500.00"),
+            m("1800.00"),
+            m("300.00")
+        )
+    );
+    assert_eq!(sold_out.shares, Quantity::ZERO);
+    assert!(sold_out.lots.is_empty());
+    assert_eq!(sold_out.sales[0].gain, m("-100.00"));
+    assert_eq!(sold_out.market_value, Some(Money::ZERO));
+    assert_eq!(pf.total, open.total, "sales change no total");
+    // Before the sale, nothing is closed.
+    let early = invest::portfolio(b.conn(), &[brk], None, date("2026-02-28"), true).unwrap();
+    assert!(
+        early.accounts[0]
+            .positions
+            .iter()
+            .all(|p| p.sales.is_empty())
+    );
 }
 
 #[test]
@@ -638,7 +709,7 @@ fn portfolio_flags_positions_without_a_price() {
     let (brk, vti) = funded(&mut b);
     b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
         .unwrap();
-    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30")).unwrap();
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), false).unwrap();
     let pos = &pf.accounts[0].positions[0];
     assert_eq!(pos.market_value, None);
     assert_eq!(pos.gain, None);
@@ -797,4 +868,105 @@ fn reconciled_balance_check_counts_cash_not_holdings() {
         .unwrap();
     let report = integrity::check(b.conn()).unwrap();
     assert!(report.is_clean(), "{:?}", report.issues);
+}
+
+/// SEC-060: a security's transactions in every account, and its graph of
+/// market value (shares held × price on each price date) or price.
+#[test]
+fn security_details_list_its_transactions_and_graph_them() {
+    use kansha_core::reports::{self, SecurityChartKind};
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let ira = b.account("IRA", AccountType::TraditionalIra).unwrap();
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "1000.00"))
+        .unwrap();
+    let mut add = InvInput::new(ira, InvAction::SharesAdded, date("2026-03-01"));
+    add.security = Some(vti);
+    add.quantity = Some(q("5"));
+    add.amount = Some(m("500.00"));
+    b.invest(&add).unwrap();
+    let mut sell = InvInput::new(brk, InvAction::Sell, date("2026-04-01"));
+    sell.security = Some(vti);
+    sell.quantity = Some(q("4"));
+    sell.amount = Some(m("480.00"));
+    b.invest(&sell).unwrap();
+    for (d, px) in [
+        ("2026-02-01", "100"),
+        ("2026-03-15", "110"),
+        ("2026-04-15", "120.125"),
+    ] {
+        b.price(vti, date(d), p(px)).unwrap();
+    }
+
+    let t = reports::security_transactions(b.conn(), vti, date("2026-06-30")).unwrap();
+    let got: Vec<_> = t
+        .iter()
+        .map(|x| (x.date.to_string(), x.account == ira, x.action))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("2026-02-01".into(), false, InvAction::Buy),
+            ("2026-03-01".into(), true, InvAction::SharesAdded),
+            ("2026-04-01".into(), false, InvAction::Sell),
+        ]
+    );
+
+    let (from, to) = (date("2026-01-01"), date("2026-06-30"));
+    let mv = reports::security_chart(
+        b.conn(),
+        vti,
+        SecurityChartKind::MarketValue,
+        from,
+        to,
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        mv.dates.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        ["2026-02-01", "2026-03-15", "2026-04-15"]
+    );
+    // 10 × 100; 15 × 110; 11 × 120.125 = 1,321.375 → 1,321.38.
+    assert_eq!(
+        mv.series[0].values,
+        vec![m("1000.00"), m("1650.00"), m("1321.38")]
+    );
+    let px = reports::security_chart(
+        b.conn(),
+        vti,
+        SecurityChartKind::PriceHistory,
+        from,
+        to,
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        px.series[0].values,
+        vec![m("100.00"), m("110.00"), m("120.12")]
+    );
+    // Not fitted: the axis reaches zero. Fitted: it starts near the data.
+    assert_eq!(px.ticks[0].label, "0");
+    let fit = reports::security_chart(
+        b.conn(),
+        vti,
+        SecurityChartKind::PriceHistory,
+        from,
+        to,
+        true,
+    )
+    .unwrap();
+    assert_eq!(fit.series[0].values, px.series[0].values);
+    assert_ne!(fit.ticks[0].label, "0");
+    assert!(fit.series[0].pos[0] > 0);
+    // No price in the span: its two ends.
+    let empty = reports::security_chart(
+        b.conn(),
+        vti,
+        SecurityChartKind::PriceHistory,
+        date("2025-01-01"),
+        date("2025-12-31"),
+        false,
+    )
+    .unwrap();
+    assert_eq!(empty.dates.len(), 2);
 }

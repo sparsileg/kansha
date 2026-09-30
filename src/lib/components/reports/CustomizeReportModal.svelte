@@ -79,6 +79,7 @@
     retirement: "Retirement",
     assets: "Assets",
     liabilities: "Liabilities",
+    other: "Other",
   };
 
   const INVESTMENT = new Set(["brokerage", "traditional_ira", "roth_ira", "hsa", "retirement_401k"]);

@@ -39,6 +39,9 @@
 
     /* The least space between table columns, everywhere. */
     --col-gap: 6px;
+
+    /* The account panel, and the Accounts header above it. */
+    --account-panel-w: 16rem;
 }
 
 /* ── Page ─────────────────────────────────────────────────────────── */
@@ -122,6 +125,67 @@ body {
 .sheet {
     background: var(--row-bg);
     border: 1px solid var(--line);
+}
+/* A card: a sheet with rounded corners and a shaded title band (the
+   dashboard, Security Details). */
+.card {
+    border-radius: 6px;
+    overflow: hidden;
+}
+.card > header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    align-items: center;
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0.35rem 0.8rem;
+}
+.card > header h2 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--fs-ui);
+}
+.card > .body {
+    padding: 0.5rem 0.8rem 0.6rem;
+}
+
+/* A view's sheet: one outlined surface that fills the view. Convention: a
+   view's title sits in the shaded band at the top of its sheet (only the
+   Dashboard so far), and its content is inset from the sheet's border.
+     <section class="view-sheet">
+       <header class="view-title"><h1>Title</h1> …gear…</header>
+       <div class="view-body">…</div>
+     </section> */
+.view-sheet {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--row-bg);
+    border: 1px solid var(--line);
+}
+.view-sheet > .view-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0.4rem 0.9rem;
+}
+.view-sheet > .view-title h1 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--fs-title);
+}
+.view-sheet > .view-body {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    padding: 0.75rem;
 }
 
 /* ── Focus & selection ────────────────────────────────────────────── */

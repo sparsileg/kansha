@@ -42,7 +42,9 @@ function preview(errors = 1): ImportPreview {
       { name: "Never Used", listed: true, kind: "expense", used: 0, total: "0.00", choice: { kind: "create", path: "Never Used", category_kind: "expense" }, imported: false },
     ],
     tags: [],
-    securities: [],
+    securities: [
+      { name: "Sold Fund", symbol: null, qif_type: "", used: 2, prices: 0, choice: { kind: "create", name: "Sold Fund", ticker: null, security_type: "other" }, imported: true },
+    ],
     transactions: 22,
     transfers_matched: 5,
     new_payees: 7,
@@ -64,6 +66,7 @@ function result(committed: boolean): ImportResult {
     categories_created: 5,
     tags_created: 1,
     securities_created: 1,
+    securities_hidden: 0,
     payees_created: 7,
     prices: 2,
     errors: [],
@@ -150,7 +153,22 @@ describe("Import from Quicken (MIG-040 … MIG-100)", () => {
     expect(o.accounts["Old Account"]).toEqual({ kind: "skip" });
   });
 
-  it("tests, then imports, and shows each account against the file", async () => {
+  it("Keep shown sends a new security's name, to keep it from being hidden when sold out", async () => {
+    await open();
+    await fireEvent.click(screen.getByLabelText("Keep Sold Fund shown"));
+    await fireEvent.click(screen.getByLabelText("Import the rest and leave these out"));
+    await fireEvent.click(screen.getByRole("button", { name: "Test import" }));
+    await vi.waitFor(() => expect(calls.list).toContain("test"));
+    // The options the next preview sends carry the choice.
+    await fireEvent.change(screen.getByLabelText("Import Old Account as"), { target: { value: "skip" } });
+    await vi.waitFor(() => expect(calls.options.length).toBeGreaterThan(0));
+    expect((calls.options.at(-1) as ImportOptions).show_securities).toEqual(["Sold Fund"]);
+    await fireEvent.click(screen.getByLabelText("Keep Sold Fund shown"));
+    await fireEvent.change(screen.getByLabelText("Import Old Account as"), { target: { value: "skip" } });
+    await vi.waitFor(() => expect((calls.options.at(-1) as ImportOptions).show_securities).toEqual([]));
+  });
+
+    it("tests, then imports, and shows each account against the file", async () => {
     await open();
     await fireEvent.click(screen.getByLabelText("Import the rest and leave these out"));
     await fireEvent.click(screen.getByRole("button", { name: "Test import" }));

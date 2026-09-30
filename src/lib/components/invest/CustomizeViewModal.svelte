@@ -1,6 +1,6 @@
 <script lang="ts">
   // Customize the selected Investments view: its name, columns, accounts,
-  // and equities. Nothing changes until OK.
+  // and securities. Nothing changes until OK.
   import Modal from "../Modal.svelte";
   import {
     availableColumns,
@@ -21,7 +21,7 @@
   const TABS: { id: Tab; label: string }[] = [
     { id: "columns", label: "Columns" },
     { id: "accounts", label: "Accounts" },
-    { id: "equities", label: "Equities" },
+    { id: "equities", label: "Securities" },
   ];
 
   const copy = (v: ViewDef): ViewDef => ({
@@ -30,6 +30,7 @@
     accountOrder: [...v.accountOrder],
     hiddenAccounts: [...v.hiddenAccounts],
     hiddenSecurities: [...v.hiddenSecurities],
+    showClosed: v.showClosed,
   });
 
   // svelte-ignore state_referenced_locally
@@ -146,7 +147,7 @@
         <button type="button" onclick={() => moveAccount(1)} disabled={account === null || accounts.indexOf(account) === accounts.length - 1}>Move Down</button>
       </div>
     {:else}
-      <p class="hint">Checked equities show.</p>
+      <p class="hint">Checked securities show.</p>
       <ul class="checks">
         {#each equities as s (s.id)}
           <li>
@@ -156,7 +157,7 @@
             </label>
           </li>
         {:else}
-          <li class="none">No equities.</li>
+          <li class="none">No securities.</li>
         {/each}
       </ul>
     {/if}
@@ -206,6 +207,13 @@
     min-height: 9rem;
     border: 1px solid var(--line);
     border-radius: 4px;
+  }
+  /* Available and Displayed: the same height, room for every column;
+     a longer list scrolls. */
+  .cols ul {
+    box-sizing: border-box;
+    height: 16rem;
+    overflow-y: auto;
   }
   .cols li button {
     width: 100%;
