@@ -66,6 +66,13 @@ fn upcoming(s: &Schedule) -> impl Iterator<Item = Date> + '_ {
         .take(limit)
 }
 
+/// Is `date` one of the schedule's upcoming occurrences? The walk stops
+/// at the first date past it, so a date outside the series is found out
+/// quickly rather than at the calendar's end.
+fn is_upcoming(s: &Schedule, date: Date) -> bool {
+    upcoming(s).take_while(|n| *n <= date).any(|n| n == date)
+}
+
 fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Result<()> {
     f.recurrence.validate()?;
     if f.lines.is_empty() {
@@ -396,16 +403,20 @@ pub fn enter(
 /// edits kept), the schedule's next occurrence, with its "# left" given
 /// back; an ended schedule comes back to life. Otherwise the occurrence
 /// is marked skipped: one before a later entered or skipped one cannot
-/// become due again (occurrences are handled in order), an auto-entry one
-/// would only be entered again, and a deleted schedule has no Due.
+/// become due again (occurrences are handled in order), one a series edit
+/// left out of the series is no longer one of its dates, an auto-entry
+/// one would only be entered again, and a deleted schedule has no Due.
 pub(crate) fn release_txn(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
     let Some(occ) = repo::occurrence_for_txn(tx.conn(), txn)? else {
         return Ok(());
     };
     let s = repo::get(tx.conn(), occ.schedule)?;
     let latest = repo::last_acted(tx.conn(), s.id)? == Some(occ.due_date);
-    let back_to_due =
-        latest && s.status != ScheduleStatus::Deleted && s.fields.mode == EntryMode::Remind;
+    let in_series = series_from(&s.fields, occ.due_date).next() == Some(occ.due_date);
+    let back_to_due = latest
+        && in_series
+        && s.status != ScheduleStatus::Deleted
+        && s.fields.mode == EntryMode::Remind;
     if !back_to_due {
         repo::put_occurrence(
             tx,
@@ -500,7 +511,7 @@ pub fn set_override(
             "this schedule has no more occurrences".into(),
         ));
     }
-    if !upcoming(&s).any(|n| n == due) {
+    if !is_upcoming(&s, due) {
         return Err(Error::Invalid(format!(
             "{due} is not an upcoming occurrence of this schedule"
         )));
@@ -775,7 +786,7 @@ fn pending_until(
     for row in &rows {
         if !seen.contains(&row.due_date) {
             let view = pending_view(s, row.due_date, Some(row), today)?;
-            if in_range(view.date) && upcoming(s).any(|n| n == row.due_date) {
+            if in_range(view.date) && is_upcoming(s, row.due_date) {
                 out.push(view);
             }
         }

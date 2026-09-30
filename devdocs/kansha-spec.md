@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.4.2 (draft) |
+| **Document version** | 0.4.3 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -335,9 +335,9 @@ common patterns.
   occurrence back: the schedule's latest one (remind mode, schedule not
   deleted) returns to Due, pending with its one-time edits, and "# left"
   counts it again; an ended schedule comes back. Otherwise it becomes
-  skipped: an earlier one (occurrences are handled in order), an
-  auto-entry one (it would only be entered again), or one of a deleted
-  schedule.
+  skipped: an earlier one (occurrences are handled in order), one a
+  series edit left out of the series (0.4.3), an auto-entry one (it
+  would only be entered again), or one of a deleted schedule.
 - **REC-200** [Later][R] Loan schedules that split each payment into
   principal and interest from an amortization table.
 
@@ -1928,6 +1928,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.4.3 | 2026-09-30 | Code review of Phase 4; one fix. REC-160: deleting a transaction whose occurrence a series edit left out of the series marks it skipped instead of returning it to Due (which left the schedule stuck: its only due item could not be entered). Checking whether a date is an upcoming occurrence no longer walks the series to the calendar's end. No schema or API change. |
 | 0.4.2 | 2026-09-30 | Code review of Phase 6; one fix. §18 investment rules: editing a split, sale, return of capital, share transfer, or shares removed no longer counts lots created later the same day (entry order), which could re-split a later buy or change a sale's lots and gain. No schema or API change. |
 | 0.4.1 | 2026-09-30 | Code review of Phases 1–2; four fixes. CAT-010: no `:` in a category name. RPT-020: merges and deletes update saved reports' filters (a merged ID becomes the survivor's; a deleted one is dropped). UI-070: one search line per transaction and account (an investment transaction once, not once per posting). §18 closed accounts: an open investment account's linked cash account cannot be closed. Hidden categories, payees, and tags stay a UI-only feature (the engine accepts them on new postings). No schema or API change. |
 | 0.4 | 2026-09-29 | Prototype review (`devdocs/phase-notes/prototype-review.md`). Spec brought up to date: header status; ACCT-100 (no icon-bar flag); REG-080 (menu as built, with Split); INV-010 table restored; POS-030 old recommendation removed; DSH-030 (uncleared over 60 days); AUD-020 (account history); BAK-030 (Setup warns, not Settings); SET-050, SET-070 (font); UI-010, UI-020 (Accounts panel, navigation bar); §16.1 CI off; §16.3 R4, R5; §17.2–§17.4 modules and layout; §18 undo and price rules; §20.2; §23 rewritten as what was built; §24 Phase 6; §25 replaced by a pointer to CLAUDE.md; this log in one order, newest first. New or changed and built: **BAK-045** timed backup (split out of SET-050); **PRC-030** price list import (ticker, price, optional `MM/DD/YYYY`; date picker; file picker or drop; replaces the dated CSV import; QIF prices only through MIG-140); **PRC-040** price download, [1.0], D-40 decided (Yahoo first, latest price, off until enabled); **PRC-050** Holdings marks stale prices; **SECU-070** the download setting; **SET-040** default lot method for new investment accounts; **UI-060** undo of the last register change (Edit > Undo, Ctrl+Z). No schema change. **API change:** `price_import_preview`/`price_import` take a `date`; `account_defaults` reads the book (returns a result); `Settings.default_lot_method`, `Settings.price_download`; new commands `undo_status`, `undo_apply`, `prices_download`. |

@@ -125,3 +125,28 @@ Phase 4 ended with the commit "Finish Phase 4". Work after it, driven by Stan's 
 
 - **Delete (REC-160):** `ledger::delete` calls `schedule::release_txn` first, which unlinks the occurrence. The schedule's latest acted occurrence (remind mode, schedule not deleted) goes back to Due: its row is removed, or kept as pending if it has a one-time date or amount; `next_due` returns to it, "# left" gains one, an ended schedule is active again (audited through `set_progress`). Any other one is marked skipped: an earlier one (occurrences are handled in order, so it cannot be due again behind later ones), an auto-entry one (Due would only re-enter it at the next startup), one of a deleted schedule. Tests in `tests/integration/schedule.rs` (`deleting_*`, `a_reverted_occurrence_*`).
 - **Calendar (CAL-020, CAL-030):** new `schedule::register_between` and command `calendar_transactions(from, to, accounts)`: one `CalendarTxn` per transaction and account posted to, not void, investment accounts left out (`AccountType::is_investment`), and a scheduled transaction left out for its schedule's account (the occurrence shows there). A transfer shows once per account. `src/lib/calendar/items.ts` merges both into `CalItem` (status `posted` for register ones). The calendar shows them with "Show entered transactions" (was "Show entered and skipped"); the day dialog ("Transactions: <date>") always does; Edit opens one in its register; Enter and Skip say "Not a scheduled transaction". Only skipped items are struck through (spec 0.3.25); entered and register ones are faded on the calendar, plain in the dialog.
+
+## Code review 2026-09-30 (spec 0.4.3)
+
+Phase 4 re-read against the code, with probes. Fixed, with tests that
+failed first:
+
+- A schedule could get stuck: enter July 1, edit the series to the
+  15th, delete the July 1 transaction. It went back to Due as
+  `next_due`, but July 1 was no longer in the series, so the Due list
+  showed only July 15 (not enterable) and never July 1. `release_txn`
+  now returns an occurrence to Due only if its date is still in the
+  series; otherwise it is skipped (test
+  `deleting_a_transaction_the_edited_series_left_behind_skips_its_occurrence`).
+- `set_override` and the pending list checked "is this an upcoming
+  occurrence?" by walking the series to the calendar's end (1.6 s for
+  a monthly schedule; far longer for a daily one) when the date was
+  not in it. `is_upcoming` stops past the date (test
+  `a_date_outside_the_series_is_refused_without_walking_the_whole_series`).
+
+Checked, no change: recurrence math, series edit, count left,
+in-order enter and skip, estimates, auto-enter, the normal
+delete-release, one-time edits, due window, projection signs, calendar
+transactions. Left as is (Stan): 2000 occurrences per schedule per
+query, so a daily schedule's 10-year projection stops after about 5.5
+years.

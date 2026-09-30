@@ -338,6 +338,50 @@ fn deleting_a_transaction_of_a_deleted_schedule_keeps_the_schedule_deleted() {
 }
 
 #[test]
+fn deleting_a_transaction_the_edited_series_left_behind_skips_its_occurrence() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.end = End::AfterCount { count: 3 };
+    let id = create(&mut fx, &f);
+    let e = enter(&mut fx, id, "2026-07-01").unwrap();
+    // The series moves to the 15th; July 1 is no longer one of its dates.
+    f.recurrence.day1 = Some(15);
+    f.end = End::AfterCount { count: 2 };
+    fx.book.write(|tx| schedule::update(tx, id, &f)).unwrap();
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-07-15")));
+
+    delete_txn(&mut fx, e.txn);
+    let s = get(&fx, id);
+    assert_eq!(s.next_due, Some(date("2026-07-15")));
+    assert_eq!(s.fields.end, End::AfterCount { count: 2 });
+    assert_eq!(
+        occ_status(&fx, id, "2026-07-01"),
+        Some(OccurrenceStatus::Skipped)
+    );
+    let due = schedule::due_list(fx.book.conn(), date("2026-07-15")).unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].nominal, date("2026-07-15"));
+    assert!(due[0].actionable);
+    enter(&mut fx, id, "2026-07-15").unwrap();
+}
+
+#[test]
+fn a_date_outside_the_series_is_refused_without_walking_the_whole_series() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    let started = std::time::Instant::now();
+    let r = fx.book.write(|tx| {
+        schedule::set_override(tx, id, date("2026-07-02"), Some(date("2026-07-03")), None)
+    });
+    assert!(matches!(r, Err(Error::Invalid(_))), "{r:?}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_millis(500),
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
 fn skip_uses_up_an_occurrence_without_a_transaction() {
     let mut fx = fx();
     let mut f = rent_fields(&fx, "2026-07-01");
