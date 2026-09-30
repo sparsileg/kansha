@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.4.4 (draft) |
+| **Document version** | 0.4.5 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -872,7 +872,11 @@ platform has one.
   Restore backs up the current database first (when there is one),
   then gives the restored database a new database key (SECU-010) and
   opens it. A backup from a newer schema is refused (§21); one from an
-  older schema is migrated on opening.
+  older schema is migrated on opening. Restore and setup's conversion
+  write the new database and key file beside the old ones, then rename
+  them into place, database first; at startup a swap a crash
+  interrupted is finished (only the key file left to rename) or undone
+  (0.4.5).
 - **BAK-075** [1.0][R] Restore comparison window, shown before
   anything is overwritten, so the user sees whether the restore would
   replace newer data:
@@ -1933,6 +1937,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.4.5 | 2026-09-30 | Code review of Phase 8; one fix. BAK-070: a crash between renaming the new database and the new key file into place (restore, setup's conversion) left them mismatched, and after a first conversion with no backup yet only a hand rename saved the data. Startup now finishes such a swap or undoes one that never started. Backup pruning per book left open (Stan). No schema or API change. |
 | 0.4.4 | 2026-09-30 | Code review of Phase 7; two fixes, both seen with an account filter. §18 report rules: a banking entry's category lines belong only to the account it was written in (a split with a transfer listed its expenses under the other account when its own was filtered out). A linked-cash buy, sale, or return of capital is now a transfer between the cash account and the investment account (it was missing from Itemized Categories); its realized gain stays with the investment account. No schema or API change. |
 | 0.4.3 | 2026-09-30 | Code review of Phase 4; one fix. REC-160: deleting a transaction whose occurrence a series edit left out of the series marks it skipped instead of returning it to Due (which left the schedule stuck: its only due item could not be entered). Checking whether a date is an upcoming occurrence no longer walks the series to the calendar's end. No schema or API change. |
 | 0.4.2 | 2026-09-30 | Code review of Phase 6; one fix. §18 investment rules: editing a split, sale, return of capital, share transfer, or shares removed no longer counts lots created later the same day (entry order), which could re-split a later buy or change a sale's lots and gain. No schema or API change. |

@@ -537,3 +537,52 @@ fn timed_backup_delay_is_a_setting() {
     });
     assert!(bad.is_err());
 }
+
+/// `path` with `suffix` appended to its name.
+fn with_suffix(path: &Path, suffix: &str) -> std::path::PathBuf {
+    let mut s = path.as_os_str().to_owned();
+    s.push(suffix);
+    s.into()
+}
+
+#[test]
+fn recover_finishes_a_swap_stopped_after_the_database_was_renamed() {
+    // Book A is being replaced by book B's files; the crash came after
+    // the database was renamed, before the key file was.
+    let dir_a = tempfile::tempdir().unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let a = BookFiles::in_folder(dir_a.path());
+    let b = BookFiles::in_folder(dir_b.path());
+    drop(book::create(&a, &pass("old"), &clock()).unwrap());
+    drop(book::create(&b, &pass("new"), &clock()).unwrap());
+    std::fs::copy(&b.db, &a.db).unwrap();
+    std::fs::copy(&b.key, with_suffix(&a.key, ".new")).unwrap();
+    assert!(book::unlock(&a, &pass("old")).is_err());
+
+    assert_eq!(book::recover(&a).unwrap(), book::Recovery::Finished);
+    assert!(!with_suffix(&a.key, ".new").exists());
+    book::unlock(&a, &pass("new")).unwrap();
+    assert_eq!(book::recover(&a).unwrap(), book::Recovery::Nothing);
+}
+
+#[test]
+fn recover_drops_staged_files_when_the_swap_never_started() {
+    let dir = tempfile::tempdir().unwrap();
+    let files = BookFiles::in_folder(dir.path());
+    drop(book::create(&files, &pass("p"), &clock()).unwrap());
+    let db_new = with_suffix(&files.db, ".new");
+    let key_new = with_suffix(&files.key, ".new");
+
+    // Both staged: the old book stays.
+    std::fs::write(&db_new, b"staged database").unwrap();
+    std::fs::write(&key_new, b"staged key").unwrap();
+    assert_eq!(book::recover(&files).unwrap(), book::Recovery::Discarded);
+    assert!(!db_new.exists() && !key_new.exists());
+    book::unlock(&files, &pass("p")).unwrap();
+
+    // Staging stopped after the database: likewise.
+    std::fs::write(&db_new, b"staged database").unwrap();
+    assert_eq!(book::recover(&files).unwrap(), book::Recovery::Discarded);
+    assert!(!db_new.exists());
+    book::unlock(&files, &pass("p")).unwrap();
+}

@@ -245,8 +245,14 @@ pub fn run() {
             let handle = app.handle();
             // Starts locked: the passphrase screen or setup opens the book
             // (SECU-020, SECU-080).
+            let files = BookFiles::at(database_path(handle)?);
+            // A crash while the book's files were being replaced: finish
+            // or undo it before anything opens them.
+            if let Err(e) = kansha_core::book::recover(&files) {
+                eprintln!("could not recover the book's files: {e}");
+            }
             let state = AppState::new(
-                BookFiles::at(database_path(handle)?),
+                files,
                 config_path(handle)?,
                 handle.path().download_dir().ok(),
                 app.package_info().version.to_string(),

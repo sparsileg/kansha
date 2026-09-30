@@ -133,6 +133,42 @@ fn commit(files: &BookFiles) -> Result<()> {
         .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.key.display())))
 }
 
+/// What [`recover`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recovery {
+    /// No replacement was interrupted.
+    Nothing,
+    /// The database had been renamed into place: the key file now is too.
+    Finished,
+    /// The swap had not started: the staged files are gone and the old
+    /// book stays.
+    Discarded,
+}
+
+/// Finish or undo a replacement of the book's files (setup's conversion,
+/// restore) that a crash interrupted. Call it before anything looks at or
+/// opens the book. [`stage`] writes the database, then the key file;
+/// [`commit`] renames them in that order. So:
+/// - only the staged key file is left: the database was renamed, finish;
+/// - the staged database is there: the swap never started, delete what
+///   was staged.
+pub fn recover(files: &BookFiles) -> Result<Recovery> {
+    let db_new = sidecar(&files.db, ".new");
+    let key_new = sidecar(&files.key, ".new");
+    if db_new.exists() {
+        remove_if_present(&db_new)?;
+        remove_journals(&db_new)?;
+        remove_if_present(&key_new)?;
+        return Ok(Recovery::Discarded);
+    }
+    if key_new.exists() {
+        std::fs::rename(&key_new, &files.key)
+            .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.key.display())))?;
+        return Ok(Recovery::Finished);
+    }
+    Ok(Recovery::Nothing)
+}
+
 fn install(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Result<()> {
     stage(files, db, key, key_file)?;
     commit(files)

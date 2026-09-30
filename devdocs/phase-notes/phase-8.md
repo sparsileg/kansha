@@ -168,3 +168,30 @@ Made while Stan tried the app; none changes a Phase 8 decision.
 - **App version 0.7.0** in `Cargo.toml`, `package.json`,
   `tauri.conf.json` (and the lock files); `version.test.ts` checks the
   three agree.
+
+## Code review 2026-09-30 (spec 0.4.5)
+
+Phase 8 re-read against the code. Fixed, with tests that failed first:
+
+- `book::commit` renames `kansha.db.new`, then `kansha.key.new`. A
+  crash between the two left a new database beside the old key file
+  (restore: "the key file does not open"; first conversion: no key
+  file and no backup yet). `book::recover`, called at startup in
+  `src-tauri/src/lib.rs` before anything opens the book, finishes the
+  swap when only the staged key file is left, and deletes the staged
+  files when the staged database is still there (tests
+  `recover_finishes_a_swap_stopped_after_the_database_was_renamed`,
+  `recover_drops_staged_files_when_the_swap_never_started`).
+
+Open (Stan to decide): pruning counts every `kansha-…zip` in the
+folder, so two books backing up to one folder (a `KANSHA_DB` test book
+and the real one on the Downloads fallback) prune each other's
+automatic backups. Options: tag backup names with a book ID, or keep
+one folder per book.
+
+Checked, no change: in-memory snapshot, integrity check, gzip, age,
+zip, write to `.partial` with fsync then rename, read-back compare,
+no overwrite, open checks and newer-schema refusal, retention (keep
+last is at least 1), atomic key file write, backup before migration
+on unlock, restore backs up first and fails safe before the swap, raw
+hex database key in `PRAGMA key`.
