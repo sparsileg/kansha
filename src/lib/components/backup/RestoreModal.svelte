@@ -6,6 +6,7 @@
   import { formatMoney } from "../../format/money";
   import type { ComparisonRow, Manifest, RestorePreview } from "../../types/bindings";
   import Modal from "../Modal.svelte";
+  import { bookState } from "../../state/book.svelte";
 
   let { onclose, ondone, start = null }: { onclose: () => void; ondone: () => void; start?: string | null } =
     $props();
@@ -19,6 +20,12 @@
   let error = $state<string | null>(null);
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  /** The backup is of another book than the one it would replace. */
+  const otherBook = $derived(
+    manifest?.book != null && bookState.status != null && manifest.book !== bookState.status.name
+      ? manifest.book
+      : null,
+  );
 
   async function choose() {
     error = null;
@@ -90,12 +97,19 @@
     {#if manifest}
       <table class="facts">
         <tbody>
+          <tr><th>Book</th><td>{manifest.book ?? "(not recorded)"}</td></tr>
           <tr><th>Made</th><td>{manifest.created_at}</td></tr>
           <tr><th>Kind</th><td>{manifest.kind}</td></tr>
           <tr><th>Kansha version</th><td>{manifest.app_version}</td></tr>
           <tr><th>Schema version</th><td>{manifest.schema_version}</td></tr>
         </tbody>
       </table>
+      {#if otherBook}
+        <p role="alert">
+          <strong>This is a backup of the book {otherBook}.</strong> Restoring it replaces the data of
+          {bookState.status?.name}; the book keeps the name {bookState.status?.name}.
+        </p>
+      {/if}
       <form onsubmit={open}>
         <label>
           Passphrase this backup was made with

@@ -13,10 +13,11 @@ export const commands = {
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
 	/**
-	 *  First-run setup (SECU-080): a new book, or the unencrypted prototype
-	 *  database converted; then the backup folder is stored in it.
+	 *  First-run setup (SECU-080): a new book named `name` (in `folder`, or
+	 *  the default book's folder), or the unencrypted prototype database
+	 *  converted under its own name; then the backup folder is stored in it.
 	 */
-	bookSetup: (passphrase: string, backupFolder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder })),
+	bookSetup: (passphrase: string, backupFolder: string | null, name: string, folder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder, name, folder })),
 	/**
 	 *  Unlock the book with the backup passphrase (SECU-020). A book from an
 	 *  older Kansha is backed up, then migrated (BAK-020).
@@ -30,14 +31,14 @@ export const commands = {
 	backupTimedRun: () => typedError<BackupResult, IpcError>(__TAURI_INVOKE("backup_timed_run")),
 	backupInfo: () => typedError<BackupInfo, IpcError>(__TAURI_INVOKE("backup_info")),
 	/**  A backup's manifest, read without the passphrase (BAK-070). */
-	backupManifest: (path: string) => typedError<Manifest, IpcError>(__TAURI_INVOKE("backup_manifest", { path })),
-	backupVerify: (path: string, passphrase: string) => typedError<VerifyResult, IpcError>(__TAURI_INVOKE("backup_verify", { path, passphrase })),
+	backupManifest: (path: string) => typedError<Manifest_Serialize, IpcError>(__TAURI_INVOKE("backup_manifest", { path })),
+	backupVerify: (path: string, passphrase: string) => typedError<VerifyResult_Serialize, IpcError>(__TAURI_INVOKE("backup_verify", { path, passphrase })),
 	/**
 	 *  Restore, step 1 (BAK-070, BAK-075): open the backup with its
 	 *  passphrase and compare it with the current book. Nothing changes until
 	 *  [`restore_apply`].
 	 */
-	restoreOpen: (path: string, passphrase: string) => typedError<RestorePreview, IpcError>(__TAURI_INVOKE("restore_open", { path, passphrase })),
+	restoreOpen: (path: string, passphrase: string) => typedError<RestorePreview_Serialize, IpcError>(__TAURI_INVOKE("restore_open", { path, passphrase })),
 	/**
 	 *  Restore, step 2: back up the current book, then replace it with the
 	 *  backup under a new database key, and open it. From now on the
@@ -58,6 +59,28 @@ export const commands = {
 	pickFolder: (start: string | null) => __TAURI_INVOKE<string | null>("pick_folder", { start }),
 	/**  The system file picker for a backup `.zip` (BAK-070). */
 	pickBackupFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_backup_file", { start }),
+	/**  The system file picker for a book's database (File > Open). */
+	pickBookFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_book_file", { start }),
+	/**  The recent books, most recent first (SET-070). */
+	bookRecent: () => __TAURI_INVOKE<RecentBook[]>("book_recent"),
+	/**
+	 *  File > New: create the book `name` in `folder` with its passphrase
+	 *  and backup folder, then close the current book (backed up) and open
+	 *  the new one. Nothing is closed if the new book cannot be made.
+	 */
+	bookNew: (folder: string, name: string, passphrase: string, backupFolder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_new", { folder, name, passphrase, backupFolder })),
+	/**
+	 *  File > Open and the recent list: close the current book (backed up)
+	 *  and point at the book whose database is `path`. The start screen then
+	 *  asks for its passphrase.
+	 */
+	bookOpen: (path: string) => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_open", { path })),
+	/**
+	 *  File > Rename Book: rename the open book's files to `name` (its
+	 *  backups then carry the new name). The passphrase is asked because the
+	 *  book is closed for the rename and opened again.
+	 */
+	bookRename: (name: string, passphrase: string) => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_rename", { name, passphrase })),
 	/**  All accounts, open and closed, in display order. */
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
 	/**  Current and ending balance of every account (ACCT-230). */
@@ -649,7 +672,11 @@ export type BookStatus = {
 	state: BookState,
 	/**  A book is unlocked and open. */
 	open: boolean,
+	/**  The book's name: its database file name without `.db`. */
+	name: string,
 	db_path: string,
+	/**  The folder the book's files are in. */
+	folder: string,
 	/**  The default backup folder (BAK-030). */
 	downloads: string | null,
 };
@@ -1317,8 +1344,31 @@ export type LotView = {
 } & Lot;
 
 /**  `manifest.json`. */
-export type Manifest = {
+export type Manifest = Manifest_Serialize | Manifest_Deserialize;
+
+/**  `manifest.json`. */
+export type Manifest_Deserialize = {
 	format: number,
+	/**
+	 *  The book's name (its database file name); `None` in backups from
+	 *  before books were named.
+	 */
+	book?: string | null,
+	/**  UTC. */
+	created_at: string,
+	app_version: string,
+	schema_version: number,
+	kind: BackupKind,
+};
+
+/**  `manifest.json`. */
+export type Manifest_Serialize = {
+	format: number,
+	/**
+	 *  The book's name (its database file name); `None` in backups from
+	 *  before books were named.
+	 */
+	book?: string | null,
 	/**  UTC. */
 	created_at: string,
 	app_version: string,
@@ -1648,6 +1698,16 @@ export type RealizedGain = {
 	taxable: boolean,
 };
 
+/**  A book on the recent list (File menu). */
+export type RecentBook = {
+	name: string,
+	path: string,
+	/**  Its database file is still there. */
+	exists: boolean,
+	/**  The book open (or waiting for its passphrase) now. */
+	current: boolean,
+};
+
 /**  Where a reconciliation stands. */
 export type ReconStatus = "in_progress" | "finished" | "abandoned";
 
@@ -1877,8 +1937,16 @@ export type ResolvedRange = {
 	to: string,
 };
 
-export type RestorePreview = {
-	manifest: Manifest,
+export type RestorePreview = RestorePreview_Serialize | RestorePreview_Deserialize;
+
+export type RestorePreview_Deserialize = {
+	manifest: Manifest_Deserialize,
+	integrity: IntegrityReport,
+	comparison: Comparison,
+};
+
+export type RestorePreview_Serialize = {
+	manifest: Manifest_Serialize,
 	integrity: IntegrityReport,
 	comparison: Comparison,
 };
@@ -2277,8 +2345,23 @@ export type TxnStatus = "normal" | "void";
  *  Verify backup… (BAK-080): decrypt with the passphrase and run the
  *  integrity check. A clean result is recorded in the open book.
  */
-export type VerifyResult = {
-	manifest: Manifest,
+export type VerifyResult = VerifyResult_Serialize | VerifyResult_Deserialize;
+
+/**
+ *  Verify backup… (BAK-080): decrypt with the passphrase and run the
+ *  integrity check. A clean result is recorded in the open book.
+ */
+export type VerifyResult_Deserialize = {
+	manifest: Manifest_Deserialize,
+	integrity: IntegrityReport,
+};
+
+/**
+ *  Verify backup… (BAK-080): decrypt with the passphrase and run the
+ *  integrity check. A clean result is recorded in the open book.
+ */
+export type VerifyResult_Serialize = {
+	manifest: Manifest_Serialize,
 	integrity: IntegrityReport,
 };
 

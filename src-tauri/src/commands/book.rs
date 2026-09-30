@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use kansha_core::backup::{self, BackupKind, Comparison, Manifest};
-use kansha_core::book::{self, BookState};
+use kansha_core::book::{self, BookFiles, BookState};
 use kansha_core::integrity::IntegrityReport;
 use kansha_core::security::Passphrase;
 use kansha_core::settings::{self, BackupStatus, Settings};
@@ -22,7 +22,11 @@ pub struct BookStatus {
     pub state: BookState,
     /// A book is unlocked and open.
     pub open: bool,
+    /// The book's name: its database file name without `.db`.
+    pub name: String,
     pub db_path: String,
+    /// The folder the book's files are in.
+    pub folder: String,
     /// The default backup folder (BAK-030).
     pub downloads: Option<String>,
 }
@@ -30,21 +34,42 @@ pub struct BookStatus {
 #[tauri::command]
 #[specta::specta]
 pub fn book_status(state: State<'_, AppState>) -> CmdResult<BookStatus> {
+    status(&state)
+}
+
+fn status(state: &AppState) -> CmdResult<BookStatus> {
     let open = state.book()?.is_some();
+    let files = state.files();
     Ok(BookStatus {
-        state: book::state(&state.files)?,
+        state: book::state(&files)?,
         open,
-        db_path: state.files.db.display().to_string(),
+        name: files.name(),
+        db_path: files.db.display().to_string(),
+        folder: files.folder().display().to_string(),
         downloads: state.downloads.as_ref().map(|d| d.display().to_string()),
     })
 }
 
 fn remember_book(state: &AppState) {
     let mut cfg = state.load_config();
-    cfg.touch_book(&state.files.db.display().to_string());
+    cfg.touch_book(&state.files().db.display().to_string());
     if let Err(e) = state.save_config(&cfg) {
         eprintln!("could not save the config file: {}", e.message);
     }
+}
+
+/// Store the backup folder in a newly created book.
+fn set_backup_folder(
+    state: &AppState,
+    open: &mut book::OpenBook,
+    folder: Option<String>,
+) -> CmdResult<()> {
+    open.db.write(state.clock(), Origin::Ui, |tx| {
+        let mut s = settings::load(tx.conn())?;
+        s.backup_folder = folder;
+        settings::save(tx, &s)
+    })?;
+    Ok(())
 }
 
 /// The backup folder typed or picked at setup or in Settings: must be an
@@ -59,35 +84,44 @@ fn check_folder(folder: Option<&str>) -> CmdResult<Option<String>> {
     }
 }
 
-/// First-run setup (SECU-080): a new book, or the unencrypted prototype
-/// database converted; then the backup folder is stored in it.
+/// First-run setup (SECU-080): a new book named `name` (in `folder`, or
+/// the default book's folder), or the unencrypted prototype database
+/// converted under its own name; then the backup folder is stored in it.
 #[tauri::command]
 #[specta::specta]
 pub fn book_setup(
     state: State<'_, AppState>,
     passphrase: String,
     backup_folder: Option<String>,
+    name: String,
+    folder: Option<String>,
 ) -> CmdResult<()> {
-    let folder = check_folder(backup_folder.as_deref())?;
+    let backups = check_folder(backup_folder.as_deref())?;
     let mut guard = state.book()?;
     if guard.is_some() {
         return Err(kansha_core::Error::Invalid("a book is already open".into()).into());
     }
     let pass = Passphrase::new(passphrase);
-    let mut open = match book::state(&state.files)? {
-        BookState::New => book::create(&state.files, &pass, state.clock())?,
-        BookState::Unencrypted => book::convert(&state.files, &pass, state.clock())?,
+    let current = state.files();
+    let mut open = match book::state(&current)? {
+        BookState::New => {
+            let place = match check_folder(folder.as_deref())? {
+                Some(f) => PathBuf::from(f),
+                None => current.folder(),
+            };
+            let files = BookFiles::named(&place, name.trim())?;
+            let open = book::create(&files, &pass, state.clock())?;
+            state.set_files(files);
+            open
+        }
+        BookState::Unencrypted => book::convert(&current, &pass, state.clock())?,
         _ => {
             return Err(
                 kansha_core::Error::Invalid("this computer already has a book".into()).into(),
             );
         }
     };
-    open.db.write(state.clock(), Origin::Ui, |tx| {
-        let mut s = settings::load(tx.conn())?;
-        s.backup_folder = folder;
-        settings::save(tx, &s)
-    })?;
+    set_backup_folder(&state, &mut open, backups)?;
     *guard = Some(open);
     state.forget_undo();
     drop(guard);
@@ -104,11 +138,13 @@ pub fn book_unlock(state: State<'_, AppState>, passphrase: String) -> CmdResult<
     if guard.is_some() {
         return Ok(());
     }
-    let mut open = book::unlock(&state.files, &Passphrase::new(passphrase))?;
+    let files = state.files();
+    let mut open = book::unlock(&files, &Passphrase::new(passphrase))?;
     if open.db.needs_migration()? {
         backup::back_up(
             &mut open.db,
             &open.key_file,
+            &files.name(),
             state.downloads.as_deref(),
             BackupKind::Migration,
             &state.app_version,
@@ -281,10 +317,12 @@ pub fn restore_apply(state: State<'_, AppState>) -> CmdResult<()> {
     if state.pending_restore()?.is_none() {
         return Err(IpcError::internal("no restore is waiting"));
     }
+    let files = state.files();
     if let Some(b) = guard.as_mut() {
         backup::back_up(
             &mut b.db,
             &b.key_file,
+            &files.name(),
             state.downloads.as_deref(),
             BackupKind::Restore,
             &state.app_version,
@@ -297,7 +335,7 @@ pub fn restore_apply(state: State<'_, AppState>) -> CmdResult<()> {
         .ok_or_else(|| IpcError::internal("no restore is waiting"))?;
     // Close the current database before its files are replaced.
     *guard = None;
-    let restored = book::install_restore(&state.files, &opened)?;
+    let restored = book::install_restore(&files, &opened)?;
     *guard = Some(restored);
     state.forget_undo();
     drop(guard);
@@ -326,7 +364,7 @@ pub async fn passphrase_change(
     );
     let mut guard = state.book()?;
     let b = guard.as_mut().ok_or_else(locked)?;
-    b.key_file = book::change_passphrase(&state.files, &b.key_file, &old, &new)?;
+    b.key_file = book::change_passphrase(&state.files(), &b.key_file, &old, &new)?;
     Ok(())
 }
 
@@ -361,6 +399,158 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> CmdResult
         settings::save(tx, &s)?;
         settings::load(tx.conn())
     })
+}
+
+/// A book on the recent list (File menu).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct RecentBook {
+    pub name: String,
+    pub path: String,
+    /// Its database file is still there.
+    pub exists: bool,
+    /// The book open (or waiting for its passphrase) now.
+    pub current: bool,
+}
+
+/// The recent books, most recent first (SET-070).
+#[tauri::command]
+#[specta::specta]
+pub fn book_recent(state: State<'_, AppState>) -> Vec<RecentBook> {
+    let current = state.files().db;
+    state
+        .load_config()
+        .recent_books
+        .into_iter()
+        .map(|path| {
+            let files = BookFiles::at(PathBuf::from(&path));
+            RecentBook {
+                name: files.name(),
+                exists: files.db.is_file(),
+                current: files.db == current,
+                path,
+            }
+        })
+        .collect()
+}
+
+/// File > New: create the book `name` in `folder` with its passphrase
+/// and backup folder, then close the current book (backed up) and open
+/// the new one. Nothing is closed if the new book cannot be made.
+#[tauri::command]
+#[specta::specta]
+pub async fn book_new(
+    state: State<'_, AppState>,
+    folder: String,
+    name: String,
+    passphrase: String,
+    backup_folder: Option<String>,
+) -> CmdResult<()> {
+    let backups = check_folder(backup_folder.as_deref())?;
+    let place = check_folder(Some(&folder))?
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let files = BookFiles::named(&place, name.trim())?;
+    if files.db.exists() {
+        return Err(IpcError::invalid(format!(
+            "{} already exists; open it, or choose another name",
+            files.db.display()
+        )));
+    }
+    let mut open = book::create(&files, &Passphrase::new(passphrase), state.clock())?;
+    set_backup_folder(&state, &mut open, backups)?;
+    state.close_book();
+    state.set_files(files);
+    *state.book()? = Some(open);
+    remember_book(&state);
+    Ok(())
+}
+
+/// File > Open and the recent list: close the current book (backed up)
+/// and point at the book whose database is `path`. The start screen then
+/// asks for its passphrase.
+#[tauri::command]
+#[specta::specta]
+pub fn book_open(state: State<'_, AppState>, path: String) -> CmdResult<BookStatus> {
+    let files = BookFiles::at(PathBuf::from(&path));
+    if files.db == state.files().db && state.book()?.is_some() {
+        return status(&state);
+    }
+    if !files.db.is_file() {
+        let mut cfg = state.load_config();
+        cfg.forget_book(&path);
+        if let Err(e) = state.save_config(&cfg) {
+            eprintln!("could not save the config file: {}", e.message);
+        }
+        return Err(IpcError::invalid(format!("there is no book at {path}")));
+    }
+    book::recover(&files)?;
+    if book::state(&files)? == BookState::New {
+        return Err(IpcError::invalid(format!("{path} is not a Kansha book")));
+    }
+    state.close_book();
+    state.set_files(files);
+    status(&state)
+}
+
+/// File > Rename Book: rename the open book's files to `name` (its
+/// backups then carry the new name). The passphrase is asked because the
+/// book is closed for the rename and opened again.
+#[tauri::command]
+#[specta::specta]
+pub async fn book_rename(
+    state: State<'_, AppState>,
+    name: String,
+    passphrase: String,
+) -> CmdResult<BookStatus> {
+    let pass = Passphrase::new(passphrase);
+    let files = state.files();
+    let name = name.trim();
+    let target = BookFiles::named(&files.folder(), name)?;
+    {
+        let mut guard = state.book()?;
+        let b = guard.as_ref().ok_or_else(locked)?;
+        // A wrong passphrase changes nothing.
+        b.key_file.unlock(&pass)?;
+        // The new path goes on the recent list first, so a crash during
+        // the rename is finished at the next start (`book::recover`).
+        let mut cfg = state.load_config();
+        cfg.touch_book(&target.db.display().to_string());
+        state.save_config(&cfg)?;
+        *guard = None;
+        match book::rename(&files, name) {
+            Ok(renamed) => {
+                state.set_files(renamed.clone());
+                cfg.forget_book(&files.db.display().to_string());
+                state.save_config(&cfg)?;
+                *guard = Some(book::unlock(&renamed, &pass)?);
+            }
+            Err(e) => {
+                *guard = Some(book::unlock(&files, &pass)?);
+                cfg.touch_book(&files.db.display().to_string());
+                cfg.forget_book(&target.db.display().to_string());
+                state.save_config(&cfg)?;
+                return Err(e.into());
+            }
+        }
+    }
+    state.forget_undo();
+    status(&state)
+}
+
+/// The system file picker for a book's database (File > Open).
+#[tauri::command]
+#[specta::specta]
+pub async fn pick_book_file(app: tauri::AppHandle, start: Option<String>) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut d = app
+        .dialog()
+        .file()
+        .set_title("Open a Kansha book")
+        .add_filter("Kansha book", &["db"]);
+    if let Some(s) = start.filter(|s| Path::new(s).is_dir()) {
+        d = d.set_directory(s);
+    }
+    picked(d.blocking_pick_file())
 }
 
 /// Theme, font, and font size (per computer, SET-070).

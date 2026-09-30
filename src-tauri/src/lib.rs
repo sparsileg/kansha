@@ -50,6 +50,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::book::appearance_set,
             commands::book::pick_folder,
             commands::book::pick_backup_file,
+            commands::book::pick_book_file,
+            commands::book::book_recent,
+            commands::book::book_new,
+            commands::book::book_open,
+            commands::book::book_rename,
             commands::accounts::account_list,
             commands::accounts::account_balances,
             commands::accounts::account_defaults,
@@ -169,9 +174,25 @@ fn bindings_path() -> PathBuf {
 
 /// The book's database (its key file sits beside it). Set `KANSHA_DB` to
 /// use another file, e.g. a scratch copy.
-fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+/// The book to start with: `KANSHA_DB` when set, else the most recent
+/// book still on disk, else `kansha.db` in the app data folder (a new
+/// computer: setup). A crash while a book's files were being replaced
+/// or renamed is finished or undone first (`book::recover`).
+fn database_path(
+    app: &tauri::AppHandle,
+    recent: &[String],
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     if let Some(path) = std::env::var_os("KANSHA_DB") {
         return Ok(PathBuf::from(path));
+    }
+    for path in recent {
+        let files = BookFiles::at(PathBuf::from(path));
+        if let Err(e) = kansha_core::book::recover(&files) {
+            eprintln!("could not recover the book at {path}: {e}");
+        }
+        if files.db.is_file() {
+            return Ok(files.db);
+        }
     }
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
@@ -245,7 +266,9 @@ pub fn run() {
             let handle = app.handle();
             // Starts locked: the passphrase screen or setup opens the book
             // (SECU-020, SECU-080).
-            let files = BookFiles::at(database_path(handle)?);
+            let config = config_path(handle)?;
+            let recent = kansha_core::local_config::LocalConfig::load(&config).recent_books;
+            let files = BookFiles::at(database_path(handle, &recent)?);
             // A crash while the book's files were being replaced: finish
             // or undo it before anything opens them.
             if let Err(e) = kansha_core::book::recover(&files) {
@@ -253,7 +276,7 @@ pub fn run() {
             }
             let state = AppState::new(
                 files,
-                config_path(handle)?,
+                config,
                 handle.path().download_dir().ok(),
                 app.package_info().version.to_string(),
             );

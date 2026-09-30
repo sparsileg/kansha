@@ -33,9 +33,9 @@ fn sample_book(dir: &Path) -> (BookFiles, book::OpenBook) {
 fn backup_now(open: &book::OpenBook, folder: &Path, kind: BackupKind) -> backup::Written {
     backup::write(
         &open.db,
-        &open.key_file.public_key().unwrap(),
-        open.key_file.locked_private_key(),
+        &open.key_file,
         folder,
+        "kansha",
         kind,
         "0.1.0",
         &clock(),
@@ -126,7 +126,7 @@ fn backup_round_trips_and_needs_the_passphrase() {
     assert_eq!(w.integrity_issues, 0);
     assert_eq!(w.path.parent(), Some(out.path()));
     assert_eq!(
-        backup::parse_file_name(&w.path.file_name().unwrap().to_string_lossy()),
+        backup::parse_file_name("kansha", &w.path.file_name().unwrap().to_string_lossy()),
         Some((clock_now(), BackupKind::Manual))
     );
     assert_eq!(backup::read_manifest(&w.path).unwrap(), w.manifest);
@@ -170,9 +170,9 @@ fn missing_backup_folder_is_refused_and_nothing_is_created() {
     let missing = dir.path().join("gone");
     let err = backup::write(
         &open.db,
-        &open.key_file.public_key().unwrap(),
-        open.key_file.locked_private_key(),
+        &open.key_file,
         &missing,
+        "kansha",
         BackupKind::Close,
         "0.1.0",
         &clock(),
@@ -370,6 +370,7 @@ fn back_up_falls_back_to_downloads_and_records_status() {
     let done = backup::back_up(
         &mut open.db,
         &open.key_file,
+        "kansha",
         Some(downloads.path()),
         BackupKind::Close,
         "0.1.0",
@@ -387,6 +388,7 @@ fn back_up_falls_back_to_downloads_and_records_status() {
     let manual = backup::back_up(
         &mut open.db,
         &open.key_file,
+        "kansha",
         Some(downloads.path()),
         BackupKind::Manual,
         "0.1.0",
@@ -396,6 +398,7 @@ fn back_up_falls_back_to_downloads_and_records_status() {
     let a = backup::back_up(
         &mut open.db,
         &open.key_file,
+        "kansha",
         Some(downloads.path()),
         BackupKind::Close,
         "0.1.0",
@@ -405,6 +408,7 @@ fn back_up_falls_back_to_downloads_and_records_status() {
     let b = backup::back_up(
         &mut open.db,
         &open.key_file,
+        "kansha",
         Some(downloads.path()),
         BackupKind::Close,
         "0.1.0",
@@ -430,6 +434,7 @@ fn back_up_falls_back_to_downloads_and_records_status() {
         backup::back_up(
             &mut open.db,
             &open.key_file,
+            "kansha",
             None,
             BackupKind::Close,
             "0.1.0",
@@ -455,7 +460,16 @@ fn timeout_backups_are_temporary() {
         )
     };
     let run = |db: &mut Db, key: &kansha_core::security::KeyFile, kind, c: &FixedClock| {
-        backup::back_up(db, key, Some(folder.path()), kind, "0.7.0", c as &dyn Clock).unwrap()
+        backup::back_up(
+            db,
+            key,
+            "kansha",
+            Some(folder.path()),
+            kind,
+            "0.7.0",
+            c as &dyn Clock,
+        )
+        .unwrap()
     };
 
     let first = run(
@@ -585,4 +599,133 @@ fn recover_drops_staged_files_when_the_swap_never_started() {
     assert_eq!(book::recover(&files).unwrap(), book::Recovery::Discarded);
     assert!(!db_new.exists());
     book::unlock(&files, &pass("p")).unwrap();
+}
+
+#[test]
+fn book_names_are_safe_file_names() {
+    for good in [
+        "kansha",
+        "barton2026",
+        "carol",
+        "barton-2026",
+        "a_b",
+        "9lives",
+    ] {
+        book::validate_name(good).unwrap();
+    }
+    let long = "x".repeat(41);
+    for bad in [
+        "",
+        "-x",
+        "_x",
+        "a b",
+        "a.b",
+        "a/b",
+        "a:b",
+        "ä",
+        long.as_str(),
+    ] {
+        assert!(book::validate_name(bad).is_err(), "{bad:?}");
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let files = BookFiles::named(dir.path(), "carol").unwrap();
+    assert_eq!(files.db, dir.path().join("carol.db"));
+    assert_eq!(files.key, dir.path().join("carol.key"));
+    assert_eq!(files.name(), "carol");
+    assert!(BookFiles::named(dir.path(), "a b").is_err());
+}
+
+#[test]
+fn a_new_book_never_takes_over_an_existing_key_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let files = BookFiles::named(dir.path(), "carol").unwrap();
+    std::fs::write(&files.key, b"someone's key").unwrap();
+    assert!(book::create(&files, &pass("p"), &clock()).is_err());
+    assert_eq!(std::fs::read(&files.key).unwrap(), b"someone's key");
+}
+
+#[test]
+fn backups_carry_the_book_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let backups = tempfile::tempdir().unwrap();
+    let files = BookFiles::named(dir.path(), "carol").unwrap();
+    let mut open = book::create(&files, &pass("p"), &clock()).unwrap();
+    let done = backup::back_up(
+        &mut open.db,
+        &open.key_file,
+        &files.name(),
+        Some(backups.path()),
+        BackupKind::Manual,
+        "0.8.0",
+        &clock(),
+    )
+    .unwrap();
+    let name = done
+        .written
+        .path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    assert!(name.starts_with("carol-"), "{name}");
+    assert_eq!(done.written.manifest.book.as_deref(), Some("carol"));
+    assert_eq!(
+        backup::read_manifest(&done.written.path)
+            .unwrap()
+            .book
+            .as_deref(),
+        Some("carol")
+    );
+    // A manifest from before books had names still reads.
+    let old: backup::Manifest = serde_json::from_str(
+        r#"{"format":1,"created_at":"2026-09-29T18:30:12Z","app_version":"0.7.0",
+            "schema_version":4,"kind":"close"}"#,
+    )
+    .unwrap();
+    assert_eq!(old.book, None);
+}
+
+#[test]
+fn renaming_a_book_moves_both_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let files = BookFiles::in_folder(dir.path());
+    drop(book::create(&files, &pass("p"), &clock()).unwrap());
+    let renamed = book::rename(&files, "barton2026").unwrap();
+    assert_eq!(renamed, BookFiles::named(dir.path(), "barton2026").unwrap());
+    assert!(!files.db.exists() && !files.key.exists());
+    assert!(!dir.path().join("barton2026.rename").exists());
+    book::unlock(&renamed, &pass("p")).unwrap();
+
+    // Taken names and bad names are refused; nothing moves.
+    let other = BookFiles::named(dir.path(), "carol").unwrap();
+    drop(book::create(&other, &pass("q"), &clock()).unwrap());
+    assert!(book::rename(&renamed, "carol").is_err());
+    assert!(book::rename(&renamed, "bad name").is_err());
+    assert!(book::rename(&renamed, "barton2026").is_err());
+    book::unlock(&renamed, &pass("p")).unwrap();
+}
+
+#[test]
+fn recover_finishes_an_interrupted_rename() {
+    // The crash came after the marker and the database's rename.
+    let dir = tempfile::tempdir().unwrap();
+    let old = BookFiles::in_folder(dir.path());
+    drop(book::create(&old, &pass("p"), &clock()).unwrap());
+    let new = BookFiles::named(dir.path(), "barton2026").unwrap();
+    std::fs::write(dir.path().join("barton2026.rename"), "kansha").unwrap();
+    std::fs::rename(&old.db, &new.db).unwrap();
+
+    assert_eq!(book::recover(&new).unwrap(), book::Recovery::Finished);
+    assert!(!old.key.exists());
+    assert!(!dir.path().join("barton2026.rename").exists());
+    book::unlock(&new, &pass("p")).unwrap();
+
+    // Before either file moved: both move.
+    let dir = tempfile::tempdir().unwrap();
+    let old = BookFiles::in_folder(dir.path());
+    drop(book::create(&old, &pass("p"), &clock()).unwrap());
+    let new = BookFiles::named(dir.path(), "carol").unwrap();
+    std::fs::write(dir.path().join("carol.rename"), "kansha").unwrap();
+    assert_eq!(book::recover(&new).unwrap(), book::Recovery::Finished);
+    book::unlock(&new, &pass("p")).unwrap();
 }

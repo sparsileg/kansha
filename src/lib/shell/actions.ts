@@ -17,16 +17,29 @@ import { openPanel } from "./panels";
 import { windowState } from "../state/windows.svelte";
 import { HOME_ID, INVESTMENTS_ID } from "./navitems";
 import type { BackupResult } from "../types/bindings";
+import { bookState } from "../state/book.svelte";
+import { openBookFile, RECENT_PREFIX, switchBook } from "./books";
 
 export function runAction(id: string): void {
   if (id === HOME_ID) {
     goHome();
   } else if (id.startsWith("account:")) {
     void openAccount(Number(id.slice("account:".length)));
+  } else if (id.startsWith(RECENT_PREFIX)) {
+    void switchBook(id.slice(RECENT_PREFIX.length)).catch(showError);
   } else if (id in MENU_REPORTS) {
     void reportState.open(MENU_REPORTS[id]);
   } else {
     switch (id) {
+      case "file.new":
+        dialogState.newBook = true;
+        break;
+      case "file.open":
+        void openBookFile(bookState.status?.folder ?? null).catch(showError);
+        break;
+      case "file.rename":
+        dialogState.renameBook = true;
+        break;
       case "file.backup":
         void backUpNow();
         break;
@@ -94,6 +107,11 @@ export function runAction(id: string): void {
 
 /** What to tell the user about a backup just made: a note, or an alert
  * when the folder was missing or the data had integrity problems. */
+/** A failed action, in the status bar. */
+function showError(e: unknown): void {
+  statusState.show(e instanceof Error ? e.message : String(e), "alert");
+}
+
 export function backupMessage(r: BackupResult, done: string): { text: string; kind: StatusKind } {
   const lines = [`${done}${r.path}.`];
   if (r.folder_missing) lines.push("The backup folder is missing, so the backup went to Downloads. Choose a folder in Settings.");

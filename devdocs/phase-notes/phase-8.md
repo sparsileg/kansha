@@ -183,11 +183,10 @@ Phase 8 re-read against the code. Fixed, with tests that failed first:
   `recover_finishes_a_swap_stopped_after_the_database_was_renamed`,
   `recover_drops_staged_files_when_the_swap_never_started`).
 
-Open (Stan to decide): pruning counts every `kansha-…zip` in the
-folder, so two books backing up to one folder (a `KANSHA_DB` test book
-and the real one on the Downloads fallback) prune each other's
-automatic backups. Options: tag backup names with a book ID, or keep
-one folder per book.
+~~Open: pruning counts every `kansha-…zip` in the folder, so two books
+backing up to one folder prune each other's automatic backups.~~
+Closed in spec 0.5: books are named and backups carry the book's name
+(`books.md`).
 
 Checked, no change: in-memory snapshot, integrity check, gzip, age,
 zip, write to `.partial` with fsync then rename, read-back compare,

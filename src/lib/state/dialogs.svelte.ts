@@ -14,6 +14,10 @@ class DialogState {
   settings = $state(false);
   /** Help > About Kansha. */
   about = $state(false);
+  /** File > New… (a named book). */
+  newBook = $state(false);
+  /** File > Rename Book…. */
+  renameBook = $state(false);
   /** File > Restore… (BAK-070). */
   restore = $state(false);
   /** Settings > Verify backup… (BAK-080). */

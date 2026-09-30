@@ -120,7 +120,7 @@ section records what was decided about it.
   settings live in the book (SET-070).
 - UI-020 (icon bar) and UI-010 (account selector) follow this document.
 - Add requirements for the menu structure, search, and multiple books
-  (one open at a time).
+  (one open at a time). Books: done in spec 0.5 (UI-080).
 
 ### Look and feel
 

@@ -34,7 +34,12 @@
   import { bookState } from "./lib/state/book.svelte";
   import StartScreen from "./views/StartScreen.svelte";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
-  import { MENUS } from "./lib/shell/menus";
+  import { MENUS, type Menu } from "./lib/shell/menus";
+  import { recentItems } from "./lib/shell/books";
+  import NewBookModal from "./lib/components/books/NewBookModal.svelte";
+  import RenameBookModal from "./lib/components/books/RenameBookModal.svelte";
+  import { commands } from "./lib/api";
+  import type { RecentBook } from "./lib/types/bindings";
   import { dialogState } from "./lib/state/dialogs.svelte";
   import { listsState } from "./lib/state/lists.svelte";
   import { REPORT_WINDOW, reportState } from "./lib/state/reports.svelte";
@@ -62,6 +67,29 @@
   // Nothing loads until a book is open (SECU-020): the start screen shows
   // until then.
   onMount(() => void bookState.refresh());
+
+  // File > Recent lists the recent books; the window title names the book.
+  let recent = $state<RecentBook[]>([]);
+  $effect(() => {
+    if (bookState.open) void commands.bookRecent().then((r) => (recent = r));
+  });
+  const menus = $derived<Menu[]>(
+    MENUS.map((m) =>
+      m.id !== "file"
+        ? m
+        : { ...m, items: m.items.map((i) => (i.id === "file.recent" ? { ...i, items: recentItems(recent) } : i)) },
+    ),
+  );
+  $effect(() => {
+    const name = bookState.status?.name;
+    const title = name ? `${name} — Kansha` : "Kansha";
+    document.title = title;
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
+      .catch(() => {
+        /* not running inside Tauri */
+      });
+  });
   let started = false;
   $effect(() => {
     if (bookState.open && !started) {
@@ -93,7 +121,7 @@
 <StartScreen />
 {:else}
 <div class="app">
-  <MenuBar menus={MENUS} onselect={runAction}><ThemePicker /></MenuBar>
+  <MenuBar {menus} onselect={runAction}><ThemePicker /></MenuBar>
   <NavBar />
   <AccountBar />
   {#if listsState.error}<p class="err">{listsState.error}</p>{/if}
@@ -137,6 +165,8 @@
   {#if dialogState.verify}
     <VerifyBackupModal start={settingsState.backupFolder} onclose={() => (dialogState.verify = false)} />
   {/if}
+  {#if dialogState.newBook}<NewBookModal onclose={() => (dialogState.newBook = false)} />{/if}
+  {#if dialogState.renameBook}<RenameBookModal onclose={() => (dialogState.renameBook = false)} />{/if}
   {#if dialogState.passphrase}<PassphraseModal onclose={() => (dialogState.passphrase = false)} />{/if}
   {#if dialogState.dbKey}<DbKeyModal onclose={() => (dialogState.dbKey = false)} />{/if}
   <div class="body" class:right={settingsState.accountPanelSide === "right"}>

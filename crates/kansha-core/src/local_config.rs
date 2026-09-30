@@ -72,6 +72,11 @@ impl LocalConfig {
         self.recent_books.insert(0, book.to_owned());
         self.recent_books.truncate(RECENT_MAX);
     }
+
+    /// Take `book` off the recent list (renamed, or chosen to forget).
+    pub fn forget_book(&mut self, book: &str) {
+        self.recent_books.retain(|b| b != book);
+    }
 }
 
 #[cfg(test)]
@@ -135,5 +140,15 @@ mod tests {
             cfg.touch_book(&i.to_string());
         }
         assert_eq!(cfg.recent_books.len(), RECENT_MAX);
+    }
+
+    #[test]
+    fn a_forgotten_book_leaves_the_recent_list() {
+        let mut cfg = LocalConfig::default();
+        cfg.touch_book("a");
+        cfg.touch_book("b");
+        cfg.forget_book("a");
+        cfg.forget_book("missing");
+        assert_eq!(cfg.recent_books, vec!["b"]);
     }
 }

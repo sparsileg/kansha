@@ -26,8 +26,11 @@ export const MENUS: Menu[] = [
     id: "file",
     label: "File",
     items: [
-      { id: "file.new", label: "New…", disabled: later("separate books") },
-      { id: "file.open", label: "Open…", disabled: later("separate books") },
+      { id: "file.new", label: "New…" },
+      { id: "file.open", label: "Open…" },
+      // Filled from the recent books list (App.svelte).
+      { id: "file.recent", label: "Recent", items: [] },
+      { id: "file.rename", label: "Rename Book…" },
       { id: "file.backup", label: "Back Up Now", divider: true },
       { id: "file.restore", label: "Restore…" },
       { id: "file.import", label: "Import…", disabled: later("import"), divider: true },

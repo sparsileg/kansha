@@ -3,7 +3,9 @@
 //! (SECU-010, SECU-020, SECU-080, SECU-090, BAK-070).
 //!
 //! A book is two files side by side: the SQLCipher database and its key
-//! file (`kansha.db`, `kansha.key`).
+//! file (`barton2026.db`, `barton2026.key`). The book's name is the
+//! database's file name without `.db`; it names the book's backups
+//! (BAK-035). The first book is `kansha`.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -14,7 +16,28 @@ use crate::backup;
 use crate::date::Clock;
 use crate::error::{Error, Result};
 use crate::persistence::Db;
-use crate::security::{DbKey, KeyFile, Passphrase};
+use crate::security::{DbKey, KeyFile, Passphrase, write_atomic};
+
+/// Longest book name.
+const NAME_MAX: usize = 40;
+
+/// Check a name for a new or renamed book: 1 to 40 letters, digits, `-`,
+/// and `_`, starting with a letter or digit. Safe as a file name on every
+/// platform and inside backup file names.
+pub fn validate_name(name: &str) -> Result<()> {
+    let ok_char = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+    let starts_ok = name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric());
+    if name.is_empty() || name.len() > NAME_MAX || !starts_ok || !name.chars().all(ok_char) {
+        return Err(Error::Invalid(format!(
+            "a book name is 1 to {NAME_MAX} letters, digits, - or _, starting with a letter \
+             or digit (not {name:?})"
+        )));
+    }
+    Ok(())
+}
 
 /// The database file and its key file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +58,31 @@ impl BookFiles {
             key: db.with_extension("key"),
             db,
         }
+    }
+
+    /// The book `name` in `folder`: `<name>.db` and `<name>.key`.
+    pub fn named(folder: &Path, name: &str) -> Result<BookFiles> {
+        validate_name(name)?;
+        Ok(BookFiles::at(folder.join(format!("{name}.db"))))
+    }
+
+    /// The book's name: the database's file name without `.db`.
+    pub fn name(&self) -> String {
+        self.db
+            .file_stem()
+            .map_or_else(|| "kansha".to_owned(), |s| s.to_string_lossy().into_owned())
+    }
+
+    /// The folder the book's files are in.
+    pub fn folder(&self) -> PathBuf {
+        self.db
+            .parent()
+            .map_or_else(PathBuf::new, Path::to_path_buf)
+    }
+
+    /// Marks a rename to this book in progress; holds the old name.
+    fn rename_marker(&self) -> PathBuf {
+        self.db.with_extension("rename")
     }
 }
 
@@ -153,6 +201,9 @@ pub enum Recovery {
 /// - the staged database is there: the swap never started, delete what
 ///   was staged.
 pub fn recover(files: &BookFiles) -> Result<Recovery> {
+    if finish_rename(files)? {
+        return Ok(Recovery::Finished);
+    }
     let db_new = sidecar(&files.db, ".new");
     let key_new = sidecar(&files.key, ".new");
     if db_new.exists() {
@@ -169,6 +220,54 @@ pub fn recover(files: &BookFiles) -> Result<Recovery> {
     Ok(Recovery::Nothing)
 }
 
+/// Rename a closed book to `name` in its folder (both files; its backups
+/// then carry the new name). Refused when a book of that name is there.
+/// A marker beside the new files holds the old name until both renames
+/// are done, so [`recover`] can finish one a crash interrupted.
+pub fn rename(files: &BookFiles, name: &str) -> Result<BookFiles> {
+    let target = BookFiles::named(&files.folder(), name)?;
+    if target == *files {
+        return Err(Error::Invalid(format!("the book is already named {name}")));
+    }
+    if target.db.exists() || target.key.exists() {
+        return Err(Error::Invalid(format!(
+            "a book named {name} is already in {}",
+            files.folder().display()
+        )));
+    }
+    if !files.db.is_file() {
+        return Err(Error::Invalid(format!(
+            "no database at {}",
+            files.db.display()
+        )));
+    }
+    write_atomic(&target.rename_marker(), files.name().as_bytes())?;
+    remove_journals(&files.db)?;
+    finish_rename(&target)?;
+    Ok(target)
+}
+
+/// Move whichever of the old book's files is still under its old name to
+/// `target`, then drop the marker. `false` when no rename is marked.
+fn finish_rename(target: &BookFiles) -> Result<bool> {
+    let marker = target.rename_marker();
+    let old_name = match std::fs::read_to_string(&marker) {
+        Ok(n) => n,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(Error::Io(format!("cannot read {}: {e}", marker.display()))),
+    };
+    let old = BookFiles::at(target.folder().join(format!("{}.db", old_name.trim())));
+    let moves = [(&old.db, &target.db), (&old.key, &target.key)];
+    for (from, to) in moves {
+        if from.is_file() && !to.exists() {
+            std::fs::rename(from, to)
+                .map_err(|e| Error::Io(format!("cannot rename {}: {e}", from.display())))?;
+        }
+    }
+    remove_if_present(&marker)?;
+    Ok(true)
+}
+
 fn install(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Result<()> {
     stage(files, db, key, key_file)?;
     commit(files)
@@ -178,6 +277,12 @@ fn install(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Resul
 /// passphrase, a random database key, and an empty encrypted database.
 pub fn create(files: &BookFiles, passphrase: &Passphrase, clock: &dyn Clock) -> Result<OpenBook> {
     expect_state(files, BookState::New)?;
+    if files.key.exists() {
+        return Err(Error::Invalid(format!(
+            "{} already exists; choose another name or folder",
+            files.key.display()
+        )));
+    }
     remove_if_present(&files.db)?;
     let (key_file, key) = KeyFile::create(passphrase)?;
     let empty = Db::open_in_memory(clock)?;

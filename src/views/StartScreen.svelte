@@ -6,8 +6,35 @@
   import RestoreModal from "../lib/components/backup/RestoreModal.svelte";
   import ThemePicker from "../lib/components/shell/ThemePicker.svelte";
   import { bookState } from "../lib/state/book.svelte";
+  import { openBookFile, switchBook } from "../lib/shell/books";
+  import type { RecentBook } from "../lib/types/bindings";
 
   const status = $derived(bookState.status);
+
+  // Other books on this computer, to switch to instead.
+  let recent = $state<RecentBook[]>([]);
+  $effect(() => {
+    void commands.bookRecent().then((r) => (recent = r.filter((b) => b.exists && !b.current)));
+  });
+  let bookName = $state<string | null>(null);
+  let bookFolder = $state<string | null>(null);
+  const name = $derived(bookName ?? status?.name ?? "kansha");
+  const nameOk = $derived(/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(name.trim()));
+
+  async function browseBook() {
+    const picked = await commands.pickFolder(bookFolder ?? status?.folder ?? null);
+    if (picked !== null) bookFolder = picked;
+  }
+
+  async function other(path: string | null) {
+    error = null;
+    try {
+      if (path === null) await openBookFile(status?.folder ?? null);
+      else await switchBook(path);
+    } catch (err) {
+      error = message(err);
+    }
+  }
 
   let passphrase = $state("");
   let again = $state("");
@@ -47,7 +74,7 @@
     busy = true;
     error = null;
     try {
-      await call(commands.bookSetup(passphrase, folder));
+      await call(commands.bookSetup(passphrase, folder, name.trim(), bookFolder));
       passphrase = again = "";
       await bookState.refresh();
     } catch (err) {
@@ -64,6 +91,7 @@
     <h1>Kansha</h1>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}
     {#if status?.state === "locked"}
+      <p class="book">Book: <strong>{status.name}</strong> <span class="path note">{status.db_path}</span></p>
       <form class="unlock" onsubmit={unlock}>
         <label>
           Backup passphrase
@@ -74,6 +102,12 @@
       </form>
       {#if error}<p role="alert"><strong>{error}</strong></p>{/if}
       <p><button type="button" class="link" onclick={() => (restoring = true)}>Restore from a backup…</button></p>
+      <p>
+        <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
+        {#each recent as b (b.path)}
+          · <button type="button" class="link" title={b.path} onclick={() => void other(b.path)}>{b.name}</button>
+        {/each}
+      </p>
     {:else if status?.state === "key_missing"}
       <p role="alert">
         <strong>The key file is missing or damaged, so this book cannot be opened.</strong> It cannot be repaired:
@@ -96,10 +130,39 @@
             <input type="radio" bind:group={choice} value="restore" />
             Restore from a backup
           </label>
+          {#if status.state === "new"}
+            <p class="opt">
+              <button type="button" class="link" onclick={() => void other(null)}>Open an existing book…</button>
+            </p>
+          {/if}
         </fieldset>
         {#if choice === "restore"}
           <p><button type="button" onclick={() => (restoring = true)}>Choose backup…</button></p>
         {:else}
+          {#if status.state === "new"}
+            <div class="grid">
+              <label>
+                <span>Name</span>
+                <input value={name} oninput={(e) => (bookName = e.currentTarget.value)} autocomplete="off" />
+              </label>
+              <span class="lbl">Folder</span>
+              <span class="row">
+                <span class="path">{bookFolder ?? status.folder}</span>
+                <button type="button" onclick={browseBook}>Browse…</button>
+              </span>
+            </div>
+            <p class="note">Letters, digits, - and _. The name is the book's file name and names its backups.</p>
+            {#if recent.length > 0}
+              <p>
+                Or open:
+                {#each recent as b, i (b.path)}
+                  {i > 0 ? " · " : ""}<button type="button" class="link" title={b.path} onclick={() => void other(b.path)}>{b.name}</button>
+                {/each}
+              </p>
+            {/if}
+          {:else}
+            <p class="note">Book: <strong>{status.name}</strong> <span class="path">{status.db_path}</span></p>
+          {/if}
           <fieldset>
             <legend>2. Backup folder</legend>
             <p class="row">
@@ -131,7 +194,7 @@
             </p>
           </fieldset>
           {#if error}<p role="alert"><strong>{error}</strong></p>{/if}
-          <button type="submit" disabled={busy || passphrase.trim() === "" || passphrase !== again}>
+          <button type="submit" disabled={busy || !nameOk || passphrase.trim() === "" || passphrase !== again}>
             {busy ? "Setting up…" : status.state === "unencrypted" ? "Encrypt book" : "Create book"}
           </button>
         {/if}
@@ -209,8 +272,12 @@
   .grid label {
     display: contents;
   }
-  .grid span {
+  .grid span,
+  .grid .lbl {
     text-align: right;
+  }
+  .grid .row {
+    text-align: left;
   }
   .note {
     opacity: 0.8;

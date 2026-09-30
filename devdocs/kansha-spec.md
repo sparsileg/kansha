@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.4.5 (draft) |
+| **Document version** | 0.5 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-29 |
 | **Owner** | Stan |
@@ -825,21 +825,24 @@ platform has one.
   - the database snapshot, compressed and then encrypted (BAK-060);
   - the private key, locked with the backup passphrase (BAK-060).
 
-  Built (0.3.32, name changed 0.3.37): the file is
-  `kansha-<YYYYMMDD>-<HHMMSS>Z-<kind>.zip` (UTC), e.g.
-  `kansha-20260929-183012Z-close.zip`; a name already taken gets `-2`,
-  `-3`, … Names from before 0.3.37
-  (`kansha-backup-2026-09-29T18-30-12Z-close.zip`) are still read and
-  pruned by the same rules. The kind is `manual`, `close`,
+  Built (0.3.32, name changed 0.3.37, book name 0.5): the file is
+  `<book>-<YYYYMMDD>-<HHMMSS>Z-<kind>.zip` (UTC), e.g.
+  `barton2026-20260929-183012Z-close.zip`; a name already taken gets
+  `-2`, `-3`, … The first book is `kansha`, so its backups kept their
+  names. Names from before 0.3.37
+  (`kansha-backup-2026-09-29T18-30-12Z-close.zip`) are the `kansha`
+  book's, still read and pruned by the same rules. The manifest also
+  records the book's name (0.5; older backups have none). The kind is `manual`, `close`,
   `migration`, `bulk` (before a merge), `import`, `restore` (the
   current book, before a restore replaces it), or `timeout` (a timed
   backup, BAK-045). The entries are
   `manifest.json`, `database.gz.age` (gzip, then `age`), and
   `private-key.age`.
 - **BAK-040** [1.0][R] Configurable retention (e.g., keep last 10
-  automatic backups plus one per month for 12 months). Only automatic
-  backups in the backup folder, named as in BAK-035, are ever
-  deleted; manual backups and other files never are. A `timeout`
+  automatic backups plus one per month for 12 months). Only the open
+  book's automatic backups in the backup folder, named as in BAK-035,
+  are ever deleted; manual backups, other books' backups (0.5), and
+  other files never are. A `timeout`
   backup is temporary and outside the count: only the newest one is
   kept, and only while no backup of any other kind (a manual one
   included) is newer.
@@ -872,7 +875,9 @@ platform has one.
   Restore backs up the current database first (when there is one),
   then gives the restored database a new database key (SECU-010) and
   opens it. A backup from a newer schema is refused (§21); one from an
-  older schema is migrated on opening. Restore and setup's conversion
+  older schema is migrated on opening. A backup of another book (by
+  its manifest) is shown as such before it replaces this book's data;
+  the book keeps its name (0.5). Restore and setup's conversion
   write the new database and key file beside the old ones, then rename
   them into place, database first; at startup a swap a crash
   interrupted is finished (only the key file left to rename) or undone
@@ -907,7 +912,7 @@ platform has one.
   **SQLCipher** under a random 256-bit key made when the database is
   created. The key is kept in a key file next to the database,
   encrypted with the backup public key (BAK-060). No OS keyring (D-20).
-  Built (0.3.32): `kansha.key` beside `kansha.db`, JSON holding the
+  Built (0.3.32): `<name>.key` beside `<name>.db` (UI-080), JSON holding the
   public key, the locked private key, and the database key encrypted
   to the public key. The database opens with the key in SQLCipher's
   raw form (no key derivation).
@@ -934,7 +939,8 @@ platform has one.
   is turned on in Settings. Requests go from Rust, never from the
   webview, and carry only the ticker. No telemetry.
 - **SECU-080** [1.0][R] First-run setup, one screen in order: (1)
-  create a new database or restore from a backup (BAK-070); (2) choose
+  create a new database (named, in a folder, UI-080) or restore from a
+  backup (BAK-070); (2) choose
   the backup folder (default Downloads, with BAK-030's note); (3) set
   the backup passphrase, with SECU-030's warning. An existing
   unencrypted database goes through the same screens once and is
@@ -1003,6 +1009,26 @@ platform has one.
   transaction and account (an investment transaction shows its cash
   posting, or its holding's when it has none); choosing one opens its
   account on that transaction.
+- **UI-080** [1.0][R] **Books** (0.5). A book is a database file and
+  its key file side by side, `<name>.db` and `<name>.key`, in any
+  folder; its name is the database's file name without `.db`, and it
+  names the book's backups (BAK-035). A new or renamed book's name is
+  1 to 40 letters, digits, `-`, or `_`, starting with a letter or
+  digit. One book is open at a time. File > New… asks for the name,
+  the folder, the backup folder, and the passphrase (SECU-030); the
+  open book is closed (backed up) once the new one exists. File >
+  Open… picks a book's `.db` file; File > Recent lists the books
+  opened on this computer (SET-070); either closes the open book
+  (backed up) and asks for the other one's passphrase. File > Rename
+  Book… renames both files after the passphrase; earlier backups keep
+  the old name and are no longer pruned. Kansha starts in the most
+  recent book still on disk (`KANSHA_DB` overrides; on a new computer
+  setup names the first book, `kansha` by default, or opens an
+  existing one). The app identifier is `tools.astryx.kansha`; the
+  default book folder and the per-computer config file (SET-070) are
+  under it. A rename a crash
+  interrupted is finished at the next start. The window title shows
+  the book's name.
 
 #### 14.2 Settings
 
@@ -1045,7 +1071,7 @@ platform has one.
   (`setting` table; portable with the data and restored with it),
   except per-computer ones: theme, font, font size (the passphrase
   screen needs them before a book is open), window geometry, and the
-  recent books list with their paths. Those are kept in a config file
+  recent books list with their paths (UI-080). Those are kept in a config file
   in the OS configuration folder, written by Rust. Browser storage
   (localStorage) is not used for settings.
 
@@ -1937,6 +1963,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.5 | 2026-09-30 | Named books (`devdocs/phase-notes/books.md`), which closes the Phase 8 review's open finding (two books sharing a backup folder pruned each other's backups). New **UI-080** Books: `<name>.db`/`<name>.key` in any folder, name rules, File > New, Open, Recent, Rename Book, one book open at a time, start in the most recent book, window title. SECU-010 and SECU-080: named files; setup names the first book. BAK-035: backups are `<book>-…zip`, manifest records the book. BAK-040: only the open book's backups are pruned. BAK-070: another book's backup is flagged. SET-070: recent books. App identifier changed from `org.sparsile.kansha` to `tools.astryx.kansha` (moves the default data and config folders). No schema change. **API change:** new commands `book_new`, `book_open`, `book_rename`, `book_recent`, `pick_book_file`; `book_setup` takes `name` and `folder`; `BookStatus` gains `name` and `folder`; `Manifest.book`. |
 | 0.4.5 | 2026-09-30 | Code review of Phase 8; one fix. BAK-070: a crash between renaming the new database and the new key file into place (restore, setup's conversion) left them mismatched, and after a first conversion with no backup yet only a hand rename saved the data. Startup now finishes such a swap or undoes one that never started. Backup pruning per book left open (Stan). No schema or API change. |
 | 0.4.4 | 2026-09-30 | Code review of Phase 7; two fixes, both seen with an account filter. §18 report rules: a banking entry's category lines belong only to the account it was written in (a split with a transfer listed its expenses under the other account when its own was filtered out). A linked-cash buy, sale, or return of capital is now a transfer between the cash account and the investment account (it was missing from Itemized Categories); its realized gain stays with the investment account. No schema or API change. |
 | 0.4.3 | 2026-09-30 | Code review of Phase 4; one fix. REC-160: deleting a transaction whose occurrence a series edit left out of the series marks it skipped instead of returning it to Due (which left the schedule stuck: its only due item could not be entered). Checking whether a date is an upcoming occurrence no longer walks the series to the calendar's end. No schema or API change. |

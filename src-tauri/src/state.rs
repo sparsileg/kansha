@@ -93,7 +93,9 @@ pub struct AppState {
     timer: Mutex<BackupTimer>,
     /// The last register change, while it can be undone (UI-060).
     undo: Mutex<Option<Undo>>,
-    pub files: BookFiles,
+    /// The book's files: the open book's, or the one the passphrase
+    /// screen or setup is for. Changes when another book is opened.
+    files: Mutex<BookFiles>,
     /// The per-computer config file (SET-070).
     pub config_path: PathBuf,
     /// The system Downloads folder, the default backup folder (BAK-030).
@@ -114,11 +116,27 @@ impl AppState {
             pending_restore: Mutex::new(None),
             timer: Mutex::new(BackupTimer::default()),
             undo: Mutex::new(None),
-            files,
+            files: Mutex::new(files),
             config_path,
             downloads,
             app_version,
             clock: SystemClock,
+        }
+    }
+
+    /// The current book's files.
+    pub fn files(&self) -> BookFiles {
+        match self.files.lock() {
+            Ok(f) => f.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    /// Point at another book's files. Close the open book first.
+    pub fn set_files(&self, files: BookFiles) {
+        match self.files.lock() {
+            Ok(mut f) => *f = files,
+            Err(poisoned) => *poisoned.into_inner() = files,
         }
     }
 
@@ -265,10 +283,12 @@ impl AppState {
         let clock = SystemClock;
         let downloads = self.downloads.clone();
         let version = self.app_version.clone();
+        let name = self.files().name();
         let done = self.with_book(|b| {
             backup::back_up(
                 &mut b.db,
                 &b.key_file,
+                &name,
                 downloads.as_deref(),
                 kind,
                 &version,
@@ -286,6 +306,7 @@ impl AppState {
     /// Failures are reported on stderr: there is no window left to show
     /// them in.
     pub fn close_book(&self) {
+        let name = self.files().name();
         let Ok(mut guard) = self.book.lock() else {
             return;
         };
@@ -293,6 +314,7 @@ impl AppState {
             if let Err(e) = backup::back_up(
                 &mut b.db,
                 &b.key_file,
+                &name,
                 self.downloads.as_deref(),
                 BackupKind::Close,
                 &self.app_version,

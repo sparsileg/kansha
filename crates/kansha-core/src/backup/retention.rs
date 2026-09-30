@@ -1,7 +1,8 @@
 //! Backup retention (BAK-040): keep the newest `keep_last` automatic
-//! backups, plus the newest one of each of the last `keep_months`
-//! calendar months (UTC). Manual backups are never deleted, nor any file
-//! whose name is not a Kansha backup's.
+//! backups of a book, plus the newest one of each of the last
+//! `keep_months` calendar months (UTC). Manual backups are never deleted,
+//! nor any file whose name is not a backup of this book (another book's
+//! backups in the same folder are its own business).
 //!
 //! Timeout backups (SET-050) are temporary and outside that count: at
 //! most one is kept, the newest, and only while no backup of another
@@ -22,8 +23,9 @@ fn month_index(t: Timestamp) -> Option<i64> {
     Some(y * 12 + m - 1)
 }
 
-/// Which of `names` to delete. Pure; [`prune`] applies it.
+/// Which of `names` to delete for `book`. Pure; [`prune`] applies it.
 pub fn prune_plan(
+    book: &str,
     names: &[String],
     now: Timestamp,
     keep_last: u32,
@@ -34,7 +36,7 @@ pub fn prune_plan(
     // The newest backup that is not a timeout, of any kind.
     let mut newest_other: Option<(Timestamp, u32)> = None;
     for n in names {
-        let Some((t, kind, seq)) = parse_parts(n) else {
+        let Some((t, kind, seq)) = parse_parts(book, n) else {
             continue;
         };
         if kind == BackupKind::Timeout {
@@ -83,10 +85,11 @@ pub fn prune_plan(
     delete
 }
 
-/// Delete automatic backups in `folder` beyond the retention rule.
-/// Returns the files deleted; one that cannot be deleted is skipped.
+/// Delete `book`'s automatic backups in `folder` beyond the retention
+/// rule. Returns the files deleted; one that cannot be deleted is skipped.
 pub fn prune(
     folder: &Path,
+    book: &str,
     now: Timestamp,
     keep_last: u32,
     keep_months: u32,
@@ -102,7 +105,7 @@ pub fn prune(
         }
     }
     let mut deleted = Vec::new();
-    for n in prune_plan(&names, now, keep_last, keep_months) {
+    for n in prune_plan(book, &names, now, keep_last, keep_months) {
         let p = folder.join(&n);
         if std::fs::remove_file(&p).is_ok() {
             deleted.push(p);
@@ -121,7 +124,7 @@ mod tests {
     }
 
     fn name(s: &str, kind: BackupKind) -> String {
-        file_name(t(s), kind)
+        file_name("kansha", t(s), kind)
     }
 
     #[test]
@@ -138,7 +141,7 @@ mod tests {
             "notes.txt".to_owned(),
             "kansha-backup-garbage.zip".to_owned(),
         ];
-        let del = prune_plan(&names, t("2026-09-29T12:00:00Z"), 2, 3);
+        let del = prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 2, 3);
         assert_eq!(
             del,
             vec![
@@ -148,9 +151,9 @@ mod tests {
             ]
         );
         // September 2025 is the 13th month back.
-        let del12 = prune_plan(&names, t("2026-09-29T12:00:00Z"), 2, 12);
+        let del12 = prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 2, 12);
         assert!(del12.contains(&name("2025-09-30T10:00:00Z", BackupKind::Close)));
-        let del13 = prune_plan(&names, t("2026-09-29T12:00:00Z"), 2, 13);
+        let del13 = prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 2, 13);
         assert!(!del13.contains(&name("2025-09-30T10:00:00Z", BackupKind::Close)));
     }
 
@@ -160,17 +163,23 @@ mod tests {
         let close = name("2026-09-29T10:00:00Z", BackupKind::Close);
         let timeout = name("2026-09-29T11:00:00Z", BackupKind::Timeout);
         // Newer than the close backup: kept.
-        assert!(prune_plan(&[close.clone(), timeout.clone()], now, 10, 12).is_empty());
+        assert!(prune_plan("kansha", &[close.clone(), timeout.clone()], now, 10, 12).is_empty());
         // A close backup after it: deleted.
         let later_close = name("2026-09-29T11:30:00Z", BackupKind::Close);
         assert_eq!(
-            prune_plan(&[close, timeout.clone(), later_close], now, 10, 12),
+            prune_plan(
+                "kansha",
+                &[close, timeout.clone(), later_close],
+                now,
+                10,
+                12
+            ),
             vec![timeout.clone()]
         );
         // So is a manual one, though a manual backup is never itself deleted.
         let manual = name("2026-09-29T11:30:00Z", BackupKind::Manual);
         assert_eq!(
-            prune_plan(&[timeout.clone(), manual], now, 10, 12),
+            prune_plan("kansha", &[timeout.clone(), manual], now, 10, 12),
             vec![timeout]
         );
     }
@@ -181,7 +190,7 @@ mod tests {
         let a = name("2026-09-29T10:00:00Z", BackupKind::Timeout);
         let b = name("2026-09-29T10:05:00Z", BackupKind::Timeout);
         let c = name("2026-09-29T10:10:00Z", BackupKind::Timeout);
-        let del = prune_plan(&[a.clone(), b.clone(), c.clone()], now, 10, 12);
+        let del = prune_plan("kansha", &[a.clone(), b.clone(), c.clone()], now, 10, 12);
         assert_eq!(del.len(), 2);
         assert!(del.contains(&a) && del.contains(&b) && !del.contains(&c));
     }
@@ -193,7 +202,7 @@ mod tests {
         let timeout = name("2026-09-29T11:00:00Z", BackupKind::Timeout);
         // keep_last = 1: the close backup stays; the timeout is not counted
         // against it and is the newest, so it stays too.
-        assert!(prune_plan(&[old, timeout], now, 1, 0).is_empty());
+        assert!(prune_plan("kansha", &[old, timeout], now, 1, 0).is_empty());
     }
 
     #[test]
@@ -202,7 +211,7 @@ mod tests {
         let timeout = "kansha-backup-2026-09-29T11-00-00Z-timeout.zip".to_owned();
         let close = name("2026-09-29T11:30:00Z", BackupKind::Close);
         assert_eq!(
-            prune_plan(&[timeout.clone(), close], now, 10, 12),
+            prune_plan("kansha", &[timeout.clone(), close], now, 10, 12),
             vec![timeout]
         );
     }
@@ -213,7 +222,7 @@ mod tests {
         let old_a = "kansha-backup-2026-09-27T10-00-00Z-close.zip".to_owned();
         let old_manual = "kansha-backup-2025-01-05T10-00-00Z-manual.zip".to_owned();
         let new_b = name("2026-09-29T10:00:00Z", BackupKind::Close);
-        let del = prune_plan(&[old_a.clone(), old_manual, new_b], now, 1, 0);
+        let del = prune_plan("kansha", &[old_a.clone(), old_manual, new_b], now, 1, 0);
         assert_eq!(del, vec![old_a]);
     }
 
@@ -223,9 +232,9 @@ mod tests {
             name("2026-09-29T10:00:00Z", BackupKind::Close),
             name("2020-01-01T10:00:00Z", BackupKind::Close),
         ];
-        assert!(prune_plan(&names, t("2026-09-29T12:00:00Z"), 10, 0).is_empty());
+        assert!(prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 10, 0).is_empty());
         assert_eq!(
-            prune_plan(&names, t("2026-09-29T12:00:00Z"), 1, 0),
+            prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 1, 0),
             vec![name("2020-01-01T10:00:00Z", BackupKind::Close)]
         );
     }
@@ -237,7 +246,7 @@ mod tests {
         let third = first.replace(".zip", "-10.zip");
         let names = vec![first.clone(), second.clone(), third.clone()];
         assert_eq!(
-            prune_plan(&names, t("2026-09-29T12:00:00Z"), 1, 0),
+            prune_plan("kansha", &names, t("2026-09-29T12:00:00Z"), 1, 0),
             vec![second, first]
         );
     }
@@ -251,10 +260,29 @@ mod tests {
         for n in [&keep, &old, &manual, &"other.zip".to_owned()] {
             std::fs::write(dir.path().join(n), b"x").unwrap();
         }
-        let del = prune(dir.path(), t("2026-09-29T12:00:00Z"), 1, 1).unwrap();
+        let del = prune(dir.path(), "kansha", t("2026-09-29T12:00:00Z"), 1, 1).unwrap();
         assert_eq!(del, vec![dir.path().join(&old)]);
         assert!(dir.path().join(&keep).exists());
         assert!(dir.path().join(&manual).exists());
         assert!(dir.path().join("other.zip").exists());
+    }
+
+    #[test]
+    fn a_book_never_prunes_another_books_backups() {
+        // Two books back up to one folder (finding #2 of the Phase 8
+        // review): each keeps its own count and its own timeout.
+        let now = t("2026-09-29T12:00:00Z");
+        let b = |book: &str, s: &str, kind| file_name(book, t(s), kind);
+        let names = vec![
+            b("barton2026", "2026-09-29T08:00:00Z", BackupKind::Close),
+            b("barton2026", "2026-09-29T09:00:00Z", BackupKind::Timeout),
+            b("carol", "2026-09-29T10:00:00Z", BackupKind::Close),
+            b("carol", "2026-09-29T11:00:00Z", BackupKind::Close),
+        ];
+        assert!(prune_plan("barton2026", &names, now, 1, 0).is_empty());
+        assert_eq!(
+            prune_plan("carol", &names, now, 1, 0),
+            vec![b("carol", "2026-09-29T10:00:00Z", BackupKind::Close)]
+        );
     }
 }
