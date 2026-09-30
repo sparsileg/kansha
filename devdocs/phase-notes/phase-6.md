@@ -233,3 +233,25 @@ non-zero). **⚠ API change:** `AdjustmentKind::Average`; `ReportKind`
   it.
 - Allocation by one asset class per security (SEC-050 multi-class
   later).
+
+## Code review 2026-09-30 (spec 0.4.2)
+
+Phase 6 re-read against the code, with probes (every action's
+memo-only edit behind a later sale; same-day ordering). Fixed, with a
+test that failed first:
+
+- Editing a lot event counted lots created later the same day: a split
+  edit re-split a later same-day buy (3 shares became 9, the buy's own
+  record still 3); a HIFO sale edit switched to a later same-day lot
+  and changed its gain. `service::plan` now leaves those lots out when
+  editing (test `an_edit_ignores_lots_bought_later_the_same_day`).
+
+Checked, no change: lot methods, basis and proceeds rounding, term,
+split, return of capital, postings balance, gain posting equals lot
+gains, date-order rule, transfer-in lots by origin date, linked cash,
+money market as cash, IRR and TWR. Skimmed only: `portfolio.rs` day
+change, `period.rs` flows (their figures are checked against Python).
+
+Phase 9 note: QIF has bank transfers straight into an investment
+account; the engine takes those only as Cash In/Out, so the importer
+must convert them.

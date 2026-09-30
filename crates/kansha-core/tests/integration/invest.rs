@@ -709,3 +709,55 @@ fn price_download_targets_and_store() {
     assert_eq!(stored.source, PriceSource::Download);
     assert!(securities::prices(book.conn(), hidden).unwrap().is_empty());
 }
+
+#[test]
+fn an_edit_ignores_lots_bought_later_the_same_day() {
+    // Same-day entries happen in entry order: editing one must not reach
+    // lots that a later entry that day created.
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    b.invest(&buy(brk, vti, "2026-01-05", "10", "1000.00"))
+        .unwrap();
+    let mut split = InvInput::new(brk, InvAction::Split, date("2026-02-01"));
+    split.security = Some(vti);
+    split.split = Some(invest::SplitRatio { new: 2, old: 1 });
+    let split_id = b.invest(&split).unwrap().txn.id;
+    let later = b
+        .invest(&buy(brk, vti, "2026-02-01", "3", "150.00"))
+        .unwrap();
+    let later_lot = later.lots[0].id;
+
+    split.split = Some(invest::SplitRatio { new: 3, old: 1 });
+    let t = b
+        .write(|tx| invest::update(tx, split_id, &split, false))
+        .unwrap();
+    assert!(t.adjustments.iter().all(|a| a.lot != later_lot));
+    let open = invest::open_lots(b.conn(), brk, Some(vti), date("2026-06-30")).unwrap();
+    let shares = |id| {
+        open.iter()
+            .find(|l| l.lot.id == id)
+            .map(|l| l.open_quantity)
+    };
+    assert_eq!(shares(later_lot), Some(q("3")));
+
+    // A highest-cost sale keeps to the lots it could see.
+    let mut sale = InvInput::new(brk, InvAction::Sell, date("2026-03-01"));
+    sale.security = Some(vti);
+    sale.quantity = Some(q("5"));
+    sale.amount = Some(m("600.00"));
+    sale.lot_method = Some(LotMethod::Hifo);
+    let sale_id = b.invest(&sale).unwrap().txn.id;
+    let pricier = b
+        .invest(&buy(brk, vti, "2026-03-01", "5", "650.00"))
+        .unwrap()
+        .lots[0]
+        .id;
+    let mut edit = invest::get(b.conn(), sale_id).unwrap().to_input();
+    edit.amount = Some(m("601.00"));
+    let t = b
+        .write(|tx| invest::update(tx, sale_id, &edit, false))
+        .unwrap();
+    assert!(t.disposals.iter().all(|d| d.lot != pricier), "{t:?}");
+    assert_eq!(t.disposals[0].lot, later_lot);
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+}

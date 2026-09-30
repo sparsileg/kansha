@@ -457,10 +457,12 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
         }
     }
 
-    // Lots of this holding open on the trade date.
+    // Lots of this holding open on the trade date. Same-day entries come
+    // in entry order, so an edit leaves out lots entered after it that day.
     let open = |s: &Security| -> Result<Vec<OpenLot>> {
         Ok(repo::open_lots(conn, Some(a), Some(s.id), input.date)?
             .into_iter()
+            .filter(|l| this.is_none_or(|id| (l.origin_date, l.lot.origin_txn) < (input.date, id)))
             .map(|l| l.open_lot())
             .collect())
     };
