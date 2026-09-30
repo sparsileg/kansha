@@ -96,6 +96,44 @@ describe("splits", () => {
     expect(splitParts(d)).toBeNull();
   });
 
+  it("a line typed with '-' goes the other way (paycheck deductions)", () => {
+    const d: Draft = {
+      ...split(),
+      payment: "",
+      deposit: "2,000",
+      splits: [
+        { target: "c:1", amount: "2,500", memo: "", cleared: "unmarked", tags: [] },
+        { target: "c:2", amount: "-500", memo: "", cleared: "unmarked", tags: [] },
+      ],
+    };
+    expect(splitParts(d)).toEqual({ total: "2000.00", parts: ["2500.00", "-500.00"] });
+    const r = buildEntry(d, 1, today);
+    expect(r.ok && r.entry.lines.map((l) => l.amount)).toEqual(["2500.00", "-500.00"]);
+    const pay = { ...split() };
+    pay.splits[1].amount = "-30.50";
+    expect(splitParts(pay)?.parts).toEqual(["-60.00", "30.50"]);
+  });
+
+  it("a split may total zero: no amount typed; plain lines are deposits", () => {
+    const d: Draft = {
+      ...split(),
+      payment: "",
+      splits: [
+        { target: "c:1", amount: "100", memo: "", cleared: "unmarked", tags: [] },
+        { target: "a:2", amount: "-100", memo: "", cleared: "unmarked", tags: [] },
+      ],
+    };
+    expect(splitParts(d)).toEqual({ total: "0.00", parts: ["100.00", "-100.00"] });
+    const r = buildEntry(d, 1, today);
+    expect(r.ok && r.entry.amount).toBe("0.00");
+    expect(r.ok && r.entry.lines.map((l) => l.amount)).toEqual(["100.00", "-100.00"]);
+  });
+
+  it("a simple entry still needs an amount", () => {
+    const r = buildEntry({ ...base(), payment: "", deposit: "" }, 1, today);
+    expect(r.ok).toBe(false);
+  });
+
   it("builds lines with signed amounts; needs two lines", () => {
     const r = buildEntry(split(), 1, today);
     expect(r.ok && r.entry.lines.map((l) => l.amount)).toEqual(["-60.00", "-30.50"]);
@@ -171,5 +209,37 @@ describe("draftFromEntry round trip", () => {
     const r = buildEntry(d, 1, today);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.entry).toEqual({ ...entry, payee: null });
+  });
+
+  it("edits a mixed-sign split without changing it", () => {
+    const paycheck: Entry = {
+      ...entry,
+      amount: "2000.00",
+      lines: [
+        { target: { kind: "category", id: 5 }, amount: "2500.00", memo: "", cleared: "unmarked", tags: [] },
+        { target: { kind: "category", id: 6 }, amount: "-500.00", memo: "", cleared: "unmarked", tags: [] },
+      ],
+    };
+    const d = draftFromEntry(paycheck, "Acme");
+    expect(d.splits.map((s) => s.amount)).toEqual(["2500.00", "-500.00"]);
+    const r = buildEntry(d, 1, today);
+    if (r.ok) expect(r.entry).toEqual({ ...paycheck, payee: null });
+    expect(r.ok).toBe(true);
+  });
+
+  it("edits a zero-total split without changing it", () => {
+    const zero: Entry = {
+      ...entry,
+      amount: "0.00",
+      lines: [
+        { target: { kind: "category", id: 5 }, amount: "100.00", memo: "", cleared: "unmarked", tags: [] },
+        { target: { kind: "category", id: 6 }, amount: "-100.00", memo: "", cleared: "unmarked", tags: [] },
+      ],
+    };
+    const d = draftFromEntry(zero, "Acme");
+    expect([d.payment, d.deposit]).toEqual(["", ""]);
+    const r = buildEntry(d, 1, today);
+    if (r.ok) expect(r.entry).toEqual({ ...zero, payee: null });
+    expect(r.ok).toBe(true);
   });
 });

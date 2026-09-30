@@ -112,21 +112,25 @@ pub fn price_import(state: State<'_, AppState>, text: String, date: Date) -> Cmd
     state.write(|tx| securities::commit_prices(tx, &text, date))
 }
 
-/// Download the latest price of every shown security with a ticker
-/// (PRC-040), once the book's setting allows it (SECU-070). The fetching
-/// runs off the main thread; the prices are stored in one transaction.
+/// Download a price for every shown security with a ticker (PRC-040),
+/// once the book's setting allows it (SECU-070): the latest when `date`
+/// is today or later, else the close of the last trading day on or before
+/// `date`. The fetching runs off the main thread; the prices are stored
+/// in one transaction.
 #[tauri::command]
 #[specta::specta]
-pub async fn prices_download(state: State<'_, AppState>) -> CmdResult<DownloadSummary> {
-    let targets = state.read(|db, _| download::targets(db.conn()))?;
-    let fetched = tauri::async_runtime::spawn_blocking(move || fetch_all(Provider::Yahoo, targets))
-        .await
-        .map_err(|e| IpcError::internal(format!("price download stopped: {e}")))?;
+pub async fn prices_download(state: State<'_, AppState>, date: Date) -> CmdResult<DownloadSummary> {
+    let (targets, today) = state.read(|db, today| Ok((download::targets(db.conn())?, today)))?;
+    let on = (date < today).then_some(date);
+    let fetched =
+        tauri::async_runtime::spawn_blocking(move || fetch_all(Provider::Yahoo, targets, on))
+            .await
+            .map_err(|e| IpcError::internal(format!("price download stopped: {e}")))?;
     state.write(|tx| download::store(tx, &fetched))
 }
 
 /// One request per security, 15 seconds each at most.
-fn fetch_all(provider: Provider, targets: Vec<download::Target>) -> Vec<Fetched> {
+fn fetch_all(provider: Provider, targets: Vec<download::Target>, on: Option<Date>) -> Vec<Fetched> {
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent(concat!("Kansha/", env!("CARGO_PKG_VERSION")))
@@ -135,19 +139,19 @@ fn fetch_all(provider: Provider, targets: Vec<download::Target>) -> Vec<Fetched>
         .into_iter()
         .map(|target| {
             let result = agent
-                .get(&provider.url(&target.ticker))
+                .get(&provider.url(&target.ticker, on))
                 .call()
                 .map_err(|e| match e {
                     ureq::Error::Status(404, r) => r
                         .into_string()
                         .ok()
-                        .and_then(|b| provider.parse(&b).err())
+                        .and_then(|b| provider.parse(&b, on).err())
                         .unwrap_or_else(|| "not found".into()),
                     ureq::Error::Status(code, _) => format!("the server answered {code}"),
                     ureq::Error::Transport(t) => format!("no connection ({})", t.kind()),
                 })
                 .and_then(|r| r.into_string().map_err(|e| e.to_string()))
-                .and_then(|body| provider.parse(&body));
+                .and_then(|body| provider.parse(&body, on));
             Fetched { target, result }
         })
         .collect()

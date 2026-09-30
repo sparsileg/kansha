@@ -92,11 +92,8 @@ export function runAction(id: string): void {
       case "tools.import_prices":
         dialogState.priceImport = true;
         break;
-      case "tools.download_prices":
-        void downloadPrices();
-        break;
       case INVESTMENTS_ID:
-        viewState.navigate("investments");
+        openPanel("investments");
         break;
       case "reports.saved":
         reportState.savedOpen = true;
@@ -151,12 +148,13 @@ export async function undoLast(): Promise<void> {
   ]);
 }
 
-/** Tools > Download Prices (PRC-040): latest prices from the internet,
- * when Settings allows it. Tickers that got none are named. */
-export async function downloadPrices(): Promise<void> {
+/** The Investments view's Download Prices (PRC-040): prices from the
+ * internet for `date` (the latest when it is today), when Settings
+ * allows it. Tickers that got none are named. */
+export async function downloadPrices(date: string): Promise<void> {
   statusState.show("Downloading prices…", "info");
   try {
-    const r = await call(commands.pricesDownload());
+    const r = await call(commands.pricesDownload(date));
     const failed = r.failed.map((f) => `${f.ticker} (${f.reason})`).join(", ");
     statusState.show(
       `Downloaded ${r.stored} price${r.stored === 1 ? "" : "s"}.${failed ? ` No price for ${failed}.` : ""}`,
@@ -192,7 +190,7 @@ export function isCurrent(id: string): boolean {
     case "tools.securities":
       return view === "manage" && viewState.params.tab === id.slice("tools.".length);
     case INVESTMENTS_ID:
-      return view === "investments";
+      return windowState.shownKind === "investments";
     default:
       if (id in MENU_REPORTS) return reportState.current?.kind === MENU_REPORTS[id];
       return false;

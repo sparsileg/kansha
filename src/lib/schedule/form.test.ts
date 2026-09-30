@@ -155,4 +155,30 @@ describe("draftFromFields", () => {
     const again = buildFields(back, TODAY);
     expect(again).toEqual(r);
   });
+
+  it("round-trips a paycheck: a deduction line goes the other way", () => {
+    const d = filled();
+    d.direction = "deposit";
+    d.lines = [
+      { target: "c:5", amount: "2,500.00", memo: "", tag: "" },
+      { target: "c:6", amount: "-500", memo: "tax", tag: "" },
+    ];
+    const r = buildFields(d, TODAY);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.fields.lines.map((l) => l.amount)).toEqual(["2500.00", "-500.00"]);
+    const back = draftFromFields(r.fields, "");
+    expect(back.direction).toBe("deposit");
+    expect(back.lines.map((l) => l.amount)).toEqual(["2500.00", "-500.00"]);
+    expect(buildFields(back, TODAY)).toEqual(r);
+  });
+
+  it("a '-' line on a payment is positive", () => {
+    const d = filled();
+    d.lines = [
+      { target: "c:5", amount: "100", memo: "", tag: "" },
+      { target: "c:6", amount: "-20", memo: "", tag: "" },
+    ];
+    const r = buildFields(d, TODAY);
+    expect(r.ok && r.fields.lines.map((l) => l.amount)).toEqual(["-100.00", "20.00"]);
+  });
 });

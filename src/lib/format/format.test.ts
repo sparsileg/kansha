@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   sanitizeAmountInput,
+  sanitizeSplitAmountInput,
   combinePaymentDeposit,
   formatMoney,
   parseMoney,
@@ -20,9 +21,11 @@ describe("parseMoney", () => {
     ["007", "7.00"],
     ["-0", "0.00"],
     ["5.", "5.00"],
+    ["12,345,678.90", "12345678.90"],
+    ["1234", "1234.00"],
   ])("%s → %s", (i, o) => expect(parseMoney(i)).toBe(o));
 
-  it.each(["", ".", "abc", "1.234", "1..2", "--5", "1 2"])(
+  it.each(["", ".", "abc", "1.234", "1..2", "--5", "1 2", "1,2,3", "12,34", "1,", "1,234,56", "1234,567"])(
     "rejects %j",
     (i) => expect(parseMoney(i)).toBeNull(),
   );
@@ -123,4 +126,15 @@ describe("sanitizeAmountInput", () => {
     ["1,000", "1,000"],
     [".5", ".5"],
   ])("%j → %j", (i, o) => expect(sanitizeAmountInput(i)).toBe(o));
+});
+
+describe("sanitizeSplitAmountInput", () => {
+  it.each([
+    ["-500", "-500"],
+    ["5-00", "500"],
+    ["--5", "-5"],
+    ["-$1,234.567", "-1,234.56"],
+    ["12a.5x", "12.5"],
+    ["-", "-"],
+  ])("%j → %j", (i, o) => expect(sanitizeSplitAmountInput(i)).toBe(o));
 });

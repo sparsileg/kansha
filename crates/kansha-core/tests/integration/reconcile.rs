@@ -200,6 +200,26 @@ fn only_a_session_in_progress_can_change() {
 }
 
 #[test]
+fn an_account_with_a_reconciliation_in_progress_does_not_close() {
+    let mut f = fx();
+    f.deposit("2026-01-01", "1000.00");
+    let rec = f.start("2026-01-31", "1000.00");
+    let chk = f.chk;
+    let err = f
+        .book
+        .write(|tx| ledger::close_account(tx, chk, date("2026-06-30"), true).map(|_| ()))
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("reconciliation in progress"),
+        "{err}"
+    );
+    f.book.write(|tx| reconcile::abandon(tx, rec.id)).unwrap();
+    f.book
+        .write(|tx| ledger::close_account(tx, chk, date("2026-06-30"), true))
+        .unwrap();
+}
+
+#[test]
 fn integrity_flags_reconciled_postings_that_leave_the_last_statement() {
     let mut f = fx();
     let open = f.deposit("2026-01-01", "1000.00");

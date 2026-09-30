@@ -11,7 +11,6 @@ export type ViewId =
   | "window"
   | "manage"
   | "search"
-  | "investments"
   | "settings";
 
 export type ManageTab = "payees" | "categories" | "tags" | "securities";

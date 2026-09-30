@@ -2,7 +2,7 @@
   import { datePattern } from "../format/date";
   import { untrack } from "svelte";
   import { call, commands } from "../api";
-  import { blockNonAmountChar, sanitizeAmountInput } from "../format/money";
+  import { blockNonSplitAmountChar, sanitizeSplitAmountInput } from "../format/money";
   import {
     PRESETS,
     WEEKDAYS,
@@ -52,7 +52,9 @@
   );
 
   function onAmount(line: { amount: string }, e: Event) {
-    line.amount = sanitizeAmountInput((e.target as HTMLInputElement).value);
+    const input = e.target as HTMLInputElement;
+    line.amount = sanitizeSplitAmountInput(input.value);
+    if (input.value !== line.amount) input.value = line.amount;
   }
 
   async function save() {
@@ -125,7 +127,7 @@
         <input bind:value={d.memo} />
       </label>
       <label>
-        Method
+        Transaction Type
         <select bind:value={d.direction}>
           <option value="payment">Payment</option>
           <option value="deposit">Deposit</option>
@@ -146,7 +148,7 @@
             inputmode="decimal"
            
             value={line.amount}
-            onbeforeinput={blockNonAmountChar}
+            onbeforeinput={blockNonSplitAmountChar}
             oninput={(e) => onAmount(line, e)}
           />
           <TargetCombo bind:value={line.target} excludeAccount={mainAccount} newKind={d.direction === "deposit" ? "income" : "expense"} label={`Line ${i + 1} category`} />
@@ -170,7 +172,7 @@
           </span>
         </div>
       {/each}
-      <p class="note">The scheduled amount is the sum of the lines.</p>
+      <p class="note">The scheduled amount is the sum of the lines. A line going the other way from the transaction type (a paycheck deduction) takes a leading -.</p>
     </fieldset>
 
     <fieldset>

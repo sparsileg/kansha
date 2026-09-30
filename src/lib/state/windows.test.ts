@@ -16,7 +16,7 @@ describe("windows", () => {
     const id = windowState.add("test", () => "Net Worth");
     windowState.show(id);
     expect(windowState.shown).toBe(id);
-    viewState.navigate("investments");
+    viewState.navigate("manage");
     expect(windowState.shown).toBeNull();
     expect(windowState.wins).toHaveLength(1);
     viewState.back();

@@ -12,7 +12,7 @@ describe("menu definitions", () => {
       "New…", "Open…", "Recent", "Rename Book…", "Back Up Now", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
     ]);
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
-      "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Import Prices…", "Download Prices", "Reconcile",
+      "Accounts", "Calendar", "Reminders", "Payees", "Categories", "Tags", "Securities", "Import Prices…", "Reconcile",
     ]);
     expect(MENUS[1].items.map((i) => i.label)).toEqual(["Undo (Ctrl+Z)", "Settings…", "Navigation Bar…", "Renaming…"]);
     expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports…", "Investing", "Net Worth", "Spending", "Tax"]);

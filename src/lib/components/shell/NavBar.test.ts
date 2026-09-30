@@ -46,7 +46,7 @@ describe("NavBar", () => {
     const inv = screen.getByRole("button", { name: "Investments" });
     expect(inv.getAttribute("aria-disabled")).toBeNull();
     await fireEvent.click(inv);
-    expect(viewState.current).toBe("investments");
+    expect(windowState.shownKind).toBe("investments");
   });
 });
 

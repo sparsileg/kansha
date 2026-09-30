@@ -152,3 +152,23 @@ Open questions for Stan (how Quicken 2013 does it):
 2. How does a register get there: a minimize button, or by opening
    another account?
 3. Can the same account be in the dock more than once?
+
+## Investments window and Download Prices (2026-09-30, spec 0.5.2)
+
+- The Investments screen is a panel (`shell/panels.ts`, kind
+  `investments`): one window, Minimize and Close, waits in the dock.
+  `"investments"` is no longer a `ViewId`; the startup setting keeps
+  the value `investments`, now opening the panel. Its heading comes
+  from the window frame.
+- Download Prices is a button beside Customize (`views/Investments.svelte`),
+  gone from the Tools menu. It downloads for the As of date:
+  `prices_download(date)` fetches the latest price when the date is
+  today or later, else each security's close on the last trading day
+  on or before it (Yahoo daily bars for the week before;
+  `download::close_on_or_before`). Downloaded prices round half-even to
+  4 decimals. **⚠ API change**; `just bindings` run. No schema change.
+- Account registers in the dock: still not built (Stan, 2026-09-30:
+  not now). See "Proposed: account registers in the dock".
+- Not run against Yahoo in the app: the past-day reply shape
+  (`timestamp`, `indicators.quote[0].close`) is from Yahoo's chart
+  service as documented by its users, tested on a sample reply only.

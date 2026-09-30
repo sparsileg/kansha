@@ -29,7 +29,6 @@ export function goHome(): void {
  * view and panel, so adding one fails to compile until it is listed. */
 const STARTUP_VIEWS: Record<ViewId, string | null> = {
   dashboard: "Dashboard",
-  investments: "Investments",
   account: null, // each account is its own choice
   window: null,
   manage: null,
@@ -37,6 +36,7 @@ const STARTUP_VIEWS: Record<ViewId, string | null> = {
   settings: null,
 };
 const STARTUP_PANELS: Record<PanelKind, string | null> = {
+  investments: "Investments",
   scheduled: "Reminders",
   calendar: "Calendar",
   accounts: "Accounts",

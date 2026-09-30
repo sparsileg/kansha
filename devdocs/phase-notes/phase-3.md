@@ -255,3 +255,51 @@ The original plan, kept for reference:
 - **Frontend:** rework `RegisterGrid.svelte` and `register.svelte.ts`. Selection, PageUp/PageDown, Home/End work across unloaded rows (Home/End jump the scroll).
 - **Check:** uniform row height (single-line columns); Today line; split panel and entry-row growth; saved-row pinning ("never clipped") against virtualization; scrollbar-width alignment.
 - **Stopgap if postponed further:** larger page size plus a "Go to date" jump.
+
+## Code review 2026-09-30 (spec 0.5.1)
+
+Phase 3 re-read against the code. Fixed, with tests that failed first:
+
+- Split lines were magnitudes only: `sanitizeAmountInput` dropped a
+  `-`, `draftFromEntry` dropped each line's sign, and `splitAmount`
+  signed every line like the total. A paycheck with deductions
+  (deposit 2,000.00: Salary 2,500.00, Taxes −500.00) could not be
+  entered, and editing one (a schedule's prefill, or an import) showed
+  every line positive, so the remainder was never zero and the entry
+  could not be saved. A zero-total split could not be entered at all.
+  Now a split line's amount is relative to the total: plain goes the
+  total's way, a leading `-` the other way (`sanitizeSplitAmountInput`,
+  `blockNonSplitAmountChar`, `lineText`); a split with neither Payment
+  nor Deposit totals zero, its plain lines deposits (`draftTotal`).
+  The engine already accepted these. Tests in `draft.test.ts`,
+  `format.test.ts`, `EntryEditor.test.ts`.
+- `EntryEditor.save()` had no busy guard. Enter in a text box is
+  blocked while saving (the submit button is disabled), but Enter on
+  the Tag select calls `save()` directly, so a second Enter saved the
+  entry twice. Test "Enter on the Tag field while a save is running
+  saves once".
+
+Checked, no change: register SQL (running balance before filters and
+sort, counterpart and `--Split--`, category filter with subcategories,
+text filter; every text column is NOT NULL, so no NULL concatenation),
+search, account balances and footer, entry to postings and back,
+reconciled links kept on edit, validation, memorized payee on first
+save only, payee/category/tag merge (transactions audited, schedule
+lines, payee defaults, subcategories, saved report filters, duplicate
+tags), account update/close/delete, stale-response guard, money and
+date parsing without floats or JS `Date`.
+
+Stan's decisions, same day, done with tests that failed first:
+
+- Deleting a category or tag used only as a payee's memorized default
+  clears that default (audited on the payee) instead of refusing
+  (`payees::forget_default`). A delete still refused as in use rolls
+  the cleared defaults back with it.
+- `parseMoney` requires thousands commas to group by three ("1,2,3",
+  "12,34", "1," are refused).
+- The schedule dialog's split lines work like the register's: a leading
+  `-` goes the other way from the transaction type (`signedLine`,
+  `lineText` shared from `register/draft.ts`), so a paycheck schedule
+  with deductions can be set up. The transaction type (label, was
+  "Method") is read back from the first line. The engine already
+  accepted mixed signs.

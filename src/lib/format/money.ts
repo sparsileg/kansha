@@ -2,7 +2,9 @@
 // arithmetic on amounts (CONVENTIONS; spec §17.3). Canonical form is the
 // Rust `Money` string: "-1234.56", always two decimals.
 
-const TYPED = /^([+-])?(\d[\d,]*)?(?:\.(\d*))?$/;
+// Thousands commas, when used, group every three digits: "1,234",
+// never "1,2,3".
+const TYPED = /^([+-])?(\d{1,3}(?:,\d{3})+|\d+)?(?:\.(\d*))?$/;
 
 /**
  * Parse what the user typed ("1,234.56", "-5", ".5", "+7.1") into a
@@ -88,6 +90,20 @@ export function sanitizeAmountInput(text: string): string {
   const dot = out.indexOf(".");
   if (dot < 0) return out;
   return out.slice(0, dot + 1) + out.slice(dot + 1).replace(/[.,]/g, "").slice(0, 2);
+}
+
+/**
+ * A split line's amount field: as `sanitizeAmountInput`, plus one leading
+ * `-` for a line that goes the other way from the total (TXN-020).
+ */
+export function sanitizeSplitAmountInput(text: string): string {
+  const minus = text.trimStart().startsWith("-");
+  return (minus ? "-" : "") + sanitizeAmountInput(text);
+}
+
+/** Block a typed character that can never be part of a split amount. */
+export function blockNonSplitAmountChar(e: InputEvent): void {
+  if (e.data && /[^0-9.,-]/.test(e.data)) e.preventDefault();
 }
 
 /** Block a typed character that can never be part of an amount. */

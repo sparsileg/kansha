@@ -761,3 +761,40 @@ fn an_edit_ignores_lots_bought_later_the_same_day() {
     assert_eq!(t.disposals[0].lot, later_lot);
     assert!(integrity::check(b.conn()).unwrap().is_clean());
 }
+
+#[test]
+fn reconciled_balance_check_counts_cash_not_holdings() {
+    use kansha_core::reconcile::{self, StartInput};
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let rec = b
+        .write(|tx| {
+            reconcile::start(
+                tx,
+                &StartInput {
+                    account: brk,
+                    statement_date: date("2026-01-31"),
+                    statement_balance: m("10000.00"),
+                    interest: None,
+                    service_charge: None,
+                },
+            )
+        })
+        .unwrap();
+    let cash_in = reconcile::session(b.conn(), rec.id).unwrap().deposits[0].txn_id;
+    b.write(|tx| reconcile::set_checked(tx, rec.id, &[cash_in], true))
+        .unwrap();
+    b.write(|tx| reconcile::finish(tx, rec.id)).unwrap();
+    b.invest(&buy(brk, vti, "2026-02-10", "10", "2005.00"))
+        .unwrap();
+    // A holding marked reconciled (an old import could): not cash, so the
+    // statement still matches, as the reconcile code counts it.
+    b.conn()
+        .execute(
+            "UPDATE posting SET cleared = 'reconciled' WHERE security_id IS NOT NULL",
+            [],
+        )
+        .unwrap();
+    let report = integrity::check(b.conn()).unwrap();
+    assert!(report.is_clean(), "{:?}", report.issues);
+}

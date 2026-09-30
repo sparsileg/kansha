@@ -345,11 +345,13 @@ export const commands = {
 	 */
 	priceImport: (text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("price_import", { text, date })),
 	/**
-	 *  Download the latest price of every shown security with a ticker
-	 *  (PRC-040), once the book's setting allows it (SECU-070). The fetching
-	 *  runs off the main thread; the prices are stored in one transaction.
+	 *  Download a price for every shown security with a ticker (PRC-040),
+	 *  once the book's setting allows it (SECU-070): the latest when `date`
+	 *  is today or later, else the close of the last trading day on or before
+	 *  `date`. The fetching runs off the main thread; the prices are stored
+	 *  in one transaction.
 	 */
-	pricesDownload: () => typedError<DownloadSummary, IpcError>(__TAURI_INVOKE("prices_download")),
+	pricesDownload: (date: string) => typedError<DownloadSummary, IpcError>(__TAURI_INVOKE("prices_download", { date })),
 	/**  An investment account's register (INV-030). */
 	invRegister: (account: AccountId) => typedError<InvRegister, IpcError>(__TAURI_INVOKE("inv_register", { account })),
 	invGet: (txn: TxnId) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("inv_get", { txn })),

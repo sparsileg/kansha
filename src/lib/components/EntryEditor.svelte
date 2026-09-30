@@ -2,7 +2,14 @@
   import { onMount, tick, untrack } from "svelte";
   import { DECLINED, call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
-  import { blockNonAmountChar, formatMoney, isZeroMoney, sanitizeAmountInput } from "../format/money";
+  import {
+    blockNonAmountChar,
+    blockNonSplitAmountChar,
+    formatMoney,
+    isZeroMoney,
+    sanitizeAmountInput,
+    sanitizeSplitAmountInput,
+  } from "../format/money";
   import {
     SPLIT,
     applyQuickFill,
@@ -201,7 +208,7 @@
 
   function splitAmountInput(i: number) {
     return (e: Event & { currentTarget: HTMLInputElement }) => {
-      const clean = sanitizeAmountInput(e.currentTarget.value);
+      const clean = sanitizeSplitAmountInput(e.currentTarget.value);
       if (clean !== e.currentTarget.value) e.currentTarget.value = clean;
       d.splits[i].amount = clean;
     };
@@ -274,6 +281,7 @@
 
   async function save(e?: Event) {
     e?.preventDefault();
+    if (busy) return; // Enter again (on a select) while saving
     error = null;
     if (txn === null && isBlank(d)) return; // Enter on an empty new row
     // Enter on an untouched edit writes nothing; it just moves on.
@@ -417,7 +425,7 @@
   {#snippet splitPanel()}
     <div class="split" role="group" aria-label="Split lines">
       <div class="split-title">
-        Split of {d.payment.trim() ? `payment ${d.payment}` : d.deposit.trim() ? `deposit ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Amounts are positive; each new line offers what is left.
+        Split of {d.payment.trim() ? `payment ${d.payment}` : d.deposit.trim() ? `deposit ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Type a part going the other way (a paycheck deduction) with a leading -; each new line offers what is left.
       </div>
       <div class="split-line split-head" aria-hidden="true">
         <span>Category or transfer account</span><span class="num">Amount</span><span>Tag</span><span>Memo</span><span title="Cleared in the other account (transfer lines)">Clr</span><span></span>
@@ -425,7 +433,7 @@
       {#each d.splits as s, i (i)}
         <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
           <TargetCombo bind:value={s.target} excludeAccount={account} newKind={newKind} label={`Split ${i + 1} category`} />
-          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonAmountChar} oninput={splitAmountInput(i)} />
+          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonSplitAmountChar} oninput={splitAmountInput(i)} />
           <select aria-label={`Split ${i + 1} tag`} value={splitTagValue(s)} onchange={(e) => (d.splits[i] = setSplitTag(s, e.currentTarget.value))}>
             <option value="">—</option>
             {#each listsState.tags.filter((t) => !t.hidden || s.tags.includes(t.id)) as t (t.id)}

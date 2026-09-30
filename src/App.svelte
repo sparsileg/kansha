@@ -103,7 +103,6 @@
     account: Account,
     manage: Manage,
     search: Search,
-    investments: Investments,
   };
   const View = $derived(views[viewState.current]);
   const panels: Record<PanelKind, Component> = {
@@ -111,6 +110,7 @@
     scheduled: Scheduled,
     accounts: Accounts,
     reconcile: Reconcile,
+    investments: Investments,
   };
   /** The window on top, when one is showing. */
   const win = $derived(windowState.shown === null ? undefined : windowState.get(windowState.shown));

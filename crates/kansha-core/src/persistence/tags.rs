@@ -98,6 +98,8 @@ pub fn update(tx: &Tx<'_>, id: TagId, f: &TagFields) -> Result<Tag> {
 /// Delete a tag no posting, schedule line, or payee uses.
 pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
     let before = get(tx.conn(), id)?;
+    // A payee's memorized default doesn't keep a tag alive.
+    super::payees::forget_default(tx, None, Some(id))?;
     tx.conn()
         .execute("DELETE FROM tag WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "tag", id.0))?;

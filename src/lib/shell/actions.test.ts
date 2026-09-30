@@ -61,16 +61,17 @@ describe("Edit > Undo (UI-060)", () => {
   });
 });
 
-describe("Tools > Download Prices (PRC-040)", () => {
+describe("Download Prices (PRC-040)", () => {
   it("reports the prices stored and flashes the tickers that got none", async () => {
     c.pricesDownload.mockImplementation(() => ok({ stored: 3, failed: [{ ticker: "OLDX", reason: "No data found" }] }));
-    await downloadPrices();
+    await downloadPrices("2026-06-12");
+    expect(c.pricesDownload).toHaveBeenLastCalledWith("2026-06-12");
     expect(statusState.message).toEqual({ text: "Downloaded 3 prices. No price for OLDX (No data found).", kind: "alert" });
   });
 
   it("says why when download is off", async () => {
     c.pricesDownload.mockImplementation(() => fail("invalid", "price download is off; turn it on in Settings") as never);
-    await downloadPrices();
+    await downloadPrices("2026-06-12");
     expect(statusState.message?.text).toMatch(/turn it on in Settings/);
     expect(statusState.message?.kind).toBe("alert");
   });

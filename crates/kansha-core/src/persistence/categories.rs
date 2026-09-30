@@ -258,6 +258,8 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
             id: id.0,
         });
     }
+    // A payee's memorized default doesn't keep a category alive.
+    super::payees::forget_default(tx, Some(id), None)?;
     tx.conn()
         .execute("DELETE FROM category WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "category", id.0))?;

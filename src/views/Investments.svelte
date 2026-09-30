@@ -7,11 +7,25 @@
   import DatePicker from "../lib/components/invest/DatePicker.svelte";
   import { buildRows } from "../lib/invest/rows";
   import { columnLabel } from "../lib/invest/views";
+  import { downloadPrices } from "../lib/shell/actions";
   import { openAccount } from "../lib/shell/nav";
   import { investViewState as st } from "../lib/state/investview.svelte";
   import { listsState } from "../lib/state/lists.svelte";
 
   let customizing = $state(false);
+  let downloading = $state(false);
+
+  /** Prices for the As of date (PRC-040): the latest when it is today,
+   * else that day's close. Then the figures follow. */
+  async function download() {
+    downloading = true;
+    try {
+      await downloadPrices(st.asOf || listsState.today);
+      await st.load();
+    } finally {
+      downloading = false;
+    }
+  }
 
   // Reload when the date, the view, or the account list changes; `load`
   // reads and writes state, so keep it out of this effect's dependencies.
@@ -30,7 +44,6 @@
 </script>
 
 <section>
-  <h1>Investments</h1>
   <div class="bar">
     <label>
       View:
@@ -40,6 +53,7 @@
     </label>
     <DatePicker value={st.asOf || listsState.today} today={listsState.today} label="As of" onchange={(iso) => (st.asOf = iso)} />
     <button type="button" onclick={() => (customizing = true)}>Customize</button>
+    <button type="button" disabled={downloading} onclick={() => void download()}>Download Prices</button>
   </div>
   {#if st.error}<p class="err" role="alert">{st.error}</p>{/if}
   {#if st.available.length === 0}
@@ -97,10 +111,6 @@
 {/if}
 
 <style>
-  h1 {
-    font-size: var(--fs-title);
-    margin: 0 0 0.5rem;
-  }
   .bar {
     display: flex;
     flex-wrap: wrap;

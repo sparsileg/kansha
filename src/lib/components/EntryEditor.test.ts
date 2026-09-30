@@ -245,6 +245,54 @@ describe("editing an existing transaction", () => {
   });
 });
 
+describe("mixed-sign splits (TXN-020)", () => {
+  const paycheck = {
+    account: 1, date: "2026-09-23", payee: 1, check_num: "", memo: "", notes: "",
+    amount: "2000.00", cleared: "unmarked" as const, tags: [],
+    lines: [
+      { target: { kind: "category" as const, id: 5 }, amount: "2500.00", memo: "", cleared: "unmarked" as const, tags: [] },
+      { target: { kind: "category" as const, id: 6 }, amount: "-500.00", memo: "", cleared: "unmarked" as const, tags: [] },
+    ],
+  };
+
+  it("an edit shows the opposite line with '-' and saves it unchanged", async () => {
+    c.entryGet.mockImplementation(() => ok(paycheck));
+    c.entryUpdate.mockImplementation(() => ok(null));
+    render(EntryEditor, { account: 1, txn: 7, ondone: vi.fn() });
+    await waitFor(() => expect(field("Split 2 amount").value).toBe("-500.00"));
+    expect(field("Split 1 amount").value).toBe("2500.00");
+    await fireEvent.input(field("Memo"), { target: { value: "pay" } });
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryUpdate).toHaveBeenCalledTimes(1));
+    expect(c.entryUpdate.mock.calls[0][1].lines.map((l: { amount: string }) => l.amount))
+      .toEqual(["2500.00", "-500.00"]);
+  });
+
+  it("a split amount keeps one leading '-'", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Deposit"), { target: { value: "2000" } });
+    await pick("Category", "split");
+    await fireEvent.input(field("Split 2 amount"), { target: { value: "-5-00" } });
+    expect(field("Split 2 amount").value).toBe("-500");
+  });
+});
+
+describe("saving twice", () => {
+  it("Enter on the Tag field while a save is running saves once", async () => {
+    let finish: (v: unknown) => void = () => {};
+    c.entryCreate.mockImplementation(() => new Promise((r) => (finish = r)) as never);
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "5" } });
+    await pick("Category", "food");
+    const tag = screen.getByLabelText("Tag");
+    await fireEvent.keyDown(tag, { key: "Enter" });
+    await fireEvent.keyDown(tag, { key: "Enter" });
+    finish({ status: "ok", data: 1 });
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalled());
+    expect(c.entryCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Category type-ahead (REG-030)", () => {
   it("finds an account by typing its name without brackets", async () => {
     render(EntryEditor, { account: 1 });

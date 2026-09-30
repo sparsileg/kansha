@@ -61,7 +61,7 @@ describe("openStartup", () => {
     expect(windowState.shownKind).toBe("accounts");
     settingsState.setStartup("investments");
     await openStartup();
-    expect(viewState.current).toBe("investments");
+    expect(windowState.shownKind).toBe("investments");
     settingsState.setStartup("account:7");
     await openStartup();
     expect(viewState.current).toBe("account");

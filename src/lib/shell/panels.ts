@@ -3,13 +3,14 @@
 
 import { windowState } from "../state/windows.svelte";
 
-export type PanelKind = "calendar" | "scheduled" | "accounts" | "reconcile";
+export type PanelKind = "calendar" | "scheduled" | "accounts" | "reconcile" | "investments";
 
 export const PANELS: Record<PanelKind, string> = {
   calendar: "Calendar",
   scheduled: "Reminders",
   accounts: "Accounts",
   reconcile: "Reconcile",
+  investments: "Investments",
 };
 
 export function openPanel(kind: PanelKind): void {

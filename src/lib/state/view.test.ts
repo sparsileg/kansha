@@ -36,7 +36,7 @@ describe("view history", () => {
     viewState.navigate("search");
     viewState.navigate("manage");
     viewState.back();
-    viewState.navigate("investments");
+    viewState.navigate("dashboard");
     expect(viewState.canForward).toBe(false);
     viewState.back();
     expect(viewState.current).toBe("search");

@@ -6,6 +6,7 @@
 import { applyDateKey, displayDate, parseDate } from "../format/date";
 import {
   combinePaymentDeposit,
+  isZeroMoney,
   negateMoney,
   parseMoney,
   splitPaymentDeposit,
@@ -85,6 +86,14 @@ function unsigned(canonical: string): string {
   return canonical.startsWith("-") ? canonical.slice(1) : canonical;
 }
 
+/** A split line as typed: its magnitude, with a leading `-` when it goes
+ * the other way from the total (a zero total counts as a deposit). */
+export function lineText(line: string, total: string): string {
+  const opposite =
+    !isZeroMoney(line) && line.startsWith("-") !== total.startsWith("-");
+  return opposite ? `-${unsigned(line)}` : unsigned(line);
+}
+
 export function draftFromEntry(entry: Entry, payeeName: string): Draft {
   const { payment, deposit } = splitPaymentDeposit(entry.amount);
   const d = newDraft("", entry.date);
@@ -106,7 +115,7 @@ export function draftFromEntry(entry: Entry, payeeName: string): Draft {
     d.category = SPLIT;
     d.splits = entry.lines.map((l) => ({
       target: targetValue(l.target),
-      amount: unsigned(l.amount),
+      amount: lineText(l.amount, entry.amount),
       memo: l.memo,
       cleared: l.cleared,
       tags: l.tags,
@@ -151,11 +160,29 @@ function isPayment(d: Draft): boolean {
   return d.payment.trim() !== "";
 }
 
-/** Signed canonical amount of one split line, or null if not a number. */
+/** Signed canonical amount of one split line, or null if not a number.
+ * A plain amount goes the total's way; a leading `-` the other way. */
 export function splitAmount(d: Draft, s: SplitDraft): string | null {
-  const m = parseMoney(s.amount);
+  return signedLine(s.amount, isPayment(d));
+}
+
+/** A typed split line amount signed for a payment (negative) or deposit
+ * total; a leading `-` goes the other way. Null if not a number. */
+export function signedLine(typed: string, payment: boolean): string | null {
+  const m = parseMoney(typed);
   if (m === null) return null;
-  return isPayment(d) ? negateMoney(unsigned(m)) : m;
+  const sameWay = payment ? negateMoney(unsigned(m)) : unsigned(m);
+  return m.startsWith("-") ? negateMoney(sameWay) : sameWay;
+}
+
+/** The entry's signed total, or null. A split with neither Payment nor
+ * Deposit typed totals zero (its lines move money between categories or
+ * accounts). */
+function draftTotal(d: Draft): string | null {
+  if (d.category === SPLIT && !d.payment.trim() && !d.deposit.trim()) {
+    return "0.00";
+  }
+  return combinePaymentDeposit(d.payment, d.deposit);
 }
 
 /**
@@ -165,7 +192,7 @@ export function splitAmount(d: Draft, s: SplitDraft): string | null {
 export function splitParts(
   d: Draft,
 ): { total: string; parts: string[] } | null {
-  const total = combinePaymentDeposit(d.payment, d.deposit);
+  const total = draftTotal(d);
   if (total === null) return null;
   const parts: string[] = [];
   for (const s of d.splits) {
@@ -235,7 +262,7 @@ export function buildEntry(
 ): Built {
   const date = parseDate(d.date, today);
   if (date === null) return { ok: false, error: "Date is not valid." };
-  const amount = combinePaymentDeposit(d.payment, d.deposit);
+  const amount = draftTotal(d);
   if (amount === null) {
     return {
       ok: false,

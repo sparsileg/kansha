@@ -122,8 +122,8 @@ pub fn set_cleared(
 }
 
 /// Close an account as of `date` (ACCT-210). No transaction may be dated
-/// after `date`, and it may not be the linked cash account of an open
-/// investment account; a non-zero balance, or for an investment account
+/// after `date`, no reconciliation may be in progress, and it may not be
+/// the linked cash account of an open investment account; a non-zero balance, or for an investment account
 /// cash or shares still held, needs `confirmed`. Closed accounts take no
 /// new or changed transactions until reopened.
 pub fn close_account(
@@ -146,6 +146,12 @@ pub fn close_account(
                 acct.fields.name
             )));
         }
+    }
+    if crate::persistence::reconcile::find_open(tx.conn(), account)?.is_some() {
+        return Err(Error::Invalid(format!(
+            "account {:?} has a reconciliation in progress; finish or abandon it first",
+            acct.fields.name
+        )));
     }
     // Its investment account's cash would have nowhere to post.
     let linked_from = accounts::list(tx.conn())?.into_iter().find(|a| {

@@ -66,3 +66,27 @@ Spec: 0.3.9. Engine, IPC, and UI in one pass. `just check` green.
 On 2026-09-24 Stan's prototype database was reshaped for reconcile testing: Checking transactions before 2026-05-01 deleted, 8,000.00 opening balance added 2026-04-30, and a compensating Opening Balance entry (2026-04-30) added to Savings, Visa, Cash, and Auto Loan so their balances from 4/30 on are unchanged (their earlier history is skewed). Backup: `kansha.db.before-rebase-2026-09-24` next to `kansha.db`. A practice statement (Aug 2026, ending 3,754.37) is in `~/Downloads/Sample-Bank-Checking-Statement-2026-08.pdf`. The 2026-08-15 deposit "missing from the reconcile list" could not be reproduced: the engine returned it (unchecked) and counts matched the database. Suspected cause was list length; recheck with the shorter data.
 
 Superseded by the reworked sample data: the hands-on reconcile used a fresh scratch book (`KANSHA_DB=/tmp/kansha-scratch.db just dev`, Load sample data) and statements from `cargo run -p kansha-core --example sample_statements`. The item lists now scroll on their own, which addresses the suspected list-length cause above.
+
+## Code review 2026-09-30 (spec 0.5.1)
+
+Phase 5 re-read against the code. No bug found; no change.
+
+Checked: one session per account; statement dates never go back
+(start and update); interest and service charge signs, including a
+credit card and an investment account's own cash; difference from the
+live reconciled total plus checked items dated on or before the
+statement; checking refuses reconciled, void, and later items; finish
+reconciles only this account's cash postings that are checked, normal,
+and on or before the statement date; Balance Adjustment only in a
+session in progress, only with a difference, only when confirmed;
+statement sign applied at the module boundary only; change detection
+(category merges and date-only edits drop out, deletes count); undo is
+refused once anything else was audited after the change, so it cannot
+undo across a finish.
+
+Stan's decisions, same day, done with tests that failed first:
+
+- An account with a reconciliation in progress cannot be closed
+  (`ledger::close_account`); finish or abandon the session first.
+- The integrity check `ReconciledBalanceMismatch` counts cash postings
+  only (`security_id IS NULL`), as the reconcile code does.

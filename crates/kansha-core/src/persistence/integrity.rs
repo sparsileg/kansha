@@ -106,7 +106,8 @@ const QUERIES: &[(Check, &str, &str)] = &[
         "reconciliation",
         "SELECT r.id, 'account ' || r.account_id || ': reconciled postings total '
                 || (SELECT ifnull(sum(p.amount), 0) FROM posting p
-                    WHERE p.account_id = r.account_id AND p.cleared = 'reconciled')
+                    WHERE p.account_id = r.account_id AND p.security_id IS NULL
+                      AND p.cleared = 'reconciled')
                 || ' cents; statement ' || r.statement_date || ' ended at '
                 || r.statement_balance || ' cents'
          FROM reconciliation r
@@ -114,7 +115,8 @@ const QUERIES: &[(Check, &str, &str)] = &[
            AND r.id = (SELECT max(r2.id) FROM reconciliation r2
                        WHERE r2.account_id = r.account_id AND r2.status = 'finished')
            AND (SELECT ifnull(sum(p.amount), 0) FROM posting p
-                WHERE p.account_id = r.account_id AND p.cleared = 'reconciled')
+                WHERE p.account_id = r.account_id AND p.security_id IS NULL
+                      AND p.cleared = 'reconciled')
                <> r.statement_balance
          ORDER BY r.id",
     ),

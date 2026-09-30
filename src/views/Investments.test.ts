@@ -25,6 +25,7 @@ const portfolio = {
   total: totals,
 };
 const invPortfolio = vi.fn((..._args: unknown[]) => ok(portfolio));
+const pricesDownload = vi.fn((..._args: unknown[]) => ok({ stored: 1, failed: [] }));
 
 vi.mock("../lib/api", async (orig) => {
   const real = await orig<typeof import("../lib/api")>();
@@ -32,6 +33,9 @@ vi.mock("../lib/api", async (orig) => {
     ...real,
     commands: {
       invPortfolio: (...a: unknown[]) => invPortfolio(...a),
+      pricesDownload: (...a: unknown[]) => pricesDownload(...a),
+      invAccounts: () => ok([]),
+      accountBalances: () => ok([]),
       securityList: () => ok([{ id: 1, name: "Total Stock Market", ticker: "VTI", hidden: false }]),
     },
   };
@@ -58,6 +62,25 @@ beforeEach(() => {
 });
 
 describe("Investments view", () => {
+  it("Download Prices, beside Customize, downloads for the As of date (PRC-040)", async () => {
+    investViewState.asOf = "2026-06-12";
+    render(Investments);
+    await screen.findByText("Brokerage");
+    const buttons = screen.getAllByRole("button").map((b) => b.textContent?.trim());
+    expect(buttons.indexOf("Download Prices")).toBe(buttons.indexOf("Customize") + 1);
+    invPortfolio.mockClear();
+    await fireEvent.click(screen.getByRole("button", { name: "Download Prices" }));
+    await waitFor(() => expect(pricesDownload).toHaveBeenCalledWith("2026-06-12"));
+    await waitFor(() => expect(invPortfolio).toHaveBeenCalled());
+  });
+
+  it("with no date chosen, downloads for today", async () => {
+    render(Investments);
+    await screen.findByText("Brokerage");
+    await fireEvent.click(screen.getByRole("button", { name: "Download Prices" }));
+    await waitFor(() => expect(pricesDownload).toHaveBeenLastCalledWith("2026-06-30"));
+  });
+
   it("shows the Default view: 8 columns, collapsed account with rolled-up values, Totals", async () => {
     render(Investments);
     await waitFor(() => expect(screen.getByText("Brokerage")).toBeTruthy());

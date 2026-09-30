@@ -523,12 +523,60 @@ fn payee_memorized_defaults_round_trip() {
     assert_eq!(found, payee);
     assert_eq!(found.fields.default_amount, Some(Money::from_cents(-18432)));
 
-    // A category a payee remembers is in use.
+    assert_eq!(payees::find_by_name(db.conn(), "Safeway").unwrap(), None);
+
+    // Deleting a category or tag a payee only remembers clears that
+    // default (audited on the payee) instead of refusing.
+    let tag = found.fields.default_tag.unwrap();
+    write(&mut db, |tx| categories::delete(tx, groceries.id)).unwrap();
+    write(&mut db, |tx| tags::delete(tx, tag)).unwrap();
+    let after = payees::get(db.conn(), payee.id).unwrap();
+    assert_eq!(after.fields.default_category, None);
+    assert_eq!(after.fields.default_tag, None);
+    assert_eq!(after.fields.default_memo, "weekly");
+    let actions: Vec<_> = audit::history(db.conn(), AuditEntity::Payee, payee.id.0)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.action)
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            AuditAction::Create,
+            AuditAction::Update,
+            AuditAction::Update
+        ]
+    );
+}
+
+#[test]
+fn a_used_category_stays_a_payee_default_when_its_delete_is_refused() {
+    let mut db = db();
+    let (payee, food) = write(&mut db, |tx| {
+        let food = categories::insert(tx, &CategoryFields::new("Food", CategoryKind::Expense))?;
+        let mut f = PayeeFields::new("Grocer");
+        f.default_category = Some(food.id);
+        Ok((payees::insert(tx, &f)?, food))
+    })
+    .unwrap();
+    // A transaction uses it too.
+    write(&mut db, |tx| {
+        let chk = accounts::insert(tx, &AccountFields::new("Checking", AccountType::Checking))?;
+        let entry =
+            kansha_core::ledger::Entry::new(chk.id, date("2026-01-05"), Money::from_cents(-500))
+                .line(
+                    kansha_core::ledger::Target::Category(food.id),
+                    Money::from_cents(-500),
+                );
+        kansha_core::ledger::create_entry(tx, &entry)
+    })
+    .unwrap();
     assert!(matches!(
-        write(&mut db, |tx| categories::delete(tx, groceries.id)),
+        write(&mut db, |tx| categories::delete(tx, food.id)),
         Err(Error::InUse { .. })
     ));
-    assert_eq!(payees::find_by_name(db.conn(), "Safeway").unwrap(), None);
+    let still = payees::get(db.conn(), payee.id).unwrap();
+    assert_eq!(still.fields.default_category, Some(food.id));
 }
 
 #[test]

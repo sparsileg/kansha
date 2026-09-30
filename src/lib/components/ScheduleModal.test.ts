@@ -40,4 +40,12 @@ describe("ScheduleModal", () => {
     await waitFor(() => expect(screen.getByLabelText("Weekday")).toBeTruthy());
     expect(screen.getByLabelText("Week")).toBeTruthy();
   });
+
+  it("a split line's amount keeps one leading '-' (paycheck deduction)", async () => {
+    render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
+    await fireEvent.click(screen.getByRole("button", { name: "Split" }));
+    const amount = screen.getByLabelText("Line 2 amount") as HTMLInputElement;
+    await fireEvent.input(amount, { target: { value: "-5-00" } });
+    expect(amount.value).toBe("-500");
+  });
 });

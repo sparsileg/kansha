@@ -4,8 +4,8 @@
 // onto the engine's (frequency, interval) pairs and parses typed values.
 
 import { parseDate } from "../format/date";
-import { negateMoney, parseMoney, splitPaymentDeposit } from "../format/money";
-import { parseTargetValue, targetValue } from "../register/draft";
+import { splitPaymentDeposit } from "../format/money";
+import { lineText, parseTargetValue, signedLine, targetValue } from "../register/draft";
 import type {
   AccountId,
   End,
@@ -52,7 +52,8 @@ export const WEEKDAYS = [
 export interface LineDraft {
   /** `c:ID` or `a:ID`, as `TargetCombo` uses. Empty when unset. */
   target: string;
-  /** Magnitude as typed; the direction is the form's. */
+  /** As typed, relative to the form's direction: a plain amount goes
+   * that way, a leading `-` the other way (a paycheck deduction). */
   amount: string;
   memo: string;
   tag: string;
@@ -143,7 +144,6 @@ export function draftFromFields(f: ScheduleFields, payeeName = ""): ScheduleDraf
   const direction = sign && sign.deposit !== "" ? "deposit" : "payment";
   const preset = presetOf(f);
   const fixedInterval = preset === "quarterly" || preset === "twice_yearly";
-  const mag = (a: string) => a.replace(/^-/, "");
   return {
     account: String(f.account),
     payee: payeeName,
@@ -153,7 +153,7 @@ export function draftFromFields(f: ScheduleFields, payeeName = ""): ScheduleDraf
     direction,
     lines: f.lines.map((l) => ({
       target: targetValue(l.target),
-      amount: mag(l.amount),
+      amount: lineText(l.amount, direction === "payment" ? "-1" : "1"),
       memo: l.memo,
       tag: l.tag === null ? "" : String(l.tag),
     })),
@@ -197,13 +197,12 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
   for (const [i, l] of d.lines.entries()) {
     const target = parseTargetValue(l.target);
     if (target === null) return fail(`Line ${i + 1}: choose a category or account.`);
-    const parsed = parseMoney(l.amount);
-    if (parsed === null || l.amount.trim() === "")
+    const amount = signedLine(l.amount, d.direction === "payment");
+    if (amount === null || l.amount.trim() === "")
       return fail(`Line ${i + 1}: enter an amount.`);
-    const mag = parsed.replace(/^-/, "");
     lines.push({
       target,
-      amount: d.direction === "payment" ? negateMoney(mag) : mag,
+      amount,
       // With one line the form shows only the transaction memo.
       memo: d.lines.length === 1 ? "" : l.memo,
       tag: l.tag === "" ? null : Number(l.tag),

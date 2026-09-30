@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.5 (draft) |
+| **Document version** | 0.5.2 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-29 |
+| **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Next: Phase 9, Quicken import (MIG) |
 
@@ -177,7 +177,8 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   categories. Merging reassigns all postings from the source to the
   target and is recorded in the audit log.
 - **CAT-030** [1.0][R] Categories cannot be deleted while in use; they
-  can be hidden/archived.
+  can be hidden/archived. A payee's memorized default is not a use:
+  deleting the category clears that default (0.5.1). Tags likewise.
 - **CAT-040** [1.0][R] Category flag **Tax-related** (used by tax
   summary reports). The tithable-income and charitable-giving flags
   are **[Withdrawn]** (0.3.22): giving is reviewed with existing
@@ -284,9 +285,12 @@ common patterns.
 #### 8.1 Schedule definition
 
 - **REC-010** [1.0][S] Each scheduled transaction has: payee, account,
-  amount, category (or split), tag, memo, method
-  (payment/deposit/transfer), next due date, frequency, end condition,
-  and reminder lead time (days before due to notify).
+  amount, category (or split), tag, memo, transaction type (payment
+  or deposit; a transfer is a line to another account), next due
+  date, frequency, end condition, and reminder lead time (days before
+  due to notify). A split line may go the other way from the
+  transaction type (a paycheck deduction), typed with a leading `-`
+  (0.5.1).
 - **REC-020** [1.0][S] Supported frequencies:
   - Only once
   - Daily [R]
@@ -430,9 +434,13 @@ common patterns.
   every other line is good; a price already stored for that date is
   replaced. Quicken's QIF price history is read only by the Quicken
   import (MIG-140).
-- **PRC-040** [1.0][S] Download the latest price of every security
-  that is not hidden and has a ticker (Tools > Download Prices), dated
-  the market day it belongs to. Off until turned on in Settings
+- **PRC-040** [1.0][S] Download a price for every security that is
+  not hidden and has a ticker (Download Prices, beside Customize on the
+  Investments screen), for the screen's As of date: the latest price
+  when that date is today, else the close of the last trading day on
+  or before it (0.5.2). Each price is dated the market day it belongs
+  to and rounded half-even to 4 decimals (0.5.2; closes carry float
+  noise, 312.4700012207031). Off until turned on in Settings
   (SECU-070). The provider sits behind an interface, since free quote
   sources change or disappear: Yahoo Finance's chart service now (no
   key; stocks, ETFs, mutual funds), a keyed provider later (D-40). The
@@ -443,6 +451,17 @@ common patterns.
   stale prices (older than the stale-price setting, SET-040, unless the
   security sets its own): Holdings marks them ⚠ and says so under the
   report; the Investments screen and the dashboard warn too.
+- **PRC-060** [Later][R] **Price pruning:** reduce a security's stored
+  prices to one per week, the close of the week's last trading day
+  (normally Friday), to cut the data kept, shown, and searched. Also
+  kept: the last trading day of each month and of each year. Every
+  other price in a week is deleted, whatever its source (downloaded,
+  imported, or entered by hand); a kept price keeps its own date.
+  Prices within a recent window (a setting, e.g. the last 90 days)
+  stay daily. Pruning runs by hand (Tools) or automatically (a
+  setting, e.g. after each download); which, or both, is decided when
+  built. A backup is made first. Market value (PRC-050) then uses the
+  most recent kept price on or before the valuation date.
 
 #### 10.3 Investment transactions (INV)
 
@@ -972,8 +991,8 @@ platform has one.
   bar at the bottom of the main window, one text label each; clicking
   a label brings that window to the top. Going to any other view
   leaves the open windows in the dock. The dock is generic. The
-  Calendar, Reminders (Scheduled Transactions), Accounts, and
-  Reconcile screens are windows too, one each. File > Exit and the
+  Calendar, Reminders (Scheduled Transactions), Accounts, Reconcile,
+  and Investments (0.5.2) screens are windows too, one each. File > Exit and the
   window's close box ask to save each changed report first; Cancel
   keeps the app open.
 - **UI-045** [1.0][R] A status bar shares the row of the Accounts
@@ -1431,11 +1450,15 @@ Modeling choices that affect other sections:
 - **Register entry view (Phase 2):** the engine stores postings; the
   register reads and writes a transaction as an *entry* seen from one
   account: that account's posting (`amount`) plus lines for the other
-  side (categories and transfer accounts). Lines carry the same sign
-  as `amount` and must add up to it (TXN-020); the engine computes the
-  unassigned remainder. A non-zero entry needs at least one line (no
-  uncategorized postings). Transaction-level tags (TAG-010) are stored
-  on the viewing account's posting.
+  side (categories and transfer accounts). Lines usually carry the
+  same sign as `amount`; a line may carry the opposite sign (a
+  paycheck deduction), typed in the split panel with a leading `-`.
+  Lines must add up to `amount` (TXN-020); the engine computes the
+  unassigned remainder. A split may total zero (no Payment or
+  Deposit typed; its plain lines are then deposits). A non-zero
+  entry needs at least one line (no uncategorized postings).
+  Transaction-level tags (TAG-010) are stored on the viewing
+  account's posting.
 - **Void (TXN-040):** the transaction and its postings stay; every
   amount becomes zero and status is `void`. Original amounts live in
   the audit entry. A void can be deleted but not edited. Un-void is
@@ -1450,7 +1473,8 @@ Modeling choices that affect other sections:
 - **Closed accounts (ACCT-210):** closing requires no transactions
   after the closing date and a zero balance or confirmation. The
   linked cash account of an open investment account cannot be closed,
-  confirmed or not (0.4.1). A closed account takes no new, edited,
+  confirmed or not (0.4.1), nor can an account with a reconciliation
+  in progress (0.5.1). A closed account takes no new, edited,
   voided, deleted, or re-cleared transactions until reopened.
 - **IPC conventions (Phase 3a):** types that cross IPC derive
   `specta::Type` behind kansha-core's `specta` feature (enabled only
@@ -1963,6 +1987,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.5.2 | 2026-09-30 | UI-040: the Investments screen is a window, one at most, so it can wait in the dock. PRC-040: Download Prices moves from the Tools menu to a button beside Customize on the Investments screen and downloads for its As of date (the latest price for today, else the close of the last trading day on or before it); downloaded prices round half-even to 4 decimals. New **PRC-060** [Later]: price pruning to weekly, month-end, and year-end closes. No schema change. **API change:** `prices_download` takes a `date`. |
+| 0.5.1 | 2026-09-30 | Code review of Phases 3 and 5; two fixes in the register entry row, then Stan's four review decisions and schedule splits. CAT-030: a payee's memorized default no longer keeps a category or tag from being deleted; the delete clears it (audited on the payee). §18 closed accounts: an account with a reconciliation in progress cannot be closed. INT-030: the reconciled-balance check counts cash postings only, as reconciliation does. Amounts typed with thousands commas must group by three ("1,2,3" is refused). REC-010: "method" is now "transaction type" (the schedule dialog's label); a schedule's split line may go the other way (a paycheck deduction), typed with a leading `-`. §18 register entry view: a split line may go the other way from the total (typed with a leading `-`), and a split may total zero; before, split amounts were magnitudes only, so a paycheck with deductions could not be entered, and editing one (from a schedule or an import) showed every line positive and could not be saved. Enter on the Tag field while a save was running saved the entry twice. No schema or API change. |
 | 0.5 | 2026-09-30 | Named books (`devdocs/phase-notes/books.md`), which closes the Phase 8 review's open finding (two books sharing a backup folder pruned each other's backups). New **UI-080** Books: `<name>.db`/`<name>.key` in any folder, name rules, File > New, Open, Recent, Rename Book, one book open at a time, start in the most recent book, window title. SECU-010 and SECU-080: named files; setup names the first book. BAK-035: backups are `<book>-…zip`, manifest records the book. BAK-040: only the open book's backups are pruned. BAK-070: another book's backup is flagged. SET-070: recent books. App identifier changed from `org.sparsile.kansha` to `tools.astryx.kansha` (moves the default data and config folders). No schema change. **API change:** new commands `book_new`, `book_open`, `book_rename`, `book_recent`, `pick_book_file`; `book_setup` takes `name` and `folder`; `BookStatus` gains `name` and `folder`; `Manifest.book`. |
 | 0.4.5 | 2026-09-30 | Code review of Phase 8; one fix. BAK-070: a crash between renaming the new database and the new key file into place (restore, setup's conversion) left them mismatched, and after a first conversion with no backup yet only a hand rename saved the data. Startup now finishes such a swap or undoes one that never started. Backup pruning per book left open (Stan). No schema or API change. |
 | 0.4.4 | 2026-09-30 | Code review of Phase 7; two fixes, both seen with an account filter. §18 report rules: a banking entry's category lines belong only to the account it was written in (a split with a transfer listed its expenses under the other account when its own was filtered out). A linked-cash buy, sale, or return of capital is now a transfer between the cash account and the investment account (it was missing from Itemized Categories); its realized gain stays with the investment account. No schema or API change. |

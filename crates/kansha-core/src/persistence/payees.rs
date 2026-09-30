@@ -6,7 +6,7 @@ use super::Tx;
 use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
 use super::{ledger, reports};
-use crate::categories::{Merged, Payee, PayeeFields, PayeeId};
+use crate::categories::{CategoryId, Merged, Payee, PayeeFields, PayeeId, TagId};
 use crate::error::{Error, Result};
 use crate::reports::FilterList;
 
@@ -140,6 +140,35 @@ pub fn delete(tx: &Tx<'_>, id: PayeeId) -> Result<()> {
         Some(&before),
         None,
     )?;
+    Ok(())
+}
+
+/// Drop `category` (or `tag`) from every payee's memorized defaults,
+/// with an audit entry on each payee changed. Called before deleting the
+/// category or tag; a refused delete rolls this back with it.
+pub(super) fn forget_default(
+    tx: &Tx<'_>,
+    category: Option<CategoryId>,
+    tag: Option<TagId>,
+) -> Result<()> {
+    let ids: Vec<PayeeId> = tx
+        .conn()
+        .prepare_cached(
+            "SELECT id FROM payee WHERE default_category_id = ?1 OR default_tag_id = ?2
+             ORDER BY id",
+        )?
+        .query_map(rusqlite::params![category, tag], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for id in ids {
+        let mut f = get(tx.conn(), id)?.fields;
+        if category.is_some() && f.default_category == category {
+            f.default_category = None;
+        }
+        if tag.is_some() && f.default_tag == tag {
+            f.default_tag = None;
+        }
+        update(tx, id, &f)?;
+    }
     Ok(())
 }
 
