@@ -122,7 +122,7 @@ fn securities_are_normalized_unique_and_deleted_only_when_unused() {
 }
 
 #[test]
-fn prices_replace_by_date_are_audited_and_found_on_or_before() {
+fn prices_replace_by_date_are_not_audited_and_found_on_or_before() {
     let mut b = book();
     let vti = b.security("Total", "VTI", SecurityType::Etf).unwrap();
     b.price(vti, date("2026-06-01"), p("300")).unwrap();
@@ -149,19 +149,11 @@ fn prices_replace_by_date_are_audited_and_found_on_or_before() {
             .is_err()
     );
 
-    let actions: Vec<_> = audit::history(b.conn(), AuditEntity::Price, vti.0)
-        .unwrap()
-        .iter()
-        .map(|h| h.action)
-        .collect();
-    assert_eq!(
-        actions,
-        vec![
-            AuditAction::Create,
-            AuditAction::Create,
-            AuditAction::Update,
-            AuditAction::Delete
-        ]
+    // Prices are not audited (CONVENTIONS §5, spec 0.7).
+    assert!(
+        audit::history(b.conn(), AuditEntity::Price, vti.0)
+            .unwrap()
+            .is_empty()
     );
     let negative = PricePoint {
         security: vti,

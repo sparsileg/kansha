@@ -35,6 +35,7 @@ mod reads;
 mod returns;
 mod seed;
 mod service;
+mod true_up;
 
 pub use period::{AccountPeriod, Track, account_period, combined};
 pub use portfolio::{
@@ -50,6 +51,10 @@ pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};
 pub(crate) use service::create_with_source;
 pub use service::{create, delete, trade_amount, update};
+pub use true_up::{
+    TrueUpLine, TrueUpLot, TrueUpPreview, TrueUpReplay, TrueUpStatus, parse_true_up,
+    preview_true_up, true_up,
+};
 
 pub(crate) use lots::OpenLot;
 pub(crate) use service::Plan;
@@ -96,6 +101,9 @@ text_enum! {
         TaxWithholding = "tax_withholding",
         MiscIncome = "misc_income",
         MiscExpense = "misc_expense",
+        /// Lot true-up (MIG-115): the holding's lots set to the broker's
+        /// list. Made only by [`true_up`], never from an [`InvInput`].
+        TrueUp = "true_up",
     }
 }
 
@@ -113,6 +121,8 @@ text_enum! {
         Sale = "sale",
         TransferOut = "transfer_out",
         Removed = "removed",
+        /// Closed by a true-up (MIG-115); no gain.
+        TrueUp = "true_up",
     }
 }
 
@@ -186,15 +196,21 @@ impl InvAction {
     pub const fn affects_lots(self) -> bool {
         self.acquires()
             || self.disposes()
-            || matches!(self, InvAction::Split | InvAction::ReturnOfCapital)
+            || matches!(
+                self,
+                InvAction::Split | InvAction::ReturnOfCapital | InvAction::TrueUp
+            )
     }
 
-    /// Has an amount of money: everything but split and the share-only
-    /// transfers and removals.
+    /// Has an amount of money: everything but split, the share-only
+    /// transfers and removals, and true-ups.
     pub const fn takes_amount(self) -> bool {
         !matches!(
             self,
-            InvAction::Split | InvAction::TransferShares | InvAction::SharesRemoved
+            InvAction::Split
+                | InvAction::TransferShares
+                | InvAction::SharesRemoved
+                | InvAction::TrueUp
         )
     }
 
@@ -256,6 +272,7 @@ impl InvAction {
             InvAction::TaxWithholding => "Tax Withheld",
             InvAction::MiscIncome => "Misc Income",
             InvAction::MiscExpense => "Misc Expense",
+            InvAction::TrueUp => "Lot True-up",
         }
     }
 }
@@ -412,7 +429,10 @@ impl InvTxn {
                 .sum()
         };
         let amount = match self.action {
-            InvAction::Split | InvAction::TransferShares | InvAction::SharesRemoved => None,
+            InvAction::Split
+            | InvAction::TransferShares
+            | InvAction::SharesRemoved
+            | InvAction::TrueUp => None,
             InvAction::ReinvestDividend
             | InvAction::ReinvestCgShort
             | InvAction::ReinvestCgLong

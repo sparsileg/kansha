@@ -84,8 +84,6 @@ pub struct CategoryFields {
     pub name: String,
     /// CAT-040 flags.
     pub tax_related: bool,
-    pub tithable: bool,
-    pub giving: bool,
     /// CAT-050: the tax form line this category's amounts belong to.
     pub tax_line: Option<TaxLineId>,
     /// CAT-030: hide instead of delete.
@@ -99,8 +97,6 @@ impl CategoryFields {
             kind,
             name: name.into(),
             tax_related: false,
-            tithable: false,
-            giving: false,
             tax_line: None,
             hidden: false,
         }

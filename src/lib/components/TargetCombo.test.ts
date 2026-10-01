@@ -21,7 +21,7 @@ const c = vi.mocked(commands, true);
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const cat = (id: number, name: string, parent: number | null = null) => ({
   id, parent, kind: "expense" as const, name, system: null, tax_related: false,
-  tithable: false, giving: false, tax_line: null, hidden: false, created_at: "",
+  tax_line: null, hidden: false, created_at: "",
 });
 
 const box = () => screen.getByLabelText("Category") as HTMLInputElement;

@@ -164,6 +164,16 @@ const QUERIES: &[(Check, &str, &str)] = &[
              UNION ALL
              SELECT l.account_id, l.security_id, a.quantity_delta
              FROM lot_adjustment a JOIN lot l ON l.id = a.lot_id
+             UNION ALL
+             -- A true-up (MIG-115) has no share count of its own: the
+             -- lots it opens and closes are its moves.
+             SELECT l.account_id, l.security_id, l.quantity
+             FROM lot l JOIN investment_txn i ON i.txn_id = l.origin_txn_id
+             WHERE i.action = 'true_up'
+             UNION ALL
+             SELECT l.account_id, l.security_id, -d.quantity
+             FROM lot_disposal d JOIN lot l ON l.id = d.lot_id
+             WHERE d.kind = 'true_up'
          ),
          held (account_id, security_id, q) AS (
              SELECT l.account_id, l.security_id,

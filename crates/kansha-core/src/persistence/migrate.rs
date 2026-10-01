@@ -69,6 +69,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0007_daf_account_type.sql"),
         foreign_keys_off: true,
     },
+    Migration {
+        version: 8,
+        description: "lot true-up; tithing columns dropped; price audit purged",
+        sql: include_str!("migrations/0008_lot_true_up.sql"),
+        foreign_keys_off: true,
+    },
 ];
 
 /// The newest schema version this build understands.

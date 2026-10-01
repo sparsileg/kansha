@@ -1,11 +1,11 @@
 //! Securities, prices, and investment commands (SEC, PRC, INV, LOT, POS,
-//! MIG-120).
+//! MIG-115, MIG-120).
 
 use kansha_core::accounts::AccountId;
 use kansha_core::backup::BackupKind;
 use kansha_core::invest::{
     self, Allocation, Holdings, IncomeReport, InvAction, InvInput, InvRegister, InvTxn, LotView,
-    Performance, Portfolio, RealizedGain, SeedPreview,
+    Performance, Portfolio, RealizedGain, SeedPreview, TrueUpPreview,
 };
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
@@ -387,5 +387,55 @@ pub fn lot_seed(
         let n = invest::commit_seed(tx, &text, date)?;
         imports::commit(tx, batch.id)?;
         Ok(n)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Lot true-up (MIG-115)
+// ---------------------------------------------------------------------------
+
+/// The broker's lot list in `text` (CSV) for `security`'s rows.
+fn broker_lots(
+    db: &kansha_core::Db,
+    security: SecurityId,
+    text: &str,
+) -> kansha_core::Result<Vec<invest::TrueUpLot>> {
+    let sec = repo::get(db.conn(), security)?;
+    invest::parse_true_up(text, sec.fields.ticker.as_deref())
+}
+
+/// Compare a holding's lots on `date` with the broker's list.
+#[tauri::command]
+#[specta::specta]
+pub fn true_up_preview(
+    state: State<'_, AppState>,
+    account: AccountId,
+    security: SecurityId,
+    date: Date,
+    text: String,
+) -> CmdResult<TrueUpPreview> {
+    state.read(|db, _| {
+        let lots = broker_lots(db, security, &text)?;
+        invest::preview_true_up(db.conn(), account, security, date, &lots)
+    })
+}
+
+/// Set a holding's lots to the broker's list as of `date` (a backup is
+/// made first); later sales choose their lots again.
+#[tauri::command]
+#[specta::specta]
+pub fn true_up(
+    state: State<'_, AppState>,
+    account: AccountId,
+    security: SecurityId,
+    date: Date,
+    text: String,
+    memo: String,
+) -> CmdResult<InvTxn> {
+    state.backup(BackupKind::Bulk)?;
+    state.write(|tx| {
+        let sec = repo::get(tx.conn(), security)?;
+        let lots = invest::parse_true_up(&text, sec.fields.ticker.as_deref())?;
+        invest::true_up(tx, account, security, date, &lots, &memo)
     })
 }

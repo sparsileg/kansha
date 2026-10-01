@@ -57,7 +57,12 @@ pub(crate) struct Plan {
 /// Create an investment transaction. Its source follows the write's
 /// origin, as for ledger transactions.
 pub fn create(tx: &Tx<'_>, input: &InvInput) -> Result<InvTxn> {
-    let source = match tx.origin() {
+    create_with_source(tx, source(tx)?, input)
+}
+
+/// A new investment transaction's source, from the write's origin.
+pub(crate) fn source(tx: &Tx<'_>) -> Result<TxnSource> {
+    Ok(match tx.origin() {
         Origin::Ui => TxnSource::Manual,
         Origin::Import(batch) => TxnSource::Import { batch },
         Origin::System => TxnSource::System,
@@ -66,8 +71,7 @@ pub fn create(tx: &Tx<'_>, input: &InvInput) -> Result<InvTxn> {
                 "investment transactions are not scheduled".into(),
             ));
         }
-    };
-    create_with_source(tx, source, input)
+    })
 }
 
 /// Create an investment transaction with an explicit source: a schedule's
@@ -96,11 +100,29 @@ pub fn update(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Resu
         check_settle(input)?;
         return repo::update_header(tx, &before, &input.memo, input.settle_date);
     }
+    if before.action == InvAction::TrueUp {
+        return Err(Error::Invalid(
+            "a lot true-up cannot be changed, only its memo; delete it and true up again".into(),
+        ));
+    }
     if before.action.affects_lots() {
         check_nothing_after(conn, &before)?;
     }
     repo::clear_effects(tx, id)?;
-    let mut plan = plan(tx.conn(), input, Some(&before))?;
+    let plan = plan(tx.conn(), input, Some(&before))?;
+    rewrite(tx, &before, plan)
+}
+
+/// Plan `before` again from its own input, after its effects (and those
+/// of everything after it in its holding) were cleared: a sale after a
+/// true-up chooses its lots again (MIG-115).
+pub(crate) fn replan(tx: &Tx<'_>, before: &InvTxn) -> Result<InvTxn> {
+    let plan = plan(tx.conn(), &before.to_input(), Some(before))?;
+    rewrite(tx, before, plan)
+}
+
+/// Store a new plan for `before`, whose effects were cleared.
+fn rewrite(tx: &Tx<'_>, before: &InvTxn, mut plan: Plan) -> Result<InvTxn> {
     // A cash posting that stays in the same account keeps its cleared
     // status and reconciliation (TXN-050).
     let mut links: HashMap<AccountId, Option<i64>> = HashMap::new();
@@ -120,7 +142,7 @@ pub fn update(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Resu
             }
         }
     }
-    repo::rewrite(tx, &before, &plan, &links)
+    repo::rewrite(tx, before, &plan, &links)
 }
 
 /// Delete an investment transaction and its lot records. One that changed
@@ -129,6 +151,9 @@ pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     let conn = tx.conn();
     let before = repo::get(conn, id)?;
     check_changeable(conn, &before, confirmed)?;
+    if before.action == InvAction::TrueUp {
+        return super::true_up::delete(tx, &before);
+    }
     if before.action.affects_lots() {
         check_nothing_after(conn, &before)?;
     }
@@ -653,6 +678,11 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
             };
             b.post(cash, None, signed);
             b.post(other, None, neg(signed)?);
+        }
+        InvAction::TrueUp => {
+            return Err(Error::Invalid(
+                "a lot true-up is made from the broker's lot list (True Up Lots)".into(),
+            ));
         }
         InvAction::Dividend
         | InvAction::Interest

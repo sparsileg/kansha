@@ -2,9 +2,9 @@
 
 Spec: 0.6. App version unchanged (0.7.0). `just check` green.
 
-Built from the decisions in `import-proposal.md` Part A. **Not built
-yet:** the lot true-up (A4, MIG-115, needs a migration) and
-verification report layouts (MIG-100, P-02). Automated tests use
+Built from the decisions in `import-proposal.md` Part A. The lot
+true-up (A4, MIG-115) followed in spec 0.7 (section below). **Not
+built yet:** verification report layouts (MIG-100, P-02). Automated tests use
 synthetic QIF; Stan's first real trial is below.
 
 **⚠ API change:** new commands `pick_import_file`, `import_open`,
@@ -219,9 +219,6 @@ Gaps:
 
 ## Known gaps
 
-- Lot true-up (MIG-115): not built; needs the broker CSV layouts and a
-  migration (new lot adjustment kind, riding with the tithing-column
-  drop).
 - MIG-100: only the per-account before/after/expected table in the
   import result. Matching report layouts wait for P-02.
 - MIG-150 (scheduled transactions): nothing; P-04 open.
@@ -229,9 +226,9 @@ Gaps:
   Windows machine; `import::large_file_timing`, ignored): 7,680
   transactions over 20 years with 960 matched transfers, preview
   23 ms, import 0.92 s, so about 12 s per 100,000. Every record goes
-  through the engine with its audit entry; prices are one audited
-  write each (a daily price history for many securities is many rows;
-  PRC-060 thinning is Later).
+  through the engine with its audit entry. Prices are no longer
+  audited (spec 0.7), so a daily price history costs only its own
+  rows; PRC-060 thinning is Later.
 - Existing investment accounts with linked cash: Cash In/Out from the
   import are refused by the engine (listed as bad records).
 - Actions not handled: `Exercise`, `Expire`, `Grant`, `Vest`,
@@ -242,7 +239,9 @@ Gaps:
   search; every change re-runs the preview.
 - `Staged` stays in memory until imported or cancelled; switching
   books does not drop it.
-- **Open (2026-09-30): per-account imports.** Importing one QIF per
+- **Resolved (2026-10-01): per-account imports.** Solved in Stan's
+  book on Windows by recategorizing three transfers to Opening
+  Balance; no code change. The original note: importing one QIF per
   account into one book gave wrong balances (Checking, Fidelity IRA
   cash, a VBS-Cash cash account at about -$40k that cannot be deleted
   because its transfers tie it to Savings and Checking). Transfers are
@@ -251,5 +250,126 @@ Gaps:
   path is one whole-file export (all five data types) imported once,
   with accounts to leave out unticked in the mapping step. Cause in
   Stan's book not yet found; the next session inspects a copy of
-  `J:\Kansha\import.db`. Also open: investigate whether a later import
-  should match a transfer against transactions already in the book.
+  `J:\Kansha\import.db`. Still open: whether a later import should
+  match a transfer against transactions already in the book.
+
+## Lot true-up (MIG-115), spec 0.7, 2026-10-01
+
+QIF has no lot IDs, so replaying the investment history relieves every
+sale by the account's method (FIFO). Stan picked lots (Vanguard SpecID,
+later MinTax), so Kansha's open lots and gains differed. On a copy of
+his book: shares matched Vanguard exactly; basis was high by $164,634
+(VTI, account 448) and $5,010 (VTSAX, 140).
+
+**⚠ Schema change:** migration 0008: investment action and disposal
+kind `true_up`; `category.tithable` and `giving` dropped (table
+rebuild); price audit entries deleted (trigger dropped and recreated).
+**⚠ API change:** commands `true_up_preview`, `true_up`; types
+`TrueUpPreview`, `TrueUpLine`, `TrueUpLot`, `TrueUpReplay`,
+`TrueUpStatus`; `InvAction`/`DisposalKind` gain `true_up`;
+`CategoryFields` loses `tithable`, `giving`. `just bindings` run.
+
+### Files
+
+- `persistence/migrations/0008_lot_true_up.sql`; `migrate.rs` entry.
+- `invest/true_up.rs`: `parse_true_up`, `preview_true_up`, `true_up`,
+  `delete` (with later events taken out and put back).
+- `invest/service.rs`: `replan`, `source`; update refuses a true-up
+  (memo only); delete routes to `true_up::delete`; `plan` refuses
+  `TrueUp` input.
+- `persistence/invest.rs`: `events_after`.
+- `invest/period.rs`: a true-up that changes shares is a flow.
+- `persistence/integrity.rs`: `share_balance_mismatch` counts true-up
+  lots.
+- `persistence/securities.rs`: `set_price`, `delete_price` not audited.
+- `src-tauri/src/commands/invest.rs`: `true_up_preview`, `true_up`
+  (backup kind `bulk` first).
+- `src/lib/components/invest/TrueUpModal.svelte`, button in
+  Securities; `invest/form.ts` `TRUE_UP` (edit shows memo only). The
+  comparison is tied to the account, security, date, and text it was
+  made with; changing any hides it until Compare runs again
+  (`TrueUpModal.test.ts`).
+- Tests: `tests/integration/true_up.rs` (12), migration 0008 test,
+  price test now expects no audit rows.
+
+### Decisions
+
+- Close and recreate: a lot matching on acquisition date, shares, and
+  basis (shares only in IRA/Roth) is kept; others closed (`true_up`
+  disposal, no gain), broker lots opened. One transaction per holding;
+  basis difference against Opening Balance.
+- Dated before later sales when needed: later disposals of the holding
+  are cleared and planned again in order (FIFO picks from the new
+  lots); then a sale can be re-picked Specific. Refused with a later
+  share transfer or true-up; fails atomically if a later sale's chosen
+  lot is closed.
+- Prices not audited at all (option 1), not just non-manual ones.
+- CSV: header found below note lines; rows filtered by the security's
+  ticker when there is a symbol column; `total cost` accepted.
+
+### Stan's true-up (to do in the app)
+
+Dry run on a scratch copy of `import.db` matched Vanguard's realized
+gains reports to the cent:
+
+1. Tools > Securities > True up lots…: Vanguard Brokerage 448, VTI,
+   2025-12-31, `ignored/vti-448-2025-12-31.csv`. Then Vanguard Grandma
+   140, VTSAX, 2025-12-31, `ignored/vtsax-140-2025-12-31.csv`. (Built
+   from Vanguard's current lots with the 2026 sales added back and
+   2026 reinvestments left out.)
+2. Edit the 2026-01-07 VTI sale: Choose lots, 400 from 2024-04-04 →
+   gain $34,406.00 long.
+3. Edit the 2026-02-20 VTSAX sale: 89.941 from 2016-09-28 and 1.232
+   from 2024-12-23 → gain $10,040.82 long.
+4. VTSAX register: reinvestment dated 2026-02-25 → 2026-02-24
+   (Vanguard's date); enter the 2026-09-28 reinvestment (0.288 sh,
+   $52.71).
+5. Check: True up lots with today's date and Vanguard's current
+   download (`costbasisdownload_*.csv`) says the lots already match.
+
+### Known gaps
+
+- Pre-2026 realized gains stay as the FIFO replay made them (those
+  years are filed). VTI 2024-11-29 and 2025-07-15 DAF gifts show as
+  phantom sales (Quicken's workaround); fix with the deferred
+  charitable-gift disposal type.
+- Preview cannot try the replay (read-only); a failing replay shows
+  only when applying (nothing changes).
+- True-up UI is a prototype in the Securities window.
+
+### Applied in Stan's book (2026-10-01)
+
+Done in the app on `import.db` (Astro drive): both true-ups dated
+2025-12-31, both 2026 sales re-picked, the VTSAX buy moved to
+2026-02-24. Checked against a copy: VTI $34,406.00 and VTSAX
+$10,040.82 long-term gains, matching Vanguard's realized gains
+reports to the cent; open lots match Vanguard's cost basis downloads
+except the 2026-09-28 VTSAX reinvestment (Stan enters it with the
+month-end reinvestments). Accounts 448 and 140 now default to Minimum
+tax, as Vanguard does.
+
+## Next: charitable gift of shares (proposal, not built)
+
+Waiting for Stan's answers and "proceed".
+
+- New action **Gift Shares**: security, shares, lot choice (any
+  method), price per share on the gift date (shares × price = fair
+  market value, the deduction). Recipient: an investment account such
+  as the DAF (shares move like Transfer Shares, keeping dates and
+  basis) or a category (shares leave at basis).
+- New disposal kind `gift`: no gain, no term; left out of realized gain
+  and tax reports.
+- ⚠ Schema change: migration 0009 (0008 is in Stan's book).
+  ⚠ API change: action, disposal kind, bindings.
+- Deferred unless asked: a deduction report of gifts at market value.
+- Then fix the VTI gifts of 2024-11-29 (170 sh) and 2025-07-15
+  (179.393 sh): each is Quicken's workaround (shares added, removed,
+  and sold, plus a "dummy" cash transfer to VBS-Cash of $50,974.79 and
+  $55,193.84), giving phantom gains of $33,498.79 and $36,555.79.
+  Date order needs: delete the VTI true-up (later sales go back on the
+  old lots; the 2026 Specific pick survives, its lot was kept), replace
+  each group with one Gift Shares, true up again with the same file.
+  Try on a scratch copy first.
+- Questions for Stan: (1) DAF receives shares (basis and dates kept)
+  or their cash value? (2) What is VBS-Cash (the DAF stand-in?)
+  (3) OK to do the cleanup as above?

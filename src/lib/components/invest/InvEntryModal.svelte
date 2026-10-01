@@ -6,7 +6,7 @@
   import { datePattern, displayDate, parseDate } from "../../format/date";
   import { formatMoney, parseMoney } from "../../format/money";
   import { formatPrice, formatQuantity, parsePrice, parseQuantity } from "../../format/quantity";
-  import { ACTIONS, LOT_METHODS, actionInfo, buildInput, emptyForm, formFromInput, type InvForm } from "../../invest/form";
+  import { ACTIONS, LOT_METHODS, TRUE_UP, actionInfo, buildInput, emptyForm, formFromInput, type InvForm } from "../../invest/form";
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
@@ -126,7 +126,8 @@
   <form class="inv" onsubmit={save}>
     <label>
       Action
-      <select bind:value={form.action}>
+      <select bind:value={form.action} disabled={form.action === TRUE_UP.value}>
+        {#if form.action === TRUE_UP.value}<option value={TRUE_UP.value}>{TRUE_UP.label}</option>{/if}
         {#each ACTIONS as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
       </select>
     </label>

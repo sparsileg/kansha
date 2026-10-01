@@ -171,151 +171,53 @@ impl Rng {
 // Static data
 // ---------------------------------------------------------------------------
 
-/// (path, kind, tax-related, tithable, giving)
-const CATEGORIES: &[(&str, CategoryKind, bool, bool, bool)] = &[
-    ("Income", CategoryKind::Income, false, false, false),
-    ("Income:Salary", CategoryKind::Income, true, true, false),
-    ("Income:Refunds", CategoryKind::Income, true, false, false),
-    ("Income:Other", CategoryKind::Income, false, false, false),
-    ("Housing", CategoryKind::Expense, false, false, false),
-    ("Housing:Rent", CategoryKind::Expense, false, false, false),
-    (
-        "Housing:Repairs",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Housing:Renters Insurance",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Utilities", CategoryKind::Expense, false, false, false),
-    (
-        "Utilities:Electric",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Utilities:Gas", CategoryKind::Expense, false, false, false),
-    (
-        "Utilities:Water",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Utilities:Internet",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Utilities:Phone",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Food", CategoryKind::Expense, false, false, false),
-    ("Food:Groceries", CategoryKind::Expense, false, false, false),
-    ("Food:Dining", CategoryKind::Expense, false, false, false),
-    ("Food:Coffee", CategoryKind::Expense, false, false, false),
-    ("Transportation", CategoryKind::Expense, false, false, false),
-    (
-        "Transportation:Fuel",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
+/// (path, kind, tax-related)
+const CATEGORIES: &[(&str, CategoryKind, bool)] = &[
+    ("Income", CategoryKind::Income, false),
+    ("Income:Salary", CategoryKind::Income, true),
+    ("Income:Refunds", CategoryKind::Income, true),
+    ("Income:Other", CategoryKind::Income, false),
+    ("Housing", CategoryKind::Expense, false),
+    ("Housing:Rent", CategoryKind::Expense, false),
+    ("Housing:Repairs", CategoryKind::Expense, false),
+    ("Housing:Renters Insurance", CategoryKind::Expense, false),
+    ("Utilities", CategoryKind::Expense, false),
+    ("Utilities:Electric", CategoryKind::Expense, false),
+    ("Utilities:Gas", CategoryKind::Expense, false),
+    ("Utilities:Water", CategoryKind::Expense, false),
+    ("Utilities:Internet", CategoryKind::Expense, false),
+    ("Utilities:Phone", CategoryKind::Expense, false),
+    ("Food", CategoryKind::Expense, false),
+    ("Food:Groceries", CategoryKind::Expense, false),
+    ("Food:Dining", CategoryKind::Expense, false),
+    ("Food:Coffee", CategoryKind::Expense, false),
+    ("Transportation", CategoryKind::Expense, false),
+    ("Transportation:Fuel", CategoryKind::Expense, false),
     (
         "Transportation:Auto Insurance",
         CategoryKind::Expense,
         false,
-        false,
-        false,
     ),
-    (
-        "Transportation:Maintenance",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Health", CategoryKind::Expense, false, false, false),
-    ("Health:Doctor", CategoryKind::Expense, true, false, false),
-    ("Health:Pharmacy", CategoryKind::Expense, true, false, false),
-    (
-        "Health:Insurance",
-        CategoryKind::Expense,
-        true,
-        false,
-        false,
-    ),
-    ("Entertainment", CategoryKind::Expense, false, false, false),
-    (
-        "Entertainment:Streaming",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Entertainment:Movies",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Entertainment:Books",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Shopping", CategoryKind::Expense, false, false, false),
-    (
-        "Shopping:Clothing",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Shopping:Household",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    (
-        "Shopping:Electronics",
-        CategoryKind::Expense,
-        false,
-        false,
-        false,
-    ),
-    ("Shopping:Gifts", CategoryKind::Expense, false, false, false),
-    ("Charity", CategoryKind::Expense, true, false, true),
-    ("Charity:Tithe", CategoryKind::Expense, true, false, true),
-    (
-        "Charity:Other Giving",
-        CategoryKind::Expense,
-        true,
-        false,
-        true,
-    ),
-    ("Taxes", CategoryKind::Expense, true, false, false),
-    ("Taxes:Property", CategoryKind::Expense, true, false, false),
-    ("Bank Fees", CategoryKind::Expense, false, false, false),
+    ("Transportation:Maintenance", CategoryKind::Expense, false),
+    ("Health", CategoryKind::Expense, false),
+    ("Health:Doctor", CategoryKind::Expense, true),
+    ("Health:Pharmacy", CategoryKind::Expense, true),
+    ("Health:Insurance", CategoryKind::Expense, true),
+    ("Entertainment", CategoryKind::Expense, false),
+    ("Entertainment:Streaming", CategoryKind::Expense, false),
+    ("Entertainment:Movies", CategoryKind::Expense, false),
+    ("Entertainment:Books", CategoryKind::Expense, false),
+    ("Shopping", CategoryKind::Expense, false),
+    ("Shopping:Clothing", CategoryKind::Expense, false),
+    ("Shopping:Household", CategoryKind::Expense, false),
+    ("Shopping:Electronics", CategoryKind::Expense, false),
+    ("Shopping:Gifts", CategoryKind::Expense, false),
+    ("Charity", CategoryKind::Expense, true),
+    ("Charity:Tithe", CategoryKind::Expense, true),
+    ("Charity:Other Giving", CategoryKind::Expense, true),
+    ("Taxes", CategoryKind::Expense, true),
+    ("Taxes:Property", CategoryKind::Expense, true),
+    ("Bank Fees", CategoryKind::Expense, false),
 ];
 
 /// Tax lines of the sample categories (CAT-050): (path, form, line).
@@ -514,7 +416,7 @@ impl Gen<'_, '_> {
     fn setup(&mut self) -> Result<()> {
         let opening = categories::system(self.tx.conn(), SystemCategory::OpeningBalance)?.id;
         let lines = crate::persistence::reports::tax_lines(self.tx.conn())?;
-        for (name, kind, tax, tithable, giving) in CATEGORIES {
+        for (name, kind, tax) in CATEGORIES {
             let (parent, leaf) = match name.rsplit_once(':') {
                 Some((p, leaf)) => (self.cats.get(p).copied(), leaf),
                 None => (None, *name),
@@ -522,8 +424,6 @@ impl Gen<'_, '_> {
             let mut f = CategoryFields::new(leaf, *kind);
             f.parent = parent;
             f.tax_related = *tax;
-            f.tithable = *tithable;
-            f.giving = *giving;
             f.tax_line = TAX_LINES
                 .iter()
                 .find(|(path, _, _)| path == name)

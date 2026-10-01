@@ -240,7 +240,8 @@ pub fn find_price(
 }
 
 /// Record a closing price, replacing any on the same date (PRC-020).
-/// Returns whether the date already had a price.
+/// Returns whether the date already had a price. Prices are not audited
+/// (CONVENTIONS §5): they move no money and can be fetched again.
 pub fn set_price(tx: &Tx<'_>, p: &PricePoint) -> Result<bool> {
     get(tx.conn(), p.security)?;
     if p.price.is_negative() {
@@ -256,36 +257,16 @@ pub fn set_price(tx: &Tx<'_>, p: &PricePoint) -> Result<bool> {
          DO UPDATE SET price = excluded.price, source = excluded.source",
         params![p.security.0, p.date, p.price, p.source],
     )?;
-    let action = if before.is_some() {
-        AuditAction::Update
-    } else {
-        AuditAction::Create
-    };
-    audit::record(
-        tx,
-        AuditEntity::Price,
-        p.security.0,
-        action,
-        before.as_ref(),
-        Some(p),
-    )?;
     Ok(before.is_some())
 }
 
+/// Delete a closing price (not audited, as [`set_price`]).
 pub fn delete_price(tx: &Tx<'_>, security: SecurityId, date: Date) -> Result<()> {
-    let before = find_price(tx.conn(), security, date)?
+    find_price(tx.conn(), security, date)?
         .ok_or_else(|| Error::Invalid(format!("no price on {date} for security {}", security.0)))?;
     tx.conn().execute(
         "DELETE FROM price WHERE security_id = ?1 AND price_date = ?2",
         params![security.0, date],
-    )?;
-    audit::record::<_, ()>(
-        tx,
-        AuditEntity::Price,
-        security.0,
-        AuditAction::Delete,
-        Some(&before),
-        None,
     )?;
     Ok(())
 }

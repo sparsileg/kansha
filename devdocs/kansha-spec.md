@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.13 (draft) |
+| **Document version** | 0.7 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-09-30 |
+| **Last updated** | 2026-10-01 |
 | **Owner** | Stan |
-| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) and verification reports (MIG-100) next |
+| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); verification reports (MIG-100) next |
 
 ---
 
@@ -192,7 +192,8 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 - **CAT-040** [1.0][R] Category flag **Tax-related** (used by tax
   summary reports). The tithable-income and charitable-giving flags
   are **[Withdrawn]** (0.3.22): giving is reviewed with existing
-  reports. Their `category` columns stay in migration 0001, unused.
+  reports. Their `category` columns were dropped in migration 0008
+  (0.7).
 - **CAT-050** [1.0][S] Map categories to tax form lines (W-2, 1099-R,
   Schedule A, B, …; built-in list, migration 0003). An account maps
   transfers out of it and transfers into it to a line each (an IRA
@@ -777,12 +778,25 @@ requirement says not built. P-02 and P-04 stay open.
   history is imported and lots are rebuilt by the lot engine, with each
   account's lot method (P-03 settled: no seeding for Stan's accounts;
   MIG-120 stays for anyone who needs it).
-- **MIG-115** [1.0][S] **Lot true-up** (not built): at cutover, compare
-  Kansha's open lots per account and security (shares, basis) with the
-  broker's cost-basis CSV and fix each difference by a dated, audited
-  true-up, a new lot adjustment kind (schema change). Tax-deferred and
-  tax-exempt accounts: shares must match; basis differences are
-  ignored.
+- **MIG-115** [1.0][S] **Lot true-up** (built, 0.7): set one
+  holding's open lots to the broker's cost-basis list as of a date
+  (Tools > Securities > True up lots…). The CSV has acquired (or date), shares
+  (or quantity), and basis (or total cost); lines of notes before the
+  header are skipped and, with a symbol column, only the chosen
+  security's rows are read, so a Vanguard cost basis download works as
+  it is. A Kansha lot open at the end of the date with the same
+  acquisition date, shares, and basis is kept; the rest are closed
+  (disposal kind `true_up`, no gain) and the broker's unmatched lots
+  opened. One audited transaction (action `true_up`, "Lot True-up")
+  records it; the holding's basis changes by the difference, against
+  Opening Balance. Tax-deferred and tax-exempt accounts compare shares
+  only. The true-up may be dated before later sales: those are taken
+  out and put back after it, each choosing its lots again by its own
+  method, and can then be re-picked (Specific). It is refused when a
+  later share transfer or true-up exists, or when a later sale's
+  chosen lots were closed (nothing changes). Only its memo can be
+  edited; deleting it puts later sales back the same way. A backup is
+  made first. Migration 0008.
 - **MIG-120** [1.0][R] Lot seeding via CSV template (account,
   security, acquisition date, quantity, cost basis), with preview and
   validation, creating "shares added" transactions dated at the
@@ -968,6 +982,8 @@ requirement says not built. P-02 and P-04 stay open.
   transactions, lots, accounts, categories, payees, and schedules is
   recorded in an append-only audit log: timestamp, action, entity ID,
   before and after values, and origin (UI, import batch, scheduler).
+  Prices are not audited (0.7): they move no money and can be fetched
+  again; migration 0008 deleted the old price entries.
 - **AUD-020** [1.0][R] View audit history for any transaction or
   account from the UI: History… in a register's context menu or an
   investment transaction's dialog, and in the account dialog.
@@ -1792,7 +1808,9 @@ Modeling choices that affect other sections:
   misc income or expense for other categories). Lot seeding (MIG-120)
   is one import batch: each CSV row becomes a Shares Added transaction
   on the seeding date whose lot keeps its original acquisition
-  date. Integrity checks (INT-030): `lot_overdrawn`,
+  date. A lot true-up (MIG-115, 0.7) is an exception to date order:
+  it may come before later disposals of its holding, which are taken
+  out and planned again after it. Integrity checks (INT-030): `lot_overdrawn`,
   `share_balance_mismatch`, `lot_basis_mismatch`,
   `lot_quantity_mismatch`. The audit entry of an investment
   transaction holds the whole transaction with its lot records. No
@@ -2196,6 +2214,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7 | 2026-10-01 | MIG-115 lot true-up built (Tools > Securities > True up lots…): one holding's lots set to the broker's cost-basis CSV (a Vanguard download reads as it is) as of a date; matching lots kept, the rest closed (disposal kind `true_up`, no gain) and the broker's opened, one audited `true_up` transaction against Opening Balance; later sales taken out and put back, choosing lots again; IRA/Roth compare shares only. §18 date-order exception. `share_balance_mismatch` counts true-up lots. AUD-010: prices are no longer audited; CONVENTIONS §5 exception. CAT-040: tithing columns dropped. **Schema change:** migration 0008 (investment action and disposal kind `true_up`; `category.tithable`, `category.giving` dropped; price audit entries deleted). **API change:** new commands `true_up_preview`, `true_up`; types `TrueUpPreview`, `TrueUpLine`, `TrueUpLot`, `TrueUpReplay`, `TrueUpStatus`; `InvAction` and `DisposalKind` gain `true_up`; `CategoryFields` loses `tithable`, `giving`. |
 | 0.6.13 | 2026-10-01 | New REC-115: schedules on investment accounts and transfers into them, entered as cash in or cash out (no split, not with linked cash, no projection). The schedule dialog and the calendar list investment accounts. No schema or API change. |
 | 0.6.12 | 2026-10-01 | PAY-020, new PAY-025: Tools > Payees becomes Memorized Payees, listing only memorized payees with Category, Memo, and Amount from each payee's last use; QuickFill uses the same values. "Show all payees" lists the rest; the defaults form is gone. No schema or API change (the `default_*` fields of `Payee` now carry last-use values in `payee_list` and `payee_search`). |
 | 0.6.11 | 2026-09-30 | PRC-050: a money market security's price is never flagged out of date (it stays at $1.00): not in Holdings, the dashboard's Needs attention card, or positions. No schema or API change. |

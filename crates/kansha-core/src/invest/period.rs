@@ -193,6 +193,32 @@ pub fn account_period(
                 let v = neg(moved(s, t.quantity, basis, date)?)?;
                 (Some((s, v)), v)
             }
+            // A true-up that changes shares moves value in or out like
+            // shares added or removed (MIG-115).
+            (InvAction::TrueUp, Some(s)) => {
+                let shares = |q: Quantity| (q.raw() != 0).then_some(q);
+                let mut q_in = Quantity::ZERO;
+                for l in &t.lots {
+                    q_in = q_in
+                        .checked_add(l.quantity)
+                        .ok_or(Error::Overflow("performance"))?;
+                }
+                let mut q_out = Quantity::ZERO;
+                for d in &t.disposals {
+                    q_out = q_out
+                        .checked_add(d.quantity)
+                        .ok_or(Error::Overflow("performance"))?;
+                }
+                let v_in = moved(s, shares(q_in), sum(t.lots.iter().map(|l| l.basis))?, date)?;
+                let v_out = moved(
+                    s,
+                    shares(q_out),
+                    sum(t.disposals.iter().map(|d| d.basis))?,
+                    date,
+                )?;
+                let v = sub(v_in, v_out)?;
+                (Some((s, v)), v)
+            }
             (InvAction::CashIn | InvAction::CashOut, _) => (None, t.cash),
             (_, s) => {
                 // Trade and income cash, from the holding's side.

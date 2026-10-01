@@ -430,6 +430,13 @@ export const commands = {
 	 *  number of lots created.
 	 */
 	lotSeed: (fileName: string, text: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("lot_seed", { fileName, text, date })),
+	/**  Compare a holding's lots on `date` with the broker's list. */
+	trueUpPreview: (account: AccountId, security: SecurityId, date: string, text: string) => typedError<TrueUpPreview, IpcError>(__TAURI_INVOKE("true_up_preview", { account, security, date, text })),
+	/**
+	 *  Set a holding's lots to the broker's list as of `date` (a backup is
+	 *  made first); later sales choose their lots again.
+	 */
+	trueUp: (account: AccountId, security: SecurityId, date: string, text: string, memo: string) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("true_up", { account, security, date, text, memo })),
 	/**  Choose a QIF file. */
 	pickImportFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_import_file", { start }),
 	/**  Read and stage a file; its preview with the default mapping. */
@@ -830,8 +837,6 @@ export type CategoryFields = {
 	name: string,
 	/**  CAT-040 flags. */
 	tax_related: boolean,
-	tithable: boolean,
-	giving: boolean,
 	/**  CAT-050: the tax form line this category's amounts belong to. */
 	tax_line: TaxLineId | null,
 	/**  CAT-030: hide instead of delete. */
@@ -1073,7 +1078,9 @@ export type Disposal = {
 };
 
 /**  Why shares left a lot. */
-export type DisposalKind = "sale" | "transfer_out" | "removed";
+export type DisposalKind = "sale" | "transfer_out" | "removed" | 
+/**  Closed by a true-up (MIG-115); no gain. */
+"true_up";
 
 /**  A ticker that got no price, and why. */
 export type DownloadFailure = {
@@ -1410,7 +1417,12 @@ export type IntegrityReport = {
 export type Interval = "none" | "week" | "two_weeks" | "half_month" | "month" | "quarter" | "half_year" | "year";
 
 /**  Investment transaction types (INV-010). */
-export type InvAction = "buy" | "sell" | "dividend" | "interest" | "reinvest_dividend" | "reinvest_cg_short" | "reinvest_cg_long" | "cg_dist_short" | "cg_dist_long" | "return_of_capital" | "split" | "transfer_shares" | "shares_added" | "shares_removed" | "cash_in" | "cash_out" | "fee" | "tax_withholding" | "misc_income" | "misc_expense";
+export type InvAction = "buy" | "sell" | "dividend" | "interest" | "reinvest_dividend" | "reinvest_cg_short" | "reinvest_cg_long" | "cg_dist_short" | "cg_dist_long" | "return_of_capital" | "split" | "transfer_shares" | "shares_added" | "shares_removed" | "cash_in" | "cash_out" | "fee" | "tax_withholding" | "misc_income" | "misc_expense" | 
+/**
+ *  Lot true-up (MIG-115): the holding's lots set to the broker's
+ *  list. Made only by [`true_up`], never from an [`InvInput`].
+ */
+"true_up";
 
 /**
  *  An investment transaction to be written (INV-010, INV-020). Fields an
@@ -2713,6 +2725,52 @@ export type Tick = {
 	label: string,
 	pos: number,
 };
+
+/**  One line of the comparison. */
+export type TrueUpLine = {
+	status: TrueUpStatus,
+	/**  The Kansha lot (kept or closed); `None` for a lot to open. */
+	lot: LotId | null,
+	acquired: string,
+	quantity: string,
+	basis: string,
+};
+
+export type TrueUpPreview = {
+	account: AccountId,
+	security: SecurityId,
+	date: string,
+	/**  Acquisition date order; kept, closed, opened within a day. */
+	lines: TrueUpLine[],
+	kansha_quantity: string,
+	kansha_basis: string,
+	broker_quantity: string,
+	broker_basis: string,
+	/**  Basis is compared (a taxable account). */
+	basis_compared: boolean,
+	changes: boolean,
+	/**  Later lot events the true-up takes out and puts back in. */
+	replayed: TrueUpReplay[],
+	/**  Why the true-up cannot be made, if it cannot. */
+	problem: string | null,
+};
+
+/**  A later transaction a true-up puts back in. */
+export type TrueUpReplay = {
+	txn: TxnId,
+	date: string,
+	action: InvAction,
+	quantity: string | null,
+};
+
+/**  What a true-up does with one lot. */
+export type TrueUpStatus = 
+/**  Open in Kansha and on the broker's list: kept. */
+"same" | 
+/**  Open in Kansha only: closed. */
+"close" | 
+/**  On the broker's list only: opened. */
+"open";
 
 /**  A stored transaction with its postings in line order. */
 export type Txn = {

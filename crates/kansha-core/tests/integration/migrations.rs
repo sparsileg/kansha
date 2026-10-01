@@ -579,3 +579,116 @@ fn migration_0007_moves_daf_to_account_types() {
         .is_err()
     );
 }
+
+#[test]
+fn migration_0008_drops_tithing_purges_price_audit_and_accepts_true_ups() {
+    use kansha_core::accounts::{AccountFields, AccountType};
+    use kansha_core::invest::{self, InvAction, InvInput};
+    use kansha_core::persistence::{Origin, accounts, securities};
+    use kansha_core::securities::{SecurityFields, SecurityType};
+
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 7).unwrap();
+    // A buy and a sale under schema 7; a tithable category; price and
+    // other audit entries.
+    db.write(&clock, Origin::Ui, |tx| {
+        let a = accounts::insert(tx, &AccountFields::new("Brokerage", AccountType::Brokerage))?.id;
+        let s = securities::insert(tx, &SecurityFields::new("Fund", SecurityType::MutualFund))?.id;
+        let mut buy = InvInput::new(a, InvAction::Buy, date("2025-01-10"));
+        buy.security = Some(s);
+        buy.quantity = Some("10".parse()?);
+        buy.amount = Some("1000.00".parse()?);
+        invest::create(tx, &buy)?;
+        let mut sell = InvInput::new(a, InvAction::Sell, date("2025-02-10"));
+        sell.security = Some(s);
+        sell.quantity = Some("4".parse()?);
+        sell.amount = Some("500.00".parse()?);
+        invest::create(tx, &sell)?;
+        Ok(())
+    })
+    .unwrap();
+    db.conn()
+        .execute_batch(
+            "INSERT INTO category (kind, name, tax_related, tithable, giving, created_at,
+                 tax_line_id)
+                 VALUES ('income', 'Salary', 1, 1, 0, '2026-06-30T12:00:00Z',
+                 (SELECT min(id) FROM tax_line));
+             INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+                 VALUES ('2026-06-30T12:00:00Z', 'price', 1, 'create', '{}', 'ui'),
+                        ('2026-06-30T12:00:00Z', 'price', 1, 'create', '{}', 'ui');",
+        )
+        .unwrap();
+    let audits = count(&db, "audit_log");
+    let rows = |db: &Db, sql: &str| -> Vec<String> {
+        let mut st = db.conn().prepare(sql).unwrap();
+        st.query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let inv = "SELECT txn_id || action || quantity || ifnull(lot_method, '') FROM investment_txn
+               ORDER BY txn_id";
+    let disp = "SELECT id || lot_id || kind || quantity || basis || gain FROM lot_disposal";
+    let cat = "SELECT id || name || tax_related || hidden || ifnull(tax_line_id, '-')
+               FROM category ORDER BY id";
+    let (inv_before, disp_before, cat_before) = (rows(&db, inv), rows(&db, disp), rows(&db, cat));
+
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    assert_eq!(rows(&db, inv), inv_before);
+    assert_eq!(rows(&db, disp), disp_before);
+    assert_eq!(rows(&db, cat), cat_before);
+    assert_eq!(count(&db, "audit_log"), audits - 2);
+    let c = db.conn();
+    let price_audits: i64 = c
+        .query_row(
+            "SELECT count(*) FROM audit_log WHERE entity = 'price'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(price_audits, 0);
+    // Still append-only.
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+    // The tithing columns are gone; indexes are back.
+    assert!(c.prepare("SELECT tithable FROM category").is_err());
+    assert!(c.prepare("SELECT giving FROM category").is_err());
+    let indexes: i64 = c
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name IN (
+                 'category_sibling_name', 'category_parent', 'category_tax_line',
+                 'investment_txn_account', 'investment_txn_security',
+                 'investment_txn_to_account', 'lot_disposal_lot', 'lot_disposal_txn')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(indexes, 8);
+    // 'true_up' is a transaction action and a disposal kind, without
+    // shares or proceeds.
+    let (lot, txn): (i64, i64) = c
+        .query_row("SELECT id, origin_txn_id FROM lot", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    c.execute(
+        "UPDATE investment_txn SET action = 'true_up', quantity = NULL, price = NULL,
+             commission = 0
+         WHERE txn_id = ?1",
+        [txn],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO lot_disposal (lot_id, txn_id, kind, quantity, basis)
+         VALUES (?1, ?2, 'true_up', 1000000, 100)",
+        [lot, txn],
+    )
+    .unwrap();
+    assert!(
+        c.execute(
+            "INSERT INTO lot_disposal (lot_id, txn_id, kind, quantity, basis, proceeds, gain, term)
+             VALUES (?1, ?2, 'true_up', 1000000, 100, 200, 100, 'long')",
+            [lot, txn],
+        )
+        .is_err()
+    );
+}

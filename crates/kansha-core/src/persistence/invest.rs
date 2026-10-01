@@ -277,6 +277,34 @@ pub fn latest_event(
         .optional()?)
 }
 
+/// Transactions that sold, transferred, removed, split, adjusted, or
+/// trued up shares of `security` in `account` after (`date`, `after`):
+/// dated after `date`, or on it and entered after `after`. (date, entry)
+/// order.
+pub fn events_after(
+    conn: &Connection,
+    account: AccountId,
+    security: SecurityId,
+    date: Date,
+    after: Option<TxnId>,
+) -> Result<Vec<TxnId>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT DISTINCT t.id, t.txn_date
+         FROM (SELECT txn_id, lot_id FROM lot_disposal
+               UNION ALL SELECT txn_id, lot_id FROM lot_adjustment) e
+         JOIN lot l ON l.id = e.lot_id
+         JOIN txn t ON t.id = e.txn_id
+         WHERE l.account_id = :account AND l.security_id = :security
+           AND (t.txn_date > :date OR (t.txn_date = :date AND t.id > ifnull(:after, t.id)))
+         ORDER BY t.txn_date, t.id",
+    )?;
+    let rows = stmt.query_map(
+        named_params! {":account": account, ":security": security, ":date": date, ":after": after},
+        |r| r.get(0),
+    )?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// Σ cash postings of an investment account (security-less postings)
 /// dated on or before `as_of` (all when `None`).
 pub fn cash_balance(conn: &Connection, account: AccountId, as_of: Option<Date>) -> Result<Money> {

@@ -156,6 +156,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::invest::inv_portfolio,
             commands::invest::lot_seed_preview,
             commands::invest::lot_seed,
+            commands::invest::true_up_preview,
+            commands::invest::true_up,
             commands::import::pick_import_file,
             commands::import::import_open,
             commands::import::import_preview,

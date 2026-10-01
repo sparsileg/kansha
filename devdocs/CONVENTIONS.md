@@ -84,7 +84,7 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - Every table is `STRICT`. Money INTEGER cents; quantity/price/rate INTEGER × 10^6; dates TEXT with `CHECK (x IS date(x))`; timestamps UTC TEXT from the `Clock`, never `CURRENT_TIMESTAMP`.
 - Enumerations: TEXT + CHECK list, mirrored by a `text_enum!` in Rust. A test inserts every Rust value.
 - IDs: `INTEGER PRIMARY KEY AUTOINCREMENT` (never reused).
-- Writes go through `Db::write`; every repository write records its audit entry in the same transaction.
+- Writes go through `Db::write`; every repository write records its audit entry in the same transaction. Exception: security prices are not audited (they move no money and can be fetched again; spec 0.7, AUD-010).
 - WAL mode, `synchronous=FULL`, `foreign_keys=ON`.
 - Multi-record changes run in a single DB transaction.
 - The ledger is the source of truth. Balances, positions, and gains are derived; caches are rebuildable and never authoritative.

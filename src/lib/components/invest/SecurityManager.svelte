@@ -2,6 +2,7 @@
   // Securities and their prices (SEC-010 … SEC-040, PRC-010 … PRC-030).
   import "../manager.css";
   import CsvImportModal from "./CsvImportModal.svelte";
+  import TrueUpModal from "./TrueUpModal.svelte";
   import { call, commands } from "../../api";
   import { dateExample, datePattern, displayDate, parseDate } from "../../format/date";
   import { formatPrice, parsePrice } from "../../format/quantity";
@@ -40,6 +41,7 @@
   let priceValue = $state("");
   let priceError = $state<string | null>(null);
   let seeding = $state(false);
+  let truingUp = $state(false);
 
   $effect(() => {
     void investState.loadSecurities();
@@ -157,6 +159,7 @@
       <button type="button" onclick={startNew}>New security</button>
       <button type="button" onclick={() => (dialogState.priceImport = true)}>Import prices…</button>
       <button type="button" onclick={() => (seeding = true)}>Seed lots…</button>
+      <button type="button" onclick={() => (truingUp = true)}>True up lots…</button>
     </div>
     <div class="list">
       <table>
@@ -245,6 +248,7 @@
 </div>
 
 {#if seeding}<CsvImportModal onclose={() => (seeding = false)} />{/if}
+{#if truingUp}<TrueUpModal onclose={() => (truingUp = false)} />{/if}
 
 <style>
   .num {

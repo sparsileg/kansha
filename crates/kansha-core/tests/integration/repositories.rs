@@ -451,14 +451,13 @@ fn create_path_finds_or_creates_each_level() {
 #[test]
 fn category_rules() {
     let mut db = db();
-    let (auto, fuel, salary) = write(&mut db, |tx| {
+    let (auto, fuel) = write(&mut db, |tx| {
         let auto = categories::insert(tx, &CategoryFields::new("Auto", CategoryKind::Expense))?;
         let fuel = categories::insert(
             tx,
             &CategoryFields::new("Fuel", CategoryKind::Expense).under(auto.id),
         )?;
-        let salary = categories::insert(tx, &CategoryFields::new("Salary", CategoryKind::Income))?;
-        Ok((auto, fuel, salary))
+        Ok((auto, fuel))
     })
     .unwrap();
 
@@ -509,17 +508,6 @@ fn category_rules() {
     f.parent = Some(auto.id);
     assert!(matches!(
         write(&mut db, |tx| categories::update(tx, auto.id, &f)),
-        Err(Error::Invalid(_))
-    ));
-
-    // Flags follow kind.
-    let mut f = salary.fields.clone();
-    f.tithable = true;
-    write(&mut db, |tx| categories::update(tx, salary.id, &f)).unwrap();
-    let mut f = fuel.fields.clone();
-    f.tithable = true;
-    assert!(matches!(
-        write(&mut db, |tx| categories::update(tx, fuel.id, &f)),
         Err(Error::Invalid(_))
     ));
 

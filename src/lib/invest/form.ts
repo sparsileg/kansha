@@ -92,7 +92,12 @@ export const ACTIONS: ActionInfo[] = [
   a("misc_expense", "Misc expense", { security: "optional", counterpart: "category" }),
 ];
 
+/** A lot true-up (MIG-115): made from the broker's lot list, never in
+ * the entry form; editing one changes only its memo. */
+export const TRUE_UP: ActionInfo = a("true_up", "Lot true-up", { amount: "none" });
+
 export function actionInfo(action: InvAction): ActionInfo {
+  if (action === TRUE_UP.value) return TRUE_UP;
   return ACTIONS.find((x) => x.value === action) ?? ACTIONS[0];
 }
 

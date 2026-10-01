@@ -12,8 +12,6 @@
     kind: "expense",
     name: "",
     tax_related: false,
-    tithable: false,
-    giving: false,
     tax_line: null,
     hidden: false,
   });
@@ -33,8 +31,6 @@
           kind: c.kind,
           name: c.name,
           tax_related: c.tax_related,
-          tithable: c.tithable,
-          giving: c.giving,
           tax_line: c.tax_line,
           hidden: c.hidden,
         }

@@ -13,8 +13,7 @@ use crate::error::{Error, Result};
 use crate::reports::FilterList;
 
 const COLUMNS: &str =
-    "id, parent_id, kind, name, system_key, tax_related, tithable, giving, tax_line_id, hidden,
-     created_at";
+    "id, parent_id, kind, name, system_key, tax_related, tax_line_id, hidden, created_at";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Category> {
     Ok(Category {
@@ -24,8 +23,6 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Category> {
             kind: r.get("kind")?,
             name: r.get("name")?,
             tax_related: r.get("tax_related")?,
-            tithable: r.get("tithable")?,
-            giving: r.get("giving")?,
             tax_line: r.get("tax_line_id")?,
             hidden: r.get("hidden")?,
         },
@@ -49,16 +46,6 @@ fn validate(conn: &Connection, id: Option<CategoryId>, f: &CategoryFields) -> Re
     }
     if f.kind == K::Equity {
         return Err(Error::Invalid("equity categories are built in".into()));
-    }
-    if f.tithable && f.kind != K::Income {
-        return Err(Error::Invalid(
-            "only income categories can be tithable".into(),
-        ));
-    }
-    if f.giving && f.kind != K::Expense {
-        return Err(Error::Invalid(
-            "only expense categories can be giving".into(),
-        ));
     }
     let Some(parent_id) = f.parent else {
         return Ok(());
@@ -89,17 +76,13 @@ fn validate(conn: &Connection, id: Option<CategoryId>, f: &CategoryFields) -> Re
 pub fn insert(tx: &Tx<'_>, f: &CategoryFields) -> Result<Category> {
     validate(tx.conn(), None, f)?;
     tx.conn().execute(
-        "INSERT INTO category (parent_id, kind, name, tax_related, tithable, giving, tax_line_id,
-             hidden, created_at)
-         VALUES (:parent, :kind, :name, :tax, :tithable, :giving, :tax_line, :hidden,
-             :created_at)",
+        "INSERT INTO category (parent_id, kind, name, tax_related, tax_line_id, hidden, created_at)
+         VALUES (:parent, :kind, :name, :tax, :tax_line, :hidden, :created_at)",
         named_params! {
             ":parent": f.parent,
             ":kind": f.kind,
             ":name": f.name.trim(),
             ":tax": f.tax_related,
-            ":tithable": f.tithable,
-            ":giving": f.giving,
             ":tax_line": f.tax_line,
             ":hidden": f.hidden,
             ":created_at": tx.now(),
@@ -221,15 +204,13 @@ pub fn update(tx: &Tx<'_>, id: CategoryId, f: &CategoryFields) -> Result<Categor
     }
     tx.conn().execute(
         "UPDATE category SET parent_id = :parent, name = :name, tax_related = :tax,
-             tithable = :tithable, giving = :giving, tax_line_id = :tax_line, hidden = :hidden
+             tax_line_id = :tax_line, hidden = :hidden
          WHERE id = :id",
         named_params! {
             ":id": id,
             ":parent": f.parent,
             ":name": f.name.trim(),
             ":tax": f.tax_related,
-            ":tithable": f.tithable,
-            ":giving": f.giving,
             ":tax_line": f.tax_line,
             ":hidden": f.hidden,
         },
