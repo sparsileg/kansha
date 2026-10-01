@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.7 (draft) |
+| **Document version** | 0.6.11 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
@@ -899,9 +899,9 @@ requirement says not built. P-02 and P-04 stay open.
 - **DSH-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
 - **DSH-030** [1.0][R] Warnings panel: missing and stale prices,
-  accounts with uncleared transactions more than 60 days old (each
-  banking, credit, and asset account by name; investment accounts,
-  which are not reconciled, in one line naming none),
+  checking, savings, and credit card accounts with uncleared
+  transactions more than 60 days old (each by name; no other type is
+  checked),
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
 - **DSH-040** [1.0][R] The dashboard is a set of cards, each with a
@@ -2176,6 +2176,10 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.11 | 2026-09-30 | PRC-050: a money market security's price is never flagged out of date (it stays at $1.00): not in Holdings, the dashboard's Needs attention card, or positions. No schema or API change. |
+| 0.6.10 | 2026-09-30 | DSH-030: only checking, savings, and credit card accounts are checked for old uncleared transactions; the investment-accounts line goes. No schema or API change. |
+| 0.6.9 | 2026-09-30 | ACCT-240: each account list section heading is a shaded band with the section's total at its right (the sum of every account in it, closed and unlisted ones too, so the sections add up to net worth). UI-070: the account gear sits at the view's right edge. No schema change. **API change:** new command `section_totals`; new type `SectionTotal`. |
+| 0.6.8 | 2026-09-30 | UI-070: a gear on every account view opens a menu (Edit Account Details…). The Accounts, Payees, Categories, Securities, and Tags views sit on a sheet like the other views. A tag dropdown (reminder lines and the register entry row) ends with "New tag…", which makes the tag in place; the reminder's column heading now lines up over its tag. SEC-060: Security Details gains an Update Prices card (date and price, newest first; New, Edit, Delete). UI-020: the account list panel is resized by dragging its inner edge (arrows nudge, Home or a double click restores). No schema change. **API change:** `Settings` gains `account_panel_width` (0 = stock; 160 to 800 pixels). |
 | 0.6.7 | 2026-09-30 | UI-080: the passphrase and missing-key screens offer "Create a new book…", so a leftover book in the default folder no longer blocks making a new one. No schema change. No API change (`book_setup` also accepts a locked or key-less current book; it refuses a name already taken). |
 | 0.6.6 | 2026-09-30 | ACCT-020: account type Donor Advised Fund (DAF), replacing the DAF security type of 0.6.3 (SEC-010; securities of that type become Other). New SET-080: Settings is a category list over one card with OK and Cancel; new Register and Notifications settings REG-070 (gray toggle), REG-100 … REG-150 (recall, memorize, capitalize, forget unused payees, out-of-date, check reuse, save confirmation). The Integrity check window has Close in place of Run again; Security Details lists no hidden securities. **Schema change:** migration 0007 (account type `donor_advised_fund`; security type `donor_advised_fund` removed; both tables rebuilt with foreign keys off). **API change:** `AccountType` gains and `SecurityType` loses `donor_advised_fund`; `Settings` gains `gray_reconciled`, `recall_payees`, `capitalize_names`, `auto_memorize_payees`, `purge_payees_months`, `warn_out_of_date`, `warn_check_reuse`, `confirm_save_change`; new commands `entry_warnings`, `payees_forget_stale`. |
 | 0.6.5 | 2026-09-30 | **DSH-040** built (was [Later]): Customize from a gear on the dashboard; the dashboard is one sheet with its title in a shaded band (view-title convention, Dashboard only for now). SEC-060: "Fit graph to data" box (fitted money axis in sub-dollar steps). POS-040: Show closed lots is kept per view. MIG-060: a file name matches the book's account and a transfer-named account by letters and digits. MIG-140: mapping step can keep sold-out new securities shown; empty opening `Cash` and `ShrsIn` with no shares are warnings. No schema change. **API change:** `security_chart` gains `fitted`; `Settings` gains `dashboard_cards`; `ImportOptions` gains `show_securities`. |

@@ -60,6 +60,9 @@ pub struct Settings {
     pub nav_items: Option<String>,
     pub account_panel_open: bool,
     pub account_panel_side: PanelSide,
+    /// The account list panel's width in pixels, as the user dragged it;
+    /// 0 = the stock width.
+    pub account_panel_width: i64,
     /// The Investments screen's named views, as the UI's JSON; `None` =
     /// default.
     pub invest_views: Option<String>,
@@ -116,6 +119,7 @@ impl Default for Settings {
             nav_items: None,
             account_panel_open: true,
             account_panel_side: PanelSide::Left,
+            account_panel_width: 0,
             invest_views: None,
             dashboard_cards: None,
             stale_price_days: DEFAULT_STALE_DAYS,
@@ -143,6 +147,8 @@ pub const UPCOMING_DAYS: std::ops::RangeInclusive<i64> = 1..=366;
 pub const KEEP_LAST: std::ops::RangeInclusive<i64> = 1..=1000;
 pub const KEEP_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 pub const TIMEOUT_MINUTES: std::ops::RangeInclusive<i64> = 0..=1440;
+/// A dragged panel width, in pixels (or 0 for the stock width).
+pub const PANEL_WIDTH: std::ops::RangeInclusive<i64> = 160..=800;
 pub const PURGE_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 
 fn get<T: std::str::FromStr>(conn: &Connection, key: &str, default: T) -> Result<T> {
@@ -176,6 +182,10 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         nav_items: get_text(conn, "nav_items")?,
         account_panel_open: get(conn, "account_panel_open", d.account_panel_open)?,
         account_panel_side: get(conn, "account_panel_side", d.account_panel_side)?,
+        account_panel_width: match get(conn, "account_panel_width", d.account_panel_width)? {
+            w if PANEL_WIDTH.contains(&w) => w,
+            _ => d.account_panel_width,
+        },
         invest_views: get_text(conn, "invest_views")?,
         dashboard_cards: get_text(conn, "dashboard_cards")?,
         stale_price_days: get_in(
@@ -252,6 +262,9 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         s.purge_payees_months,
         PURGE_MONTHS,
     )?;
+    if s.account_panel_width != 0 {
+        check_range("Account list width", s.account_panel_width, PANEL_WIDTH)?;
+    }
     if s.startup.trim().is_empty() {
         return Err(Error::Invalid("the startup choice is required".into()));
     }
@@ -266,6 +279,11 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     put_text(tx, "nav_items", s.nav_items.as_deref())?;
     repo::set(tx, "account_panel_open", &s.account_panel_open.to_string())?;
     repo::set(tx, "account_panel_side", s.account_panel_side.as_str())?;
+    repo::set(
+        tx,
+        "account_panel_width",
+        &s.account_panel_width.to_string(),
+    )?;
     put_text(tx, "invest_views", s.invest_views.as_deref())?;
     put_text(tx, "dashboard_cards", s.dashboard_cards.as_deref())?;
     repo::set(tx, "stale_price_days", &s.stale_price_days.to_string())?;

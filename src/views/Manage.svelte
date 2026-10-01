@@ -8,7 +8,7 @@
   const tab = $derived(viewState.params.tab ?? "payees");
 </script>
 
-<section>
+<section class="manage">
   <div class="tabs" role="tablist">
     {#each ["payees", "categories", "tags", "securities"] as const as t (t)}
       <button type="button" role="tab" aria-selected={tab === t} class:on={tab === t} onclick={() => viewState.navigate("manage", { tab: t })}>
@@ -16,10 +16,25 @@
       </button>
     {/each}
   </div>
-  {#if tab === "payees"}<PayeeManager />{:else if tab === "categories"}<CategoryManager />{:else if tab === "securities"}<SecurityManager />{:else}<TagManager />{/if}
+  <!-- The manager on a sheet (base.css), the window's color around it. -->
+  <div class="pane sheet">
+    {#if tab === "payees"}<PayeeManager />{:else if tab === "categories"}<CategoryManager />{:else if tab === "securities"}<SecurityManager />{:else}<TagManager />{/if}
+  </div>
 </section>
 
 <style>
+  .manage {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .pane {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.75rem;
+  }
   .tabs {
     display: flex;
     gap: 0.25rem;

@@ -4,7 +4,7 @@ use kansha_core::Date;
 use kansha_core::accounts::{
     Account, AccountFields, AccountId, AccountType, GroupOrder, masked_account_number,
 };
-use kansha_core::ledger::{self, AccountBalance};
+use kansha_core::ledger::{self, AccountBalance, SectionTotal};
 use kansha_core::persistence::accounts;
 use tauri::State;
 
@@ -22,6 +22,13 @@ pub fn account_list(state: State<'_, AppState>) -> CmdResult<Vec<Account>> {
 #[specta::specta]
 pub fn account_balances(state: State<'_, AppState>) -> CmdResult<Vec<AccountBalance>> {
     state.read(|db, today| ledger::account_balances(db.conn(), today))
+}
+
+/// Each account list section's total (ACCT-240).
+#[tauri::command]
+#[specta::specta]
+pub fn section_totals(state: State<'_, AppState>) -> CmdResult<Vec<SectionTotal>> {
+    state.read(|db, today| ledger::section_totals(db.conn(), today))
 }
 
 /// A new account's fields with the type's defaults: group, tax treatment,

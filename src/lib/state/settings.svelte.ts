@@ -12,6 +12,15 @@ class SettingsState {
   /** The account list panel: open beside the register, or closed. */
   accountPanelOpen = $derived(bookSettings.value.account_panel_open);
   accountPanelSide = $derived<PanelSide>(bookSettings.value.account_panel_side);
+  /** The panel's dragged width in pixels, or 0 for the stock width. */
+  accountPanelWidth = $derived(bookSettings.value.account_panel_width);
+  /** The width while it is being dragged (not yet stored); else `null`. */
+  liveWidth = $state<number | null>(null);
+  /** CSS for the panel and the bar above it. */
+  accountPanelCss = $derived.by(() => {
+    const w = this.liveWidth ?? this.accountPanelWidth;
+    return w > 0 ? `${w}px` : "16rem";
+  });
   /** Where the app opens at startup: a view, a panel, or "account:<id>"
    * (shell/nav.ts `startupChoices`). */
   startup = $derived(bookSettings.value.startup);
@@ -29,6 +38,9 @@ class SettingsState {
   }
   setAccountPanelSide(side: PanelSide) {
     void bookSettings.update({ account_panel_side: side });
+  }
+  setAccountPanelWidth(px: number) {
+    void bookSettings.update({ account_panel_width: px });
   }
   setStartup(startup: string) {
     void bookSettings.update({ startup });

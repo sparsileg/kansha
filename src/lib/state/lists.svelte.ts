@@ -23,6 +23,8 @@ class ListsState {
   /** Net worth today, from Rust, for the foot of the account list;
    * `null` until loaded or when it could not be. */
   netWorth = $state<string | null>(null);
+  /** Each account list section's total, from Rust, by section id. */
+  sectionTotals = $state<Record<string, string>>({});
   categories = $state<Category[]>([]);
   tags = $state<Tag[]>([]);
   payees = $state<Payee[]>([]);
@@ -116,6 +118,17 @@ class ListsState {
       this.error = e instanceof Error ? e.message : String(e);
     }
     await this.loadNetWorth();
+    await this.loadSectionTotals();
+  }
+
+  /** A failure only drops the totals: the list still works. */
+  async loadSectionTotals(): Promise<void> {
+    try {
+      const rows = await call(commands.sectionTotals());
+      this.sectionTotals = Object.fromEntries(rows.map((r) => [r.section, r.total]));
+    } catch {
+      this.sectionTotals = {};
+    }
   }
 
   /** Net worth changes with balances and prices. A failure only blanks

@@ -759,3 +759,69 @@ fn capitalize_words_keeps_the_rest_of_each_word() {
     assert_eq!(capitalize_words("food:eating out"), "Food:Eating Out");
     assert_eq!(capitalize_words("IBM mcDonald"), "IBM McDonald");
 }
+
+#[test]
+fn account_panel_width_is_stored_and_range_checked() {
+    use kansha_core::settings;
+    let mut f = fixture();
+    assert_eq!(
+        settings::load(f.book.conn()).unwrap().account_panel_width,
+        0
+    );
+    set_settings(&mut f, |s| s.account_panel_width = 300);
+    assert_eq!(
+        settings::load(f.book.conn()).unwrap().account_panel_width,
+        300
+    );
+    let bad = f.book.write(|tx| {
+        let mut s = settings::load(tx.conn())?;
+        s.account_panel_width = 100;
+        settings::save(tx, &s)
+    });
+    assert!(bad.is_err());
+}
+
+#[test]
+fn section_totals_add_up_the_balances_by_section() {
+    let f = fixture();
+    let today = date("2026-06-30");
+    let balances = ledger::account_balances(f.book.conn(), today).unwrap();
+    let totals = ledger::section_totals(f.book.conn(), today).unwrap();
+    let names: Vec<&str> = totals.iter().map(|t| t.section.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "banking",
+            "credit",
+            "investments",
+            "retirement",
+            "assets_debt",
+            "other"
+        ]
+    );
+    // Every account is counted once, so the sections add up to the whole.
+    let all: Money = balances.iter().map(|b| b.current).sum_money();
+    let parts: Money = totals.iter().map(|t| t.total).sum_money();
+    assert_eq!(parts, all);
+    // The fixture's checking and savings are the banking section.
+    let banking = totals
+        .iter()
+        .find(|t| t.section == "banking")
+        .unwrap()
+        .total;
+    let bank: Money = balances
+        .iter()
+        .filter(|b| b.account == f.chk || b.account == f.sav)
+        .map(|b| b.current)
+        .sum_money();
+    assert_eq!(banking, bank);
+}
+
+trait SumMoney {
+    fn sum_money(self) -> Money;
+}
+impl<I: Iterator<Item = Money>> SumMoney for I {
+    fn sum_money(self) -> Money {
+        self.fold(Money::ZERO, |a, b| a.checked_add(b).unwrap())
+    }
+}

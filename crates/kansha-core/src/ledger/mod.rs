@@ -632,6 +632,57 @@ pub fn account_balances(conn: &Connection, today: Date) -> Result<Vec<AccountBal
     Ok(out)
 }
 
+/// The sum of the balances shown for one section of the account list
+/// (ACCT-240).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct SectionTotal {
+    /// `banking`, `credit`, `investments`, `retirement`, `assets_debt`, or
+    /// `other`.
+    pub section: String,
+    pub total: Money,
+}
+
+/// Each account list section's total: the sum of the `current` balances
+/// of every account in its groups, closed and unlisted ones too, so the
+/// totals add up to net worth. Assets & Debt holds Assets and Liabilities;
+/// a debt's balance is negative, so it reduces the total.
+pub fn section_totals(conn: &Connection, today: Date) -> Result<Vec<SectionTotal>> {
+    use crate::accounts::AccountGroup;
+    let balances = account_balances(conn, today)?;
+    let mut totals: Vec<SectionTotal> = [
+        "banking",
+        "credit",
+        "investments",
+        "retirement",
+        "assets_debt",
+        "other",
+    ]
+    .iter()
+    .map(|s| SectionTotal {
+        section: (*s).to_string(),
+        total: Money::ZERO,
+    })
+    .collect();
+    for a in crate::persistence::accounts::list(conn)? {
+        let section = match a.fields.group {
+            AccountGroup::Banking => "banking",
+            AccountGroup::Credit => "credit",
+            AccountGroup::Investments => "investments",
+            AccountGroup::Retirement => "retirement",
+            AccountGroup::Assets | AccountGroup::Liabilities => "assets_debt",
+            AccountGroup::Other => "other",
+        };
+        let Some(b) = balances.iter().find(|b| b.account == a.id) else {
+            continue;
+        };
+        if let Some(t) = totals.iter_mut().find(|t| t.section == section) {
+            t.total = checked_sum([t.total, b.current])?;
+        }
+    }
+    Ok(totals)
+}
+
 /// Register footer figures (REG-060).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]

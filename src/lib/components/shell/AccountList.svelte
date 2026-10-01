@@ -25,7 +25,10 @@
     Show closed accounts
   </label>
   {#each groups as g (g.section)}
-    <h3>{g.label}</h3>
+    <h3>
+      <span>{g.label}</span>
+      <AccountBalance amount={listsState.sectionTotals[g.section]} />
+    </h3>
     <ul>
       {#each g.accounts as a (a.id)}
         <li>
@@ -51,11 +54,20 @@
     align-items: center;
     font-size: var(--fs-register);
   }
+  /* A section's heading is a shaded band, with its total at the right. */
   h3 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
     margin: 0.75rem 0 0.25rem;
+    padding: 0.2rem 0.4rem;
     font-size: var(--fs-header);
+    background: var(--head-bg);
+    color: var(--head-fg);
+    border-radius: 4px;
+  }
+  h3 span:first-child {
     text-transform: uppercase;
-    opacity: 0.7;
   }
   ul {
     list-style: none;

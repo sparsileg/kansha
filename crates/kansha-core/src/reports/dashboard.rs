@@ -12,7 +12,7 @@ use super::facts::{self, Lookups, Section, Want};
 use super::net_worth::shown_balance;
 use super::range::{day_before, periods};
 use super::{DatePreset, DateRange, ReportKind, ReportSettings, ResolvedRange};
-use crate::accounts::{AccountId, AccountStatus};
+use crate::accounts::{AccountId, AccountStatus, AccountType};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::money::Money;
@@ -266,18 +266,18 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
     }
     out.extend(prices.into_values());
 
-    // Accounts with old uncleared transactions: each banking and credit
-    // account by name; investment accounts, which are not reconciled,
-    // in one line.
+    // Accounts with old uncleared transactions (DSH-030): only checking,
+    // savings, and credit card accounts, each by name. Others (cash,
+    // investment, assets) are not reconciled against statements.
     let before = schedule::add_days(today, -UNCLEARED_DAYS).unwrap_or(today);
-    let mut investment = false;
     for id in repo::accounts_with_old_uncleared(conn, before)? {
         let Some(a) = lk.account(id) else { continue };
-        if a.status != AccountStatus::Open {
-            continue;
-        }
-        if a.fields.account_type.is_investment() {
-            investment = true;
+        if a.status != AccountStatus::Open
+            || !matches!(
+                a.fields.account_type,
+                AccountType::Checking | AccountType::Savings | AccountType::CreditCard
+            )
+        {
             continue;
         }
         out.push(Warning {
@@ -287,15 +287,6 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
                 a.fields.name
             ),
             account: Some(id),
-        });
-    }
-    if investment {
-        out.push(Warning {
-            kind: WarningKind::Unreconciled,
-            message: format!(
-                "Some investment accounts have uncleared transactions more than {UNCLEARED_DAYS} days old."
-            ),
-            account: None,
         });
     }
 

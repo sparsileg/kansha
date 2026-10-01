@@ -17,14 +17,15 @@
   );
 </script>
 
-<section>
+<section class="accounts">
   <header>
     <button type="button" onclick={() => dialogState.newAccount()}>New account</button>
   </header>
   {#if accounts.length === 0}
     <p>No accounts yet.</p>
   {:else}
-    <div class="wrap">
+    <!-- The list on a sheet (base.css), the window's color around it. -->
+    <div class="wrap sheet">
       <table>
         <thead>
           <tr><th>Name</th><th>Type</th><th>Group</th><th>Status</th><th class="r">Balance</th><th></th></tr>
@@ -51,12 +52,21 @@
 </section>
 
 <style>
+  .accounts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    flex: 1;
+    min-height: 0;
+  }
   header {
     display: flex;
     gap: 1rem;
     align-items: baseline;
   }
   .wrap {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
   }
   table {

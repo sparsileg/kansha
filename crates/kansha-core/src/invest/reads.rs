@@ -198,7 +198,9 @@ pub(super) fn valuation(
                 .naive()
                 .signed_duration_since(p.date.naive())
                 .num_days();
-            Ok(Some((p.price, Some(p.date), age > stale_days)))
+            // A money market fund stays at $1.00: its price is never old.
+            let stale = age > stale_days && s.fields.security_type != SecurityType::MoneyMarket;
+            Ok(Some((p.price, Some(p.date), stale)))
         }
         None if s.fields.security_type == SecurityType::MoneyMarket => {
             Ok(Some((MONEY_MARKET_PRICE, None, false)))

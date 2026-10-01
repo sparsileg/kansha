@@ -820,19 +820,17 @@ fn dashboard_sums_net_worth_month_and_due_items() {
         "{:?}",
         d.warnings
     );
-    // Investment accounts are not reconciled: one line for all of them,
-    // naming none (DSH-030).
-    let inv: Vec<_> = d
-        .warnings
-        .iter()
-        .filter(|w| w.message.contains("uncleared") && w.account != Some(fx.checking))
-        .filter(|w| w.account != Some(fx.savings) && w.account != Some(fx.visa))
-        .collect();
-    assert_eq!(inv.len(), 1, "{:?}", d.warnings);
-    assert_eq!(inv[0].account, None);
-    assert_eq!(
-        inv[0].message,
-        "Some investment accounts have uncleared transactions more than 60 days old."
+    // Only checking, savings, and credit card accounts are checked for old
+    // uncleared transactions (DSH-030): no line for investment accounts.
+    assert!(
+        d.warnings
+            .iter()
+            .filter(|w| w.message.contains("uncleared"))
+            .all(|w| [fx.checking, fx.savings, fx.visa]
+                .iter()
+                .any(|a| w.account == Some(*a))),
+        "{:?}",
+        d.warnings
     );
     assert!(
         !d.warnings

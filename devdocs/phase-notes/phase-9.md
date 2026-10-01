@@ -242,3 +242,14 @@ Gaps:
   search; every change re-runs the preview.
 - `Staged` stays in memory until imported or cancelled; switching
   books does not drop it.
+- **Open (2026-09-30): per-account imports.** Importing one QIF per
+  account into one book gave wrong balances (Checking, Fidelity IRA
+  cash, a VBS-Cash cash account at about -$40k that cannot be deleted
+  because its transfers tie it to Savings and Checking). Transfers are
+  matched only within one file (MIG-070), so separate files may
+  double-count them or post them against Opening Balance. The designed
+  path is one whole-file export (all five data types) imported once,
+  with accounts to leave out unticked in the mapping step. Cause in
+  Stan's book not yet found; the next session inspects a copy of
+  `J:\Kansha\import.db`. Also open: investigate whether a later import
+  should match a transfer against transactions already in the book.

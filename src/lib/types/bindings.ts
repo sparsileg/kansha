@@ -85,6 +85,8 @@ export const commands = {
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
 	/**  Current and ending balance of every account (ACCT-230). */
 	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
+	/**  Each account list section's total (ACCT-240). */
+	sectionTotals: () => typedError<SectionTotal[], IpcError>(__TAURI_INVOKE("section_totals")),
 	/**
 	 *  A new account's fields with the type's defaults: group, tax treatment,
 	 *  investment or other-asset settings (ACCT-030, ACCT-240); an
@@ -2393,6 +2395,19 @@ export type SearchQuery = {
 	limit: number,
 };
 
+/**
+ *  The sum of the balances shown for one section of the account list
+ *  (ACCT-240).
+ */
+export type SectionTotal = {
+	/**
+	 *  `banking`, `credit`, `investments`, `retirement`, `assets_debt`, or
+	 *  `other`.
+	 */
+	section: string,
+	total: string,
+};
+
 /**  A stored security. */
 export type Security = {
 	id: SecurityId,
@@ -2537,6 +2552,11 @@ export type Settings = {
 	nav_items: string | null,
 	account_panel_open: boolean,
 	account_panel_side: PanelSide,
+	/**
+	 *  The account list panel's width in pixels, as the user dragged it;
+	 *  0 = the stock width.
+	 */
+	account_panel_width: number,
 	/**
 	 *  The Investments screen's named views, as the UI's JSON; `None` =
 	 *  default.

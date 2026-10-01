@@ -57,6 +57,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::book::book_rename,
             commands::accounts::account_list,
             commands::accounts::account_balances,
+            commands::accounts::section_totals,
             commands::accounts::account_defaults,
             commands::accounts::account_number_masked,
             commands::accounts::account_create,

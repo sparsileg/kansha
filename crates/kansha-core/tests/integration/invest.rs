@@ -970,3 +970,35 @@ fn security_details_list_its_transactions_and_graph_them() {
     .unwrap();
     assert_eq!(empty.dates.len(), 2);
 }
+
+/// A money market fund stays at $1.00, so an old price is never stale; an
+/// old price of anything else is (PRC-050).
+#[test]
+fn a_money_market_price_is_never_stale() {
+    let mut b = book();
+    let (_, vti) = funded(&mut b);
+    // This account holds money market funds as securities.
+    let mut f = kansha_core::accounts::AccountFields::new("Vanguard", AccountType::Brokerage);
+    if let Some(inv) = f.investment.as_mut() {
+        inv.mmf_mode = kansha_core::accounts::MmfMode::Security;
+    }
+    let brk = b.account_with(&f).unwrap();
+    let opening = b.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    cash.amount = Some(m("10000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    b.invest(&cash).unwrap();
+    let mm = b
+        .security("Money Market", "VMFXX", SecurityType::MoneyMarket)
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-01-05", "10", "1000.00"))
+        .unwrap();
+    b.invest(&buy(brk, mm, "2026-01-05", "500", "500.00"))
+        .unwrap();
+    b.price(vti, date("2026-01-10"), p("100")).unwrap();
+    b.price(mm, date("2026-01-10"), p("1")).unwrap();
+    let h = invest::holdings(b.conn(), brk, date("2026-06-30"), None).unwrap();
+    let stale = |s| h.positions.iter().find(|x| x.security == s).unwrap().stale;
+    assert!(stale(vti));
+    assert!(!stale(mm));
+}

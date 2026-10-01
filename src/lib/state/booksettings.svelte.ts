@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   nav_items: null,
   account_panel_open: true,
   account_panel_side: "left",
+  account_panel_width: 0,
   invest_views: null,
   dashboard_cards: null,
   stale_price_days: 7,

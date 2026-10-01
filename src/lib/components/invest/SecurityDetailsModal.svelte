@@ -10,13 +10,15 @@
   import { call, commands } from "../../api";
   import { displayDate } from "../../format/date";
   import { formatMoney } from "../../format/money";
-  import { formatPrice, formatQuantity } from "../../format/quantity";
+  import { formatPrice, formatQuantity, parsePrice } from "../../format/quantity";
   import { SECURITY_TYPES, securityTypeLabel } from "../../invest/securityTypes";
+  import { confirmState } from "../../state/confirm.svelte";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import type {
     Chart,
     ChartSpan,
+    PricePoint,
     SecurityChartKind,
     SecurityId,
     SecurityTxn,
@@ -52,6 +54,15 @@
   let edit = $state<{ name: string; ticker: string; security_type: SecurityType } | null>(null);
   let seq = 0;
 
+  // Update Prices card. `editing` is the row open for typing: a new row
+  // (date and price) or the selected one (price only).
+  let prices = $state<PricePoint[]>([]);
+  let selectedDate = $state<string | null>(null);
+  let editing = $state<{ date: string; price: string; isNew: boolean } | null>(null);
+  let priceError = $state<string | null>(null);
+  /** Bumped when a price changes, so the graph is redrawn. */
+  let priceVersion = $state(0);
+
   const s = $derived(investState.securityById.get(id));
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -70,6 +81,7 @@
 
   $effect(() => {
     const [sec, k, sp, f, t, fit] = [id, kind, span, from, to, fitted];
+    void priceVersion;
     const mine = ++seq;
     const custom = sp === "custom";
     Promise.all([
@@ -86,6 +98,81 @@
         if (mine === seq) error = message(e);
       });
   });
+
+  $effect(() => {
+    const sec = id;
+    editing = null;
+    selectedDate = null;
+    priceError = null;
+    void loadPrices(sec);
+  });
+
+  async function loadPrices(sec: SecurityId) {
+    try {
+      const rows = await call(commands.priceList(sec));
+      if (sec === id) prices = rows;
+    } catch (e) {
+      priceError = message(e);
+    }
+  }
+
+  function newPrice() {
+    selectedDate = null;
+    priceError = null;
+    editing = { date: listsState.today, price: "", isNew: true };
+  }
+
+  function editPrice() {
+    const p = prices.find((x) => x.date === selectedDate);
+    if (!p) return;
+    priceError = null;
+    editing = { date: p.date, price: p.price, isNew: false };
+  }
+
+  async function savePrice(e?: Event) {
+    e?.preventDefault();
+    if (!editing) return;
+    const price = parsePrice(editing.price);
+    if (price === null) {
+      priceError = "Enter the price, like 41.25.";
+      return;
+    }
+    try {
+      await call(commands.priceSet(id, editing.date, price));
+      selectedDate = editing.date;
+      editing = null;
+      priceError = null;
+      priceVersion += 1;
+      await loadPrices(id);
+    } catch (err) {
+      priceError = message(err);
+    }
+  }
+
+  async function deletePrice() {
+    const p = prices.find((x) => x.date === selectedDate);
+    if (!p || editing) return;
+    if (!(await confirmState.ask(`Delete the price of ${formatPrice(p.price)} on ${displayDate(p.date)}?`))) return;
+    try {
+      await call(commands.priceDelete(id, p.date));
+      selectedDate = null;
+      priceError = null;
+      priceVersion += 1;
+      await loadPrices(id);
+    } catch (err) {
+      priceError = message(err);
+    }
+  }
+
+  function onPriceKey(e: KeyboardEvent) {
+    if (e.key === "Escape" && editing) {
+      // Closes the edit, not the dialog.
+      e.preventDefault();
+      e.stopPropagation();
+      editing = null;
+      priceError = null;
+    }
+  }
 
   function startEdit() {
     if (!s) return;
@@ -161,6 +248,77 @@
           </dl>
           <div class="buttons"><button type="button" onclick={startEdit}>Edit</button></div>
         {/if}
+      </div>
+    </article>
+
+    <article class="card sheet" aria-labelledby="sd-prices">
+      <header><h2 id="sd-prices">Update Prices</h2></header>
+      <div class="body">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="scroll prices" onkeydown={onPriceKey}>
+          <table>
+            <thead><tr><th>Date</th><th class="num">Price</th></tr></thead>
+            <tbody>
+              {#if editing?.isNew}
+                <tr class="sel">
+                  <td>
+                    <DatePicker
+                      value={editing.date}
+                      today={listsState.today}
+                      label="Price date"
+                      onchange={(iso) => editing && (editing.date = iso)}
+                    />
+                  </td>
+                  <td class="num">
+                    <form onsubmit={savePrice}>
+                      <!-- svelte-ignore a11y_autofocus -->
+                      <input aria-label="Price" inputmode="decimal" size="10" autofocus bind:value={editing.price} />
+                    </form>
+                  </td>
+                </tr>
+              {/if}
+              {#each prices as p, i (p.date)}
+                {@const open = editing && !editing.isNew && editing.date === p.date}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <tr
+                  class:alt={i % 2 === 1}
+                  class:sel={selectedDate === p.date && !editing?.isNew}
+                  aria-selected={selectedDate === p.date}
+                  onclick={() => !editing && (selectedDate = p.date)}
+                  ondblclick={() => {
+                    selectedDate = p.date;
+                    if (!editing) editPrice();
+                  }}
+                >
+                  <td>{displayDate(p.date)}</td>
+                  <td class="num">
+                    {#if open && editing}
+                      <form onsubmit={savePrice}>
+                        <!-- svelte-ignore a11y_autofocus -->
+                        <input aria-label="Price" inputmode="decimal" size="10" autofocus bind:value={editing.price} />
+                      </form>
+                    {:else}
+                      {formatPrice(p.price)}
+                    {/if}
+                  </td>
+                </tr>
+              {:else}
+                {#if !editing}<tr><td colspan="2" class="sub">No prices yet.</td></tr>{/if}
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        {#if priceError}<p class="err" role="alert">{priceError}</p>{/if}
+        <div class="buttons">
+          {#if editing}
+            <button type="button" onclick={() => savePrice()}>Save</button>
+            <button type="button" onclick={() => (editing = null)}>Cancel</button>
+          {:else}
+            <button type="button" onclick={newPrice}>New</button>
+            <button type="button" onclick={editPrice} disabled={selectedDate === null}>Edit</button>
+            <button type="button" onclick={deletePrice} disabled={selectedDate === null}>Delete</button>
+          {/if}
+        </div>
       </div>
     </article>
 
@@ -270,6 +428,22 @@
   .scroll {
     max-height: 30vh;
     overflow: auto;
+  }
+  .prices {
+    max-height: 10rem;
+    margin-bottom: 0.5rem;
+  }
+  .prices tbody tr {
+    cursor: pointer;
+  }
+  .prices tr.sel {
+    background: var(--hover-bg);
+  }
+  .prices form {
+    margin: 0;
+  }
+  .prices input {
+    text-align: right;
   }
   table {
     border-collapse: collapse;

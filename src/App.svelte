@@ -121,7 +121,7 @@
 {#if !bookState.open}
 <StartScreen />
 {:else}
-<div class="app">
+<div class="app" style:--account-panel-w={settingsState.accountPanelCss}>
   <MenuBar {menus} onselect={runAction}><ThemePicker /></MenuBar>
   <NavBar />
   <AccountBar />

@@ -33,6 +33,7 @@
   import { scheduleState } from "../state/schedule.svelte";
   import type { AccountId, Entry, Payee } from "../types/bindings";
   import { SPLIT_ICON } from "../shell/icons";
+  import TagPicker from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
 
   /** `null` = the new-entry row; otherwise edit this transaction in place. */
@@ -423,12 +424,7 @@
     <div class="c-cat">
       <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit newKind={newKind} onchange={onCategoryChange} />
     </div>
-    <select class="c-tag" aria-label="Tag" bind:value={d.tag}>
-      <option value="">—</option>
-      {#each listsState.tags.filter((t) => !t.hidden || d.tag === String(t.id)) as t (t.id)}
-        <option value={String(t.id)}>{t.name}</option>
-      {/each}
-    </select>
+    <TagPicker class="c-tag" bind:value={d.tag} />
     <input class="c-memo" aria-label="Memo" bind:value={d.memo} />
     <span class="c-clr">{d.cleared === "cleared" ? "c" : d.cleared === "reconciled" ? "R" : ""}</span>
     <span class="c-actions">

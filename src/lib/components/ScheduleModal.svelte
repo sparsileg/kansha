@@ -18,6 +18,7 @@
   import { scheduleState } from "../state/schedule.svelte";
   import type { ScheduleFields, ScheduleId } from "../types/bindings";
   import Modal from "./Modal.svelte";
+  import TagPicker from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
 
   let {
@@ -137,7 +138,7 @@
 
     <fieldset>
       <legend>Amount and category</legend>
-      <div class="line head" aria-hidden="true">
+      <div class="line head" class:one={single} aria-hidden="true">
         <span>Amount</span><span>Category or transfer</span>{#if !single}<span>Memo</span>{/if}<span>Tag</span><span></span>
       </div>
       {#each d.lines as line, i (i)}
@@ -153,12 +154,7 @@
           />
           <TargetCombo bind:value={line.target} excludeAccount={mainAccount} newKind={d.direction === "deposit" ? "income" : "expense"} label={`Line ${i + 1} category`} />
           {#if !single}<input aria-label={`Line ${i + 1} memo`} bind:value={line.memo} />{/if}
-          <select aria-label={`Line ${i + 1} tag`} bind:value={line.tag}>
-            <option value="">—</option>
-            {#each listsState.tags.filter((t) => !t.hidden || String(t.id) === line.tag) as t (t.id)}
-              <option value={String(t.id)}>{t.name}</option>
-            {/each}
-          </select>
+          <TagPicker bind:value={line.tag} label={`Line ${i + 1} tag`} />
           <span class="end">
             {#if d.lines.length > 1}
               <button type="button" aria-label={`Remove line ${i + 1}`} onclick={() => d.lines.splice(i, 1)}>×</button>
