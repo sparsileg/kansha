@@ -18,7 +18,14 @@
   });
   let bookName = $state<string | null>(null);
   let bookFolder = $state<string | null>(null);
-  const name = $derived(bookName ?? status?.name ?? "kansha");
+  /** "Create a new book…" from the passphrase or missing-key screen: the
+   * first-run form, for a book beside the one that is there. */
+  let creating = $state(false);
+  /** The setup form makes a new book (first run, or `creating`). */
+  const fresh = $derived(status?.state === "new" || creating);
+  // A new book beside an existing one starts with no name, so it cannot
+  // take the existing book's.
+  const name = $derived(bookName ?? (creating ? "" : (status?.name ?? "kansha")));
   const nameOk = $derived(/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(name.trim()));
 
   async function browseBook() {
@@ -76,6 +83,7 @@
     try {
       await call(commands.bookSetup(passphrase, folder, name.trim(), bookFolder));
       passphrase = again = "";
+      creating = false;
       await bookState.refresh();
     } catch (err) {
       error = message(err);
@@ -90,7 +98,7 @@
   <main>
     <h1>Kansha</h1>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}
-    {#if status?.state === "locked"}
+    {#if status?.state === "locked" && !creating}
       <p class="book">Book: <strong>{status.name}</strong> <span class="path note">{status.db_path}</span></p>
       <form class="unlock" onsubmit={unlock}>
         <label>
@@ -103,17 +111,22 @@
       {#if error}<p role="alert"><strong>{error}</strong></p>{/if}
       <p><button type="button" class="link" onclick={() => (restoring = true)}>Restore from a backup…</button></p>
       <p>
-        <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
+        <button type="button" class="link" onclick={() => (creating = true)}>Create a new book…</button>
+        · <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
         {#each recent as b (b.path)}
           · <button type="button" class="link" title={b.path} onclick={() => void other(b.path)}>{b.name}</button>
         {/each}
       </p>
-    {:else if status?.state === "key_missing"}
+    {:else if status?.state === "key_missing" && !creating}
       <p role="alert">
         <strong>The key file is missing or damaged, so this book cannot be opened.</strong> It cannot be repaired:
         restore the most recent backup. Changes made since that backup are lost.
       </p>
       <p><button type="button" onclick={() => (restoring = true)}>Restore from a backup…</button></p>
+      <p>
+        <button type="button" class="link" onclick={() => (creating = true)}>Create a new book…</button>
+        · <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
+      </p>
       <p class="note">Book: <span class="path">{status.db_path}</span></p>
     {:else if status}
       <form class="setup" onsubmit={setup}>
@@ -122,7 +135,7 @@
           <legend>1. Book</legend>
           <label class="opt">
             <input type="radio" bind:group={choice} value="create" />
-            {status.state === "unencrypted"
+            {status.state === "unencrypted" && !creating
               ? "Keep the existing book; it will be encrypted"
               : "Create a new, empty book"}
           </label>
@@ -130,7 +143,7 @@
             <input type="radio" bind:group={choice} value="restore" />
             Restore from a backup
           </label>
-          {#if status.state === "new"}
+          {#if fresh}
             <p class="opt">
               <button type="button" class="link" onclick={() => void other(null)}>Open an existing book…</button>
             </p>
@@ -139,7 +152,7 @@
         {#if choice === "restore"}
           <p><button type="button" onclick={() => (restoring = true)}>Choose backup…</button></p>
         {:else}
-          {#if status.state === "new"}
+          {#if fresh}
             <div class="grid">
               <label>
                 <span>Name</span>
@@ -195,8 +208,11 @@
           </fieldset>
           {#if error}<p role="alert"><strong>{error}</strong></p>{/if}
           <button type="submit" disabled={busy || !nameOk || passphrase.trim() === "" || passphrase !== again}>
-            {busy ? "Setting up…" : status.state === "unencrypted" ? "Encrypt book" : "Create book"}
+            {busy ? "Setting up…" : status.state === "unencrypted" && !creating ? "Encrypt book" : "Create book"}
           </button>
+          {#if creating}
+            <button type="button" onclick={() => { creating = false; error = null; }}>Cancel</button>
+          {/if}
         {/if}
       </form>
     {/if}

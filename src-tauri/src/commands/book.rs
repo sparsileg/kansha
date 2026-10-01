@@ -84,8 +84,8 @@ fn check_folder(folder: Option<&str>) -> CmdResult<Option<String>> {
     }
 }
 
-/// First-run setup (SECU-080): a new book named `name` (in `folder`, or
-/// the default book's folder), or the unencrypted prototype database
+/// First-run setup (SECU-080), or a new book beside a locked one: a new
+/// book named `name` (in `folder`, or the current book's folder), or the unencrypted prototype database
 /// converted under its own name; then the backup folder is stored in it.
 #[tauri::command]
 #[specta::specta]
@@ -104,22 +104,26 @@ pub fn book_setup(
     let pass = Passphrase::new(passphrase);
     let current = state.files();
     let mut open = match book::state(&current)? {
-        BookState::New => {
+        // A locked or key-less book is no bar to making another beside it.
+        BookState::New | BookState::Locked | BookState::KeyMissing => {
             let place = match check_folder(folder.as_deref())? {
                 Some(f) => PathBuf::from(f),
                 None => current.folder(),
             };
             let files = BookFiles::named(&place, name.trim())?;
+            if files.db.is_file() && book::state(&files)? != BookState::New {
+                return Err(kansha_core::Error::Invalid(format!(
+                    "a book named {} is already in {}; choose another name or folder",
+                    files.name(),
+                    place.display()
+                ))
+                .into());
+            }
             let open = book::create(&files, &pass, state.clock())?;
             state.set_files(files);
             open
         }
         BookState::Unencrypted => book::convert(&current, &pass, state.clock())?,
-        _ => {
-            return Err(
-                kansha_core::Error::Invalid("this computer already has a book".into()).into(),
-            );
-        }
     };
     set_backup_folder(&state, &mut open, backups)?;
     *guard = Some(open);

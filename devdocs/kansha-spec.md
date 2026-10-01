@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.6 (draft) |
+| **Document version** | 0.6.7 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
@@ -1182,7 +1182,9 @@ platform has one.
   the old name and are no longer pruned. Kansha starts in the most
   recent book still on disk (`KANSHA_DB` overrides; on a new computer
   setup names the first book, `kansha` by default, or opens an
-  existing one). The app identifier is `tools.astryx.kansha`; the
+  existing one). The passphrase and missing-key screens offer
+  "Create a new book…", the first-run form for a book beside the one
+  that is there (an existing book is never replaced). The app identifier is `tools.astryx.kansha`; the
   default book folder and the per-computer config file (SET-070) are
   under it. A rename a crash
   interrupted is finished at the next start. The window title shows
@@ -2174,6 +2176,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.7 | 2026-09-30 | UI-080: the passphrase and missing-key screens offer "Create a new book…", so a leftover book in the default folder no longer blocks making a new one. No schema change. No API change (`book_setup` also accepts a locked or key-less current book; it refuses a name already taken). |
 | 0.6.6 | 2026-09-30 | ACCT-020: account type Donor Advised Fund (DAF), replacing the DAF security type of 0.6.3 (SEC-010; securities of that type become Other). New SET-080: Settings is a category list over one card with OK and Cancel; new Register and Notifications settings REG-070 (gray toggle), REG-100 … REG-150 (recall, memorize, capitalize, forget unused payees, out-of-date, check reuse, save confirmation). The Integrity check window has Close in place of Run again; Security Details lists no hidden securities. **Schema change:** migration 0007 (account type `donor_advised_fund`; security type `donor_advised_fund` removed; both tables rebuilt with foreign keys off). **API change:** `AccountType` gains and `SecurityType` loses `donor_advised_fund`; `Settings` gains `gray_reconciled`, `recall_payees`, `capitalize_names`, `auto_memorize_payees`, `purge_payees_months`, `warn_out_of_date`, `warn_check_reuse`, `confirm_save_change`; new commands `entry_warnings`, `payees_forget_stale`. |
 | 0.6.5 | 2026-09-30 | **DSH-040** built (was [Later]): Customize from a gear on the dashboard; the dashboard is one sheet with its title in a shaded band (view-title convention, Dashboard only for now). SEC-060: "Fit graph to data" box (fitted money axis in sub-dollar steps). POS-040: Show closed lots is kept per view. MIG-060: a file name matches the book's account and a transfer-named account by letters and digits. MIG-140: mapping step can keep sold-out new securities shown; empty opening `Cash` and `ShrsIn` with no shares are warnings. No schema change. **API change:** `security_chart` gains `fitted`; `Settings` gains `dashboard_cards`; `ImportOptions` gains `show_securities`. |
 | 0.6.4 | 2026-09-30 | DSH-030: investment accounts with old uncleared transactions are one line, naming none. Reconcile and Reminders show their content on a sheet. No schema or API change. |

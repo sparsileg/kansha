@@ -327,6 +327,23 @@ describe("App shell", () => {
     expect(book.unlocks).toEqual(["wrong", "right"]);
   });
 
+  it("a locked book still offers Create a new book…, with an empty name to fill in", async () => {
+    book.open = false;
+    book.state = "locked";
+    book.setups = [];
+    render(App);
+    await fireEvent.click(await screen.findByRole("button", { name: "Create a new book…" }));
+    expect(screen.getByText(/Create a new, empty book/)).toBeTruthy();
+    const create = screen.getByRole("button", { name: "Create book" }) as HTMLButtonElement;
+    await fireEvent.input(screen.getByLabelText("Passphrase"), { target: { value: "p" } });
+    await fireEvent.input(screen.getByLabelText("Again"), { target: { value: "p" } });
+    expect(create.disabled).toBe(true); // no name yet
+    await fireEvent.input(screen.getByLabelText("Name"), { target: { value: "fresh" } });
+    expect(create.disabled).toBe(false);
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Backup passphrase")).toBeTruthy();
+  });
+
   it("first run shows setup: folder, passphrase twice, and the lost-passphrase warning", async () => {
     book.open = false;
     book.state = "new";

@@ -13,8 +13,8 @@ export const commands = {
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
 	/**
-	 *  First-run setup (SECU-080): a new book named `name` (in `folder`, or
-	 *  the default book's folder), or the unencrypted prototype database
+	 *  First-run setup (SECU-080), or a new book beside a locked one: a new
+	 *  book named `name` (in `folder`, or the current book's folder), or the unencrypted prototype database
 	 *  converted under its own name; then the backup folder is stored in it.
 	 */
 	bookSetup: (passphrase: string, backupFolder: string | null, name: string, folder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder, name, folder })),
