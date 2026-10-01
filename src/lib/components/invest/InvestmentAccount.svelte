@@ -8,6 +8,7 @@
   import { displayDate } from "../../format/date";
   import { formatMoney } from "../../format/money";
   import { formatPrice, formatQuantity } from "../../format/quantity";
+  import { bookSettings } from "../../state/booksettings.svelte";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import { registerState } from "../../state/register.svelte";
@@ -76,7 +77,7 @@
           data-txn={row.txn_id}
           class:alt={i % 2 === 1}
           class:future={row.future}
-          class:reconciled={row.cleared === "reconciled"}
+          class:reconciled={bookSettings.value.gray_reconciled && row.cleared === "reconciled"}
           class:sel={row.txn_id === selected}
           onclick={() => openRow(row.txn_id, row.incoming)}
           title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>

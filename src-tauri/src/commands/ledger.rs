@@ -4,11 +4,11 @@ use kansha_core::accounts::AccountId;
 use kansha_core::audit::{self, AuditEntity, AuditEntry};
 use kansha_core::integrity::{self, IntegrityReport};
 use kansha_core::ledger::{
-    self, Cleared, Entry, RegisterPage, RegisterQuery, RegisterSummary, SearchPage, SearchQuery,
-    TxnId,
+    self, Cleared, Entry, EntryWarning, RegisterPage, RegisterQuery, RegisterSummary, SearchPage,
+    SearchQuery, TxnId,
 };
 use kansha_core::persistence::payees;
-use kansha_core::{Money, Tx};
+use kansha_core::{Clock, Money, Tx};
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -96,12 +96,34 @@ pub fn entry_update(
     )
 }
 
+/// What to confirm before saving `entry` (REG-130, REG-140): `txn` is the
+/// transaction being edited, `None` for a new one.
+#[tauri::command]
+#[specta::specta]
+pub fn entry_warnings(
+    state: State<'_, AppState>,
+    entry: Entry,
+    txn: Option<TxnId>,
+) -> CmdResult<Vec<EntryWarning>> {
+    state.read(|db, today| ledger::entry_warnings(db.conn(), today, &entry, txn))
+}
+
+/// Forget memorized payees not used lately, per the setting (REG-120);
+/// returns how many were cleared. Runs when a book opens.
+#[tauri::command]
+#[specta::specta]
+pub fn payees_forget_stale(state: State<'_, AppState>) -> CmdResult<usize> {
+    let today = state.clock().today();
+    state.write(|tx| ledger::forget_stale_payees(tx, today))
+}
+
 fn resolve_payee(tx: &Tx<'_>, entry: &mut Entry, name: Option<&str>) -> kansha_core::Result<()> {
     if let Some(name) = name {
         entry.payee = if name.trim().is_empty() {
             None
         } else {
-            Some(payees::find_or_insert(tx, name)?.id)
+            let name = kansha_core::settings::tidy_name(tx.conn(), name)?;
+            Some(payees::find_or_insert(tx, &name)?.id)
         };
     }
     Ok(())

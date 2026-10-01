@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.5 (draft) |
+| **Document version** | 0.6.6 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
@@ -111,7 +111,9 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   Traditional IRA, Roth IRA, HSA, Other Asset, Other Liability.
 - **ACCT-020** [1.0][S] Add account types 401(k)/403(b) and
   Loan/Mortgage (liability). Loan accounts in 1.0 are balance-tracking
-  only; amortization schedules are [Later] (see REC-200).
+  only; amortization schedules are [Later] (see REC-200). Add account
+  type Donor Advised Fund (DAF): an investment account that holds
+  securities or only cash, in the Investments group (migration 0007).
 - **ACCT-030** [1.0][R] Each account has a **tax treatment** of
   Taxable, Tax-Deferred, or Tax-Exempt, defaulted by type:
   - Traditional IRA, 401(k) → Tax-Deferred
@@ -279,11 +281,32 @@ had a combined column.
   distinguished and a line separates today from future entries. In
   every register (banking and investment) future rows are italic
   and their alternate rows use their own tint; their text is not
-  dimmed. Reconciled rows have gray text.
+  dimmed. Reconciled rows have gray text (a setting; default on).
 - **REG-080** [1.0][R] Right-click/context menu: Edit, Split (opens
   the edit with its split lines, the category so far as line 1), Mark
   cleared or unmarked, Go to other side of transfer, Schedule this…
   (REC-140), History… (AUD-020), Void, Delete.
+- **REG-100** [1.0][R] Settings > Register: "Recall memorized payees"
+  (default on) turns on QuickFill from a memorized payee (PAY-020);
+  "Automatically memorize new payees" (default on) turns on learning a
+  new payee's defaults from its first transaction.
+- **REG-110** [1.0][R] "Capitalize payees and categories" (default off)
+  upper-cases the first letter of each word of a payee or category name
+  as it is saved; the rest of each word stays as typed.
+- **REG-120** [1.0][R] "Remove memorized payees not used in last N
+  months" (default 0 = never): when a book opens, a payee with
+  memorized defaults, made before the cutoff and not on any transaction
+  since, loses those defaults. The payee stays, so old transactions keep
+  their names.
+- **REG-130** [1.0][R] Settings > Notifications: warn, with a choice to
+  save anyway, when a transaction is dated in the past or more than a
+  year after today (default on). A scheduled item entered from its
+  occurrence is not warned about.
+- **REG-140** [1.0][R] Warn, with a choice to save anyway, when a check
+  number is already on another live transaction in the same account
+  (default on).
+- **REG-150** [1.0][R] Ask "Save the changes to this transaction?"
+  before saving a changed transaction (default off).
 
 ### 8. Scheduled and Recurring Transactions (REC) and Calendar (CAL)
 
@@ -418,8 +441,8 @@ common patterns.
 
 - **SEC-010** [1.0][S] Maintain a list of securities with: name,
   ticker symbol, security type (stock, ETF, mutual fund, bond, money
-  market fund, CD, donor advised fund (DAF; asset class Other by
-  default; migration 0006), other), asset class (e.g., US Equity, International
+  market fund, CD, other; a donor advised fund is an account type,
+  ACCT-020), asset class (e.g., US Equity, International
   Equity, Bond, Cash), and notes.
 - **SEC-020** [1.0][R] Optional CUSIP field (helps match brokerage
   cost-basis reports).
@@ -1202,6 +1225,14 @@ platform has one.
   dashboard, Investments, Reminders, Calendar, Accounts, or any
   account (every new view or account joins the list); run integrity
   check at startup. The Home button always opens the dashboard.
+- **SET-080** [1.0][R] The Settings dialog is a category list (Interface,
+  Data, Investments, Register, Notifications, Backups) over one card
+  showing that category's settings, with OK and Cancel below on the
+  right. Edits are kept until OK. Interface: date format, first day of
+  week, startup view, account list side. Data: integrity check at
+  startup, dashboard look-ahead days. Investments: stale price days,
+  lot method, price download. Register: REG-070, REG-100 … REG-120.
+  Notifications: REG-130 … REG-150. Backups: SET-050.
 - **SET-070** [1.0][R] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
   except per-computer ones: theme, font, font size (the passphrase
@@ -2143,6 +2174,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.6 | 2026-09-30 | ACCT-020: account type Donor Advised Fund (DAF), replacing the DAF security type of 0.6.3 (SEC-010; securities of that type become Other). New SET-080: Settings is a category list over one card with OK and Cancel; new Register and Notifications settings REG-070 (gray toggle), REG-100 … REG-150 (recall, memorize, capitalize, forget unused payees, out-of-date, check reuse, save confirmation). The Integrity check window has Close in place of Run again; Security Details lists no hidden securities. **Schema change:** migration 0007 (account type `donor_advised_fund`; security type `donor_advised_fund` removed; both tables rebuilt with foreign keys off). **API change:** `AccountType` gains and `SecurityType` loses `donor_advised_fund`; `Settings` gains `gray_reconciled`, `recall_payees`, `capitalize_names`, `auto_memorize_payees`, `purge_payees_months`, `warn_out_of_date`, `warn_check_reuse`, `confirm_save_change`; new commands `entry_warnings`, `payees_forget_stale`. |
 | 0.6.5 | 2026-09-30 | **DSH-040** built (was [Later]): Customize from a gear on the dashboard; the dashboard is one sheet with its title in a shaded band (view-title convention, Dashboard only for now). SEC-060: "Fit graph to data" box (fitted money axis in sub-dollar steps). POS-040: Show closed lots is kept per view. MIG-060: a file name matches the book's account and a transfer-named account by letters and digits. MIG-140: mapping step can keep sold-out new securities shown; empty opening `Cash` and `ShrsIn` with no shares are warnings. No schema change. **API change:** `security_chart` gains `fitted`; `Settings` gains `dashboard_cards`; `ImportOptions` gains `show_securities`. |
 | 0.6.4 | 2026-09-30 | DSH-030: investment accounts with old uncleared transactions are one line, naming none. Reconcile and Reminders show their content on a sheet. No schema or API change. |
 | 0.6.3 | 2026-09-30 | SEC-010: security type Donor Advised Fund (DAF). MIG-140: securities the import creates and no account holds afterwards are created hidden. RPT-010: date axis names days, months, or years. POS-040: the Customize dialog's Equities tab is named Securities. **Schema change:** migration 0006 (security type `donor_advised_fund`; the security table is rebuilt with foreign keys off). **API change:** `Chart` gains `x_unit`; `ImportResult` gains `securities_hidden`; `SecurityType` gains `donor_advised_fund`. |

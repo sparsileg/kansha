@@ -26,11 +26,12 @@
     splitTagValue,
     type Draft,
   } from "../register/draft";
+  import { bookSettings } from "../state/booksettings.svelte";
   import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import { scheduleState } from "../state/schedule.svelte";
-  import type { AccountId, Payee } from "../types/bindings";
+  import type { AccountId, Entry, Payee } from "../types/bindings";
   import { SPLIT_ICON } from "../shell/icons";
   import TargetCombo from "./TargetCombo.svelte";
 
@@ -155,7 +156,7 @@
 
   /** QuickFill (PAY-020): only when adding, and only into empty fields. */
   function onPayeeChange() {
-    if (txn !== null) return;
+    if (txn !== null || !bookSettings.value.recall_payees) return;
     const name = d.payee.trim().toLowerCase();
     const p =
       suggestions.find((x) => x.name.toLowerCase() === name) ??
@@ -179,6 +180,7 @@
    */
   function onPayeeKey(e: KeyboardEvent) {
     if ((e.key !== "Tab" && e.key !== "Enter") || e.shiftKey) return;
+    if (!bookSettings.value.recall_payees) return;
     const p = uniquePayeeMatch();
     if (!p) return;
     d.payee = p.name;
@@ -279,6 +281,28 @@
     }
   }
 
+  /** The warnings and the save confirmation the settings ask for
+   * (REG-130, REG-140, REG-150). A scheduled item is not warned about its
+   * date: it is due when it is. */
+  async function confirmSave(entry: Entry): Promise<boolean> {
+    const notes: string[] = [];
+    if (!occ) {
+      const found = await call(commands.entryWarnings(entry, txn));
+      if (found.includes("out_of_date")) {
+        notes.push("The date is in the past or more than a year ahead.");
+      }
+      if (found.includes("check_reused")) {
+        notes.push(`Check number ${entry.check_num.trim()} is already used in this account.`);
+      }
+    }
+    if (txn !== null && bookSettings.value.confirm_save_change) {
+      notes.push("Save the changes to this transaction?");
+    } else if (notes.length > 0) {
+      notes.push("Save anyway?");
+    }
+    return notes.length === 0 || (await confirmState.ask(notes.join(" ")));
+  }
+
   async function save(e?: Event) {
     e?.preventDefault();
     if (busy) return; // Enter again (on a select) while saving
@@ -303,6 +327,7 @@
     }
     busy = true;
     try {
+      if (!(await confirmSave(built.entry))) return;
       const name = built.payeeName;
       let savedId: number = txn ?? -1;
       if (txn === null && occ) {

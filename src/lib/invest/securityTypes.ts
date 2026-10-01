@@ -9,7 +9,6 @@ export const SECURITY_TYPES: [SecurityType, string][] = [
   ["bond", "Bond"],
   ["money_market", "Money market fund"],
   ["cd", "CD"],
-  ["donor_advised_fund", "Donor Advised Fund (DAF)"],
   ["other", "Other"],
 ];
 

@@ -514,12 +514,15 @@ fn migration_0006_accepts_donor_advised_funds_and_keeps_securities() {
         .unwrap();
     assert_eq!(kept, ("Fund".into(), "FND".into(), 1));
     assert_eq!(count(&db, "price"), 1);
-    c.execute(
-        "INSERT INTO security (name, type, asset_class, created_at)
-         VALUES ('Giving', 'donor_advised_fund', 'other', '2026-06-30T12:00:00Z')",
-        [],
-    )
-    .unwrap();
+    // Migration 0007 moves DAF to the account types.
+    assert!(
+        c.execute(
+            "INSERT INTO security (name, type, asset_class, created_at)
+             VALUES ('Giving', 'donor_advised_fund', 'other', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .is_err()
+    );
     // Tickers stay unique (ignoring case), and prices need a security.
     assert!(
         c.execute(
@@ -533,6 +536,44 @@ fn migration_0006_accepts_donor_advised_funds_and_keeps_securities() {
         c.execute(
             "INSERT INTO price (security_id, price_date, price, source)
              VALUES (99, '2026-06-30', 1, 'manual')",
+            [],
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn migration_0007_moves_daf_to_account_types() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 6).unwrap();
+    let c = db.conn();
+    c.execute_batch(
+        "INSERT INTO security (name, type, asset_class, created_at)
+             VALUES ('Giving', 'donor_advised_fund', 'other', '2026-06-30T12:00:00Z');
+         INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+             VALUES ('Keep', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+    let daf_account = "INSERT INTO account (name, type, account_group, tax_treatment, cash_mode,
+             mmf_mode, default_lot_method, created_at)
+         VALUES ('Firefly Hill Fund', 'donor_advised_fund', 'investments', 'taxable',
+             'internal', 'cash', 'fifo', '2026-06-30T12:00:00Z')";
+    assert!(c.execute(daf_account, []).is_err());
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let t: String = c
+        .query_row("SELECT type FROM security WHERE name = 'Giving'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(t, "other");
+    assert_eq!(count(&db, "account"), 1);
+    c.execute(daf_account, []).unwrap();
+    // An investment type must say how cash is held.
+    assert!(
+        c.execute(
+            "INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+             VALUES ('Bad', 'donor_advised_fund', 'investments', 'taxable', '2026-06-30T12:00:00Z')",
             [],
         )
         .is_err()

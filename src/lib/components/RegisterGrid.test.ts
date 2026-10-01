@@ -13,6 +13,7 @@ vi.mock("../api", async (orig) => {
       txnSetCleared: vi.fn(),
       entryGet: vi.fn(),
       entryUpdate: vi.fn(),
+      entryWarnings: vi.fn(() => Promise.resolve({ status: "ok", data: [] })),
       payeeList: vi.fn(),
       splitRemainder: vi.fn(),
     },

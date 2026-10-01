@@ -617,3 +617,145 @@ fn a_split_row_shows_only_its_own_tag_but_the_tag_filter_finds_its_lines() {
     let p = query(&f, |q| q.tag = Some(home));
     assert_eq!(dates(&p), vec!["2026-03-01", "2026-03-02"]);
 }
+
+fn set_settings(f: &mut Fixture, edit: impl FnOnce(&mut kansha_core::settings::Settings)) {
+    f.book
+        .write(|tx| {
+            let mut s = kansha_core::settings::load(tx.conn())?;
+            edit(&mut s);
+            kansha_core::settings::save(tx, &s)
+        })
+        .unwrap();
+}
+
+#[test]
+fn auto_memorize_setting_turns_memorizing_off() {
+    let mut f = fixture();
+    set_settings(&mut f, |s| s.auto_memorize_payees = false);
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let e = f
+        .book
+        .entry(f.chk, date("2026-03-01"))
+        .payee("Aldi")
+        .amount(m("-55.00"))
+        .category(groceries)
+        .build()
+        .unwrap();
+    let changed = f
+        .book
+        .write(|tx| {
+            ledger::create_entry(tx, &e)?;
+            ledger::memorize_payee(tx, &e)
+        })
+        .unwrap();
+    assert!(!changed);
+}
+
+#[test]
+fn warnings_flag_old_far_future_and_reused_check_numbers() {
+    let mut f = fixture();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let build = |f: &mut Fixture, day: &str, num: &str| {
+        let mut e = f
+            .book
+            .entry(f.chk, date(day))
+            .amount(m("-5.00"))
+            .category(groceries)
+            .build()
+            .unwrap();
+        e.check_num = num.into();
+        e
+    };
+    let today = date("2026-06-30");
+    let warn = |f: &Fixture, e: &ledger::Entry, txn| {
+        ledger::entry_warnings(f.book.conn(), today, e, txn).unwrap()
+    };
+    let first = build(&mut f, "2026-06-30", "9901");
+    assert_eq!(warn(&f, &first, None), vec![]);
+    let id = f
+        .book
+        .write(|tx| ledger::create_entry(tx, &first))
+        .unwrap()
+        .id;
+
+    // Same number again: reuse. Editing the original is not.
+    assert_eq!(
+        warn(&f, &first, None),
+        vec![ledger::EntryWarning::CheckReused]
+    );
+    assert_eq!(warn(&f, &first, Some(id)), vec![]);
+    // Past; a year ahead is fine, a day more is not.
+    let past = build(&mut f, "2026-06-29", "");
+    let year = build(&mut f, "2027-06-30", "");
+    let beyond = build(&mut f, "2027-07-01", "");
+    assert_eq!(warn(&f, &past, None), vec![ledger::EntryWarning::OutOfDate]);
+    assert_eq!(warn(&f, &year, None), vec![]);
+    assert_eq!(
+        warn(&f, &beyond, None),
+        vec![ledger::EntryWarning::OutOfDate]
+    );
+
+    set_settings(&mut f, |s| {
+        s.warn_out_of_date = false;
+        s.warn_check_reuse = false;
+    });
+    assert_eq!(warn(&f, &first, None), vec![]);
+    let old = build(&mut f, "2020-01-01", "9901");
+    assert_eq!(warn(&f, &old, None), vec![]);
+}
+
+#[test]
+fn stale_payee_defaults_are_forgotten_after_the_set_months() {
+    let mut f = fixture();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let mut e = f
+        .book
+        .entry(f.chk, date("2026-03-01"))
+        .payee("Aldi")
+        .amount(m("-55.00"))
+        .category(groceries)
+        .build()
+        .unwrap();
+    f.book
+        .write(|tx| {
+            ledger::create_entry(tx, &e)?;
+            ledger::memorize_payee(tx, &e)
+        })
+        .unwrap();
+    // The fixture's payees are made "now" (2026-06-30); judge from later.
+    let later = date("2027-01-31");
+    assert_eq!(
+        f.book
+            .write(|tx| ledger::forget_stale_payees(tx, later))
+            .unwrap(),
+        0
+    ); // off
+    set_settings(&mut f, |s| s.purge_payees_months = 6);
+    // Used 2026-03-01; six months before 2026-08-31 is 2026-02-28: in use.
+    assert_eq!(
+        f.book
+            .write(|tx| ledger::forget_stale_payees(tx, date("2026-08-31")))
+            .unwrap(),
+        0
+    );
+    e.date = date("2026-03-01");
+    assert_eq!(
+        f.book
+            .write(|tx| ledger::forget_stale_payees(tx, later))
+            .unwrap(),
+        1
+    );
+    let aldi = payees::find_by_name(f.book.conn(), "Aldi")
+        .unwrap()
+        .unwrap();
+    assert_eq!(aldi.fields.default_category, None);
+    assert_eq!(aldi.fields.default_amount, None);
+}
+
+#[test]
+fn capitalize_words_keeps_the_rest_of_each_word() {
+    use kansha_core::settings::capitalize_words;
+    assert_eq!(capitalize_words("trader joe's"), "Trader Joe's");
+    assert_eq!(capitalize_words("food:eating out"), "Food:Eating Out");
+    assert_eq!(capitalize_words("IBM mcDonald"), "IBM McDonald");
+}

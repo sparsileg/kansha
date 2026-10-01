@@ -30,6 +30,8 @@ text_enum! {
         Hsa = "hsa",
         /// 401(k)/403(b).
         Retirement401k = "retirement_401k",
+        /// Donor advised fund; holds securities, or only cash.
+        DonorAdvisedFund = "donor_advised_fund",
         OtherAsset = "other_asset",
         OtherLiability = "other_liability",
         /// Loan or mortgage; balance tracking only in 1.0.
@@ -119,6 +121,7 @@ impl AccountType {
                 | AccountType::RothIra
                 | AccountType::Hsa
                 | AccountType::Retirement401k
+                | AccountType::DonorAdvisedFund
         )
     }
 
@@ -160,7 +163,7 @@ impl AccountType {
             | AccountType::Cash
             | AccountType::MoneyMarket => AccountGroup::Banking,
             AccountType::CreditCard => AccountGroup::Credit,
-            AccountType::Brokerage => AccountGroup::Investments,
+            AccountType::Brokerage | AccountType::DonorAdvisedFund => AccountGroup::Investments,
             AccountType::TraditionalIra | AccountType::RothIra | AccountType::Retirement401k => {
                 AccountGroup::Retirement
             }

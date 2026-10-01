@@ -126,9 +126,8 @@
 
 <Modal title="Security Details" fit {onclose}>
   <label class="pick">
-    Security
-    <select value={String(id)} onchange={(e) => pick(Number(e.currentTarget.value))}>
-      {#each investState.securities as x (x.id)}
+    <select aria-label="Security" value={String(id)} onchange={(e) => pick(Number(e.currentTarget.value))}>
+      {#each investState.securities.filter((x) => !x.hidden || x.id === id) as x (x.id)}
         <option value={String(x.id)}>{x.name}{x.ticker ? ` (${x.ticker})` : ""}{x.hidden ? " (hidden)" : ""}</option>
       {/each}
     </select>

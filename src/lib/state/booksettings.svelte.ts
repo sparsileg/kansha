@@ -26,6 +26,14 @@ export const DEFAULT_SETTINGS: Settings = {
   backup_keep_last: 10,
   backup_keep_months: 12,
   backup_timeout_minutes: 5,
+  gray_reconciled: true,
+  recall_payees: true,
+  capitalize_names: false,
+  auto_memorize_payees: true,
+  purge_payees_months: 0,
+  warn_out_of_date: true,
+  warn_check_reuse: true,
+  confirm_save_change: false,
 };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

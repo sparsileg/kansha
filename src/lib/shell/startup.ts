@@ -16,6 +16,8 @@ import { startTimedBackups } from "./timedbackup";
 export async function startBook(): Promise<void> {
   await bookSettings.load();
   investViewState.applyStored();
+  // Forget memorized payees not used for a while, if the setting says so.
+  await call(commands.payeesForgetStale()).catch(() => 0);
   await listsState.loadAll();
   // Open the startup setting, unless the user has already gone somewhere.
   if (viewState.untouched) await openStartup();

@@ -7,17 +7,13 @@
   // An automatic check hands over the report it already has.
   let report = $state<IntegrityReport | null>(dialogState.integrityReport);
   let error = $state<string | null>(null);
-  let running = $state(false);
 
   async function run() {
-    running = true;
     error = null;
     try {
       report = await call(commands.integrityCheck());
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-    } finally {
-      running = false;
     }
   }
 
@@ -55,7 +51,7 @@
       </table>
     </div>
   {/if}
-  <p><button type="button" onclick={run} disabled={running}>Run again</button></p>
+  <div class="row"><button type="button" onclick={close}>Close</button></div>
 </Modal>
 
 <style>
@@ -71,6 +67,11 @@
     text-align: left;
     padding: 0.15rem 0.5rem;
     border-bottom: 1px solid var(--line-soft);
+  }
+  .row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
   }
   .err {
     color: var(--bad);

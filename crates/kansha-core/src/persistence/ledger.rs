@@ -39,6 +39,24 @@ fn source_from_row(r: &Row<'_>) -> rusqlite::Result<TxnSource> {
     })
 }
 
+/// Whether another live transaction in `account` already uses `check_num`
+/// (REG-140). `exclude` is the transaction being edited.
+pub fn check_num_in_use(
+    conn: &Connection,
+    account: AccountId,
+    check_num: &str,
+    exclude: Option<TxnId>,
+) -> Result<bool> {
+    Ok(conn
+        .prepare_cached(
+            "SELECT EXISTS (
+                 SELECT 1 FROM txn t JOIN posting p ON p.txn_id = t.id
+                 WHERE p.account_id = ?1 AND t.check_num = ?2 AND t.status = 'normal'
+                   AND (?3 IS NULL OR t.id <> ?3))",
+        )?
+        .query_row(params![account, check_num, exclude], |r| r.get(0))?)
+}
+
 /// One transaction by ID, or `None`.
 pub fn find(conn: &Connection, id: TxnId) -> Result<Option<Txn>> {
     let header = conn

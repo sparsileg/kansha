@@ -11,6 +11,7 @@ use crate::accounts::{Account, AccountId, AccountStatus};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::persistence::{Origin, Tx, accounts, categories, invest, ledger as repo, payees};
+use crate::settings;
 
 /// Create a transaction. Its source follows the write's origin: UI →
 /// manual, import → that batch, system → system. Scheduled entries go
@@ -304,6 +305,9 @@ pub fn memorize_payee(tx: &Tx<'_>, entry: &Entry) -> Result<bool> {
     let Some(payee_id) = entry.payee else {
         return Ok(false);
     };
+    if !settings::load(tx.conn())?.auto_memorize_payees {
+        return Ok(false);
+    }
     let payee = payees::get(tx.conn(), payee_id)?;
     let f = &payee.fields;
     if f.default_category.is_some()

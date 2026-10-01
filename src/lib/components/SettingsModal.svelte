@@ -1,20 +1,34 @@
 <script lang="ts">
   // Book settings (SET-030 … SET-070), stored in the book. Theme and font
   // size are on the menu bar and stored per computer.
+  //
+  // One category at a time in one card; edits are held until OK.
   import { onMount } from "svelte";
   import { call, commands } from "../api";
   import { LOT_METHODS } from "../invest/form";
   import { startupChoices } from "../shell/nav";
   import { bookSettings } from "../state/booksettings.svelte";
   import { dialogState } from "../state/dialogs.svelte";
-  import { DATE_FORMATS, dateFormatState, type DateFormat } from "../state/dateformat.svelte";
-  import { settingsState, type PanelSide } from "../state/settings.svelte";
+  import { DATE_FORMATS } from "../state/dateformat.svelte";
   import type { BackupInfo, Settings } from "../types/bindings";
   import Modal from "./Modal.svelte";
 
   // Reads listsState.accounts, so a new account shows up at once.
   const choices = $derived(startupChoices());
-  const s = $derived(bookSettings.value);
+
+  const CATEGORIES = [
+    ["interface", "Interface"],
+    ["data", "Data"],
+    ["investments", "Investments"],
+    ["register", "Register"],
+    ["notifications", "Notifications"],
+    ["backups", "Backups"],
+  ] as const;
+  type Category = (typeof CATEGORIES)[number][0];
+  let category = $state<Category>("interface");
+
+  // Edits are kept here until OK; Cancel drops them.
+  let s = $state<Settings>({ ...bookSettings.value });
 
   let info = $state<BackupInfo | null>(null);
   let error = $state<string | null>(null);
@@ -28,21 +42,33 @@
   }
   onMount(loadInfo);
 
-  async function save(patch: Partial<Settings>) {
-    error = await bookSettings.update(patch);
-    if (error) await bookSettings.load();
-    if ("backup_folder" in patch) await loadInfo();
-  }
+  const NUMBERS: [keyof Settings, string][] = [
+    ["stale_price_days", "Price is stale after"],
+    ["upcoming_days", "Dashboard items due within"],
+    ["backup_keep_last", "Backups to keep"],
+    ["backup_keep_months", "Months of monthly backups"],
+    ["backup_timeout_minutes", "Minutes before a timed backup"],
+    ["purge_payees_months", "Months before a payee is removed"],
+  ];
 
-  /** A whole number typed into a field, or no change. */
-  function saveNumber(key: keyof Settings, e: Event) {
-    const v = Number((e.currentTarget as HTMLInputElement).value);
-    if (Number.isInteger(v)) void save({ [key]: v } as Partial<Settings>);
+  /** Store every edit; the dialog closes only when that worked. */
+  async function ok() {
+    const bad = NUMBERS.find(([k]) => !Number.isInteger(s[k]));
+    if (bad) {
+      error = `${bad[1]} must be a whole number.`;
+      return;
+    }
+    error = await bookSettings.update(s);
+    if (error) {
+      await bookSettings.load();
+      return;
+    }
+    dialogState.settings = false;
   }
 
   async function browse() {
     const picked = await commands.pickFolder(s.backup_folder ?? info?.folder ?? null);
-    if (picked !== null) await save({ backup_folder: picked });
+    if (picked !== null) s.backup_folder = picked;
   }
 
   type Tool = "verify" | "passphrase" | "dbKey";
@@ -55,126 +81,163 @@
   }
 </script>
 
-<Modal title="Settings" onclose={() => (dialogState.settings = false)}>
-  <div class="form">
-    <label>
-      <span>Date format</span>
-      <select value={dateFormatState.value} onchange={(e) => dateFormatState.set(e.currentTarget.value as DateFormat)}>
-        {#each DATE_FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
-      </select>
-    </label>
-    <label>
-      <span>First day of week</span>
-      <select
-        value={s.week_start}
-        onchange={(e) => save({ week_start: e.currentTarget.value as Settings["week_start"] })}
-      >
-        <option value="sunday">Sunday</option>
-        <option value="monday">Monday</option>
-      </select>
-    </label>
-    <label>
-      <span>On startup open to:</span>
-      <select value={settingsState.startup} onchange={(e) => settingsState.setStartup(e.currentTarget.value)}>
-        {#each choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
-      </select>
-    </label>
-    <label>
-      <span>Integrity check at startup</span>
-      <input
-        type="checkbox"
-        checked={s.integrity_at_startup}
-        onchange={(e) => save({ integrity_at_startup: e.currentTarget.checked })}
-      />
-    </label>
-    <label>
-      <span>Account list side</span>
-      <select value={settingsState.accountPanelSide} onchange={(e) => settingsState.setAccountPanelSide(e.currentTarget.value as PanelSide)}>
-        <option value="left">Left</option>
-        <option value="right">Right</option>
-      </select>
-    </label>
-    <label>
-      <span>Price is stale after (days)</span>
-      <input type="number" min="1" max="365" value={s.stale_price_days} onchange={(e) => saveNumber("stale_price_days", e)} />
-    </label>
-    <label>
-      <span>Lot method for new investment accounts</span>
-      <select
-        value={s.default_lot_method}
-        onchange={(e) => save({ default_lot_method: e.currentTarget.value as Settings["default_lot_method"] })}
-      >
-        {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
-      </select>
-    </label>
-    <label>
-      <span>Allow price download (internet)</span>
-      <input
-        type="checkbox"
-        checked={s.price_download}
-        onchange={(e) => save({ price_download: e.currentTarget.checked })}
-      />
-    </label>
-    <label>
-      <span>Dashboard shows items due within (days)</span>
-      <input type="number" min="1" max="366" value={s.upcoming_days} onchange={(e) => saveNumber("upcoming_days", e)} />
-    </label>
-
-    <h3>Backups</h3>
-    <div class="folder">
-      <span class="head">Backup folder</span>
-      <span class="path">{s.backup_folder ?? "Downloads (default)"}</span>
-      <div class="buttons">
-        <button type="button" onclick={browse}>Browse…</button>
-        {#if s.backup_folder}<button type="button" onclick={() => save({ backup_folder: null })}>Use Downloads</button>{/if}
-      </div>
-      {#if info?.folder_missing_now}
-        <p role="alert"><strong>⚠ This folder is missing; backups go to Downloads until another is chosen.</strong></p>
+<Modal title="Settings" wide onclose={() => (dialogState.settings = false)}>
+  <select class="category" aria-label="Settings category" bind:value={category}>
+    {#each CATEGORIES as [value, label] (value)}<option {value}>{label}</option>{/each}
+  </select>
+  <article class="card sheet" aria-labelledby="set-head">
+    <header><h2 id="set-head">{CATEGORIES.find(([v]) => v === category)?.[1]}</h2></header>
+    <div class="body form">
+      {#if category === "interface"}
+        <label>
+          <span>Date format</span>
+          <select bind:value={s.date_format}>
+            {#each DATE_FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
+          </select>
+        </label>
+        <label>
+          <span>First day of week</span>
+          <select bind:value={s.week_start}>
+            <option value="sunday">Sunday</option>
+            <option value="monday">Monday</option>
+          </select>
+        </label>
+        <label>
+          <span>On startup open to:</span>
+          <select bind:value={s.startup}>
+            {#each choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+          </select>
+        </label>
+        <label>
+          <span>Account list side</span>
+          <select bind:value={s.account_panel_side}>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+      {:else if category === "data"}
+        <label>
+          <span>Integrity check at startup</span>
+          <input type="checkbox" bind:checked={s.integrity_at_startup} />
+        </label>
+        <label>
+          <span>Dashboard shows items due within (days)</span>
+          <input type="number" min="1" max="366" bind:value={s.upcoming_days} />
+        </label>
+      {:else if category === "investments"}
+        <label>
+          <span>Price is stale after (days)</span>
+          <input type="number" min="1" max="365" bind:value={s.stale_price_days} />
+        </label>
+        <label>
+          <span>Lot method for new investment accounts</span>
+          <select bind:value={s.default_lot_method}>
+            {#each LOT_METHODS as [m, label] (m)}<option value={m}>{label}</option>{/each}
+          </select>
+        </label>
+        <label>
+          <span>Allow price download (internet)</span>
+          <input type="checkbox" bind:checked={s.price_download} />
+        </label>
+      {:else if category === "register"}
+        <label>
+          <span>Gray reconciled transactions</span>
+          <input type="checkbox" bind:checked={s.gray_reconciled} />
+        </label>
+        <label>
+          <span>Recall memorized payees</span>
+          <input type="checkbox" bind:checked={s.recall_payees} />
+        </label>
+        <label>
+          <span>Capitalize payees and categories</span>
+          <input type="checkbox" bind:checked={s.capitalize_names} />
+        </label>
+        <label>
+          <span>Automatically memorize new payees</span>
+          <input type="checkbox" bind:checked={s.auto_memorize_payees} />
+        </label>
+        <label>
+          <span>Remove memorized payees not used in last (months, 0 = never)</span>
+          <input type="number" min="0" max="120" bind:value={s.purge_payees_months} />
+        </label>
+      {:else if category === "notifications"}
+        <label>
+          <span>When entering out-of-date transactions (past, or over a year ahead)</span>
+          <input type="checkbox" bind:checked={s.warn_out_of_date} />
+        </label>
+        <label>
+          <span>A check number is reused</span>
+          <input type="checkbox" bind:checked={s.warn_check_reuse} />
+        </label>
+        <label>
+          <span>Save a transaction after changing it</span>
+          <input type="checkbox" bind:checked={s.confirm_save_change} />
+        </label>
+      {:else}
+        <div class="folder">
+          <span class="head">Backup folder</span>
+          <span class="path">{s.backup_folder ?? "Downloads (default)"}</span>
+          <div class="buttons">
+            <button type="button" onclick={browse}>Browse…</button>
+            {#if s.backup_folder}<button type="button" onclick={() => (s.backup_folder = null)}>Use Downloads</button>{/if}
+          </div>
+          {#if info?.folder_missing_now}
+            <p role="alert"><strong>⚠ This folder is missing; backups go to Downloads until another is chosen.</strong></p>
+          {/if}
+        </div>
+        <label>
+          <span>Keep the newest automatic backups</span>
+          <input type="number" min="1" max="1000" bind:value={s.backup_keep_last} />
+        </label>
+        <label>
+          <span>… plus one per month for (months)</span>
+          <input type="number" min="0" max="120" bind:value={s.backup_keep_months} />
+        </label>
+        <label>
+          <span>Back up after a change (minutes, 0 = off)</span>
+          <input type="number" min="0" max="1440" bind:value={s.backup_timeout_minutes} />
+        </label>
+        {#if info}
+          <p class="note">
+            Last backup: {info.status.last_at ?? "none yet"}. Last full verification: {info.status.last_verified_at ?? "never"}.
+            Manual backups are never deleted. A timed backup is temporary: only the newest is kept, until another kind of backup is made.
+          </p>
+        {/if}
+        <span class="head">Backup tools</span>
+        <div class="inline">
+          <select aria-label="Backup tools" bind:value={tool}>
+            <option value="verify">Verify backup…</option>
+            <option value="passphrase">Change backup passphrase…</option>
+            <option value="dbKey">Show database key…</option>
+          </select>
+          <button type="button" onclick={applyTool}>Apply</button>
+        </div>
       {/if}
     </div>
-    <label>
-      <span>Keep the newest automatic backups</span>
-      <input type="number" min="1" max="1000" value={s.backup_keep_last} onchange={(e) => saveNumber("backup_keep_last", e)} />
-    </label>
-    <label>
-      <span>… plus one per month for (months)</span>
-      <input type="number" min="0" max="120" value={s.backup_keep_months} onchange={(e) => saveNumber("backup_keep_months", e)} />
-    </label>
-    <label>
-      <span>Back up after a change (minutes, 0 = off)</span>
-      <input type="number" min="0" max="1440" value={s.backup_timeout_minutes} onchange={(e) => saveNumber("backup_timeout_minutes", e)} />
-    </label>
-    {#if info}
-      <p class="note">
-        Last backup: {info.status.last_at ?? "none yet"}. Last full verification: {info.status.last_verified_at ?? "never"}.
-        Manual backups are never deleted. A timed backup is temporary: only the newest is kept, until another kind of backup is made.
-      </p>
-    {/if}
-    <span class="head">Backup tools</span>
-    <div class="inline">
-      <select aria-label="Backup tools" bind:value={tool}>
-        <option value="verify">Verify backup…</option>
-        <option value="passphrase">Change backup passphrase…</option>
-        <option value="dbKey">Show database key…</option>
-      </select>
-      <button type="button" onclick={applyTool}>Apply</button>
-    </div>
-    {#if error}<p class="note" role="alert"><strong>{error}</strong></p>{/if}
-    <div class="row">
-      <button type="button" onclick={() => (dialogState.settings = false)}>Close</button>
-    </div>
+  </article>
+  {#if error}<p class="note err" role="alert"><strong>{error}</strong></p>{/if}
+  <div class="row">
+    <button type="button" onclick={ok}>OK</button>
+    <button type="button" onclick={() => (dialogState.settings = false)}>Cancel</button>
   </div>
 </Modal>
 
 <style>
+  .category {
+    margin-bottom: 0.5rem;
+  }
   /* One line per setting: the label right-aligned on the left, its
      control on the right. Each label's text and control take the two
-     columns (`display: contents`), so every control lines up. */
+     columns (`display: contents`), so every control lines up. Every
+     category's card is as tall as the fullest one (Backups), so the
+     dialog does not jump when the category changes. */
   .form {
     display: grid;
     grid-template-columns: fit-content(60%) minmax(0, 1fr);
     gap: 0.5rem 0.75rem;
     align-items: center;
+    align-content: start;
+    min-height: 19rem;
   }
   label {
     display: contents;
@@ -221,11 +284,6 @@
   input[type="number"] {
     width: 6em;
   }
-  h3 {
-    grid-column: 1 / -1;
-    margin: 0.5rem 0 0;
-    font-size: var(--fs-register);
-  }
   .path {
     font-family: monospace;
     word-break: break-all;
@@ -240,11 +298,16 @@
     opacity: 0.8;
     font-size: var(--fs-register);
   }
+  .note.err {
+    width: auto;
+    margin-top: 0.5rem;
+    opacity: 1;
+    color: var(--bad);
+  }
   .row {
-    grid-column: 1 / -1;
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    margin-top: 0.75rem;
   }
 </style>

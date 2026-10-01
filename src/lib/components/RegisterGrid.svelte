@@ -4,6 +4,7 @@
   import { displayDate } from "../format/date";
   import { formatMoney, splitPaymentDeposit } from "../format/money";
   import { moveSelection, rowKeyAction } from "../register/keys";
+  import { bookSettings } from "../state/booksettings.svelte";
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
   import { registerState } from "../state/register.svelte";
@@ -329,7 +330,7 @@
           class="row"
           class:alt={i % 2 === 1}
           class:future={r.future}
-          class:reconciled={r.cleared === "reconciled"}
+          class:reconciled={bookSettings.value.gray_reconciled && r.cleared === "reconciled"}
           class:selected={registerState.selected === r.txn_id}
           class:void={r.status === "void"}
           role="row"

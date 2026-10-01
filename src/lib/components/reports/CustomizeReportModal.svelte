@@ -82,7 +82,7 @@
     other: "Other",
   };
 
-  const INVESTMENT = new Set(["brokerage", "traditional_ira", "roth_ira", "hsa", "retirement_401k"]);
+  const INVESTMENT = new Set(["brokerage", "traditional_ira", "roth_ira", "hsa", "retirement_401k", "donor_advised_fund"]);
 
   function items(t: FilterTab): Item[] {
     switch (t) {

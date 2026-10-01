@@ -31,7 +31,6 @@ text_enum! {
         Bond = "bond",
         MoneyMarket = "money_market",
         Cd = "cd",
-        DonorAdvisedFund = "donor_advised_fund",
         Other = "other",
     }
 }
@@ -97,8 +96,6 @@ impl SecurityFields {
         let asset_class = match security_type {
             SecurityType::Bond | SecurityType::Cd => AssetClass::Bond,
             SecurityType::MoneyMarket => AssetClass::Cash,
-            // Its investments are the fund's to choose.
-            SecurityType::DonorAdvisedFund => AssetClass::Other,
             _ => AssetClass::UsEquity,
         };
         SecurityFields {

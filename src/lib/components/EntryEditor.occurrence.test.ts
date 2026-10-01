@@ -7,6 +7,7 @@ vi.mock("../api", async (orig) => {
     ...real,
     commands: {
       entryCreate: vi.fn(),
+      entryWarnings: vi.fn(() => Promise.resolve({ status: "ok", data: [] })),
       scheduleEnter: vi.fn(),
       scheduleList: vi.fn(),
       scheduleDueList: vi.fn(),

@@ -63,6 +63,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0006_donor_advised_fund.sql"),
         foreign_keys_off: true,
     },
+    Migration {
+        version: 7,
+        description: "donor advised fund account type",
+        sql: include_str!("migrations/0007_daf_account_type.sql"),
+        foreign_keys_off: true,
+    },
 ];
 
 /// The newest schema version this build understands.

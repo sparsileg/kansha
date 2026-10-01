@@ -86,6 +86,24 @@ pub struct Settings {
     /// Minutes after the first change since the last backup, when a timed
     /// backup is made (SET-050); 0 = off.
     pub backup_timeout_minutes: i64,
+    /// Reconciled register rows are shown gray (REG-070).
+    pub gray_reconciled: bool,
+    /// A memorized payee fills in its category, memo, and amount (REG-100).
+    pub recall_payees: bool,
+    /// Payee and category names are capitalized as they are entered (REG-110).
+    pub capitalize_names: bool,
+    /// A new payee is memorized from its first transaction (REG-100).
+    pub auto_memorize_payees: bool,
+    /// Memorized payees not used in this many months are removed when the
+    /// book opens (REG-120); 0 = never.
+    pub purge_payees_months: i64,
+    /// Warn about a transaction dated in the past or over a year ahead
+    /// (REG-130).
+    pub warn_out_of_date: bool,
+    /// Warn when a check number is used twice in an account (REG-140).
+    pub warn_check_reuse: bool,
+    /// Ask before saving a changed transaction (REG-150).
+    pub confirm_save_change: bool,
 }
 
 impl Default for Settings {
@@ -108,6 +126,14 @@ impl Default for Settings {
             backup_keep_last: 10,
             backup_keep_months: 12,
             backup_timeout_minutes: 5,
+            gray_reconciled: true,
+            recall_payees: true,
+            capitalize_names: false,
+            auto_memorize_payees: true,
+            purge_payees_months: 0,
+            warn_out_of_date: true,
+            warn_check_reuse: true,
+            confirm_save_change: false,
         }
     }
 }
@@ -117,6 +143,7 @@ pub const UPCOMING_DAYS: std::ops::RangeInclusive<i64> = 1..=366;
 pub const KEEP_LAST: std::ops::RangeInclusive<i64> = 1..=1000;
 pub const KEEP_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 pub const TIMEOUT_MINUTES: std::ops::RangeInclusive<i64> = 0..=1440;
+pub const PURGE_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 
 fn get<T: std::str::FromStr>(conn: &Connection, key: &str, default: T) -> Result<T> {
     Ok(repo::get(conn, key)?
@@ -174,6 +201,19 @@ pub fn load(conn: &Connection) -> Result<Settings> {
             TIMEOUT_MINUTES,
             d.backup_timeout_minutes,
         )?,
+        gray_reconciled: get(conn, "gray_reconciled", d.gray_reconciled)?,
+        recall_payees: get(conn, "recall_payees", d.recall_payees)?,
+        capitalize_names: get(conn, "capitalize_names", d.capitalize_names)?,
+        auto_memorize_payees: get(conn, "auto_memorize_payees", d.auto_memorize_payees)?,
+        purge_payees_months: get_in(
+            conn,
+            "purge_payees_months",
+            PURGE_MONTHS,
+            d.purge_payees_months,
+        )?,
+        warn_out_of_date: get(conn, "warn_out_of_date", d.warn_out_of_date)?,
+        warn_check_reuse: get(conn, "warn_check_reuse", d.warn_check_reuse)?,
+        confirm_save_change: get(conn, "confirm_save_change", d.confirm_save_change)?,
     })
 }
 
@@ -207,6 +247,11 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         s.backup_timeout_minutes,
         TIMEOUT_MINUTES,
     )?;
+    check_range(
+        "Months before a payee is removed",
+        s.purge_payees_months,
+        PURGE_MONTHS,
+    )?;
     if s.startup.trim().is_empty() {
         return Err(Error::Invalid("the startup choice is required".into()));
     }
@@ -235,7 +280,53 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         "backup_timeout_minutes",
         &s.backup_timeout_minutes.to_string(),
     )?;
+    for (key, v) in [
+        ("gray_reconciled", s.gray_reconciled),
+        ("recall_payees", s.recall_payees),
+        ("capitalize_names", s.capitalize_names),
+        ("auto_memorize_payees", s.auto_memorize_payees),
+        ("warn_out_of_date", s.warn_out_of_date),
+        ("warn_check_reuse", s.warn_check_reuse),
+        ("confirm_save_change", s.confirm_save_change),
+    ] {
+        repo::set(tx, key, &v.to_string())?;
+    }
+    repo::set(
+        tx,
+        "purge_payees_months",
+        &s.purge_payees_months.to_string(),
+    )?;
     Ok(())
+}
+
+/// Upper-case the first letter of each word (REG-110). The rest of a word
+/// stays as typed, so "IBM" and "McDonald" survive.
+pub fn capitalize_words(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut start = true;
+    for c in name.chars() {
+        if start {
+            out.extend(c.to_uppercase());
+        } else {
+            out.push(c);
+        }
+        start = c.is_whitespace() || c == ':';
+    }
+    out
+}
+
+/// A payee or category name as the setting wants it stored.
+pub fn tidy_name(conn: &Connection, name: &str) -> Result<String> {
+    let on = get(
+        conn,
+        "capitalize_names",
+        Settings::default().capitalize_names,
+    )?;
+    Ok(if on {
+        capitalize_words(name)
+    } else {
+        name.to_string()
+    })
 }
 
 /// The stale-price threshold alone (SET-040), for valuations.

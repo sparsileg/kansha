@@ -87,6 +87,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ledger::entry_get,
             commands::ledger::entry_create,
             commands::ledger::entry_update,
+            commands::ledger::entry_warnings,
+            commands::ledger::payees_forget_stale,
             commands::ledger::txn_void,
             commands::ledger::txn_delete,
             commands::ledger::txn_set_cleared,

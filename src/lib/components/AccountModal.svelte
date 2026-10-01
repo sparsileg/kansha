@@ -33,6 +33,7 @@
     ["roth_ira", "Roth IRA"],
     ["hsa", "HSA"],
     ["retirement_401k", "401(k)/403(b)"],
+    ["donor_advised_fund", "Donor Advised Fund (DAF)"],
     ["other_asset", "Other asset"],
     ["other_liability", "Other liability"],
     ["loan", "Loan"],

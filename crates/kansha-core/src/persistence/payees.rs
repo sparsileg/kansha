@@ -7,6 +7,7 @@ use super::accounts::in_use_or;
 use super::audit::{self, AuditAction, AuditEntity};
 use super::{ledger, reports};
 use crate::categories::{CategoryId, Merged, Payee, PayeeFields, PayeeId, TagId};
+use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::reports::FilterList;
 
@@ -90,6 +91,23 @@ pub fn list(conn: &Connection) -> Result<Vec<Payee>> {
     let sql = format!("SELECT {COLUMNS} FROM payee ORDER BY name, id");
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt.query_map([], from_row)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Payees with memorized defaults that no transaction on or after
+/// `cutoff` uses, and that were made before it (REG-120).
+pub fn stale_memorized(conn: &Connection, cutoff: Date) -> Result<Vec<Payee>> {
+    let sql = format!(
+        "SELECT {COLUMNS} FROM payee
+         WHERE (default_category_id IS NOT NULL OR default_tag_id IS NOT NULL
+                OR default_memo <> '' OR default_amount IS NOT NULL)
+           AND substr(created_at, 1, 10) < ?1
+           AND NOT EXISTS (SELECT 1 FROM txn t
+                           WHERE t.payee_id = payee.id AND t.txn_date >= ?1)
+         ORDER BY id"
+    );
+    let mut stmt = conn.prepare_cached(&sql)?;
+    let rows = stmt.query_map([cutoff], from_row)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 

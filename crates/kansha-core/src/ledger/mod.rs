@@ -20,12 +20,14 @@
 //! All writes run inside a [`Tx`]; validation reads through `persistence`.
 
 mod service;
+mod warnings;
 
 pub(crate) use service::create_with_source;
 pub use service::{
     close_account, create, create_entry, delete, memorize_payee, set_cleared, update, update_entry,
     void,
 };
+pub use warnings::{EntryWarning, entry_warnings, forget_stale_payees};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

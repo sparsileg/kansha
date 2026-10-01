@@ -8,6 +8,7 @@ vi.mock("../api", async (orig) => {
     commands: {
       entryCreate: vi.fn(),
       entryUpdate: vi.fn(),
+      entryWarnings: vi.fn(() => Promise.resolve({ status: "ok", data: [] })),
       entryGet: vi.fn(),
       payeeSearch: vi.fn(),
       payeeList: vi.fn(),

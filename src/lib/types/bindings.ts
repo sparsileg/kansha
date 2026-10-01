@@ -179,6 +179,16 @@ export const commands = {
 	 *  `confirmation_required` until `confirmed`.
 	 */
 	entryUpdate: (txn: TxnId, entry: Entry, payeeName: string | null, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("entry_update", { txn, entry, payeeName, confirmed })),
+	/**
+	 *  What to confirm before saving `entry` (REG-130, REG-140): `txn` is the
+	 *  transaction being edited, `None` for a new one.
+	 */
+	entryWarnings: (entry: Entry, txn: number | null) => typedError<EntryWarning[], IpcError>(__TAURI_INVOKE("entry_warnings", { entry, txn })),
+	/**
+	 *  Forget memorized payees not used lately, per the setting (REG-120);
+	 *  returns how many were cleared. Runs when a book opens.
+	 */
+	payeesForgetStale: () => typedError<number, IpcError>(__TAURI_INVOKE("payees_forget_stale")),
 	txnVoid: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_void", { txn, confirmed })),
 	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
 	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
@@ -601,7 +611,9 @@ export type AccountStatus = "open" | "closed";
 /**  Account types (ACCT-010, ACCT-020; D-100). */
 export type AccountType = "checking" | "savings" | "credit_card" | "cash" | "money_market" | "brokerage" | "traditional_ira" | "roth_ira" | "hsa" | 
 /**  401(k)/403(b). */
-"retirement_401k" | "other_asset" | "other_liability" | 
+"retirement_401k" | 
+/**  Donor advised fund; holds securities, or only cash. */
+"donor_advised_fund" | "other_asset" | "other_liability" | 
 /**  Loan or mortgage; balance tracking only in 1.0. */
 "loan";
 
@@ -1168,6 +1180,13 @@ export type EntryLine = {
  *  date and flagged for review (REC-070).
  */
 export type EntryMode = "remind" | "auto";
+
+/**  Something to confirm before an entry is saved. */
+export type EntryWarning = 
+/**  Dated before today, or more than a year after it. */
+"out_of_date" | 
+/**  The check number is on another transaction in the account. */
+"check_reused";
 
 export type ErrorKind = 
 /**  The request broke a domain rule; show the message. */
@@ -2435,7 +2454,7 @@ export type SecurityTxn = {
 };
 
 /**  Kind of security (SEC-010). */
-export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "donor_advised_fund" | "other";
+export type SecurityType = "stock" | "etf" | "mutual_fund" | "bond" | "money_market" | "cd" | "other";
 
 export type SeedPreview = {
 	/**  The date the Shares Added transactions get. */
@@ -2556,6 +2575,28 @@ export type Settings = {
 	 *  backup is made (SET-050); 0 = off.
 	 */
 	backup_timeout_minutes: number,
+	/**  Reconciled register rows are shown gray (REG-070). */
+	gray_reconciled: boolean,
+	/**  A memorized payee fills in its category, memo, and amount (REG-100). */
+	recall_payees: boolean,
+	/**  Payee and category names are capitalized as they are entered (REG-110). */
+	capitalize_names: boolean,
+	/**  A new payee is memorized from its first transaction (REG-100). */
+	auto_memorize_payees: boolean,
+	/**
+	 *  Memorized payees not used in this many months are removed when the
+	 *  book opens (REG-120); 0 = never.
+	 */
+	purge_payees_months: number,
+	/**
+	 *  Warn about a transaction dated in the past or over a year ahead
+	 *  (REG-130).
+	 */
+	warn_out_of_date: boolean,
+	/**  Warn when a check number is used twice in an account (REG-140). */
+	warn_check_reuse: boolean,
+	/**  Ask before saving a changed transaction (REG-150). */
+	confirm_save_change: boolean,
 };
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */

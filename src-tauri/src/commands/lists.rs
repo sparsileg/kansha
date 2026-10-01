@@ -7,6 +7,7 @@ use kansha_core::categories::{
     TagFields, TagId,
 };
 use kansha_core::persistence::{categories, payees, tags};
+use kansha_core::settings;
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -20,8 +21,14 @@ pub fn category_list(state: State<'_, AppState>) -> CmdResult<Vec<Category>> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn category_create(state: State<'_, AppState>, fields: CategoryFields) -> CmdResult<Category> {
-    state.write(|tx| categories::insert(tx, &fields))
+pub fn category_create(
+    state: State<'_, AppState>,
+    mut fields: CategoryFields,
+) -> CmdResult<Category> {
+    state.write(|tx| {
+        fields.name = settings::tidy_name(tx.conn(), &fields.name)?;
+        categories::insert(tx, &fields)
+    })
 }
 
 /// The category at a `Parent:Child` path, created (with any missing
@@ -33,7 +40,10 @@ pub fn category_create_path(
     path: String,
     kind: CategoryKind,
 ) -> CmdResult<Category> {
-    state.write(|tx| categories::create_path(tx, &path, kind))
+    state.write(|tx| {
+        let path = settings::tidy_name(tx.conn(), &path)?;
+        categories::create_path(tx, &path, kind)
+    })
 }
 
 /// Built-in categories cannot be changed (CAT-060).
@@ -42,9 +52,12 @@ pub fn category_create_path(
 pub fn category_update(
     state: State<'_, AppState>,
     id: CategoryId,
-    fields: CategoryFields,
+    mut fields: CategoryFields,
 ) -> CmdResult<Category> {
-    state.write(|tx| categories::update(tx, id, &fields))
+    state.write(|tx| {
+        fields.name = settings::tidy_name(tx.conn(), &fields.name)?;
+        categories::update(tx, id, &fields)
+    })
 }
 
 /// Only an unused category can be deleted (CAT-030); hide it otherwise.
@@ -91,9 +104,12 @@ pub fn payee_search(
 pub fn payee_update(
     state: State<'_, AppState>,
     id: PayeeId,
-    fields: PayeeFields,
+    mut fields: PayeeFields,
 ) -> CmdResult<Payee> {
-    state.write(|tx| payees::update(tx, id, &fields))
+    state.write(|tx| {
+        fields.name = settings::tidy_name(tx.conn(), &fields.name)?;
+        payees::update(tx, id, &fields)
+    })
 }
 
 /// Only an unused payee can be deleted (PAY-030); hide it otherwise.
