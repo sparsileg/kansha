@@ -120,6 +120,20 @@ describe("Calendar day with more than three items", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
+  it("clicking another day while the dialog is open updates it in place", async () => {
+    occurrences = [item(1)];
+    render(Calendar);
+    await fireEvent.click(await screen.findByRole("gridcell", { name: displayDate("2026-09-24") }));
+    expect(await screen.findByRole("dialog", { name: `Transactions: ${displayDate("2026-09-24")}` })).toBeTruthy();
+    occCalls.mockClear();
+    await fireEvent.click(screen.getByRole("gridcell", { name: displayDate("2026-09-23") }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: `Transactions: ${displayDate("2026-09-23")}` })).toBeTruthy(),
+    );
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(occCalls).toHaveBeenCalledWith("2026-09-23", "2026-09-23", null, true);
+  });
+
   it("register transactions show with Show entered transactions, and always in the day's dialog", async () => {
     occurrences = [item(1)];
     posted = [{ txn: 40, date: "2026-09-24", account: 2, payee: 4, amount: "-12.00" }];

@@ -2,6 +2,7 @@
   import "./manager.css";
   import { call, commands } from "../api";
   import { confirmState } from "../state/confirm.svelte";
+  import { hiddenLast } from "../manage/order";
   import { listsState } from "../state/lists.svelte";
   import type { Tag, TagFields } from "../types/bindings";
 
@@ -59,7 +60,7 @@
     <table>
       <thead><tr><th>Tag</th><th>Hidden</th></tr></thead>
       <tbody>
-        {#each listsState.tags as t (t.id)}
+        {#each hiddenLast(listsState.tags, (t) => t.name) as t (t.id)}
           <tr class:sel={selected?.id === t.id} class:dim={t.hidden} onclick={() => pick(t)}>
             <td>{t.name}</td><td>{t.hidden ? "yes" : ""}</td>
           </tr>

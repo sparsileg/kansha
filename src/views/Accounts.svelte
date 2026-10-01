@@ -90,6 +90,9 @@
   tr.dim td {
     opacity: 0.6;
   }
+  tbody tr:nth-child(even) {
+    background: var(--row-alt);
+  }
   tbody tr:hover {
     background: var(--hover-bg);
   }

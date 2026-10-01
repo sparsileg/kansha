@@ -11,8 +11,9 @@
   let {
     value = $bindable(),
     label = "Tag",
+    empty = "—",
     class: className = "",
-  }: { value: string; label?: string; class?: string } = $props();
+  }: { value: string; label?: string; empty?: string; class?: string } = $props();
 
   const NEW = "__new__";
   let adding = $state(false);
@@ -81,8 +82,8 @@
     onblur={cancel}
   />
 {:else}
-  <select class={className} aria-label={label} value={value} onchange={onSelect}>
-    <option value="">—</option>
+  <select class={className} class:hint={value === "" && empty !== "—"} aria-label={label} value={value} onchange={onSelect}>
+    <option value="">{empty}</option>
     {#each listsState.tags.filter((t) => !t.hidden || String(t.id) === value) as t (t.id)}
       <option value={String(t.id)}>{t.name}</option>
     {/each}
@@ -100,5 +101,12 @@
   }
   .bad {
     outline: 1px solid var(--bad);
+  }
+  /* An empty entry-row tag shows its name as a hint, like the text boxes. */
+  select.hint {
+    color: color-mix(in srgb, currentColor 55%, transparent);
+  }
+  select.hint option {
+    color: var(--opt-fg);
   }
 </style>

@@ -16,7 +16,7 @@
   import { dialogState } from "../state/dialogs.svelte";
   import { listsState } from "../state/lists.svelte";
   import { scheduleState } from "../state/schedule.svelte";
-  import type { ScheduleFields, ScheduleId } from "../types/bindings";
+  import type { Account, ScheduleFields, ScheduleId } from "../types/bindings";
   import Modal from "./Modal.svelte";
   import TagPicker from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
@@ -44,6 +44,14 @@
   /** One line: its memo is the transaction memo, as in the register. */
   const single = $derived(d.lines.length === 1);
   const mainAccount = $derived(d.account === "" ? undefined : Number(d.account));
+  /** Investment accounts take cash in or out, never a split, and not with linked cash (INV-300). */
+  const schedulable = (a: Account) => a.investment === null || a.investment.cash_mode !== "linked";
+  const mainIsInvestment = $derived(
+    mainAccount !== undefined && listsState.account(mainAccount)?.investment != null,
+  );
+  /** A transfer line into an investment account ("a:<id>"). */
+  const toInvestment = (target: string) =>
+    target.startsWith("a:") && listsState.account(Number(target.slice(2)))?.investment != null;
   const monthly = $derived(["monthly", "quarterly", "twice_yearly"].includes(d.preset));
   const usesEvery = $derived(
     ["daily", "weekly", "monthly", "last_day", "nth_weekday", "yearly"].includes(d.preset),
@@ -111,7 +119,7 @@
         Account
         <select bind:value={d.account}>
           <option value="">(choose)</option>
-          {#each listsState.accounts.filter((a) => a.investment === null && (a.status === "open" || String(a.id) === d.account)) as a (a.id)}
+          {#each listsState.accounts.filter((a) => schedulable(a) && (a.status === "open" || String(a.id) === d.account)) as a (a.id)}
             <option value={String(a.id)}>{a.name}</option>
           {/each}
         </select>
@@ -152,14 +160,15 @@
             onbeforeinput={blockNonSplitAmountChar}
             oninput={(e) => onAmount(line, e)}
           />
-          <TargetCombo bind:value={line.target} excludeAccount={mainAccount} newKind={d.direction === "deposit" ? "income" : "expense"} label={`Line ${i + 1} category`} />
+          <TargetCombo bind:value={line.target} excludeAccount={mainAccount} allowInvestment={!mainIsInvestment && single} newKind={d.direction === "deposit" ? "income" : "expense"} label={`Line ${i + 1} category`} />
           {#if !single}<input aria-label={`Line ${i + 1} memo`} bind:value={line.memo} />{/if}
-          <TagPicker bind:value={line.tag} label={`Line ${i + 1} tag`} />
+          <!-- A cash in or out on an investment account has no tags. -->
+          {#if !mainIsInvestment && !toInvestment(line.target)}<TagPicker bind:value={line.tag} label={`Line ${i + 1} tag`} />{:else}<span></span>{/if}
           <span class="end">
             {#if d.lines.length > 1}
               <button type="button" aria-label={`Remove line ${i + 1}`} onclick={() => d.lines.splice(i, 1)}>×</button>
             {/if}
-            {#if i === d.lines.length - 1}
+            {#if i === d.lines.length - 1 && !mainIsInvestment}
               <button type="button" class="split" aria-label="Split" title="Split into another category" onclick={() => d.lines.push(emptyLine())}>
                 <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14V8M8 8L3 2M8 8l5-6M3 2v3M3 2h3M13 2v3M13 2h-3" /></svg>
                 Split

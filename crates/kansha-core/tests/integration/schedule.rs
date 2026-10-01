@@ -1232,3 +1232,156 @@ fn calendar_lists_register_transactions_but_not_investments_voids_or_scheduled_o
     let ira_only = schedule::register_between(fx.book.conn(), from, to, Some(&[ira])).unwrap();
     assert!(ira_only.is_empty());
 }
+
+/// A one-line schedule from `account`: monthly on the 1st from 2026-07-01.
+fn one_line(account: AccountId, target: Target, amount: &str) -> ScheduleFields {
+    let mut rec = Recurrence::new(Frequency::Monthly, date("2026-07-01"));
+    rec.day1 = Some(1);
+    ScheduleFields {
+        account,
+        payee: None,
+        memo: "move".into(),
+        amount_type: AmountType::Fixed,
+        lines: vec![ScheduleLine {
+            target,
+            amount: m(amount),
+            memo: String::new(),
+            tag: None,
+        }],
+        recurrence: rec,
+        end: End::Never,
+        remind_days: 3,
+        mode: EntryMode::Remind,
+    }
+}
+
+#[test]
+fn a_schedule_on_an_investment_account_enters_as_cash_out() {
+    let mut fx = fx();
+    let (chk, sav) = (fx.chk, fx.sav);
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let opening = fx.book.find_category("Opening Balance").unwrap().unwrap();
+    let mut seed = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    seed.amount = Some(m("2000.00"));
+    seed.counterpart = Some(Target::Category(opening));
+    fx.book.invest(&seed).unwrap();
+
+    // Quarterly dividend cash to Savings: money out of the brokerage.
+    let id = create(&mut fx, &one_line(brk, Target::Account(sav), "-500.00"));
+    let entered = enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(fx.book.balance(brk).unwrap(), m("1500.00"));
+    assert_eq!(fx.book.balance(fx.sav).unwrap(), m("500.00"));
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-08-01")));
+    let occ = schedules::occurrence(fx.book.conn(), id, date("2026-07-01"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (occ.status, occ.txn),
+        (OccurrenceStatus::Entered, Some(entered.txn))
+    );
+    let txn = ledger::get(fx.book.conn(), entered.txn).unwrap();
+    assert_eq!(txn.source, TxnSource::Schedule { schedule: id.0 });
+    assert_eq!(txn.memo, "move");
+
+    // A deposit is a cash in.
+    let id = create(&mut fx, &one_line(brk, Target::Account(chk), "250.00"));
+    enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(fx.book.balance(brk).unwrap(), m("1750.00"));
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("4750.00"));
+}
+
+#[test]
+fn a_transfer_from_a_bank_account_to_an_investment_account_enters_as_cash_in() {
+    let mut fx = fx();
+    let chk = fx.chk;
+    let ira = fx.book.account("IRA", AccountType::TraditionalIra).unwrap();
+    let id = create(&mut fx, &one_line(chk, Target::Account(ira), "-300.00"));
+    enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("4700.00"));
+    assert_eq!(fx.book.balance(ira).unwrap(), m("300.00"));
+
+    // The other direction: a withdrawal from the IRA into checking.
+    let id = create(&mut fx, &one_line(chk, Target::Account(ira), "100.00"));
+    enter(&mut fx, id, "2026-07-01").unwrap();
+    assert_eq!(fx.book.balance(ira).unwrap(), m("200.00"));
+    assert_eq!(fx.book.balance(fx.chk).unwrap(), m("4800.00"));
+}
+
+#[test]
+fn investment_schedules_refuse_splits_investment_pairs_and_linked_cash() {
+    let mut fx = fx();
+    let (chk, sav, rent) = (fx.chk, fx.sav, fx.rent);
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let ira = fx.book.account("IRA", AccountType::TraditionalIra).unwrap();
+    let refused = |fx: &mut Fx, f: &ScheduleFields| {
+        let err = fx.book.write(|tx| schedule::create(tx, f)).unwrap_err();
+        assert!(matches!(err, Error::Invalid(_)), "{err:?}");
+    };
+
+    // Between two investment accounts.
+    refused(&mut fx, &one_line(brk, Target::Account(ira), "-10.00"));
+    // A split on an investment account, and a split to one.
+    let mut split = one_line(brk, Target::Category(rent), "-10.00");
+    split.lines.push(split.lines[0].clone());
+    refused(&mut fx, &split);
+    let mut split = one_line(chk, Target::Account(brk), "-10.00");
+    split.lines.push(split.lines[0].clone());
+    refused(&mut fx, &split);
+
+    // Linked cash: schedule on the linked account instead.
+    let mut f = kansha_core::persistence::accounts::get(fx.book.conn(), brk)
+        .unwrap()
+        .fields;
+    if let Some(inv) = f.investment.as_mut() {
+        inv.cash_mode = kansha_core::accounts::CashMode::Linked;
+        inv.linked_cash_account = Some(sav);
+    }
+    fx.book
+        .write(|tx| kansha_core::persistence::accounts::update(tx, brk, &f))
+        .unwrap();
+    refused(&mut fx, &one_line(brk, Target::Account(chk), "-10.00"));
+    refused(&mut fx, &one_line(chk, Target::Account(brk), "-10.00"));
+}
+
+#[test]
+fn an_investment_account_balance_is_not_projected() {
+    let mut fx = fx();
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let err = schedule::projected_balances(
+        fx.book.conn(),
+        brk,
+        date("2026-07-01"),
+        date("2026-07-31"),
+        date("2026-06-30"),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::Invalid(_)));
+}
+
+#[test]
+fn deleting_a_scheduled_cash_out_gives_the_occurrence_back() {
+    let mut fx = fx();
+    let sav = fx.sav;
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let f = one_line(brk, Target::Account(sav), "-500.00");
+    let id = create(&mut fx, &f);
+    let entered = enter(&mut fx, id, "2026-07-01").unwrap();
+    fx.book
+        .write(|tx| kansha_core::invest::delete(tx, entered.txn, false))
+        .unwrap();
+    assert_eq!(fx.book.balance(sav).unwrap(), Money::ZERO);
+    // Back in Due, as for a register transaction (REC-160).
+    assert_eq!(get(&fx, id).next_due, Some(date("2026-07-01")));
+}

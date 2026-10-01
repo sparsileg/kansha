@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.6.11 (draft) |
+| **Document version** | 0.6.13 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-09-30 |
 | **Owner** | Stan |
@@ -209,7 +209,18 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   imported transactions.
 - **PAY-020** [1.0][R] **Memorized payees:** a payee may store a
   default category, tag, memo, and amount. Typing a known payee in the
-  register auto-fills these (equivalent to Quicken QuickFill).
+  register auto-fills these (equivalent to Quicken QuickFill). The
+  values shown, here and in the Memorized Payees list, are those of the
+  payee's last use (its newest normal, non-investment transaction): its
+  memo, the amount of its first account posting, its category when one
+  category took the whole amount (none for a split or a transfer), and
+  its first tag. The stored defaults only mark a payee as memorized and
+  serve a payee with no transaction (0.6.12).
+- **PAY-025** [1.0][R] Tools > Memorized Payees lists the memorized
+  payees (those with defaults, which REG-120 drops after N unused
+  months) with Category, Memo, and Amount from the last use. "Show all
+  payees" lists the rest. Rename, hide, merge, and delete work from the
+  list; the defaults are not edited there (0.6.12).
 - **PAY-030** [1.0][R] Rename and merge payees (with audit logging).
 - **PAY-040** [Later][R] Payee renaming rules for imported
   transactions (e.g., "COSTCO WHSE #1234" → "Costco").
@@ -355,6 +366,15 @@ common patterns.
 - **REC-110** [1.0][R] For a single upcoming occurrence: **Enter**
   (with optional edits to amount/date), **Skip**, or **Edit this
   occurrence only** without changing the series.
+- **REC-115** [1.0][R] A schedule may be on an investment account, or
+  transfer into one (a quarterly dividend moved to Savings, a monthly
+  IRA contribution): one line, no split, and the investment account's
+  cash its own (with linked cash, schedule on the linked account).
+  Entering an occurrence records a cash in or cash out there, in the
+  amount and on the date scheduled, with no register to edit it in
+  first; it is changed afterwards in the investment register. Its
+  payee name goes in the memo. An investment account's balance is not
+  projected on the calendar. (0.6.13)
 - **REC-120** [1.0][R] Editing a schedule offers "this occurrence
   only" vs. "this and all future occurrences."
 - **REC-130** [1.0][R] On app startup, show a "Due and Overdue" list
@@ -633,8 +653,8 @@ income and fees) is its own row, so the rows add up to the account.
   children instead; Totals close the list. An as-of date (default
   today) sets the valuation; a date with no price uses the latest
   earlier price, and the day columns are blank unless a price is dated
-  exactly that day and an earlier one exists. Ten named views
-  (Default, Custom 2 to Custom 10, renamable) keep the columns and
+  exactly that day and an earlier one exists. Five named views
+  (Default, Custom 2 to Custom 5, renamable) keep the columns and
   their order, the accounts and their order, and the equities shown;
   Reset View restores a view. A gear at the end of the screen's bar
   opens a menu: Customize (the view dialog; its tabs are Columns,
@@ -2176,6 +2196,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.13 | 2026-10-01 | New REC-115: schedules on investment accounts and transfers into them, entered as cash in or cash out (no split, not with linked cash, no projection). The schedule dialog and the calendar list investment accounts. No schema or API change. |
+| 0.6.12 | 2026-10-01 | PAY-020, new PAY-025: Tools > Payees becomes Memorized Payees, listing only memorized payees with Category, Memo, and Amount from each payee's last use; QuickFill uses the same values. "Show all payees" lists the rest; the defaults form is gone. No schema or API change (the `default_*` fields of `Payee` now carry last-use values in `payee_list` and `payee_search`). |
 | 0.6.11 | 2026-09-30 | PRC-050: a money market security's price is never flagged out of date (it stays at $1.00): not in Holdings, the dashboard's Needs attention card, or positions. No schema or API change. |
 | 0.6.10 | 2026-09-30 | DSH-030: only checking, savings, and credit card accounts are checked for old uncleared transactions; the investment-accounts line goes. No schema or API change. |
 | 0.6.9 | 2026-09-30 | ACCT-240: each account list section heading is a shaded band with the section's total at its right (the sum of every account in it, closed and unlisted ones too, so the sections add up to net worth). UI-070: the account gear sits at the view's right edge. No schema change. **API change:** new command `section_totals`; new type `SectionTotal`. |

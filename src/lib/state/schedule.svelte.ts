@@ -2,12 +2,16 @@
 // items, and auto-entered items awaiting review (REC-070, REC-130).
 
 import { call, commands } from "../api";
+import { displayDate } from "../format/date";
+import { formatMoney } from "../format/money";
 import type {
   AutoEnterReport,
   OccurrenceView,
+  ScheduleFields,
   ScheduleId,
   ScheduleRow,
 } from "../types/bindings";
+import { confirmState } from "./confirm.svelte";
 import { dialogState } from "./dialogs.svelte";
 import { listsState } from "./lists.svelte";
 import { viewState } from "./view.svelte";
@@ -64,11 +68,38 @@ class ScheduleState {
    * prefilled and focused on the amount, so the user can always adjust it
    * before saving (REC-110). Saving records the occurrence as entered. */
   async enterOccurrence(v: OccurrenceView): Promise<void> {
+    const row = this.row(v.schedule);
+    if (row && this.movesInvestmentCash(row.schedule.fields)) {
+      await this.enterAsScheduled(v, row.schedule.fields);
+      return;
+    }
     const entry = await call(commands.schedulePrefill(v.schedule, v.nominal));
     dialogState.due = false;
     viewState.navigate("account");
     await registerState.open(entry.account);
     registerState.prefill = { entry, schedule: v.schedule, due: v.nominal };
+  }
+
+  /** A schedule on an investment account, or a transfer into one: its cash
+   * in or out is recorded by the investments engine. */
+  movesInvestmentCash(f: ScheduleFields): boolean {
+    const investment = (id: number) => listsState.account(id)?.investment != null;
+    return (
+      investment(f.account) ||
+      f.lines.some((l) => l.target.kind === "account" && investment(l.target.id))
+    );
+  }
+
+  /** There is no bank register to edit it in, so ask, then enter it as
+   * scheduled; the amount can be changed afterwards in the investment
+   * register. A failure is thrown to the caller, as for the register path. */
+  private async enterAsScheduled(v: OccurrenceView, f: ScheduleFields): Promise<void> {
+    const payee = f.payee === null ? "" : (listsState.payee(f.payee)?.name ?? "");
+    const amount = `${formatMoney(v.amount)}${v.estimated ? " (an estimate)" : ""}`;
+    const what = `${payee || "this transaction"} for ${amount} on ${displayDate(v.date)}`;
+    if (!(await confirmState.ask(`Enter ${what} as scheduled? Change it afterwards in the investment register.`))) return;
+    await call(commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, true));
+    await this.changed();
   }
 
   /** After entering, skipping, or editing: lists, balances, open register. */

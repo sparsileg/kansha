@@ -20,6 +20,9 @@
 .mgr tbody tr {
   cursor: pointer;
 }
+.mgr tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
 .mgr tbody tr:hover,
 .mgr tbody tr.sel {
   background: rgba(128, 128, 128, 0.2);
@@ -56,4 +59,9 @@
   .mgr {
     grid-template-columns: 1fr;
   }
+}
+.mgr th.num,
+.mgr td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

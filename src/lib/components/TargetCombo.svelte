@@ -22,15 +22,21 @@
     value = $bindable(),
     excludeAccount,
     allowSplit = false,
+    allowInvestment = false,
     onchange,
     label = "Category",
+    placeholder = "",
     newKind,
   }: {
     value: TargetValue;
     excludeAccount?: AccountId;
     allowSplit?: boolean;
+    /** Also list investment accounts (a schedule's transfer into one). */
+    allowInvestment?: boolean;
     onchange?: () => void;
     label?: string;
+    /** Hint text while empty. */
+    placeholder?: string;
     newKind?: "income" | "expense";
   } = $props();
 
@@ -46,7 +52,7 @@
       }
     }
     for (const a of listsState.accounts) {
-      if (a.id === excludeAccount || a.investment !== null) continue;
+      if (a.id === excludeAccount || (a.investment !== null && !allowInvestment)) continue;
       if (a.status !== "open" && value !== `a:${a.id}`) continue;
       out.push({ value: `a:${a.id}`, label: `[${a.name}]` });
     }
@@ -188,6 +194,7 @@
   class="combo"
   role="combobox"
   aria-label={label}
+  {placeholder}
   aria-expanded={open}
   aria-controls={listId}
   aria-autocomplete="list"

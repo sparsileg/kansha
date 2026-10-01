@@ -242,6 +242,7 @@
   }
   .checks {
     max-height: 18rem;
+    max-width: 28rem;
     overflow: auto;
   }
   .checks li {
@@ -249,6 +250,9 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.1rem 0.3rem;
+  }
+  .checks li:nth-child(even) {
+    background: var(--row-alt);
   }
   .checks li.sel {
     background: var(--active-bg);

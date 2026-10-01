@@ -12,13 +12,10 @@ import {
 } from "./views";
 
 describe("investment views", () => {
-  it("has ten slots: Default, then Custom 2 to Custom 10", () => {
+  it("has five slots: Default, then Custom 2 to Custom 5", () => {
     const s = defaultViews();
-    expect(s.views).toHaveLength(10);
-    expect(s.views.map((v) => v.name)).toEqual([
-      "Default", "Custom 2", "Custom 3", "Custom 4", "Custom 5",
-      "Custom 6", "Custom 7", "Custom 8", "Custom 9", "Custom 10",
-    ]);
+    expect(s.views).toHaveLength(5);
+    expect(s.views.map((v) => v.name)).toEqual(["Default", "Custom 2", "Custom 3", "Custom 4", "Custom 5"]);
   });
 
   it("shows every column but Cost Basis at first", () => {

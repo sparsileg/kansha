@@ -54,7 +54,13 @@
       loaded = true;
     }
   }
-  void load();
+  // Another day (or another item clicked) while this is open: show it
+  // in place.
+  $effect(() => {
+    void [day, accounts, pick];
+    untrack(() => (selected = pick));
+    void load();
+  });
 
   const sel = $derived(items.find((v) => keyOf(v) === selected));
   const canAct = $derived(sel?.occ != null && sel.status === "pending" && sel.actionable);
@@ -84,7 +90,9 @@
   function enter() {
     if (!sel?.occ || !canAct) return;
     // Props are gone once closed: act first.
-    void scheduleState.enterOccurrence(sel.occ);
+    void scheduleState.enterOccurrence(sel.occ).catch((e) => {
+      scheduleState.error = e instanceof Error ? e.message : String(e);
+    });
     onclose();
   }
 
@@ -138,7 +146,7 @@
   }
 </script>
 
-<Modal title="Transactions: {displayDate(day)}" wide {onclose}>
+<Modal title="Transactions: {displayDate(day)}" side {onclose}>
   {#if error}<p class="err" role="alert">{error}</p>{/if}
   {#if loaded && items.length === 0}
     <p>No transactions on this day.</p>

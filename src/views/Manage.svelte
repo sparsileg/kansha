@@ -12,7 +12,7 @@
   <div class="tabs" role="tablist">
     {#each ["payees", "categories", "tags", "securities"] as const as t (t)}
       <button type="button" role="tab" aria-selected={tab === t} class:on={tab === t} onclick={() => viewState.navigate("manage", { tab: t })}>
-        {t[0].toUpperCase() + t.slice(1)}
+        {t === "payees" ? "Memorized Payees" : t[0].toUpperCase() + t.slice(1)}
       </button>
     {/each}
   </div>

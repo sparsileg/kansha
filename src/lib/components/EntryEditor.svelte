@@ -415,17 +415,17 @@
 <form class="entry" class:editing={txn !== null} onsubmit={save} {onkeydown} bind:this={formEl}>
   {#if isSplit && !registerState.descending}{@render splitPanel()}{/if}
   <div class="cells">
-    <input class="c-date" aria-label="Date" bind:this={dateInput} bind:value={d.date} onkeydown={onDateKey} onblur={() => (d.date = d.date.trim())} />
-    <input class="c-num" aria-label="Num" bind:value={d.check_num} />
-    <input class="c-payee" aria-label="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
+    <input class="c-date" aria-label="Date" placeholder="Date" bind:this={dateInput} bind:value={d.date} onkeydown={onDateKey} onblur={() => (d.date = d.date.trim())} />
+    <input class="c-num" aria-label="Num" placeholder="Num" bind:value={d.check_num} />
+    <input class="c-payee" aria-label="Payee" placeholder="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
-    <input class="c-dep num" aria-label="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
+    <input class="c-pay num" aria-label="Payment" placeholder="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
+    <input class="c-dep num" aria-label="Deposit" placeholder="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
     <div class="c-cat">
-      <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit newKind={newKind} onchange={onCategoryChange} />
+      <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit placeholder="Category" newKind={newKind} onchange={onCategoryChange} />
     </div>
-    <TagPicker class="c-tag" bind:value={d.tag} />
-    <input class="c-memo" aria-label="Memo" bind:value={d.memo} />
+    <TagPicker class="c-tag" bind:value={d.tag} empty="Tag" />
+    <input class="c-memo" aria-label="Memo" placeholder="Memo" bind:value={d.memo} />
     <span class="c-clr">{d.cleared === "cleared" ? "c" : d.cleared === "reconciled" ? "R" : ""}</span>
     <span class="c-actions">
       <button
@@ -510,6 +510,12 @@
   }
   .num {
     text-align: right;
+  }
+  /* Hint text: each empty field names what goes in it, in a softer tone
+     of the field's own text color, so it fits every theme. */
+  .entry :global(input::placeholder) {
+    color: color-mix(in srgb, currentColor 55%, transparent);
+    opacity: 1;
   }
   .c-actions {
     display: flex;

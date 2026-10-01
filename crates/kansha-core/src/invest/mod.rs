@@ -48,6 +48,7 @@ pub use reads::{
 };
 pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};
+pub(crate) use service::create_with_source;
 pub use service::{create, delete, trade_amount, update};
 
 pub(crate) use lots::OpenLot;

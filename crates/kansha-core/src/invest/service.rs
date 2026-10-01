@@ -67,6 +67,16 @@ pub fn create(tx: &Tx<'_>, input: &InvInput) -> Result<InvTxn> {
             ));
         }
     };
+    create_with_source(tx, source, input)
+}
+
+/// Create an investment transaction with an explicit source: a schedule's
+/// cash in or cash out (REC-110).
+pub(crate) fn create_with_source(
+    tx: &Tx<'_>,
+    source: TxnSource,
+    input: &InvInput,
+) -> Result<InvTxn> {
     let plan = plan(tx.conn(), input, None)?;
     repo::insert(tx, source, &plan)
 }
@@ -122,6 +132,9 @@ pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     if before.action.affects_lots() {
         check_nothing_after(conn, &before)?;
     }
+    // A cash in or out entered from a schedule (REC-115) gives its
+    // occurrence back, as a register transaction does (REC-160).
+    crate::schedule::release_txn(tx, id)?;
     repo::delete(tx, &before)
 }
 

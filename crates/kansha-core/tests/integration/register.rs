@@ -475,6 +475,98 @@ fn payee_quickfill_search_and_first_time_memorize() {
 }
 
 #[test]
+fn memorized_payee_shows_its_last_use() {
+    let mut f = fixture();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let dining = f.book.find_category("Food:Dining").unwrap().unwrap();
+    let household = f.book.find_category("Household").unwrap().unwrap();
+    let e = f
+        .book
+        .entry(f.chk, date("2026-03-01"))
+        .payee("Aldi")
+        .memo("weekly")
+        .amount(m("-55.00"))
+        .category(groceries)
+        .build()
+        .unwrap();
+    f.book
+        .write(|tx| {
+            ledger::create_entry(tx, &e)?;
+            ledger::memorize_payee(tx, &e)
+        })
+        .unwrap();
+    let shown = |book: &Book| {
+        let p = payees::list(book.conn())
+            .unwrap()
+            .into_iter()
+            .find(|p| p.fields.name == "Aldi")
+            .unwrap();
+        (
+            p.fields.default_category,
+            p.fields.default_memo,
+            p.fields.default_amount,
+        )
+    };
+    assert_eq!(
+        shown(&f.book),
+        (Some(groceries), "weekly".into(), Some(m("-55.00")))
+    );
+
+    // A later use replaces what the list shows; the stored defaults stay.
+    f.book
+        .entry(f.chk, date("2026-04-01"))
+        .payee("Aldi")
+        .memo("party")
+        .amount(m("-80.00"))
+        .category(dining)
+        .save()
+        .unwrap();
+    assert_eq!(
+        shown(&f.book),
+        (Some(dining), "party".into(), Some(m("-80.00")))
+    );
+    let stored = payees::find_by_name(f.book.conn(), "Aldi")
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.fields.default_category, Some(groceries));
+
+    // An older transaction entered afterwards is not the last use.
+    f.book
+        .entry(f.chk, date("2026-02-01"))
+        .payee("Aldi")
+        .memo("old")
+        .amount(m("-5.00"))
+        .category(household)
+        .save()
+        .unwrap();
+    assert_eq!(shown(&f.book).1, "party");
+
+    // QuickFill search sees the same values.
+    let found = payees::search(f.book.conn(), "al", 5).unwrap();
+    assert_eq!(found[0].fields.default_amount, Some(m("-80.00")));
+
+    // A split has no single category.
+    f.book
+        .entry(f.chk, date("2026-05-01"))
+        .payee("Aldi")
+        .memo("mixed")
+        .amount(m("-30.00"))
+        .split(Target::Category(groceries), m("-20.00"))
+        .split(Target::Category(household), m("-10.00"))
+        .save()
+        .unwrap();
+    assert_eq!(shown(&f.book), (None, "mixed".into(), Some(m("-30.00"))));
+
+    // A payee that was never memorized stays blank.
+    let costco = payees::list(f.book.conn())
+        .unwrap()
+        .into_iter()
+        .find(|p| p.fields.name == "Costco")
+        .unwrap();
+    assert_eq!(costco.fields.default_memo, "");
+}
+
+#[test]
 fn audit_view_lists_changed_fields() {
     let mut f = fixture();
     let reg = ledger::register(f.book.conn(), f.chk).unwrap();

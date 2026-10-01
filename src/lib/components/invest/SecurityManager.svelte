@@ -10,6 +10,7 @@
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
+  import { hiddenLast } from "../../manage/order";
   import { listsState } from "../../state/lists.svelte";
   import type {
     AssetClass,
@@ -33,7 +34,6 @@
   /** `null` = a new security. */
   let selected = $state<Security | null | undefined>(undefined);
   let f = $state<SecurityFields | null>(null);
-  let filter = $state("");
   let error = $state<string | null>(null);
   let prices = $state<PricePoint[]>([]);
   let priceDate = $state("");
@@ -46,9 +46,7 @@
   });
 
   const shown = $derived(
-    investState.securities.filter((s) =>
-      `${s.ticker ?? ""} ${s.name}`.toLowerCase().includes(filter.trim().toLowerCase()),
-    ),
+    hiddenLast(investState.securities, (s) => s.name),
   );
 
   async function loadPrices(s: Security | null | undefined) {
@@ -156,7 +154,6 @@
 <div class="mgr">
   <div>
     <div class="row">
-      <label>Find <input type="search" bind:value={filter} /></label>
       <button type="button" onclick={startNew}>New security</button>
       <button type="button" onclick={() => (dialogState.priceImport = true)}>Import prices…</button>
       <button type="button" onclick={() => (seeding = true)}>Seed lots…</button>

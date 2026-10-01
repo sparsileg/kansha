@@ -12,9 +12,10 @@ use super::{
     OccurrenceView, Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine, ScheduleRow,
     ScheduleStatus, add_days,
 };
-use crate::accounts::AccountId;
+use crate::accounts::{Account, AccountId, CashMode};
 use crate::date::{Clock, Date};
 use crate::error::{Error, Result};
+use crate::invest::{self, InvAction, InvInput};
 use crate::ledger::{self, Entry, EntryLine, Target, TxnId, TxnSource};
 use crate::money::Money;
 use crate::persistence::audit::{self, AuditAction, AuditEntity};
@@ -103,11 +104,16 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
         }
     }
     let main = accounts::get(conn, f.account)?;
-    if main.fields.account_type.is_investment() {
-        return Err(Error::Invalid(format!(
-            "{:?} is an investment account; schedule from a cash account",
-            main.fields.name
-        )));
+    let main_investment = main.fields.account_type.is_investment();
+    if main_investment {
+        check_cash_schedulable(&main)?;
+        if f.lines.len() != 1 {
+            return Err(Error::Invalid(format!(
+                "{:?} is an investment account; a schedule on it is one cash in or cash out, \
+                 not a split",
+                main.fields.name
+            )));
+        }
     }
     if let Some(p) = f.payee {
         payees::get(conn, p)?;
@@ -122,10 +128,20 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
                 }
                 let other = accounts::get(conn, a)?;
                 if other.fields.account_type.is_investment() {
-                    return Err(Error::Invalid(format!(
-                        "{:?} is an investment account; use the investment register",
-                        other.fields.name
-                    )));
+                    if main_investment {
+                        return Err(Error::Invalid(format!(
+                            "{:?} is an investment account; move money between investment \
+                             accounts from an investment register",
+                            other.fields.name
+                        )));
+                    }
+                    if f.lines.len() != 1 {
+                        return Err(Error::Invalid(format!(
+                            "{:?} is an investment account; a split cannot go to it",
+                            other.fields.name
+                        )));
+                    }
+                    check_cash_schedulable(&other)?;
                 }
             }
             Target::Category(c) => {
@@ -135,6 +151,102 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
     }
     f.amount()?;
     Ok(())
+}
+
+/// An investment account in a schedule takes cash in or cash out, so its
+/// cash must be its own (INV-300): with linked cash, schedule on the
+/// linked account.
+fn check_cash_schedulable(acct: &Account) -> Result<()> {
+    let linked = acct
+        .fields
+        .investment
+        .as_ref()
+        .is_some_and(|i| i.cash_mode == CashMode::Linked);
+    if linked {
+        return Err(Error::Invalid(format!(
+            "{:?} keeps its cash in its linked account; schedule on that account",
+            acct.fields.name
+        )));
+    }
+    Ok(())
+}
+
+/// Where an investment account's cash moves in a schedule: the investment
+/// account, the other side of the cash in or cash out, and whether the
+/// schedule's own amount has the opposite sign (the schedule is on the
+/// other account).
+struct CashLeg {
+    account: AccountId,
+    other: Target,
+    flip: bool,
+}
+
+/// The investment cash leg of a one-line schedule, if it has one: a
+/// schedule on an investment account, or a transfer to one.
+fn cash_leg(conn: &Connection, f: &ScheduleFields) -> Result<Option<CashLeg>> {
+    let [line] = f.lines.as_slice() else {
+        return Ok(None);
+    };
+    if accounts::get(conn, f.account)?
+        .fields
+        .account_type
+        .is_investment()
+    {
+        return Ok(Some(CashLeg {
+            account: f.account,
+            other: line.target,
+            flip: false,
+        }));
+    }
+    if let Target::Account(b) = line.target {
+        if accounts::get(conn, b)?.fields.account_type.is_investment() {
+            return Ok(Some(CashLeg {
+                account: b,
+                other: Target::Account(f.account),
+                flip: true,
+            }));
+        }
+    }
+    Ok(None)
+}
+
+/// Record an occurrence that moves an investment account's cash as a cash
+/// in or cash out there (the investments engine owns those postings).
+fn enter_cash(tx: &Tx<'_>, id: ScheduleId, entry: &Entry, leg: &CashLeg) -> Result<TxnId> {
+    if entry.amount.is_zero() {
+        return Err(Error::Invalid(
+            "a cash in or cash out needs an amount".into(),
+        ));
+    }
+    let signed = if leg.flip {
+        entry
+            .amount
+            .checked_neg()
+            .ok_or(Error::Overflow("scheduled amount"))?
+    } else {
+        entry.amount
+    };
+    let action = if signed.is_negative() {
+        InvAction::CashOut
+    } else {
+        InvAction::CashIn
+    };
+    let mut input = InvInput::new(leg.account, action, entry.date);
+    input.amount = Some(if signed.is_negative() {
+        signed
+            .checked_neg()
+            .ok_or(Error::Overflow("scheduled amount"))?
+    } else {
+        signed
+    });
+    input.counterpart = Some(leg.other);
+    // Investment transactions have no payee, so the name goes in the memo.
+    input.memo = match (entry.memo.is_empty(), entry.payee) {
+        (true, Some(p)) => payees::get(tx.conn(), p)?.fields.name,
+        _ => entry.memo.clone(),
+    };
+    let created = invest::create_with_source(tx, TxnSource::Schedule { schedule: id.0 }, &input)?;
+    Ok(created.txn.id)
 }
 
 // ---------------------------------------------------------------------------
@@ -361,20 +473,33 @@ pub fn enter(
     let s = repo::get(tx.conn(), id)?;
     require_next(&s, due)?;
     let row = repo::occurrence(tx.conn(), id, due)?;
-    let entry = match &edits.entry {
-        Some(e) if e.account != s.fields.account => {
+    let (txn_id, date) = if let Some(leg) = cash_leg(tx.conn(), &s.fields)? {
+        if edits.entry.is_some() {
             return Err(Error::Invalid(
-                "the entry is for a different account than the schedule".into(),
+                "a cash in or cash out on an investment account is entered as scheduled; \
+                 edit it afterwards in the investment register"
+                    .into(),
             ));
         }
-        Some(e) => e.clone(),
-        None => build_entry(&s, due, row.as_ref(), edits, confirmed)?,
+        let entry = build_entry(&s, due, row.as_ref(), edits, confirmed)?;
+        (enter_cash(tx, id, &entry, &leg)?, entry.date)
+    } else {
+        let entry = match &edits.entry {
+            Some(e) if e.account != s.fields.account => {
+                return Err(Error::Invalid(
+                    "the entry is for a different account than the schedule".into(),
+                ));
+            }
+            Some(e) => e.clone(),
+            None => build_entry(&s, due, row.as_ref(), edits, confirmed)?,
+        };
+        let txn = ledger::create_with_source(
+            tx,
+            TxnSource::Schedule { schedule: id.0 },
+            &entry.to_input()?,
+        )?;
+        (txn.id, entry.date)
     };
-    let txn = ledger::create_with_source(
-        tx,
-        TxnSource::Schedule { schedule: id.0 },
-        &entry.to_input()?,
-    )?;
     repo::put_occurrence(
         tx,
         &Occurrence {
@@ -384,7 +509,7 @@ pub fn enter(
             status: OccurrenceStatus::Entered,
             override_date: row.as_ref().and_then(|o| o.override_date),
             override_amount: row.as_ref().and_then(|o| o.override_amount),
-            txn: Some(txn.id),
+            txn: Some(txn_id),
             needs_review: tx.origin() == Origin::Scheduler,
         },
     )?;
@@ -392,8 +517,8 @@ pub fn enter(
     Ok(Entered {
         schedule: id,
         nominal: due,
-        txn: txn.id,
-        date: entry.date,
+        txn: txn_id,
+        date,
     })
 }
 
@@ -881,6 +1006,15 @@ pub fn projected_balances(
     if to < from {
         return Err(Error::Invalid(
             "the end date is before the start date".into(),
+        ));
+    }
+    if accounts::get(conn, account)?
+        .fields
+        .account_type
+        .is_investment()
+    {
+        return Err(Error::Invalid(
+            "an investment account's balance is not projected".into(),
         ));
     }
     if (to.naive() - from.naive()).num_days() > MAX_PROJECTION_DAYS {

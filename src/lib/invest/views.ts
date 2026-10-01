@@ -28,7 +28,7 @@ export const columnLabel = (id: ColumnId): string => COLUMNS.find((c) => c.id ==
 
 export const DEFAULT_COLUMNS: ColumnId[] = COLUMNS.map((c) => c.id).filter((id) => id !== "cost_basis");
 
-export const VIEW_COUNT = 10;
+export const VIEW_COUNT = 5;
 
 export interface ViewDef {
   name: string;

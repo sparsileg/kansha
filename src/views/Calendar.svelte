@@ -35,6 +35,8 @@
   });
   const balanceByDay = $derived(new Map(balances.map((b) => [b.date, b.balance])));
   const keyOf = (v: CalItem) => v.key;
+  /** An investment account's balance is not projected. */
+  const investmentSelected = $derived(account !== "" && listsState.account(Number(account))?.investment != null);
 
   async function load() {
     const mine = ++seq;
@@ -46,7 +48,7 @@
       const [occ, txns, proj] = await Promise.all([
         call(commands.calendarOccurrences(from, to, filter, showDone)),
         showDone ? call(commands.calendarTransactions(from, to, filter)) : Promise.resolve([] as CalendarTxn[]),
-        projection && account !== ""
+        projection && account !== "" && !investmentSelected
           ? call(commands.calendarProjection(Number(account), from, to))
           : Promise.resolve([] as DayBalance[]),
       ]);
@@ -84,7 +86,7 @@
     v.payee === null ? "(no payee)" : (listsState.payee(v.payee)?.name ?? "");
 </script>
 
-<section class="cal">
+<section class="cal" class:docked={dayOpen !== null}>
   <header>
     <button type="button" aria-label="Previous month" onclick={() => (month = addMonths(month, -1))}>‹</button>
     <strong class="label">{monthLabel(month)}</strong>
@@ -94,14 +96,14 @@
       Account
       <select bind:value={account} aria-label="Calendar account">
         <option value="">All accounts</option>
-        {#each listsState.accounts.filter((a) => a.investment === null && a.status === "open") as a (a.id)}
+        {#each listsState.accounts.filter((a) => a.status === "open") as a (a.id)}
           <option value={String(a.id)}>{a.name}</option>
         {/each}
       </select>
     </label>
     <label><input type="checkbox" bind:checked={showDone} /> Show entered transactions</label>
-    <label title="Choose an account first">
-      <input type="checkbox" bind:checked={projection} disabled={account === ""} /> Projected balance
+    <label title={investmentSelected ? "An investment account's balance is not projected" : "Choose an account first"}>
+      <input type="checkbox" bind:checked={projection} disabled={account === "" || investmentSelected} /> Projected balance
     </label>
   </header>
   {#if error}<p class="err">{error}</p>{/if}
@@ -169,6 +171,10 @@
 {/if}
 
 <style>
+  /* The day's panel sits at the right; the month narrows to stay clear of it. */
+  .cal.docked {
+    margin-right: calc(min(40rem, 94vw) + 1rem);
+  }
   .cal {
     display: flex;
     flex-direction: column;

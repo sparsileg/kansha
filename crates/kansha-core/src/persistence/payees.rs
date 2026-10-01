@@ -29,6 +29,47 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Payee> {
     })
 }
 
+/// A payee's last use: its newest normal, non-investment transaction.
+const LAST_TXN: &str = "SELECT t.id FROM txn t
+     WHERE t.payee_id = payee.id AND t.status = 'normal'
+       AND NOT EXISTS (SELECT 1 FROM posting s
+                       WHERE s.txn_id = t.id AND s.security_id IS NOT NULL)
+     ORDER BY t.txn_date DESC, t.id DESC LIMIT 1";
+
+/// A read of payees for the UI and QuickFill: a memorized payee (one with
+/// stored defaults) shows the category, tag, memo, and amount of its last
+/// use, not the first-use values stored when it was memorized (PAY-020).
+/// The category is the last use's when that was one category taking the
+/// whole amount, else none (a split or a transfer). A payee with no usable
+/// transaction keeps its stored defaults.
+fn last_use_select(filter: &str, tail: &str) -> String {
+    format!(
+        "SELECT id, name, hidden, created_at,
+            CASE WHEN last_id IS NULL OR NOT memorized THEN default_category_id
+                 WHEN (SELECT count(*) FROM posting WHERE txn_id = last_id) = 2
+                 THEN (SELECT category_id FROM posting
+                       WHERE txn_id = last_id AND category_id IS NOT NULL) END
+                AS default_category_id,
+            CASE WHEN last_id IS NULL OR NOT memorized THEN default_tag_id
+                 ELSE (SELECT pt.tag_id FROM posting p
+                       JOIN posting_tag pt ON pt.posting_id = p.id
+                       WHERE p.txn_id = last_id AND p.account_id IS NOT NULL
+                       ORDER BY p.line_no, pt.tag_id LIMIT 1) END AS default_tag_id,
+            CASE WHEN last_id IS NULL OR NOT memorized THEN default_memo
+                 ELSE (SELECT memo FROM txn WHERE id = last_id) END AS default_memo,
+            CASE WHEN last_id IS NULL OR NOT memorized THEN default_amount
+                 ELSE (SELECT amount FROM posting
+                       WHERE txn_id = last_id AND account_id IS NOT NULL
+                       ORDER BY line_no LIMIT 1) END AS default_amount
+         FROM (SELECT payee.*,
+                      (default_category_id IS NOT NULL OR default_tag_id IS NOT NULL
+                       OR default_memo <> '' OR default_amount IS NOT NULL) AS memorized,
+                      ({LAST_TXN}) AS last_id
+               FROM payee {filter})
+         {tail}"
+    )
+}
+
 fn validate(f: &PayeeFields) -> Result<()> {
     if f.name.trim().is_empty() {
         return Err(Error::Invalid("payee name is required".into()));
@@ -86,9 +127,9 @@ pub fn find_by_name(conn: &Connection, name: &str) -> Result<Option<Payee>> {
         .optional()?)
 }
 
-/// All payees by name.
+/// All payees by name, memorized ones with their last use's values.
 pub fn list(conn: &Connection) -> Result<Vec<Payee>> {
-    let sql = format!("SELECT {COLUMNS} FROM payee ORDER BY name, id");
+    let sql = last_use_select("", "ORDER BY name, id");
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt.query_map([], from_row)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -245,10 +286,9 @@ pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
 /// Visible payees whose name starts with `prefix`, ignoring case, by name
 /// (register QuickFill, PAY-020). An empty prefix lists the first `limit`.
 pub fn search(conn: &Connection, prefix: &str, limit: i64) -> Result<Vec<Payee>> {
-    let sql = format!(
-        "SELECT {COLUMNS} FROM payee
-         WHERE hidden = 0 AND substr(name, 1, length(?1)) = ?1 COLLATE NOCASE
-         ORDER BY name COLLATE NOCASE, id LIMIT ?2"
+    let sql = last_use_select(
+        "WHERE hidden = 0 AND substr(name, 1, length(?1)) = ?1 COLLATE NOCASE",
+        "ORDER BY name COLLATE NOCASE, id LIMIT ?2",
     );
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt.query_map(rusqlite::params![prefix.trim_start(), limit], from_row)?;

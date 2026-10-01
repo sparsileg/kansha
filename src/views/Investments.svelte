@@ -57,12 +57,9 @@
 
 <section class="inv">
   <div class="bar">
-    <label>
-      View:
-      <select value={String(st.selected)} onchange={(e) => st.select(Number(e.currentTarget.value))}>
-        {#each st.views as v, i (i)}<option value={String(i)}>{v.name}</option>{/each}
-      </select>
-    </label>
+    <select aria-label="View" value={String(st.selected)} onchange={(e) => st.select(Number(e.currentTarget.value))}>
+      {#each st.views as v, i (i)}<option value={String(i)}>{v.name}</option>{/each}
+    </select>
     <DatePicker value={st.asOf || listsState.today} today={listsState.today} label="As of" onchange={(iso) => (st.asOf = iso)} />
     <button type="button" disabled={downloading} onclick={() => void download()}>Download Prices</button>
     <span class="grow"></span>
@@ -150,11 +147,6 @@
   }
   .grow {
     flex: 1;
-  }
-  .bar label {
-    display: inline-flex;
-    gap: 0.35rem;
-    align-items: center;
   }
   .inv {
     display: flex;

@@ -1,7 +1,8 @@
 <script lang="ts">
   import "./manager.css";
   import { call, commands } from "../api";
-  import { formatMoney, parseMoney } from "../format/money";
+  import { formatMoney } from "../format/money";
+  import { hiddenLast } from "../manage/order";
   import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
@@ -9,26 +10,28 @@
 
   let selected = $state<Payee | null>(null);
   let name = $state("");
-  let category = $state("");
-  let tag = $state("");
-  let memo = $state("");
-  let amount = $state("");
   let hidden = $state(false);
   let mergeInto = $state("");
-  let filter = $state("");
+  let showAll = $state(false);
   let error = $state<string | null>(null);
 
+  /** A memorized payee has defaults; they show its last use (PAY-020). */
+  const memorized = (p: Payee) =>
+    p.default_category !== null ||
+    p.default_tag !== null ||
+    p.default_memo !== "" ||
+    p.default_amount !== null;
+
   const shown = $derived(
-    listsState.payees.filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase())),
+    hiddenLast(
+      listsState.payees.filter((p) => showAll || memorized(p) || p.id === selected?.id),
+      (p) => p.name,
+    ),
   );
 
   function pick(p: Payee | null) {
     selected = p;
     name = p?.name ?? "";
-    category = p?.default_category != null ? String(p.default_category) : "";
-    tag = p?.default_tag != null ? String(p.default_tag) : "";
-    memo = p?.default_memo ?? "";
-    amount = p?.default_amount != null ? formatMoney(p.default_amount) : "";
     hidden = p?.hidden ?? false;
     mergeInto = "";
     error = null;
@@ -42,27 +45,20 @@
   async function save(e: Event) {
     e.preventDefault();
     error = null;
-    let amt: string | null = null;
-    if (amount.trim()) {
-      amt = parseMoney(amount);
-      if (amt === null) {
-        error = "Default amount is not a valid amount.";
-        return;
-      }
+    if (!selected) {
+      error = "Payees are created by entering a transaction; select one to edit.";
+      return;
     }
+    // The defaults travel unchanged; they come from the last use, not from here.
     const fields = {
       name,
-      default_category: category ? Number(category) : null,
-      default_tag: tag ? Number(tag) : null,
-      default_memo: memo,
-      default_amount: amt,
+      default_category: selected.default_category,
+      default_tag: selected.default_tag,
+      default_memo: selected.default_memo,
+      default_amount: selected.default_amount,
       hidden,
     };
     try {
-      if (!selected) {
-        error = "Payees are created by entering a transaction; select one to edit.";
-        return;
-      }
       const p = await call(commands.payeeUpdate(selected.id, fields));
       await reload();
       pick(listsState.payee(p.id) ?? null);
@@ -98,16 +94,17 @@
 
 <div class="mgr">
   <div>
-    <label>Find <input type="search" bind:value={filter} /></label>
+    <label class="check"><input type="checkbox" bind:checked={showAll} /> Show all payees</label>
     <div class="list">
       <table>
-        <thead><tr><th>Payee</th><th>Category</th><th>Amount</th></tr></thead>
+        <thead><tr><th>Payee</th><th>Category</th><th>Memo</th><th class="num">Amount</th></tr></thead>
         <tbody>
           {#each shown as p (p.id)}
             <tr class:sel={selected?.id === p.id} class:dim={p.hidden} onclick={() => pick(p)}>
               <td>{p.name}</td>
               <td>{p.default_category != null ? listsState.categoryPath(p.default_category) : ""}</td>
-              <td>{p.default_amount != null ? formatMoney(p.default_amount) : ""}</td>
+              <td>{p.default_memo}</td>
+              <td class="num">{p.default_amount != null ? formatMoney(p.default_amount) : ""}</td>
             </tr>
           {/each}
         </tbody>
@@ -118,22 +115,6 @@
     <h3>{selected ? "Edit payee" : "Select a payee"}</h3>
     {#if selected}
       <label>Name <input bind:value={name} required /></label>
-      <label>
-        Default category
-        <select bind:value={category}>
-          <option value="">—</option>
-          {#each listsState.categories.filter((c) => c.kind !== "equity") as c (c.id)}<option value={String(c.id)}>{listsState.categoryPath(c.id)}</option>{/each}
-        </select>
-      </label>
-      <label>
-        Default tag
-        <select bind:value={tag}>
-          <option value="">—</option>
-          {#each listsState.tags as t (t.id)}<option value={String(t.id)}>{t.name}</option>{/each}
-        </select>
-      </label>
-      <label>Default memo <input bind:value={memo} /></label>
-      <label>Default amount (negative = payment) <input bind:value={amount} inputmode="decimal" /></label>
       <label class="check"><input type="checkbox" bind:checked={hidden} /> Hidden</label>
       {#if error}<p class="err" role="alert">{error}</p>{/if}
       <div class="row">
@@ -150,7 +131,7 @@
       <div class="row"><button type="button" disabled={!mergeInto} onclick={merge}>Merge</button></div>
       <p class="note">Delete works only for an unused payee; hide it otherwise.</p>
     {:else}
-      <p class="note">Payees are created when you enter a transaction.</p>
+      <p class="note">The list shows payees you have memorized, with the category, memo, and amount of their last use. Payees are created when you enter a transaction.</p>
     {/if}
   </form>
 </div>

@@ -2,6 +2,7 @@
   import "./manager.css";
   import { call, commands } from "../api";
   import { confirmState } from "../state/confirm.svelte";
+  import { hiddenLast } from "../manage/order";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import type { Category, CategoryFields } from "../types/bindings";
@@ -97,7 +98,7 @@
     <table>
       <thead><tr><th>Category</th><th>Kind</th><th>Flags</th></tr></thead>
       <tbody>
-        {#each listsState.categories as c (c.id)}
+        {#each hiddenLast(listsState.categories, (c) => listsState.categoryPath(c.id)) as c (c.id)}
           <tr class:sel={selected?.id === c.id} class:dim={c.hidden} onclick={() => pick(c)}>
             <td>{listsState.categoryPath(c.id)}{c.system ? " (built-in)" : ""}</td>
             <td>{c.kind}</td>

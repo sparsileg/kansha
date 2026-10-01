@@ -56,7 +56,7 @@ describe("NavBar contents come from the setting", () => {
     settingsState.setNavItems(["account:4", "tools.calendar", "tools.payees"]);
     render(NavBar);
     const names = screen.getAllByRole("button").map((b) => b.textContent?.trim());
-    expect(names).toEqual(["Checking", "Calendar", "Payees"]);
+    expect(names).toEqual(["Checking", "Calendar", "Memorized Payees"]);
   });
 
   it("clicking an account item opens that account", async () => {

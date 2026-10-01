@@ -67,6 +67,14 @@ const listed = () =>
 const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement;
 
 describe("EntryEditor keyboard entry (REG-030)", () => {
+  it("each empty field names what goes in it", () => {
+    render(EntryEditor, { account: 1 });
+    for (const name of ["Num", "Payee", "Payment", "Deposit", "Category", "Memo"]) {
+      expect(screen.getByLabelText(name).getAttribute("placeholder")).toBe(name);
+    }
+    expect(within(screen.getByLabelText("Tag")).getByRole("option", { name: "Tag" })).toBeTruthy();
+  });
+
   it("+ / - / t adjust the date field", async () => {
     render(EntryEditor, { account: 1 });
     const date = field("Date");

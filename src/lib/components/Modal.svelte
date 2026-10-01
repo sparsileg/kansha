@@ -6,6 +6,7 @@
     onclose,
     wide = false,
     fit = false,
+    side = false,
     children,
   }: {
     title: string;
@@ -13,6 +14,8 @@
     wide?: boolean;
     /** As wide as its widest row (up to the window), never narrower than `wide`. */
     fit?: boolean;
+    /** Docked to the right with the page still usable beside it: no dimming, clicks pass through. */
+    side?: boolean;
     children: Snippet;
   } = $props();
 
@@ -34,13 +37,13 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" {onkeydown}>
+<div class="backdrop" class:side {onkeydown}>
   <div
     class="modal"
     class:wide
     class:fit
     role="dialog"
-    aria-modal="true"
+    aria-modal={!side}
     aria-label={title}
     bind:this={dialog}
   >
@@ -62,6 +65,17 @@
     justify-content: center;
     padding-top: 4vh;
     z-index: 50;
+  }
+  .backdrop.side {
+    background: none;
+    pointer-events: none;
+    justify-content: flex-end;
+    padding-right: 1rem;
+  }
+  .backdrop.side .modal {
+    pointer-events: auto;
+    width: min(40rem, 94vw);
+    box-shadow: var(--shadow-popup);
   }
   .modal {
     background: var(--popup-bg);
