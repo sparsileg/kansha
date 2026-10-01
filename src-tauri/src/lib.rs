@@ -182,6 +182,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
 /// The generated bindings file, anchored to this crate's directory (not the
 /// process cwd), since `cargo run`/`tauri dev` can start from either the
 /// repo root or `src-tauri/`.
+#[cfg(any(debug_assertions, test))]
 fn bindings_path() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/types/bindings.ts")
 }

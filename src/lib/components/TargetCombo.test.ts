@@ -38,6 +38,21 @@ beforeEach(() => {
   c.categoryCreatePath.mockImplementation((path: string) => ok(cat(7, path)));
 });
 
+describe("TargetCombo: built-in Opening Balance", () => {
+  it("lists the equity category and offers no duplicate to create", async () => {
+    listsState.categories = [
+      cat(5, "Food"),
+      { ...cat(11, "Opening Balance"), kind: "equity" as const, system: "opening_balance" },
+    ] as never;
+    render(TargetCombo, { value: "", newKind: "expense" });
+    await fireEvent.input(box(), { target: { value: "Opening Balance" } });
+    expect(listed()).toEqual(["Opening Balance"]);
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    expect(box().value).toBe("Opening Balance");
+    expect(c.categoryCreatePath).not.toHaveBeenCalled();
+  });
+});
+
 describe("TargetCombo: entering a new category", () => {
   it("offers to create text that matches nothing, and creates it after a yes", async () => {
     const ask = vi.spyOn(confirmState, "ask").mockResolvedValue(true);

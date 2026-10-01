@@ -37,7 +37,8 @@
   const options = $derived.by((): TargetOption[] => {
     const out: TargetOption[] = [];
     if (allowSplit) out.push({ value: SPLIT, label: "--Split--" });
-    for (const kind of ["income", "expense"]) {
+    // "equity" is the built-in Opening Balance.
+    for (const kind of ["income", "expense", "equity"]) {
       for (const c of listsState.categories) {
         if (c.kind !== kind) continue;
         if (c.hidden && value !== `c:${c.id}`) continue;
