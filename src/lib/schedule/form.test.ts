@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildFields, draftFromFields, newScheduleDraft } from "./form";
+import { buildFields, byScheduleUse, draftFromFields, newScheduleDraft } from "./form";
+import type { Account, ScheduleRow } from "../types/bindings";
 
 const TODAY = "2026-09-24";
 
@@ -37,6 +38,16 @@ describe("buildFields", () => {
     d.direction = "deposit";
     const r = buildFields(d, TODAY);
     expect(r.ok && r.fields.lines[0].amount).toBe("1000.00");
+  });
+
+  it("keeps the transaction type of a 0.00 schedule", () => {
+    const d = filled();
+    d.direction = "deposit";
+    d.lines[0].amount = "0";
+    const r = buildFields(d, TODAY);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.fields.direction).toBe("deposit");
+    expect(draftFromFields(r.fields, "").direction).toBe("deposit");
   });
 
   it("maps quarterly and twice a year onto monthly intervals", () => {
@@ -180,5 +191,13 @@ describe("draftFromFields", () => {
     ];
     const r = buildFields(d, TODAY);
     expect(r.ok && r.fields.lines.map((l) => l.amount)).toEqual(["-100.00", "20.00"]);
+  });
+});
+
+describe("byScheduleUse", () => {
+  it("puts accounts most used by schedules first, ties in their order", () => {
+    const accts = [1, 2, 3, 4].map((id) => ({ id }) as Account);
+    const rows = [3, 2, 3, 9].map((account) => ({ schedule: { fields: { account } } }) as ScheduleRow);
+    expect(byScheduleUse(accts, rows).map((a) => a.id)).toEqual([3, 2, 1, 4]);
   });
 });

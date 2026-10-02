@@ -398,3 +398,52 @@ holding, so it starts by deleting the VTI true-up; then re-run it with
 `ignored/vti-448-2025-12-31.csv`. Done: dry run on a scratch copy,
 then Stan in the app (2026-10-01). Realized gains: 2024 −1.41 (a fee,
 kept), 2025 0.00.
+
+## Schedule transaction type (REC-010, REC-300), spec 0.7.3, 2026-10-02
+
+Found while Stan re-entered his Quicken reminders. Payment or deposit
+was only the sign of a schedule's lines, so a 0.00 reminder (a bill
+known when it comes in) lost it: Reminders showed it as Deposit, and
+an amount set with "Set for this occurrence only" on a 0.00 payment
+went in as a deposit. Entering through the register was safe (the
+user picks the column).
+
+### Files
+
+- `persistence/migrations/0009_schedule_direction.sql`:
+  `schedule.direction` (`payment` | `deposit`), filled from the sign
+  of each schedule's lines (posting sign: a positive sum is a
+  payment); 0.00 ones become payments.
+- `schedule/mod.rs`: `Direction` (`of`, `allows`); `ScheduleFields`
+  and `OccurrenceView` gain `direction`.
+- `schedule/service.rs`: `validate_fields` refuses lines that total
+  the other way; `check_direction` on one-time and entered amounts;
+  `from_entry` takes the entry's direction.
+- `persistence/schedules.rs`: the column.
+- UI: `schedule/form.ts` (draft keeps the stored type;
+  `byScheduleUse`), `views/Scheduled.svelte` (Method = Payment or
+  Deposit, no Transfer), `OccurrenceRow.svelte` (typed amount signed
+  by the direction), `ScheduleModal.svelte` (Account list sorted by
+  use in existing schedules).
+- Tests: `schedule::a_zero_amount_schedule_keeps_its_direction`,
+  `lines_must_go_the_schedules_direction`,
+  `an_amount_entered_on_a_zero_payment_must_be_a_payment`,
+  `a_schedule_from_an_entry_takes_its_direction`;
+  `migrations::migration_0009_stores_each_schedules_direction_from_its_sign`;
+  `form.test.ts`, `OccurrenceRow.test.ts`.
+
+### Decisions
+
+- Stan: Method shows the transaction type like Quicken; a transfer is
+  a Payment or Deposit, not "Transfer".
+- The type is stored rather than guessed from the category (a 0.00
+  transfer, such as a card payment, has no category to guess from).
+- The schedule dialog's Account list puts accounts most used by
+  existing schedules first (main account only; ties keep their order).
+
+### Known gaps
+
+- Entering through the register can still go the other way (a full
+  edit; allowed on purpose).
+- Stan: check 0.00 reminders that should be deposits; the migration
+  made them payments.

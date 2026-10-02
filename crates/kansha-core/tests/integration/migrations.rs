@@ -696,3 +696,43 @@ fn migration_0008_drops_tithing_purges_price_audit_and_accepts_true_ups() {
         .is_err()
     );
 }
+
+#[test]
+fn migration_0009_stores_each_schedules_direction_from_its_sign() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 8).unwrap();
+    db.conn()
+        .execute_batch(
+            "INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+                 VALUES ('C', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z');
+             INSERT INTO category (kind, name, created_at)
+                 VALUES ('expense', 'Bills', '2026-06-30T12:00:00Z');
+             INSERT INTO schedule (account_id, frequency, start_date, next_due, created_at)
+                 VALUES (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z'),
+                        (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z'),
+                        (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z');
+             INSERT INTO schedule_line (schedule_id, line_no, category_id, amount)
+                 SELECT 1, 1, max(id), 5000 FROM category;
+             INSERT INTO schedule_line (schedule_id, line_no, category_id, amount)
+                 SELECT 2, 1, max(id), -5000 FROM category;
+             INSERT INTO schedule_line (schedule_id, line_no, category_id, amount)
+                 SELECT 3, 1, max(id), 0 FROM category;",
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let mut st = c
+        .prepare("SELECT direction FROM schedule ORDER BY id")
+        .unwrap();
+    let dirs: Vec<String> = st
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    // Lines are in posting sign: a payment's sum is positive.
+    assert_eq!(dirs, ["payment", "deposit", "payment"]);
+    assert!(
+        c.execute("UPDATE schedule SET direction = 'transfer'", [])
+            .is_err()
+    );
+}

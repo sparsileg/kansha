@@ -346,7 +346,7 @@ fn every_schedule_enum_value_is_accepted_by_the_schema() {
     use kansha_core::accounts::AccountType;
     use kansha_core::persistence::schedules;
     use kansha_core::schedule::{
-        AmountType, End, EntryMode, Frequency, Occurrence, OccurrenceStatus, Recurrence,
+        AmountType, Direction, End, EntryMode, Frequency, Occurrence, OccurrenceStatus, Recurrence,
         ScheduleFields, ScheduleId, ScheduleLine, ScheduleStatus, WeekendRule,
     };
 
@@ -366,6 +366,7 @@ fn every_schedule_enum_value_is_accepted_by_the_schema() {
             account: chk.id,
             payee: None,
             memo: String::new(),
+            direction: Direction::Payment,
             amount_type: AmountType::Fixed,
             lines: vec![ScheduleLine {
                 target: kansha_core::ledger::Target::Category(cat.id),
@@ -405,6 +406,11 @@ fn every_schedule_enum_value_is_accepted_by_the_schema() {
                     last = schedules::insert(tx, &f, Some(start))?.id;
                 }
             }
+        }
+        for d in Direction::ALL {
+            let mut f = base(Recurrence::new(Frequency::Daily, start));
+            f.direction = *d;
+            schedules::insert(tx, &f, Some(start))?;
         }
         for end in [
             End::Never,

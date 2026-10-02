@@ -26,7 +26,8 @@
 
   const schedule = $derived(scheduleState.row(view.schedule));
   const single = $derived((schedule?.schedule.fields.lines.length ?? 1) === 1);
-  const negative = $derived(view.amount.startsWith("-"));
+  /** The typed amount is unsigned; the schedule's direction signs it. */
+  const negative = $derived(view.direction === "payment");
   const payee = $derived(view.payee === null ? "" : (listsState.payee(view.payee)?.name ?? ""));
   const who = $derived(`${payee || "(no payee)"} · ${listsState.account(view.account)?.name ?? ""}`);
   const done = $derived(view.status !== "pending");

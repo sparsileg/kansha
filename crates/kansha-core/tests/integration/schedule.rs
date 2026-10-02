@@ -9,8 +9,8 @@ use kansha_core::ledger::{self, Target, TxnSource};
 use kansha_core::persistence::audit::AuditEntity;
 use kansha_core::persistence::{Origin, audit, schedules};
 use kansha_core::schedule::{
-    self, AmountType, End, EnterEdits, EntryMode, Frequency, OccurrenceStatus, Recurrence,
-    ScheduleFields, ScheduleId, ScheduleLine, ScheduleStatus, WeekendRule,
+    self, AmountType, Direction, End, EnterEdits, EntryMode, Frequency, OccurrenceStatus,
+    Recurrence, ScheduleFields, ScheduleId, ScheduleLine, ScheduleStatus, WeekendRule,
 };
 use kansha_core::testkit::Book;
 use kansha_core::{Error, FixedClock, Money};
@@ -53,6 +53,7 @@ fn rent_fields(fx: &Fx, start: &str) -> ScheduleFields {
         account: fx.chk,
         payee: None,
         memo: "rent".into(),
+        direction: Direction::Payment,
         amount_type: AmountType::Fixed,
         lines: vec![ScheduleLine {
             target: Target::Category(fx.rent),
@@ -1241,6 +1242,7 @@ fn one_line(account: AccountId, target: Target, amount: &str) -> ScheduleFields 
         account,
         payee: None,
         memo: "move".into(),
+        direction: Direction::of(m(amount)),
         amount_type: AmountType::Fixed,
         lines: vec![ScheduleLine {
             target,
@@ -1384,4 +1386,77 @@ fn deleting_a_scheduled_cash_out_gives_the_occurrence_back() {
     assert_eq!(fx.book.balance(sav).unwrap(), Money::ZERO);
     // Back in Due, as for a register transaction (REC-160).
     assert_eq!(get(&fx, id).next_due, Some(date("2026-07-01")));
+}
+
+#[test]
+fn a_zero_amount_schedule_keeps_its_direction() {
+    // 0.00 has no sign: the stored direction says payment or deposit
+    // (REC-010), in the list and in the due list.
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.lines[0].amount = Money::ZERO;
+    f.amount_type = AmountType::Estimated;
+    for d in Direction::ALL {
+        f.direction = *d;
+        let id = create(&mut fx, &f);
+        assert_eq!(get(&fx, id).fields.direction, *d);
+        let due = schedule::due_list(fx.book.conn(), date("2026-07-01")).unwrap();
+        let view = due.iter().find(|v| v.schedule == id).unwrap();
+        assert_eq!(view.direction, *d);
+        fx.book.write(|tx| schedule::delete(tx, id)).unwrap();
+    }
+}
+
+#[test]
+fn lines_must_go_the_schedules_direction() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.direction = Direction::Deposit;
+    let err = fx.book.write(|tx| schedule::create(tx, &f)).unwrap_err();
+    assert!(matches!(err, Error::Invalid(_)), "{err:?}");
+}
+
+#[test]
+fn an_amount_entered_on_a_zero_payment_must_be_a_payment() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.lines[0].amount = Money::ZERO;
+    let id = create(&mut fx, &f);
+    let due = date("2026-07-01");
+
+    let r = fx
+        .book
+        .write(|tx| schedule::set_override(tx, id, due, None, Some(m("125.00"))));
+    assert!(matches!(r, Err(Error::Invalid(_))), "{r:?}");
+    let deposit = EnterEdits {
+        amount: Some(m("125.00")),
+        ..EnterEdits::default()
+    };
+    let r = fx
+        .book
+        .write(|tx| schedule::enter(tx, id, due, &deposit, false));
+    assert!(matches!(r, Err(Error::Invalid(_))), "{r:?}");
+
+    let payment = EnterEdits {
+        amount: Some(m("-125.00")),
+        ..EnterEdits::default()
+    };
+    let e = fx
+        .book
+        .write(|tx| schedule::enter(tx, id, due, &payment, false))
+        .unwrap();
+    let txn = kansha_core::persistence::ledger::get(fx.book.conn(), e.txn).unwrap();
+    assert_eq!(txn.posting_for(fx.chk).unwrap().amount, m("-125.00"));
+}
+
+#[test]
+fn a_schedule_from_an_entry_takes_its_direction() {
+    let entry = kansha_core::ledger::Entry::new(AccountId(1), date("2026-07-01"), m("50.00"));
+    let f = schedule::from_entry(&entry).unwrap();
+    assert_eq!(f.direction, Direction::Deposit);
+    let entry = kansha_core::ledger::Entry::new(AccountId(1), date("2026-07-01"), Money::ZERO);
+    assert_eq!(
+        schedule::from_entry(&entry).unwrap().direction,
+        Direction::Payment
+    );
 }

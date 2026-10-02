@@ -7,6 +7,7 @@
     PRESETS,
     WEEKDAYS,
     buildFields,
+    byScheduleUse,
     draftFromFields,
     emptyLine,
     newScheduleDraft,
@@ -46,6 +47,13 @@
   const mainAccount = $derived(d.account === "" ? undefined : Number(d.account));
   /** Investment accounts take cash in or out, never a split, and not with linked cash (INV-300). */
   const schedulable = (a: Account) => a.investment === null || a.investment.cash_mode !== "linked";
+  /** Accounts most used by existing schedules first. */
+  const accountChoices = $derived(
+    byScheduleUse(
+      listsState.accounts.filter((a) => schedulable(a) && (a.status === "open" || String(a.id) === d.account)),
+      scheduleState.rows,
+    ),
+  );
   const mainIsInvestment = $derived(
     mainAccount !== undefined && listsState.account(mainAccount)?.investment != null,
   );
@@ -119,7 +127,7 @@
         Account
         <select bind:value={d.account}>
           <option value="">(choose)</option>
-          {#each listsState.accounts.filter((a) => schedulable(a) && (a.status === "open" || String(a.id) === d.account)) as a (a.id)}
+          {#each accountChoices as a (a.id)}
             <option value={String(a.id)}>{a.name}</option>
           {/each}
         </select>

@@ -7,6 +7,7 @@ const occ = (schedule: number, date: string, over: Partial<OccurrenceView> = {})
   nominal: date,
   date,
   amount: "-10.00",
+  direction: "payment",
   status: "pending",
   account: 2,
   payee: null,

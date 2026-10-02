@@ -4,13 +4,15 @@
 // onto the engine's (frequency, interval) pairs and parses typed values.
 
 import { parseDate } from "../format/date";
-import { splitPaymentDeposit } from "../format/money";
 import { lineText, parseTargetValue, signedLine, targetValue } from "../register/draft";
 import type {
+  Account,
   AccountId,
+  Direction,
   End,
   EntryMode,
   ScheduleFields,
+  ScheduleRow,
   WeekendRule,
 } from "../types/bindings";
 
@@ -64,7 +66,7 @@ export interface ScheduleDraft {
   payee: string;
   memo: string;
   estimated: boolean;
-  direction: "payment" | "deposit";
+  direction: Direction;
   lines: LineDraft[];
   preset: Preset;
   every: string;
@@ -79,6 +81,17 @@ export interface ScheduleDraft {
   count: string;
   remindDays: string;
   mode: EntryMode;
+}
+
+/** `accounts` with those most used by existing schedules first; ties
+ * keep their order. */
+export function byScheduleUse(accounts: Account[], rows: ScheduleRow[]): Account[] {
+  const uses = new Map<AccountId, number>();
+  for (const r of rows) {
+    const a = r.schedule.fields.account;
+    uses.set(a, (uses.get(a) ?? 0) + 1);
+  }
+  return [...accounts].sort((x, y) => (uses.get(y.id) ?? 0) - (uses.get(x.id) ?? 0));
 }
 
 export const emptyLine = (): LineDraft => ({
@@ -139,9 +152,7 @@ function presetOf(f: ScheduleFields): Preset {
  * on save). */
 export function draftFromFields(f: ScheduleFields, payeeName = ""): ScheduleDraft {
   const r = f.recurrence;
-  const first = f.lines[0];
-  const sign = first ? splitPaymentDeposit(first.amount) : null;
-  const direction = sign && sign.deposit !== "" ? "deposit" : "payment";
+  const direction = f.direction;
   const preset = presetOf(f);
   const fixedInterval = preset === "quarterly" || preset === "twice_yearly";
   return {
@@ -276,6 +287,7 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
       // creates it.
       payee: null,
       memo: d.memo !== "" || d.lines.length !== 1 ? d.memo : d.lines[0].memo,
+      direction: d.direction,
       amount_type: d.estimated ? "estimated" : "fixed",
       lines,
       recurrence: {

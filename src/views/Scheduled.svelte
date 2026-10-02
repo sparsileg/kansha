@@ -9,11 +9,7 @@
   const modeLabel = (r: ScheduleRow) =>
     r.schedule.fields.mode === "auto" ? "Auto" : "Remind";
   const method = (r: ScheduleRow) =>
-    r.schedule.fields.lines.some((l) => l.target.kind === "account")
-      ? "Transfer"
-      : r.amount.startsWith("-")
-        ? "Payment"
-        : "Deposit";
+    r.schedule.fields.direction === "deposit" ? "Deposit" : "Payment";
 </script>
 
 <section class="reminders">

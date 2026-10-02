@@ -75,6 +75,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0008_lot_true_up.sql"),
         foreign_keys_off: true,
     },
+    Migration {
+        version: 9,
+        description: "schedule transaction type",
+        sql: include_str!("migrations/0009_schedule_direction.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

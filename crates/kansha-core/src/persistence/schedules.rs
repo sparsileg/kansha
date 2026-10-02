@@ -17,7 +17,7 @@ use crate::schedule::{
     ScheduleStatus,
 };
 
-const COLUMNS: &str = "id, account_id, payee_id, memo, amount_type, frequency, interval, \
+const COLUMNS: &str = "id, account_id, payee_id, memo, direction, amount_type, frequency, interval, \
     day1, day2, weekday, week_of_month, start_date, next_due, end_kind, end_date, remaining, \
     remind_days, mode, weekend_rule, status, created_at";
 
@@ -36,6 +36,7 @@ fn from_row(r: &Row<'_>) -> Result<Schedule> {
             account: r.get("account_id")?,
             payee: r.get("payee_id")?,
             memo: r.get("memo")?,
+            direction: r.get("direction")?,
             amount_type: r.get("amount_type")?,
             lines: Vec::new(),
             recurrence: Recurrence {
@@ -168,16 +169,17 @@ pub fn insert(tx: &Tx<'_>, f: &ScheduleFields, next_due: Option<Date>) -> Result
         ScheduleStatus::Ended
     };
     tx.conn().execute(
-        "INSERT INTO schedule (account_id, payee_id, memo, amount_type, frequency, interval,
+        "INSERT INTO schedule (account_id, payee_id, memo, direction, amount_type, frequency, interval,
              day1, day2, weekday, week_of_month, start_date, next_due, end_kind, end_date,
              remaining, remind_days, mode, weekend_rule, status, created_at)
-         VALUES (:account, :payee, :memo, :amount_type, :frequency, :interval,
+         VALUES (:account, :payee, :memo, :direction, :amount_type, :frequency, :interval,
              :day1, :day2, :weekday, :week, :start, :next_due, :end_kind, :end_date,
              :remaining, :remind, :mode, :weekend, :status, :created_at)",
         named_params! {
             ":account": f.account,
             ":payee": f.payee,
             ":memo": f.memo,
+            ":direction": f.direction,
             ":amount_type": f.amount_type,
             ":frequency": r.frequency,
             ":interval": r.interval,
@@ -225,7 +227,7 @@ pub fn update(
     let r = &f.recurrence;
     tx.conn().execute(
         "UPDATE schedule SET account_id = :account, payee_id = :payee, memo = :memo,
-             amount_type = :amount_type, frequency = :frequency, interval = :interval,
+             direction = :direction, amount_type = :amount_type, frequency = :frequency, interval = :interval,
              day1 = :day1, day2 = :day2, weekday = :weekday, week_of_month = :week,
              start_date = :start, next_due = :next_due, end_kind = :end_kind,
              end_date = :end_date, remaining = :remaining, remind_days = :remind,
@@ -236,6 +238,7 @@ pub fn update(
             ":account": f.account,
             ":payee": f.payee,
             ":memo": f.memo,
+            ":direction": f.direction,
             ":amount_type": f.amount_type,
             ":frequency": r.frequency,
             ":interval": r.interval,

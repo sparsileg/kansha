@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AmountType, CalendarTxn, DayBalance, End, EntryMode, Occurrence, OccurrenceStatus,
+    AmountType, CalendarTxn, DayBalance, Direction, End, EntryMode, Occurrence, OccurrenceStatus,
     OccurrenceView, Recurrence, Schedule, ScheduleFields, ScheduleId, ScheduleLine, ScheduleRow,
     ScheduleStatus, add_days,
 };
@@ -149,8 +149,26 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
             }
         }
     }
-    f.amount()?;
+    if !f.direction.allows(f.amount()?) {
+        return Err(Error::Invalid(format!(
+            "the lines add up to a {} but the schedule is a {}",
+            Direction::of(f.amount()?),
+            f.direction
+        )));
+    }
     Ok(())
+}
+
+/// A one-time or entered amount must go the schedule's way (REC-010):
+/// the amount typed on entry is unsigned, and the direction signs it.
+fn check_direction(s: &Schedule, amount: Option<Money>) -> Result<()> {
+    match amount {
+        Some(a) if !s.fields.direction.allows(a) => Err(Error::Invalid(format!(
+            "this schedule is a {}; the amount goes the other way",
+            s.fields.direction
+        ))),
+        _ => Ok(()),
+    }
 }
 
 /// An investment account in a schedule takes cash in or cash out, so its
@@ -330,6 +348,7 @@ pub fn from_entry(entry: &Entry) -> Result<ScheduleFields> {
         account: entry.account,
         payee: entry.payee,
         memo: entry.memo.clone(),
+        direction: Direction::of(entry.amount),
         amount_type: AmountType::Fixed,
         lines,
         recurrence: rec,
@@ -403,6 +422,7 @@ fn build_entry(
                 .into(),
         ));
     }
+    check_direction(s, explicit)?;
     let amount = explicit.unwrap_or(template);
     if amount != template && f.lines.len() != 1 {
         return Err(Error::Invalid(
@@ -646,6 +666,7 @@ pub fn set_override(
             "the amount of a split can't be changed for one occurrence".into(),
         ));
     }
+    check_direction(&s, amount)?;
     let before = repo::occurrence(tx.conn(), id, due)?;
     let after = if date.is_none() && amount.is_none() {
         repo::delete_pending_occurrence(tx, id, due)?;
@@ -827,6 +848,7 @@ fn pending_view(
         nominal,
         date,
         amount,
+        direction: s.fields.direction,
         status: OccurrenceStatus::Pending,
         account: s.fields.account,
         payee: s.fields.payee,
@@ -864,6 +886,7 @@ fn acted_view(conn: &Connection, s: &Schedule, occ: &Occurrence) -> Result<Occur
         nominal: occ.due_date,
         date,
         amount,
+        direction: s.fields.direction,
         status: occ.status,
         account: s.fields.account,
         payee: s.fields.payee,

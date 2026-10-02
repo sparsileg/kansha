@@ -61,6 +61,32 @@ text_enum! {
 }
 
 text_enum! {
+    /// Which way the money goes in the schedule's account (REC-010): out
+    /// (negative amount) or in (positive). Stored, since a 0.00 amount
+    /// has no sign.
+    pub enum Direction {
+        Payment = "payment",
+        Deposit = "deposit",
+    }
+}
+
+impl Direction {
+    /// The direction of an amount in register sign; 0.00 is a payment.
+    pub fn of(amount: Money) -> Direction {
+        if amount > Money::ZERO {
+            Direction::Deposit
+        } else {
+            Direction::Payment
+        }
+    }
+
+    /// Whether `amount` goes this way (0.00 goes either way).
+    pub fn allows(self, amount: Money) -> bool {
+        amount == Money::ZERO || Direction::of(amount) == self
+    }
+}
+
+text_enum! {
     /// Remind: the user enters each occurrence. Auto: entered on the due
     /// date and flagged for review (REC-070).
     pub enum EntryMode {
@@ -126,6 +152,8 @@ pub struct ScheduleFields {
     pub account: AccountId,
     pub payee: Option<PayeeId>,
     pub memo: String,
+    /// Payment or deposit; a non-zero amount must go this way.
+    pub direction: Direction,
     pub amount_type: AmountType,
     /// At least one. One line is a simple transaction.
     pub lines: Vec<ScheduleLine>,
@@ -193,6 +221,8 @@ pub struct OccurrenceView {
     pub date: Date,
     /// The main account's amount, override applied.
     pub amount: Money,
+    /// The schedule's direction: the sign for an amount typed on entry.
+    pub direction: Direction,
     pub status: OccurrenceStatus,
     pub account: AccountId,
     pub payee: Option<PayeeId>,

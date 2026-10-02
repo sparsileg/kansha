@@ -1066,6 +1066,13 @@ export type DetailSort =
 /**  Check number (numbers in numeric order, then text, then none). */
 "num";
 
+/**
+ *  Which way the money goes in the schedule's account (REC-010): out
+ *  (negative amount) or in (positive). Stored, since a 0.00 amount
+ *  has no sign.
+ */
+export type Direction = "payment" | "deposit";
+
 /**  Shares leaving a lot. A sale is a realized gain record (LOT-040). */
 export type Disposal = {
 	lot: LotId,
@@ -1716,6 +1723,8 @@ export type OccurrenceView = {
 	date: string,
 	/**  The main account's amount, override applied. */
 	amount: string,
+	/**  The schedule's direction: the sign for an amount typed on entry. */
+	direction: Direction,
 	status: OccurrenceStatus,
 	account: AccountId,
 	payee: PayeeId | null,
@@ -2329,6 +2338,8 @@ export type ScheduleFields = {
 	account: AccountId,
 	payee: PayeeId | null,
 	memo: string,
+	/**  Payment or deposit; a non-zero amount must go this way. */
+	direction: Direction,
 	amount_type: AmountType,
 	/**  At least one. One line is a simple transaction. */
 	lines: ScheduleLine[],

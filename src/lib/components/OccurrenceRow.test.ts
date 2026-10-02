@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 const skip = vi.fn();
 const prefill = vi.fn();
 const enterNow = vi.fn();
+const override = vi.fn();
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
   const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
@@ -18,7 +19,10 @@ vi.mock("../api", async (orig) => {
         skip(...a);
         return ok(null);
       },
-      scheduleOverride: () => ok(null),
+      scheduleOverride: (...a: unknown[]) => {
+        override(...a);
+        return ok(null);
+      },
       scheduleEnter: (...a: unknown[]) => enterNow(...a),
       scheduleList: () => ok([]),
       scheduleDueList: () => ok([]),
@@ -43,6 +47,7 @@ const view = (over: Partial<OccurrenceView> = {}): OccurrenceView => ({
   nominal: "2026-10-01",
   date: "2026-10-01",
   amount: "-1000.00",
+  direction: "payment",
   status: "pending",
   account: 2,
   payee: null,
@@ -110,6 +115,14 @@ describe("OccurrenceRow", () => {
     expect(await screen.findByText(/account is closed/)).toBeTruthy();
     scheduleState.rows = [];
     listsState.accounts = [];
+  });
+
+  it("an amount typed for a 0.00 payment goes out, not in", async () => {
+    render(OccurrenceRow, { view: view({ amount: "0.00", direction: "payment" }) });
+    await fireEvent.click(screen.getByRole("button", { name: "Edit…" }));
+    await fireEvent.input(screen.getByLabelText("Amount"), { target: { value: "125" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Set for this occurrence only" }));
+    await waitFor(() => expect(override).toHaveBeenCalledWith(1, "2026-10-01", null, "-125.00"));
   });
 
   it("Skip calls skip", async () => {

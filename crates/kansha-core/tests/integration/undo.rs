@@ -10,7 +10,7 @@ use kansha_core::ledger::{self, Cleared, Entry, Target, TxnId, TxnStatus};
 use kansha_core::persistence::audit::{self, AuditAction, AuditEntity};
 use kansha_core::reconcile::{self, StartInput};
 use kansha_core::schedule::{
-    self, AmountType, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
+    self, AmountType, Direction, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
     ScheduleLine,
 };
 use kansha_core::securities::SecurityType;
@@ -308,6 +308,7 @@ fn deleting_a_scheduled_transaction_cannot_be_undone() {
         account: fx.chk,
         payee: None,
         memo: "rent".into(),
+        direction: Direction::Payment,
         amount_type: AmountType::Fixed,
         lines: vec![ScheduleLine {
             target: Target::Category(fx.rent),

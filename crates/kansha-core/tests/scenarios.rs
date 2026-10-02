@@ -25,7 +25,7 @@ use kansha_core::ledger::{self, Cleared, Counterpart, EntryLine, Target, TxnId};
 use kansha_core::persistence::{accounts, categories, payees, schedules, securities, tags};
 use kansha_core::reconcile::{self, StartInput, StatementItem};
 use kansha_core::schedule::{
-    self, AmountType, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
+    self, AmountType, Direction, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
     ScheduleId, ScheduleLine, WeekendRule,
 };
 use kansha_core::securities::{AssetClass, PricePoint, PriceSource, SecurityFields, SecurityId};
@@ -352,6 +352,8 @@ struct ScheduleSpec {
     mode: Option<String>,
     /// fixed or estimated.
     amount_type: Option<String>,
+    /// payment or deposit; by default the amount's sign says.
+    direction: Option<String>,
     expect_error: Option<String>,
 }
 
@@ -1145,6 +1147,10 @@ impl Ctx<'_> {
             account,
             payee,
             memo: spec.memo.clone(),
+            direction: match &spec.direction {
+                Some(d) => parse::<Direction>("direction", d)?,
+                None => Direction::of(amount),
+            },
             amount_type: match &spec.amount_type {
                 Some(t) => parse::<AmountType>("amount_type", t)?,
                 None => AmountType::Fixed,

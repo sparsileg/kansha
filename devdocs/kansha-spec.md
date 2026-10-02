@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.2 (draft) |
+| **Document version** | 0.7.3 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-01 |
+| **Last updated** | 2026-10-02 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); verification reports (MIG-100) next |
 
@@ -333,7 +333,9 @@ common patterns.
   date, frequency, end condition, and reminder lead time (days before
   due to notify). A split line may go the other way from the
   transaction type (a paycheck deduction), typed with a leading `-`
-  (0.5.1).
+  (0.5.1). The transaction type is stored, so a 0.00 schedule (a bill
+  whose amount is known when it comes in) keeps it; a non-zero amount,
+  one-time amount, or amount typed on entry must go its way (0.7.3).
 - **REC-020** [1.0][S] Supported frequencies:
   - Only once
   - Daily [R]
@@ -401,7 +403,8 @@ common patterns.
 
 - **REC-300** [1.0][S] List columns: Date Due, Payee, Amount, Account,
   Method, Frequency ("How often"), Remind Days, # Left, End Date,
-  Mode.
+  Mode. Method is the transaction type, Payment or Deposit, transfers
+  included (0.7.3).
 
 #### 8.4 Calendar
 
@@ -2226,6 +2229,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.3 | 2026-10-02 | REC-010: a schedule stores its transaction type (payment or deposit). Before, the type was only the sign of the lines, so a 0.00 schedule lost it: the list showed it as a deposit, and an amount set for one occurrence of a 0.00 payment went in as a deposit. A non-zero amount, one-time amount, or entered amount must go the type's way. REC-300: Method shows Payment or Deposit; a transfer is no longer listed as Transfer. The schedule dialog lists accounts most used by existing schedules first. **Schema change:** migration 0009 (`schedule.direction`, filled from the sign of each schedule's lines; 0.00 ones become payments). **API change:** `ScheduleFields` and `OccurrenceView` gain `direction`; new type `Direction`. |
 | 0.7.2 | 2026-10-01 | MIG-150 closed, not needed (schedules re-entered by hand); P-04 settled. INV-060: a gift with an empty memo gets "Gift / noncash donation". RPT-145: Schedule A non-cash line over $500 says "(Form 8283 needed)". No schema change. No API change. |
 | 0.7.1 | 2026-10-01 | New INV-060: gift of shares (a DAF contribution) as Shares removed with a price and a recipient (category or non-investment account); lots leave at basis with no gain, the recipient gets shares × price, Opening Balance the difference. §18 investment rules. Entry form: Shares removed shows Price per share and Given to. NFR-040: 50 MiB page cache (CONVENTIONS §5). No schema change. No API change (`InvInput.counterpart` doc comment only; `trade_amount` accepts Shares removed). |
 | 0.7 | 2026-10-01 | MIG-115 lot true-up built (Tools > Securities > True up lots…): one holding's lots set to the broker's cost-basis CSV (a Vanguard download reads as it is) as of a date; matching lots kept, the rest closed (disposal kind `true_up`, no gain) and the broker's opened, one audited `true_up` transaction against Opening Balance; later sales taken out and put back, choosing lots again; IRA/Roth compare shares only. §18 date-order exception. `share_balance_mismatch` counts true-up lots. AUD-010: prices are no longer audited; CONVENTIONS §5 exception. CAT-040: tithing columns dropped. **Schema change:** migration 0008 (investment action and disposal kind `true_up`; `category.tithable`, `category.giving` dropped; price audit entries deleted). **API change:** new commands `true_up_preview`, `true_up`; types `TrueUpPreview`, `TrueUpLine`, `TrueUpLot`, `TrueUpReplay`, `TrueUpStatus`; `InvAction` and `DisposalKind` gain `true_up`; `CategoryFields` loses `tithable`, `giving`. |
