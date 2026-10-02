@@ -447,3 +447,8 @@ user picks the column).
   edit; allowed on purpose).
 - Stan: check 0.00 reminders that should be deposits; the migration
   made them payments.
+
+## Next: tax reports closer to Quicken (designed 2026-10-02)
+
+Design and plan: `devdocs/tax-reports-design.md`. Not built. Closes
+gap 13 above (Quicken `R` tax codes) in its step 1.
