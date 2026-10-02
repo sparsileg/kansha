@@ -62,3 +62,30 @@ scenario $KANSHA_SCENARIOS:
 # Show how failing scenarios are reported (this recipe is expected to fail)
 scenario-demo-fail:
     just scenario crates/kansha-core/tests/fixtures/failing
+
+# Touches every workspace .rs file and rebuilds (build, test, clippy), so
+# the workspace crates recompile once; any incremental dir those builds
+# don't write is dead.
+#
+# Delete stale incremental dirs from target/debug (full workspace rebuild)
+[unix]
+sweep:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    marker=$(mktemp target/sweep-marker.XXXXXX)
+    trap 'rm -f "$marker"' EXIT
+    sleep 1
+    find crates src-tauri -name target -prune -o -name '*.rs' -exec touch -c {} +
+    cargo build --workspace
+    cargo test --workspace --no-run
+    cargo test -p kansha --no-run
+    cargo clippy --workspace --all-targets -- -D warnings
+    before=$(du -sh target | cut -f1)
+    n=0
+    for d in target/debug/incremental/*/; do
+        if [ -z "$(find "$d" -newer "$marker" -print -quit)" ]; then
+            rm -rf -- "$d"
+            n=$((n + 1))
+        fi
+    done
+    echo "sweep: removed $n incremental dirs; target $before -> $(du -sh target | cut -f1)"
