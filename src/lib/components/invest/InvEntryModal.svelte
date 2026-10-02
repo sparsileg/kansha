@@ -185,7 +185,7 @@
     {/if}
     {#if info.counterpart !== "none"}
       <label>
-        {info.counterpart === "category" ? "Category (optional)" : "From or to"}
+        {info.counterpartLabel}
         <select bind:value={form.counterpart}>
           <option value="">—</option>
           {#if info.counterpart === "account_or_category"}
@@ -198,6 +198,9 @@
           </optgroup>
         </select>
       </label>
+      {#if form.action === "shares_removed" && form.counterpart && computed}
+        <p class="note">Gift value (shares × price) = {formatMoney(computed)}; no gain is recorded.</p>
+      {/if}
     {/if}
     {#if info.lots}
       <label>

@@ -325,7 +325,8 @@ pub struct InvInput {
     /// date when left out.
     pub acquired: Option<Date>,
     /// Cash in/out: the other account or a category. Misc income or
-    /// expense: a category instead of the built-in one.
+    /// expense: a category instead of the built-in one. Shares removed:
+    /// the recipient of shares given away, which gets shares × price.
     pub counterpart: Option<Target>,
     pub memo: String,
 }
@@ -452,6 +453,11 @@ impl InvTxn {
                 .iter()
                 .find(|p| matches!(p.target, Target::Category(_)))
                 .map(|p| p.target),
+            // Given away: holding, recipient, Opening Balance (a plain
+            // removal has only two postings).
+            InvAction::SharesRemoved if self.txn.postings.len() == 3 => {
+                self.txn.postings.get(1).map(|p| p.target)
+            }
             _ => None,
         };
         let lots = if self.lot_method == Some(LotMethod::Specific) {

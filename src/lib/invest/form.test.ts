@@ -76,6 +76,15 @@ describe("buildInput", () => {
     const cash = buildInput(7, { ...emptyForm("cash_in", "2026-06-01"), security: 3, amount: "100", counterpart: "a:1" }, today);
     expect(cash.ok && cash.input.security).toBeNull();
     expect(cash.ok && cash.input.counterpart).toEqual({ kind: "account", id: 1 });
+
+    const gift = buildInput(
+      7,
+      { ...emptyForm("shares_removed", "2026-06-01"), security: 3, quantity: "4", price: "250", counterpart: "c:12" },
+      today,
+    );
+    expect(gift.ok && gift.input.price).toBe("250");
+    expect(gift.ok && gift.input.counterpart).toEqual({ kind: "category", id: 12 });
+    expect(gift.ok && gift.input.amount).toBeNull();
   });
 
   it("says what does not parse", () => {

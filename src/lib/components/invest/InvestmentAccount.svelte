@@ -19,10 +19,14 @@
   /** `undefined` closed; `null` new; a transaction to edit. */
   let entry = $state<TxnId | null | undefined>(undefined);
 
+  /** Scroll to the newest rows once this account's register loads. */
+  let toEnd = false;
+
   // Load when the account changes; `open` reads and writes the state it
   // loads, so keep it out of this effect's dependencies.
   $effect(() => {
     const id = account.id;
+    toEnd = true;
     untrack(() => void investState.open(id));
   });
 
@@ -43,9 +47,22 @@
     if (want === null || registerState.accountId !== account.id || !rows?.some((x) => x.txn_id === want)) return;
     untrack(() => {
       registerState.reveal = null;
+      toEnd = false;
       void tick().then(() =>
         pane?.querySelector(`tr[data-txn="${want}"]`)?.scrollIntoView?.({ block: "center" }),
       );
+    });
+  });
+
+  // After opening the account, show the bottom (newest) rows, unless a
+  // search hit or drill-down names a transaction to show instead.
+  $effect(() => {
+    const rows = r?.rows;
+    if (!toEnd || !rows || investState.accountId !== account.id) return;
+    toEnd = false;
+    if (untrack(() => registerState.reveal !== null && registerState.accountId === account.id)) return;
+    void tick().then(() => {
+      if (pane) pane.scrollTop = pane.scrollHeight;
     });
   });
 

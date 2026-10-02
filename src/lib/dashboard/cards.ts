@@ -14,6 +14,8 @@ export interface CardDef {
   label: string;
   /** Spans the dashboard's full width. */
   wide?: boolean;
+  /** Two columns wide, when there is room for two. */
+  double?: boolean;
 }
 
 /** Every card, in the default order. */
@@ -21,7 +23,7 @@ export const CARDS: readonly CardDef[] = [
   { id: "net_worth", label: "Net worth" },
   { id: "this_month", label: "This month" },
   { id: "net_worth_trend", label: "Net worth, last 12 months", wide: true },
-  { id: "upcoming", label: "Due soon" },
+  { id: "upcoming", label: "Due soon", double: true },
   { id: "attention", label: "Needs attention" },
 ];
 

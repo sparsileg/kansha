@@ -131,9 +131,13 @@ fn file_database_uses_wal_full_sync_and_foreign_keys() {
     let app: i32 = conn
         .query_row("PRAGMA application_id", [], |r| r.get(0))
         .unwrap();
+    // A page cache of up to 50 MiB: a whole book stays in memory.
+    let cache: i64 = conn
+        .query_row("PRAGMA cache_size", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(
-        (mode.as_str(), sync, fk, app),
-        ("wal", 2, 1, APPLICATION_ID)
+        (mode.as_str(), sync, fk, app, cache),
+        ("wal", 2, 1, APPLICATION_ID, -51_200)
     );
 }
 

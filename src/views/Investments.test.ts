@@ -61,6 +61,7 @@ beforeEach(() => {
   investViewState.selected = 0;
   investViewState.asOf = "";
   investViewState.expanded = new Set();
+  investViewState.seenAccounts = new Set();
   investViewState.portfolio = null;
 });
 
@@ -92,6 +93,7 @@ describe("Investments view", () => {
   it("shows the Default view: 8 columns, collapsed account with rolled-up values, Totals", async () => {
     render(Investments);
     await waitFor(() => expect(screen.getByText("Brokerage")).toBeTruthy());
+    await fireEvent.click(screen.getByRole("button", { name: "Collapse Brokerage" }));
     const heads = screen.getAllByRole("columnheader").map((h) => h.textContent);
     expect(heads).toEqual([
       "Name", "Ticker Symbol", "Quote/Price", "Shares", "Market Value", "Gain/Loss",
@@ -104,9 +106,23 @@ describe("Investments view", () => {
     expect(invPortfolio).toHaveBeenCalledWith([2], null, "2026-06-30", false);
   });
 
+  it("an account starts expanded once; a collapse is kept while the app runs", async () => {
+    render(Investments);
+    await screen.findByText("Total Stock Market");
+    await fireEvent.click(screen.getByRole("button", { name: "Collapse Brokerage" }));
+    expect(screen.queryByText("Total Stock Market")).toBeNull();
+    cleanup();
+    invPortfolio.mockClear();
+    render(Investments);
+    await waitFor(() => expect(invPortfolio).toHaveBeenCalled());
+    await screen.findByRole("button", { name: "Expand Brokerage" });
+    expect(screen.queryByText("Total Stock Market")).toBeNull();
+  });
+
   it("expands an account, then an equity, to its lots", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
+    await fireEvent.click(screen.getByRole("button", { name: "Collapse Brokerage" }));
     await fireEvent.click(screen.getByRole("button", { name: "Expand Brokerage" }));
     expect(screen.getByText("Cash")).toBeTruthy();
     expect(screen.getByText("Total Stock Market")).toBeTruthy();
@@ -206,7 +222,6 @@ describe("Investments view", () => {
   it("clicking a security opens its details", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
-    await fireEvent.click(screen.getByRole("button", { name: "Expand Brokerage" }));
     await fireEvent.click(screen.getByRole("button", { name: "Total Stock Market" }));
     const dlg = await screen.findByRole("dialog", { name: "Security Details" });
     expect((within(dlg).getByRole("combobox", { name: "Security" }) as HTMLSelectElement).value).toBe("1");

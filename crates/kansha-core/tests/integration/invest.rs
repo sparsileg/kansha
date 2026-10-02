@@ -3,6 +3,7 @@
 //! scenarios can't reach, the integrity checks, and the schema's enums.
 
 use kansha_core::accounts::{AccountType, CashMode, LotMethod};
+use kansha_core::categories::CategoryKind;
 use kansha_core::integrity::{self, Check};
 use kansha_core::invest::{self, AdjustmentKind, DisposalKind, InvAction, InvInput, LotPick, Term};
 use kansha_core::ledger::{self, Cleared, Target, TxnSource};
@@ -558,6 +559,11 @@ fn trade_amount_is_computed_in_rust() {
         invest::trade_amount(InvAction::Sell, q("3"), p("33.333333"), m("1.00")).unwrap(),
         m("99.00")
     );
+    // Shares given away: their value, shares × price.
+    assert_eq!(
+        invest::trade_amount(InvAction::SharesRemoved, q("4"), p("250"), Money::ZERO).unwrap(),
+        m("1000.00")
+    );
     assert!(invest::trade_amount(InvAction::Dividend, q("1"), p("1"), Money::ZERO).is_err());
 }
 
@@ -822,6 +828,113 @@ fn an_edit_ignores_lots_bought_later_the_same_day() {
         .unwrap();
     assert!(t.disposals.iter().all(|d| d.lot != pricier), "{t:?}");
     assert_eq!(t.disposals[0].lot, later_lot);
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+}
+
+#[test]
+fn shares_given_away_leave_with_no_gain_and_the_value_goes_to_the_recipient() {
+    // A gift of shares (a DAF contribution): the chosen lots leave at
+    // basis, the recipient gets shares × price, and the difference is
+    // Opening Balance, never a realized gain.
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let cheap = b
+        .invest(&buy(brk, vti, "2026-01-10", "10", "1000.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-02-10", "10", "2000.00"))
+        .unwrap();
+    let charity = b
+        .category("Charity:Noncash", CategoryKind::Expense)
+        .unwrap();
+    let opening = b.find_category("Opening Balance").unwrap().unwrap();
+
+    let mut gift = InvInput::new(brk, InvAction::SharesRemoved, date("2026-03-02"));
+    gift.security = Some(vti);
+    gift.quantity = Some(q("4"));
+    gift.price = Some(p("250"));
+    gift.lots = vec![LotPick {
+        lot: cheap.lots[0].id,
+        quantity: q("4"),
+    }];
+    gift.counterpart = Some(Target::Category(charity));
+    gift.memo = "Firefly Hill Fund".into();
+    let t = b.invest(&gift).unwrap();
+    let postings: Vec<_> = t
+        .txn
+        .postings
+        .iter()
+        .map(|x| (x.target, x.security, x.amount))
+        .collect();
+    assert_eq!(
+        postings,
+        vec![
+            (Target::Account(brk), Some(vti), m("-400.00")),
+            (Target::Category(charity), None, m("1000.00")),
+            (Target::Category(opening), None, m("-600.00")),
+        ]
+    );
+    assert_eq!(t.cash, Money::ZERO);
+    assert_eq!(t.disposals.len(), 1);
+    assert_eq!(t.disposals[0].kind, DisposalKind::Removed);
+    assert_eq!(t.disposals[0].gain, None);
+    gift.lot_method = Some(LotMethod::Specific);
+    assert_eq!(t.to_input(), gift);
+
+    // An edit of the price moves the value; the basis stays.
+    gift.price = Some(p("300"));
+    let t = b
+        .write(|tx| invest::update(tx, t.txn.id, &gift, false))
+        .unwrap();
+    let amounts: Vec<_> = t.txn.postings.iter().map(|x| x.amount).collect();
+    assert_eq!(amounts, vec![m("-400.00"), m("1200.00"), m("-800.00")]);
+    assert_eq!(t.to_input(), gift);
+
+    // Worth exactly its basis: the Opening Balance line stays, at zero.
+    gift.price = Some(p("100"));
+    let t = b
+        .write(|tx| invest::update(tx, t.txn.id, &gift, false))
+        .unwrap();
+    let amounts: Vec<_> = t.txn.postings.iter().map(|x| x.amount).collect();
+    assert_eq!(amounts, vec![m("-400.00"), m("400.00"), Money::ZERO]);
+    assert_eq!(t.to_input(), gift);
+
+    // Plain shares removed: basis against Opening Balance, no recipient.
+    let mut plain = InvInput::new(brk, InvAction::SharesRemoved, date("2026-03-03"));
+    plain.security = Some(vti);
+    plain.quantity = Some(q("1"));
+    plain.price = Some(p("250"));
+    let r = b.invest(&plain).unwrap();
+    assert_eq!(r.txn.postings.len(), 2);
+    assert_eq!(r.to_input().counterpart, None);
+
+    // A recipient needs the price; an investment account can't be one.
+    let mut no_price = gift.clone();
+    no_price.date = date("2026-03-04");
+    no_price.price = None;
+    no_price.lots = Vec::new();
+    no_price.lot_method = None;
+    let err = b.invest(&no_price).unwrap_err();
+    assert!(err.to_string().contains("price"), "{err}");
+    let daf = b
+        .account("Firefly Hill Fund", AccountType::DonorAdvisedFund)
+        .unwrap();
+    let mut to_daf = no_price.clone();
+    to_daf.price = Some(p("250"));
+    to_daf.counterpart = Some(Target::Account(daf));
+    let err = b.invest(&to_daf).unwrap_err();
+    assert!(err.to_string().contains("investment account"), "{err}");
+
+    // Nothing realized: no Realized Gain posting anywhere.
+    let rg = b.find_category("Realized Gain/Loss").unwrap().unwrap();
+    let n: i64 = b
+        .conn()
+        .query_row(
+            "SELECT count(*) FROM posting WHERE category_id = ?1",
+            params![rg.0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 0);
     assert!(integrity::check(b.conn()).unwrap().is_clean());
 }
 

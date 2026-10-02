@@ -96,6 +96,11 @@ fn keyed_export_round_trips_every_row_and_the_schema() {
 
     let db = Db::open_keyed(&enc, &key).unwrap();
     assert!(!db.needs_migration().unwrap());
+    let cache: i64 = db
+        .conn()
+        .query_row("PRAGMA cache_size", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(cache, -51_200);
     assert_eq!(fingerprint(&db), fingerprint(&plain));
     assert_eq!(schema_sql(&db), schema_sql(&plain));
     let app: i32 = db

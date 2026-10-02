@@ -89,7 +89,7 @@
       {@const d = data}
       <div class="cards">
         {#each cards as c (c.id)}
-          <article class="card sheet" class:wide={c.wide} data-card={c.id} aria-labelledby={`card-${c.id}`}>
+          <article class="card sheet" class:wide={c.wide} class:double={c.double} data-card={c.id} aria-labelledby={`card-${c.id}`}>
             <header><h2 id={`card-${c.id}`}>{c.id === "upcoming" ? `Due in the next ${d.upcoming_days} days` : c.label}</h2></header>
             <div class="body">{@render bodies[c.id](d)}</div>
           </article>
@@ -182,9 +182,16 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     gap: 0.75rem;
+    container-type: inline-size;
   }
   .card.wide {
     grid-column: 1 / -1;
+  }
+  /* Two columns only when the grid has two (16rem each plus the gap). */
+  @container (min-width: 32.75rem) {
+    .card.double {
+      grid-column: span 2;
+    }
   }
   .big {
     font-size: var(--fs-title);

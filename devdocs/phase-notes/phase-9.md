@@ -348,28 +348,42 @@ except the 2026-09-28 VTSAX reinvestment (Stan enters it with the
 month-end reinvestments). Accounts 448 and 140 now default to Minimum
 tax, as Vanguard does.
 
-## Next: charitable gift of shares (proposal, not built)
+## Gift of shares (INV-060), spec 0.7.1, 2026-10-01
 
-Waiting for Stan's answers and "proceed".
+Stan's answers: the DAF (Firefly Hill Fund) gets the cash value, not
+the shares; VBS-Cash was 448's external cash account, now closed (cash
+now goes straight from 448); redoing the true-up is fine. His Quicken
+method: Removed (chosen lots), Added at market, Sold that lot, then
+VBS-Cash paid to Charity:Noncash; the DAF balance updated by hand.
 
-- New action **Gift Shares**: security, shares, lot choice (any
-  method), price per share on the gift date (shares × price = fair
-  market value, the deduction). Recipient: an investment account such
-  as the DAF (shares move like Transfer Shares, keeping dates and
-  basis) or a category (shares leave at basis).
-- New disposal kind `gift`: no gain, no term; left out of realized gain
-  and tax reports.
-- ⚠ Schema change: migration 0009 (0008 is in Stan's book).
-  ⚠ API change: action, disposal kind, bindings.
-- Deferred unless asked: a deduction report of gifts at market value.
-- Then fix the VTI gifts of 2024-11-29 (170 sh) and 2025-07-15
-  (179.393 sh): each is Quicken's workaround (shares added, removed,
-  and sold, plus a "dummy" cash transfer to VBS-Cash of $50,974.79 and
-  $55,193.84), giving phantom gains of $33,498.79 and $36,555.79.
-  Date order needs: delete the VTI true-up (later sales go back on the
-  old lots; the 2026 Specific pick survives, its lot was kept), replace
-  each group with one Gift Shares, true up again with the same file.
-  Try on a scratch copy first.
-- Questions for Stan: (1) DAF receives shares (basis and dates kept)
-  or their cash value? (2) What is VBS-Cash (the DAF stand-in?)
-  (3) OK to do the cleanup as above?
+Built as Shares removed with a price and a recipient, not a new
+action, so no migration and no IPC signature change:
+
+- Engine (`invest/service.rs`): recipient allowed on Shares removed,
+  needs the price; holding −basis, recipient +shares × price, Opening
+  Balance the difference (posted even at zero, so `to_input` finds the
+  recipient as the second of three postings). Disposal kind `removed`:
+  no gain, not in realized gains. `trade_amount` gives the value.
+- Recipient: a category or a non-investment account
+  (`check_counterpart`). Firefly is type Donor Advised Fund, an
+  investment account, so it can't be the recipient; use Charity:Noncash
+  and keep updating Firefly by hand, as in Quicken.
+- Form: Shares removed shows Price per share and "Given to"; a note
+  shows the gift value.
+- Test: `invest::shares_given_away_leave_with_no_gain_and_the_value_goes_to_the_recipient`
+  (postings, edits, zero difference, plain removal, errors);
+  `trade_amount_is_computed_in_rust`; `form.test.ts`;
+  `reports::shares_given_to_charity_are_a_deduction_at_market_value_not_a_sale`
+  (Charity:Noncash on Schedule A, Non-cash charity contributions, at
+  market value; Schedule D unchanged).
+- Setup: Charity:Noncash tax-related, tax line Schedule A "Non-cash
+  charity contributions". Deferred: Form 8283 report.
+- Not run in the real app yet.
+
+Cleanup of the two imported VTI gifts (2024-11-29, 170 sh;
+2025-07-15, 179.393 sh), each Quicken's Removed + Added + Sold, whose
+sales took FIFO lots on import (phantom gains $33,498.79 and
+$36,555.79): re-pick each sale to the lot added that day, so the gain
+is zero. Date order blocks editing a sale with later disposals in the
+holding, so it starts by deleting the VTI true-up; then re-run it with
+`ignored/vti-448-2025-12-31.csv`. Dry run on a scratch copy first.

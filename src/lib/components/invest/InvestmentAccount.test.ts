@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 
 const ok = <T,>(data: T) => Promise.resolve({ status: "ok" as const, data });
@@ -54,6 +54,35 @@ beforeEach(() => {
 });
 
 describe("Investment account register (INV-030)", () => {
+  describe("opening scroll", () => {
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight");
+    beforeEach(() => {
+      Object.defineProperty(HTMLDivElement.prototype, "scrollHeight", { configurable: true, get: () => 900 });
+      registerState.reveal = null;
+    });
+    afterEach(() => {
+      delete (HTMLDivElement.prototype as { scrollHeight?: number }).scrollHeight;
+      if (desc) Object.defineProperty(Element.prototype, "scrollHeight", desc);
+    });
+
+    it("opens scrolled to the newest rows", async () => {
+      const { container } = render(InvestmentAccount, { account });
+      await screen.findByText("Buy");
+      const pane = container.querySelector<HTMLDivElement>(".pane")!;
+      await waitFor(() => expect(pane.scrollTop).toBe(900));
+    });
+
+    it("a drill-down's transaction wins over the newest rows", async () => {
+      registerState.accountId = 2;
+      registerState.reveal = 10;
+      const { container } = render(InvestmentAccount, { account });
+      await screen.findByText("Buy");
+      const pane = container.querySelector<HTMLDivElement>(".pane")!;
+      await waitFor(() => expect(registerState.reveal).toBeNull());
+      expect(pane.scrollTop).toBe(0);
+    });
+  });
+
   it("stripes rows; future rows are italic in their own tint; reconciled rows are gray", async () => {
     const saved = register.rows;
     const at = (txn_id: number, o: object) => ({ ...saved[0], txn_id, ...o });

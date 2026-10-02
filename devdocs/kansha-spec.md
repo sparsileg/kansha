@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7 (draft) |
+| **Document version** | 0.7.1 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-01 |
 | **Owner** | Stan |
@@ -561,6 +561,12 @@ common patterns.
 - **INV-050** [1.0][S] Money market funds held as "cash" can be
   treated either as a security (with $1.00 price) or as the account's
   cash balance, configurable per account (D-50, decided).
+- **INV-060** [1.0][S] **Gift of shares** (built, 0.7.1), such as a
+  donor advised fund contribution: Shares removed with a price per
+  share and a recipient (a category such as Charity:Noncash, or a
+  non-investment account). The chosen lots leave at basis with no
+  gain (disposal kind `removed`); the recipient gets shares × price;
+  the difference goes to Opening Balance. A recipient needs the price.
 
 #### 10.4 Cash handling
 
@@ -1293,7 +1299,8 @@ platform has one.
   Section 19).
 - **NFR-040** [1.0][R] Performance: register with 10,000 transactions
   opens in under 1 second; typical reports render in under 2 seconds
-  on Stan's hardware.
+  on Stan's hardware. A book keeps up to 50 MiB of database pages in
+  memory, so it is read and decrypted once (0.7.1).
 - **NFR-050** [1.0][R] Data volume: comfortably supports 20+ years of
   data (hundreds of thousands of transactions).
 - **NFR-060** [1.0][R] Durability: SQLite WAL mode with
@@ -1765,7 +1772,9 @@ Modeling choices that affect other sections:
   of capital (cash +, holding −basis reduced, Realized Gain/Loss
   −excess), split (one zero holding posting), share transfer (holding
   − here, + there), shares added or removed (holding ± basis against
-  Opening Balance), cash in or out (cash ± against an account or
+  Opening Balance; shares given away, INV-060: holding −basis,
+  recipient +shares × price, Opening Balance the difference, kept
+  even at zero), cash in or out (cash ± against an account or
   category), fee, withholding, and misc (cash ± against the built-in
   or a chosen category). With linked cash (INV-300) every cash posting
   goes to the linked account; cash in and out are refused; cash
@@ -2214,6 +2223,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.1 | 2026-10-01 | New INV-060: gift of shares (a DAF contribution) as Shares removed with a price and a recipient (category or non-investment account); lots leave at basis with no gain, the recipient gets shares × price, Opening Balance the difference. §18 investment rules. Entry form: Shares removed shows Price per share and Given to. NFR-040: 50 MiB page cache (CONVENTIONS §5). No schema change. No API change (`InvInput.counterpart` doc comment only; `trade_amount` accepts Shares removed). |
 | 0.7 | 2026-10-01 | MIG-115 lot true-up built (Tools > Securities > True up lots…): one holding's lots set to the broker's cost-basis CSV (a Vanguard download reads as it is) as of a date; matching lots kept, the rest closed (disposal kind `true_up`, no gain) and the broker's opened, one audited `true_up` transaction against Opening Balance; later sales taken out and put back, choosing lots again; IRA/Roth compare shares only. §18 date-order exception. `share_balance_mismatch` counts true-up lots. AUD-010: prices are no longer audited; CONVENTIONS §5 exception. CAT-040: tithing columns dropped. **Schema change:** migration 0008 (investment action and disposal kind `true_up`; `category.tithable`, `category.giving` dropped; price audit entries deleted). **API change:** new commands `true_up_preview`, `true_up`; types `TrueUpPreview`, `TrueUpLine`, `TrueUpLot`, `TrueUpReplay`, `TrueUpStatus`; `InvAction` and `DisposalKind` gain `true_up`; `CategoryFields` loses `tithable`, `giving`. |
 | 0.6.13 | 2026-10-01 | New REC-115: schedules on investment accounts and transfers into them, entered as cash in or cash out (no split, not with linked cash, no projection). The schedule dialog and the calendar list investment accounts. No schema or API change. |
 | 0.6.12 | 2026-10-01 | PAY-020, new PAY-025: Tools > Payees becomes Memorized Payees, listing only memorized payees with Category, Memo, and Amount from each payee's last use; QuickFill uses the same values. "Show all payees" lists the rest; the defaults form is gone. No schema or API change (the `default_*` fields of `Payee` now carry last-use values in `payee_list` and `payee_search`). |

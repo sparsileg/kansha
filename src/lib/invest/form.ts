@@ -41,8 +41,10 @@ export interface ActionInfo {
   /** Takes shares out of lots (FIFO or chosen lots). */
   lots: boolean;
   acquired: boolean;
-  /** Cash in/out: an account or category; misc: a category. */
+  /** Cash in/out: an account or category; misc: a category; shares
+   * removed: the recipient of shares given away. */
   counterpart: "account_or_category" | "category" | "none";
+  counterpartLabel: string;
 }
 
 const base: Omit<ActionInfo, "value" | "label"> = {
@@ -57,6 +59,7 @@ const base: Omit<ActionInfo, "value" | "label"> = {
   lots: false,
   acquired: false,
   counterpart: "none",
+  counterpartLabel: "From or to",
 };
 
 const a = (value: InvAction, label: string, over: Partial<ActionInfo> = {}): ActionInfo => ({
@@ -83,13 +86,20 @@ export const ACTIONS: ActionInfo[] = [
   a("split", "Stock split", { amount: "none", split: true }),
   a("transfer_shares", "Transfer shares", { shares: true, amount: "none", toAccount: true, lots: true }),
   a("shares_added", "Shares added", { shares: true, acquired: true, amountLabel: "Cost basis" }),
-  a("shares_removed", "Shares removed", { shares: true, amount: "none", lots: true }),
+  a("shares_removed", "Shares removed", {
+    shares: true,
+    price: true,
+    amount: "none",
+    lots: true,
+    counterpart: "account_or_category",
+    counterpartLabel: "Given to (optional; needs the price)",
+  }),
   a("cash_in", "Cash in", { security: "none", counterpart: "account_or_category" }),
   a("cash_out", "Cash out", { security: "none", counterpart: "account_or_category" }),
   a("fee", "Fee", { security: "optional" }),
   a("tax_withholding", "Tax withheld", { security: "optional" }),
-  a("misc_income", "Misc income", { security: "optional", counterpart: "category" }),
-  a("misc_expense", "Misc expense", { security: "optional", counterpart: "category" }),
+  a("misc_income", "Misc income", { security: "optional", counterpart: "category", counterpartLabel: "Category (optional)" }),
+  a("misc_expense", "Misc expense", { security: "optional", counterpart: "category", counterpartLabel: "Category (optional)" }),
 ];
 
 /** A lot true-up (MIG-115): made from the broker's lot list, never in

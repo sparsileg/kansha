@@ -1461,7 +1461,8 @@ export type InvInput = {
 	acquired: string | null,
 	/**
 	 *  Cash in/out: the other account or a category. Misc income or
-	 *  expense: a category instead of the built-in one.
+	 *  expense: a category instead of the built-in one. Shares removed:
+	 *  the recipient of shares given away, which gets shares × price.
 	 */
 	counterpart: Target | null,
 	memo: string,

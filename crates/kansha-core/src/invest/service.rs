@@ -177,9 +177,10 @@ pub fn trade_amount(
     match action {
         InvAction::Buy => value.checked_add(commission).ok_or_else(overflow),
         InvAction::Sell => value.checked_sub(commission).ok_or_else(overflow),
-        InvAction::ReinvestDividend | InvAction::ReinvestCgShort | InvAction::ReinvestCgLong => {
-            Ok(value)
-        }
+        InvAction::ReinvestDividend
+        | InvAction::ReinvestCgShort
+        | InvAction::ReinvestCgLong
+        | InvAction::SharesRemoved => Ok(value),
         other => Err(Error::Invalid(format!(
             "{} has no shares × price amount",
             other.label()
@@ -355,10 +356,17 @@ fn check_fields(i: &InvInput) -> Result<()> {
         InvAction::MiscIncome | InvAction::MiscExpense => {
             matches!(i.counterpart, None | Some(Target::Category(_)))
         }
+        // Shares given away: the recipient (a charity category, say).
+        InvAction::SharesRemoved => true,
         _ => i.counterpart.is_none(),
     };
     if !counterpart_ok {
         return unused("transfer account or category");
+    }
+    if a == InvAction::SharesRemoved && i.counterpart.is_some() && i.price.is_none() {
+        return Err(Error::Invalid(
+            "shares given away need their price per share on the gift date".into(),
+        ));
     }
     check_settle(i)
 }
@@ -618,7 +626,20 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
                         b.disposals.push(disposal(t, DisposalKind::Removed));
                     }
                     b.post(Target::Account(a), Some(s.id), neg(basis)?);
-                    b.category(conn, SystemCategory::OpeningBalance, basis)?;
+                    match (input.counterpart, input.price) {
+                        // Given away: the recipient gets shares × price and
+                        // the rest is Opening Balance, not a gain. The
+                        // Opening Balance line is kept even at zero, so the
+                        // recipient is always the second of three postings
+                        // (`InvTxn::to_input`).
+                        (Some(to), Some(price)) => {
+                            check_counterpart(conn, to, a)?;
+                            let value = extended_value(qty, price)?;
+                            b.post(to, None, value);
+                            b.category(conn, SystemCategory::OpeningBalance, sub(basis, value)?)?;
+                        }
+                        _ => b.category(conn, SystemCategory::OpeningBalance, basis)?,
+                    }
                 }
             }
         }

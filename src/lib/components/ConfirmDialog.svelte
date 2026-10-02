@@ -4,7 +4,7 @@
 </script>
 
 {#if confirmState.message !== null}
-  <Modal title="Confirm" onclose={() => confirmState.answer(false)}>
+  <Modal title="Confirm" top onclose={() => confirmState.answer(false)}>
     <p>{confirmState.message}</p>
     <div class="row">
       {#if confirmState.choices.length}

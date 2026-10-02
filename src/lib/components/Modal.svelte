@@ -7,6 +7,7 @@
     wide = false,
     fit = false,
     side = false,
+    top = false,
     children,
   }: {
     title: string;
@@ -16,6 +17,9 @@
     fit?: boolean;
     /** Docked to the right with the page still usable beside it: no dimming, clicks pass through. */
     side?: boolean;
+    /** Above every other dialog, menu, and drop-down: the Confirm dialog,
+     * which other dialogs open. */
+    top?: boolean;
     children: Snippet;
   } = $props();
 
@@ -37,7 +41,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" class:side {onkeydown}>
+<div class="backdrop" class:side class:top {onkeydown}>
   <div
     class="modal"
     class:wide
@@ -65,6 +69,9 @@
     justify-content: center;
     padding-top: 4vh;
     z-index: 50;
+  }
+  .backdrop.top {
+    z-index: 90;
   }
   .backdrop.side {
     background: none;

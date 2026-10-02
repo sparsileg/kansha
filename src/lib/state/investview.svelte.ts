@@ -2,7 +2,8 @@
 // overview Rust works out (POS-010, LOT-150). Views are kept in the book
 // (SET-070) through booksettings.svelte.ts; `applyStored` reads them when
 // a book opens. Whether closed lots show is part of each view. Which rows
-// are expanded is kept while the app runs.
+// are expanded is kept while the app runs; an account starts expanded the
+// first time it appears, so its securities show.
 
 import { call, commands } from "../api";
 import {
@@ -14,6 +15,7 @@ import {
   type ViewDef,
   type ViewsState,
 } from "../invest/views";
+import { accountKey } from "../invest/rows";
 import type { Portfolio } from "../types/bindings";
 import { listsState } from "./lists.svelte";
 import { investState } from "./invest.svelte";
@@ -31,6 +33,8 @@ class InvestViewState {
   error = $state<string | null>(null);
   /** Keys of expanded rows: "a<account>" and "p<account>:<security>". */
   expanded = $state<Set<string>>(new Set());
+  /** Accounts already shown once: later loads keep their expansion. */
+  seenAccounts = new Set<number>();
 
   #seq = 0;
 
@@ -97,6 +101,15 @@ class InvestViewState {
       );
       const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null, this.showClosed));
       if (seq !== this.#seq) return;
+      const fresh = p.accounts.map((a) => a.account).filter((id) => !this.seenAccounts.has(id));
+      if (fresh.length) {
+        const next = new Set(this.expanded);
+        for (const id of fresh) {
+          this.seenAccounts.add(id);
+          next.add(accountKey(id));
+        }
+        this.expanded = next;
+      }
       this.portfolio = p;
       this.error = null;
     } catch (e) {

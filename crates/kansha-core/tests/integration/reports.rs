@@ -599,6 +599,40 @@ fn tax_summary_lists_tax_related_categories_and_mapped_transfers() {
 }
 
 #[test]
+fn shares_given_to_charity_are_a_deduction_at_market_value_not_a_sale() {
+    // INV-060: the recipient category gets shares × price; Schedule D
+    // keeps only the sale.
+    let mut fx = fixture();
+    let noncash = tax_line(&fx.book, "Schedule A", "Non-cash charity contributions");
+    set_category_line(
+        &mut fx.book,
+        "Charity:Noncash",
+        CategoryKind::Expense,
+        noncash,
+    );
+    let charity = fx.book.find_category("Charity:Noncash").unwrap().unwrap();
+    let vti = kansha_core::persistence::securities::list(fx.book.conn()).unwrap()[0].id;
+    let mut gift = InvInput::new(fx.brokerage, InvAction::SharesRemoved, date("2026-06-01"));
+    gift.security = Some(vti);
+    gift.quantity = Some("2".parse().unwrap());
+    gift.price = Some("150".parse().unwrap());
+    gift.counterpart = Some(Target::Category(charity));
+    fx.book.invest(&gift).unwrap();
+    let schedule = text(&run(&fx, &settings(ReportKind::TaxSchedule)));
+    assert!(
+        schedule.contains(
+            "  + Non-cash charity contributions |  |  |  |  |  |  |  |  | -300.00\n    -  | 2026-06-01 | Brokerage | Shares Removed"
+        ),
+        "{schedule}"
+    );
+    assert!(
+        schedule.contains("# Schedule D |  |  |  |  |  |  |  |  | 500.00"),
+        "{schedule}"
+    );
+    assert!(!schedule.contains("Opening Balance"), "{schedule}");
+}
+
+#[test]
 fn income_in_tax_deferred_accounts_stays_out_of_tax_reports() {
     let mut fx = fixture();
     let vti = kansha_core::persistence::securities::list(fx.book.conn()).unwrap()[0].id;

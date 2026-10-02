@@ -73,7 +73,7 @@ describe("Dashboard", () => {
     const ids = [...container.querySelectorAll("[data-card]")].map((e) => e.getAttribute("data-card"));
     expect(ids).toEqual(CARDS.map((c) => c.id));
     expect(screen.getByRole("article", { name: "Net worth" })).toBeTruthy();
-    expect(screen.getByRole("article", { name: "Due in the next 14 days" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Due in the next 14 days" }).classList.contains("double")).toBe(true);
   });
 
   it("the title sits in a shaded band inside one outlined sheet holding the cards", async () => {

@@ -72,7 +72,8 @@ pub struct Db {
 impl Db {
     /// Open (or create) a database file and bring its schema up to date.
     ///
-    /// Sets WAL, `synchronous=FULL`, and `foreign_keys=ON` (NFR-060).
+    /// Sets WAL, `synchronous=FULL`, `foreign_keys=ON` (NFR-060), and a
+    /// 50 MiB page cache.
     /// Refuses non-Kansha files and newer schema versions.
     ///
     /// Unencrypted: the prototype database (D-110), converted once by
@@ -331,6 +332,9 @@ impl Tx<'_> {
 
 /// Connection settings every Kansha connection uses. Verified, not just
 /// requested: a pragma that silently didn't apply is an error.
+/// Page cache ceiling for a file database, in KiB (50 MiB).
+const PAGE_CACHE_KIB: i64 = 50 * 1024;
+
 fn configure(conn: &Connection, file_backed: bool) -> Result<()> {
     conn.pragma_update(None, "foreign_keys", true)?;
     let fk: i64 = conn.pragma_query_value(None, "foreign_keys", |r| r.get(0))?;
@@ -346,6 +350,10 @@ fn configure(conn: &Connection, file_backed: bool) -> Result<()> {
                 "journal_mode is {mode}, expected wal"
             )));
         }
+        // Keep up to 50 MiB of pages in memory (negative = KiB), so a
+        // whole book is read from disk and decrypted once. A ceiling,
+        // not a reservation; it changes nothing on disk.
+        conn.pragma_update(None, "cache_size", -PAGE_CACHE_KIB)?;
     }
 
     conn.pragma_update(None, "synchronous", "FULL")?;

@@ -318,7 +318,7 @@
 {/if}
 {#if custom}
   <Modal title="Custom dates" onclose={() => (custom = null)}>
-    <form class="save" onsubmit={applyCustom}>
+    <form class="save custom" onsubmit={applyCustom}>
       <div class="dates">
         <span>From:</span>
         <DatePicker label="From" value={custom.from} today={listsState.today} onchange={(d) => custom && (custom.from = d)} />
@@ -469,6 +469,12 @@
     display: inline-flex;
     gap: 0.3rem;
     align-items: center;
+  }
+  /* Room below the To field for its calendar, which the dialog would
+     otherwise cut off; the buttons sit at the bottom. */
+  .custom {
+    min-height: 20rem;
+    align-content: space-between;
   }
   .dates {
     display: grid;
