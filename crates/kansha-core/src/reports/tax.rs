@@ -35,6 +35,11 @@ pub(super) fn columns() -> Vec<Column> {
     .collect()
 }
 
+/// Form 8283 goes with non-cash gifts over $500 for the year; the
+/// report only says so (it does not fill the form).
+const NONCASH: (&str, &str) = ("Schedule A", "Non-cash charity contributions");
+const FORM_8283_OVER: Money = Money::from_cents(50_000);
+
 const SCHEDULE_D: &str = "Schedule D";
 /// Schedule D sorts after 1099-DIV (800s), before 1099-SA (900).
 const SCHEDULE_D_ORDER: i64 = 850;
@@ -68,6 +73,17 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
             continue;
         };
         facts::sort_lines(&mut ls, s.sort, s.sort_desc, &lk);
+        let mut label = tl.line.clone();
+        if (tl.form.as_str(), tl.line.as_str()) == NONCASH {
+            let total = ls.iter().try_fold(Money::ZERO, |t, l| {
+                t.checked_add(l.amount)
+                    .ok_or(Error::Overflow("report total"))
+            })?;
+            let total = Money::from_cents(total.cents().saturating_abs());
+            if total > FORM_8283_OVER {
+                label.push_str(" (Form 8283 needed)");
+            }
+        }
         let form_order = lk
             .tax_lines
             .iter()
@@ -78,10 +94,7 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
         forms
             .entry((form_order, tl.form.clone()))
             .or_default()
-            .insert(
-                (tl.sort_order, tl.line.clone()),
-                ls.into_iter().map(to_row).collect(),
-            );
+            .insert((tl.sort_order, label), ls.into_iter().map(to_row).collect());
     }
 
     let d_lines = schedule_d(conn, s, range, &lk, &columns)?;

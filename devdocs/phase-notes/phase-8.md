@@ -5,9 +5,8 @@ Spec: 0.3.32 (design 0.3.30–0.3.31); changes since in the last section (now 0.
 **Exit criteria (spec §24):** restore drill passes
 (`tests/integration/backup.rs::restore_drill`: back up, change the
 book, compare, restore, reopen with the backup's passphrase, data
-identical row for row). **Open:** Stan's hands-on run of setup,
-conversion of the prototype database, backup on close, and restore in
-the app; `just test` on Windows. Review findings for spec 0.4: done,
+identical row for row). Stan ran restore and timed backup in the app
+(2026-10-01). **Open:** `just test` on Windows. Review findings for spec 0.4: done,
 `prototype-review.md`.
 
 **⚠ API change:** 18 new commands: `book_status`, `book_setup`,

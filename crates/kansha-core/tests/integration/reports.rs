@@ -630,6 +630,20 @@ fn shares_given_to_charity_are_a_deduction_at_market_value_not_a_sale() {
         "{schedule}"
     );
     assert!(!schedule.contains("Opening Balance"), "{schedule}");
+    // $300 is under the Form 8283 threshold.
+    assert!(!schedule.contains("8283"), "{schedule}");
+
+    // Over $500 for the period: the line says Form 8283 is needed.
+    gift.date = date("2026-06-02");
+    gift.quantity = Some("2".parse().unwrap());
+    fx.book.invest(&gift).unwrap();
+    let schedule = text(&run(&fx, &settings(ReportKind::TaxSchedule)));
+    assert!(
+        schedule.contains(
+            "  + Non-cash charity contributions (Form 8283 needed) |  |  |  |  |  |  |  |  | -600.00"
+        ),
+        "{schedule}"
+    );
 }
 
 #[test]

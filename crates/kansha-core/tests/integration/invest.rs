@@ -939,6 +939,46 @@ fn shares_given_away_leave_with_no_gain_and_the_value_goes_to_the_recipient() {
 }
 
 #[test]
+fn a_gift_with_no_memo_is_marked_as_a_noncash_donation() {
+    // INV-060: the Action column says Shares Removed, so the memo says
+    // what it was. A memo the user typed stays; a plain removal gets none.
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    b.invest(&buy(brk, vti, "2026-01-10", "10", "1000.00"))
+        .unwrap();
+    let charity = b
+        .category("Charity:Noncash", CategoryKind::Expense)
+        .unwrap();
+    let mut gift = InvInput::new(brk, InvAction::SharesRemoved, date("2026-03-02"));
+    gift.security = Some(vti);
+    gift.quantity = Some(q("1"));
+    gift.price = Some(p("250"));
+    gift.counterpart = Some(Target::Category(charity));
+    let t = b.invest(&gift).unwrap();
+    assert_eq!(t.txn.memo, "Gift / noncash donation");
+
+    // An edit that changes the lots with the memo cleared gets it back.
+    let mut edit = t.to_input();
+    edit.memo = String::new();
+    edit.price = Some(p("260"));
+    let t = b
+        .write(|tx| invest::update(tx, t.txn.id, &edit, false))
+        .unwrap();
+    assert_eq!(t.txn.memo, "Gift / noncash donation");
+
+    gift.date = date("2026-03-03");
+    gift.memo = "Firefly Hill Fund".into();
+    let t = b.invest(&gift).unwrap();
+    assert_eq!(t.txn.memo, "Firefly Hill Fund");
+
+    let mut plain = InvInput::new(brk, InvAction::SharesRemoved, date("2026-03-04"));
+    plain.security = Some(vti);
+    plain.quantity = Some(q("1"));
+    let t = b.invest(&plain).unwrap();
+    assert_eq!(t.txn.memo, "");
+}
+
+#[test]
 fn reconciled_balance_check_counts_cash_not_holdings() {
     use kansha_core::reconcile::{self, StartInput};
     let mut b = book();

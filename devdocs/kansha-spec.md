@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.1 (draft) |
+| **Document version** | 0.7.2 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-01 |
 | **Owner** | Stan |
@@ -567,6 +567,8 @@ common patterns.
   non-investment account). The chosen lots leave at basis with no
   gain (disposal kind `removed`); the recipient gets shares × price;
   the difference goes to Opening Balance. A recipient needs the price.
+  A gift saved with an empty memo gets the memo "Gift / noncash
+  donation" (0.7.2); the action stays Shares removed.
 
 #### 10.4 Cash handling
 
@@ -683,7 +685,7 @@ income and fees) is its own row, so the rows add up to the account.
 
 Decided 2026-09-30 (`devdocs/phase-notes/import-proposal.md`, Part A);
 built in Phase 9 (`devdocs/phase-notes/phase-9.md`) except where a
-requirement says not built. P-02 and P-04 stay open.
+requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
 
 #### 11.1 Known facts and decisions
 
@@ -712,8 +714,8 @@ requirement says not built. P-02 and P-04 stay open.
   cost-basis CSV and trued up (MIG-115) [S].
 - Each trial imports into a throwaway named book (UI-080); to rerun,
   delete the book. The live book gets the final import only [S].
-- Quicken scheduled transactions may not export in any usable format
-  and may need manual re-entry ⟨PLACEHOLDER P-04⟩ [R].
+- Scheduled transactions are re-entered by hand; they are not
+  imported (P-04 settled 0.7.2) [S].
 
 #### 11.2 Requirements
 
@@ -819,10 +821,8 @@ requirement says not built. P-02 and P-04 stay open.
   how many. The mapping step can keep any such security shown. Records
   that say nothing to import, Quicken's empty opening `Cash` (no amount)
   and a `ShrsIn` with no shares, are warnings, not bad records.
-- **MIG-150** [1.0][R] Scheduled transactions: ⟨PLACEHOLDER P-04:
-  import if Quicken exports them usably; otherwise manual re-entry,
-  supported by a "Quicken schedule checklist" to confirm all were
-  recreated.⟩
+- **MIG-150** ~~Scheduled transactions~~ Closed 0.7.2, not needed:
+  Stan re-entered his schedules by hand; no import, no checklist.
 - **MIG-160** [1.0][S] Known QIF pitfalls the parser must handle:
   two-digit-year and apostrophe date formats (`1/5'26` is 2026,
   `1/5/98` is 1998; padded `1/ 5'26`), locale-dependent date order,
@@ -904,7 +904,10 @@ requirement says not built. P-02 and P-04 stay open.
   not compute tax (planning is out of scope).
 - **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line
   (CAT-050) with their transactions, from taxable accounts; Schedule D
-  by holding period from lot disposals. No overall total.
+  by holding period from lot disposals. No overall total. When
+  Schedule A "Non-cash charity contributions" is over $500 for the
+  period, its label adds "(Form 8283 needed)" (0.7.2); Kansha does not
+  fill Form 8283.
 - **RPT-150** [1.0][S] **Realized gains detail** (Capital Gains) —
   lot-level sales for a period, suitable for checking against broker
   Form 1099-B. Subtotal by short vs. long-term, month, quarter, year,
@@ -2151,7 +2154,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | P-01 | ~~Source format for income/expense history (QIF vs. QXF)~~ Settled 0.6: one whole-file QIF (§11.1) | — |
 | P-02 | Quicken reports used as reference for import verification | Choose reports (e.g., account balances as of export date; category totals by year) |
 | P-03 | ~~Source for seeding investment lots~~ Settled 0.6: full QIF history, trued up to the broker's cost-basis CSV (MIG-110, MIG-115) | Check each brokerage's CSV layout when MIG-115 is built |
-| P-04 | Whether Quicken scheduled transactions can be exported | Test export; otherwise plan manual re-entry |
+| P-04 | ~~Whether Quicken scheduled transactions can be exported~~ Settled 0.7.2: re-entered by hand (MIG-150 closed) | — |
 | P-05 | ~~Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form~~ Settled 0.6: the whole-file export does; per-account ones do not (§11.1) | — |
 
 ---
@@ -2183,7 +2186,7 @@ REG, REC, CAL, RCN, SEC, PRC (manual, price list import, download),
 INV, LOT (all five methods), POS, RPT, DSH, INT, AUD, BAK, SECU, UI,
 SET, TEST, and MIG-120's lot seeding on synthetic data. Phase 9
 (after the prototype) built the Quicken QIF import (MIG, except
-MIG-115 and the open P-02/P-04 parts). Not built: the [1.0] items
+MIG-115 and the open P-02 part). Not built: the [1.0] items
 listed as missing in
 `devdocs/phase-notes/prototype-review.md`, which keep their status
 until decided (RPT-040 comparison, RPT-120, RPT-190, RPT-200,
@@ -2223,6 +2226,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.2 | 2026-10-01 | MIG-150 closed, not needed (schedules re-entered by hand); P-04 settled. INV-060: a gift with an empty memo gets "Gift / noncash donation". RPT-145: Schedule A non-cash line over $500 says "(Form 8283 needed)". No schema change. No API change. |
 | 0.7.1 | 2026-10-01 | New INV-060: gift of shares (a DAF contribution) as Shares removed with a price and a recipient (category or non-investment account); lots leave at basis with no gain, the recipient gets shares × price, Opening Balance the difference. §18 investment rules. Entry form: Shares removed shows Price per share and Given to. NFR-040: 50 MiB page cache (CONVENTIONS §5). No schema change. No API change (`InvInput.counterpart` doc comment only; `trade_amount` accepts Shares removed). |
 | 0.7 | 2026-10-01 | MIG-115 lot true-up built (Tools > Securities > True up lots…): one holding's lots set to the broker's cost-basis CSV (a Vanguard download reads as it is) as of a date; matching lots kept, the rest closed (disposal kind `true_up`, no gain) and the broker's opened, one audited `true_up` transaction against Opening Balance; later sales taken out and put back, choosing lots again; IRA/Roth compare shares only. §18 date-order exception. `share_balance_mismatch` counts true-up lots. AUD-010: prices are no longer audited; CONVENTIONS §5 exception. CAT-040: tithing columns dropped. **Schema change:** migration 0008 (investment action and disposal kind `true_up`; `category.tithable`, `category.giving` dropped; price audit entries deleted). **API change:** new commands `true_up_preview`, `true_up`; types `TrueUpPreview`, `TrueUpLine`, `TrueUpLot`, `TrueUpReplay`, `TrueUpStatus`; `InvAction` and `DisposalKind` gain `true_up`; `CategoryFields` loses `tithable`, `giving`. |
 | 0.6.13 | 2026-10-01 | New REC-115: schedules on investment accounts and transfers into them, entered as cash in or cash out (no split, not with linked cash, no projection). The schedule dialog and the calendar list investment accounts. No schema or API change. |

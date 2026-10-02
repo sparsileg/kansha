@@ -165,8 +165,10 @@ D-40 decided; Appendix A in one order, newest first.
 
 Also open by the phase exit rules: `just test` on Windows (Phases 5,
 7, 8); Stan's report review against the Quicken samples (Phase 7);
-hands-on restore, timed backup, folder picker, window geometry
-(Phase 8); and now undo, price import, and price download.
+folder picker, window geometry (Phase 8); and now undo, price
+import, and price download. Restore, timed backup, themes and fonts:
+tried by Stan in the app (2026-10-01); large fonts break the layout
+(§6).
 
 ## 5. Open decisions
 
@@ -185,10 +187,12 @@ Placeholders P-01–P-05 belong to Phase 9.
   the right-click menu is placed wrong near the window's bottom
   (Phase 3).
 - Register at a 24 px base font: columns overflow; the "Today" label
-  sits over a balance; native checkboxes do not scale (shell).
+  sits over a balance; native checkboxes do not scale (shell). Stan
+  confirmed in the app (2026-10-01): too big a font breaks the layout.
 - Investment register: no keyboard grid; not measured at thousands of
   rows (NFR-040); a transfer-in row opens only from the sending side.
 - No lot replay: fixing an old trade means re-entering later ones.
+  On hold (Stan, 2026-10-01); true-up covers it for now.
 - Save PDF is Linux only.
 - Dockable registers: three questions open (`shell.md`).
 - Engine error messages show ISO dates, not the user's format.

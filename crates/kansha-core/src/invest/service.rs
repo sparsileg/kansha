@@ -743,7 +743,7 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
             date: input.date,
             payee: None,
             check_num: String::new(),
-            memo: input.memo.clone(),
+            memo: memo(input),
             notes: String::new(),
             postings: b.postings,
         },
@@ -754,6 +754,22 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
         adjustments: b.adjustments,
     })
 }
+
+/// The memo to store: a gift of shares with none says what it was, since
+/// its Action column reads Shares Removed (INV-060).
+fn memo(input: &InvInput) -> String {
+    if input.action == InvAction::SharesRemoved
+        && input.counterpart.is_some()
+        && input.memo.trim().is_empty()
+    {
+        GIFT_MEMO.to_string()
+    } else {
+        input.memo.clone()
+    }
+}
+
+/// Default memo of a gift of shares (INV-060).
+const GIFT_MEMO: &str = "Gift / noncash donation";
 
 fn disposal(t: &Take, kind: DisposalKind) -> PlannedDisposal {
     PlannedDisposal {

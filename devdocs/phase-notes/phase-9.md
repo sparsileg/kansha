@@ -221,7 +221,11 @@ Gaps:
 
 - MIG-100: only the per-account before/after/expected table in the
   import result. Matching report layouts wait for P-02.
-- MIG-150 (scheduled transactions): nothing; P-04 open.
+- MIG-150 (scheduled transactions): closed, not needed (spec 0.7.2);
+  Stan re-entered his schedules by hand.
+- From 2026-10-01 Stan's imported book is his production book. Fixes
+  and dry runs go on a scratch copy; a new migration is tested on a
+  copy of his book first.
 - Not measured on Stan's file. Synthetic timing (release, this
   Windows machine; `import::large_file_timing`, ignored): 7,680
   transactions over 20 years with 960 matched transfers, preview
@@ -377,8 +381,13 @@ action, so no migration and no IPC signature change:
   (Charity:Noncash on Schedule A, Non-cash charity contributions, at
   market value; Schedule D unchanged).
 - Setup: Charity:Noncash tax-related, tax line Schedule A "Non-cash
-  charity contributions". Deferred: Form 8283 report.
-- Not run in the real app yet.
+  charity contributions". No Form 8283 report: Tax Schedule marks
+  that line "(Form 8283 needed)" when it is over $500 for the period
+  (spec 0.7.2).
+- Memo: a gift saved with an empty memo gets "Gift / noncash
+  donation" (spec 0.7.2); the Action column stays Shares Removed.
+  Stan adds it by hand to gifts entered before.
+- Used by Stan in the app for the VTI cleanup below.
 
 Cleanup of the two imported VTI gifts (2024-11-29, 170 sh;
 2025-07-15, 179.393 sh), each Quicken's Removed + Added + Sold, whose
@@ -386,4 +395,6 @@ sales took FIFO lots on import (phantom gains $33,498.79 and
 $36,555.79): re-pick each sale to the lot added that day, so the gain
 is zero. Date order blocks editing a sale with later disposals in the
 holding, so it starts by deleting the VTI true-up; then re-run it with
-`ignored/vti-448-2025-12-31.csv`. Dry run on a scratch copy first.
+`ignored/vti-448-2025-12-31.csv`. Done: dry run on a scratch copy,
+then Stan in the app (2026-10-01). Realized gains: 2024 −1.41 (a fee,
+kept), 2025 0.00.
