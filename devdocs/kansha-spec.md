@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.6 (draft) |
+| **Document version** | 0.7.7 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -1184,7 +1184,10 @@ platform has one.
   key. One passphrase for the database and all backups. A wrong
   passphrase is asked again. "Show database key" in Settings asks for
   the passphrase, then shows the key, which opens the database in DB
-  Browser for SQLite (SQLCipher build).
+  Browser for SQLite (SQLCipher build). The passphrase screen opens
+  in a small window with the 感謝 mark and what *kansha* means; the
+  window grows to its working size when the book opens, or at once
+  for setup, restore, or a new book. A maximized window is left alone.
 - **SECU-030** [1.0][R] Clear warning at setup: a lost passphrase
   makes the database and all backups unrecoverable. The user is
   prompted to record it durably (e.g., password manager).
@@ -1250,8 +1253,10 @@ platform has one.
   motion asked for, it does not flash. A new message replaces the
   old one. Back Up Now, report exports (CSV, PDF), and the automatic
   integrity check report there rather than in windows.
-- **UI-047** [1.0][R] Help > About Kansha shows the version (for now
-  only that).
+- **UI-047** [1.0][R] Help > About Kansha shows the 感謝 mark and
+  what *kansha* means, the app version, the schema version (the newest
+  this build opens), a short description, and the address for
+  suggestions and bug reports, kansha@sparsile.org, as plain text.
 - **UI-050** [1.0][R] Global keyboard shortcuts for common actions;
   full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent register change in the
@@ -2296,6 +2301,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.7 | 2026-10-03 | UI-047: Help > About shows the 感謝 mark and meaning, app and schema versions, a description, and kansha@sparsile.org. SECU-020: the passphrase screen opens in a small window with the mark, growing to working size when the book opens. The app is version 0.8.0. No schema change. **API change:** new command `schema_version`. |
 | 0.7.6 | 2026-10-03 | New INV-070: Roth conversion, in cash or in kind, from a traditional IRA or 401(k) into a Roth IRA, with optional nontaxable part and federal and state tax withheld; on 1099-R in the Tax Schedule and Tax Summary. §18 date order: changing or deleting an investment transaction puts its holdings' later lot events back in (as a true-up does) instead of being refused. CAT-050: forms in Quicken's order. **Schema change:** migration 0010 (`investment_txn` rebuilt: action `roth_conversion`, columns `nontaxable`, `withheld_federal`, `withheld_state`; built-in tax line sort orders). **API change:** `InvAction` gains `roth_conversion`; `InvInput` and `InvTxn` gain `conversion` (new type `ConversionTax`). |
 | 0.7.5 | 2026-10-02 | Tax reports closer to Quicken, step 3 in part (`devdocs/tax-reports-design.md` §4.4, §4.6). RPT-020: Display option Totals on group heading (on by default for the two tax reports; CSV follows; no "Total Total"). RPT-145: compact layout: Date under the group headings, shaded form rows, one line per row, fitted to the page width (Description, Memo, Tag cut first, then Account; Category never). RPT-050: WebKitGTK does not repeat a table's heading row in print (the old text said it did); a compact report prints one table per page, split so a heading never ends a page. RPT-140: Tax Summary uses the same compact layout (Tax Item cut with Account); column S marks splits (tax reports show it, Itemized Categories and Payees hide it by default); Tag hidden by default in the tax reports. RPT-050: negatives in the negative color. Saved reports keep their columns. No schema change. **API change:** `ReportSettings.totals_on_heading: Option<bool>`; `Report` gains `totals_on_heading`, `compact`. |
 | 0.7.4 | 2026-10-02 | Tax reports closer to Quicken, step 1 (`devdocs/tax-reports-design.md` §4.1). CAT-050: Quicken tax codes map to built-in tax lines; Tools > Categories > Set tax lines from QIF… sets them once on categories with no tax line (preview, then apply after a bulk backup; audited; built-in categories untouched). MIG-020: the import sets the tax line on the categories it creates; the result counts lines set and codes with no Kansha line. No schema change. **API change:** new commands `tax_lines_from_qif_preview`, `tax_lines_from_qif_apply`; new types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus`; `ImportResult` gains `tax_lines_set`, `tax_codes_unmapped`. |

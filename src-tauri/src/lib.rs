@@ -29,6 +29,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .dangerously_cast_bigints_to_number()
         .commands(collect_commands![
             commands::app_version,
+            commands::schema_version,
             commands::today,
             commands::book::book_status,
             commands::book::book_setup,

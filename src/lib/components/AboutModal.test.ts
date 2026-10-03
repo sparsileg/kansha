@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 
 vi.mock("../api", async (orig) => {
   const real = await orig<typeof import("../api")>();
-  return { ...real, commands: { appVersion: () => Promise.resolve("0.7.0") } };
+  return {
+    ...real,
+    commands: { appVersion: () => Promise.resolve("0.8.0"), schemaVersion: () => Promise.resolve(10) },
+  };
 });
 
 import AboutModal from "./AboutModal.svelte";
@@ -17,9 +20,20 @@ beforeEach(() => {
 });
 
 describe("Help > About Kansha", () => {
-  it("shows the version", async () => {
+  it("shows the app and schema versions", async () => {
     render(AboutModal);
-    expect(await screen.findByText("Version 0.7.0")).toBeTruthy();
+    expect(await screen.findByText("0.8.0")).toBeTruthy();
+    expect(await screen.findByText("10")).toBeTruthy();
+    expect(screen.getByText("Version")).toBeTruthy();
+    expect(screen.getByText("Schema")).toBeTruthy();
+  });
+
+  it("describes Kansha and gives the address, as plain text", () => {
+    render(AboutModal);
+    expect(screen.getByText(/personal finance app/)).toBeTruthy();
+    expect(screen.getByText(/gratitude/)).toBeTruthy();
+    const email = screen.getByText("kansha@sparsile.org");
+    expect(email.closest("a")).toBeNull();
   });
 
   it("Close closes it", async () => {

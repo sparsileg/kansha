@@ -34,6 +34,7 @@
   import { startBook } from "./lib/shell/startup";
   import { bookState } from "./lib/state/book.svelte";
   import StartScreen from "./views/StartScreen.svelte";
+  import { fullWindow } from "./lib/shell/windowsize";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
   import { MENUS, type Menu } from "./lib/shell/menus";
   import { recentItems } from "./lib/shell/books";
@@ -90,6 +91,9 @@
       .catch(() => {
         /* not running inside Tauri */
       });
+  });
+  $effect(() => {
+    if (bookState.open) void fullWindow();
   });
   let started = false;
   $effect(() => {

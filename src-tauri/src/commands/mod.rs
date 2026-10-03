@@ -25,6 +25,14 @@ pub fn app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// The newest database schema version this build understands; an open
+/// book is migrated up to it.
+#[tauri::command]
+#[specta::specta]
+pub fn schema_version() -> u32 {
+    kansha_core::persistence::migrate::LATEST_VERSION
+}
+
 /// Today's date from the app clock (financial dates never come from the
 /// browser).
 #[tauri::command]

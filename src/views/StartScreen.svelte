@@ -8,6 +8,8 @@
   import { bookState } from "../lib/state/book.svelte";
   import { openBookFile, switchBook } from "../lib/shell/books";
   import type { RecentBook } from "../lib/types/bindings";
+  import { compactWindow, fullWindow } from "../lib/shell/windowsize";
+  import mark from "../assets/kansha-mark.webp";
 
   const status = $derived(bookState.status);
 
@@ -50,6 +52,13 @@
   let restoring = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+
+  /** Only the passphrase to ask: a small window, the mark centred above. */
+  const compact = $derived(status?.state === "locked" && !creating && !restoring);
+  $effect(() => {
+    if (!status) return;
+    void (compact ? compactWindow() : fullWindow());
+  });
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
   const mismatch = $derived(again !== "" && passphrase !== again);
@@ -95,11 +104,17 @@
 
 <div class="start">
   <div class="top"><ThemePicker /></div>
-  <main>
-    <h1>Kansha</h1>
+  <main class:compact>
+    <header class="brand">
+      <span class="mark" style:--mark="url({mark})" role="img" aria-label="感謝, kansha, in brush calligraphy"></span>
+      <div>
+        <h1>Kansha</h1>
+        <p class="meaning"><span lang="ja">感謝</span> <i>kansha</i> — Japanese for gratitude, heartfelt thanks.</p>
+      </div>
+    </header>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}
     {#if status?.state === "locked" && !creating}
-      <p class="book">Book: <strong>{status.name}</strong> <span class="path note">{status.db_path}</span></p>
+      <p class="book"><strong>{status.name}</strong><span class="path note" title={status.db_path}>{status.db_path}</span></p>
       <form class="unlock" onsubmit={unlock}>
         <label>
           Backup passphrase
@@ -109,14 +124,21 @@
         <button type="submit" disabled={busy || passphrase === ""}>{busy ? "Opening…" : "Open"}</button>
       </form>
       {#if error}<p role="alert"><strong>{error}</strong></p>{/if}
-      <p><button type="button" class="link" onclick={() => (restoring = true)}>Restore from a backup…</button></p>
-      <p>
-        <button type="button" class="link" onclick={() => (creating = true)}>Create a new book…</button>
-        · <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
-        {#each recent as b (b.path)}
-          · <button type="button" class="link" title={b.path} onclick={() => void other(b.path)}>{b.name}</button>
-        {/each}
-      </p>
+      <nav class="others">
+        {#if recent.length > 0}
+          <p>
+            Open:
+            {#each recent as b, i (b.path)}
+              {i > 0 ? " · " : ""}<button type="button" class="link" title={b.path} onclick={() => void other(b.path)}>{b.name}</button>
+            {/each}
+          </p>
+        {/if}
+        <p>
+          <button type="button" class="link" onclick={() => void other(null)}>Open another book…</button>
+          · <button type="button" class="link" onclick={() => (creating = true)}>Create a new book…</button>
+        </p>
+        <p><button type="button" class="link" onclick={() => (restoring = true)}>Restore from a backup…</button></p>
+      </nav>
     {:else if status?.state === "key_missing" && !creating}
       <p role="alert">
         <strong>The key file is missing or damaged, so this book cannot be opened.</strong> It cannot be repaired:
@@ -244,10 +266,66 @@
   }
   main {
     width: min(40rem, 94vw);
-    margin: 2rem auto;
+    margin: 1rem auto 2rem;
+  }
+  /* The mark is drawn in the text colour (a mask over the ink), so it
+     reads on every theme. */
+  .mark {
+    display: block;
+    flex: none;
+    width: 3rem;
+    aspect-ratio: 224 / 417;
+    /* The image, set on the element. */
+    --mark: none;
+    background: var(--fg);
+    -webkit-mask: var(--mark) center / contain no-repeat;
+    mask: var(--mark) center / contain no-repeat;
+  }
+  .brand {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
   }
   h1 {
+    margin: 0;
+    font-size: var(--fs-title);
+    letter-spacing: 0.04em;
+  }
+  .meaning {
+    margin: 0.25rem 0 0;
+    opacity: 0.8;
+  }
+  .compact {
+    width: min(24rem, 92vw);
     margin-top: 0;
+    text-align: center;
+  }
+  .compact .brand {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .compact .mark {
+    width: 6.5rem;
+  }
+  .compact .brand > div {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line-soft);
+    width: 100%;
+  }
+  .book {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .book .path {
+    font-size: var(--fs-small);
+  }
+  .compact .book .path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
   }
   .unlock {
     display: flex;
@@ -257,6 +335,16 @@
   .unlock label {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    text-align: left;
+  }
+  .others {
+    margin-top: 1.5rem;
+    font-size: var(--fs-small);
+    opacity: 0.9;
+  }
+  .others p {
+    margin: 0.35rem 0;
   }
   fieldset {
     margin: 0 0 1rem;

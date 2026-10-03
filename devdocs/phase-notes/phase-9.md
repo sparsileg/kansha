@@ -612,7 +612,47 @@ investment transactions kept, integrity clean); converting the
 2024-10-01 (IRA 540, 1,725 VTIAX) and 2025-12-15 (LT IRA 156, VTIAX +
 VTSAX) conversions: 1099-R 2024 154,909.29, 2025 325,824.15 (Quicken's
 figure); cash, holdings, Roth lots, and IRA 540's later gains
-unchanged. Not yet applied to the real book.
+unchanged. Applied to Stan's book on 2026-10-03 (his "go"; backup in
+`backup-before-roth-conversions-20261003/` beside the book): the same
+figures, integrity clean.
+
+Also applied that day: VTSAX in Vanguard Grandma 140, the 2025 sales
+re-picked to Vanguard's lots (true-up dated 2024-12-31, sales entered
+again with Specific lots, 1/9 and 2/21 moved to Vanguard's 1/8 and
+2/20): 2025 gains 16,090.15, matching Vanguard; 2026 unchanged
+(backup `backup-before-vtsax-fix-20261003/`). Quicken differs by a
+wash-sale basis adjustment it never had (3/22/2023 lot) and rounding.
 
 Gaps: replaying a changed buy whose lot a later sale picked by hand
 fails (the lot is made again with a new ID); not run in the real app.
+
+## About and start screen (spec 0.7.7, app 0.8.0, 2026-10-03)
+
+App version 0.8.0 (Cargo.toml, package.json, tauri.conf.json, lock
+files, `version.test.ts`). **⚠ API change:** new command
+`schema_version` (`migrate::LATEST_VERSION`); `just bindings` run. No
+schema change.
+
+- `src/assets/kansha-mark.webp`: 感謝 cut from Stan's poster image,
+  paper removed, ink as alpha. Drawn as a CSS mask in `--fg`, so it
+  reads on every theme.
+- `AboutModal.svelte` (UI-047): mark, name, meaning, Version and
+  Schema, description, kansha@sparsile.org as plain text (not a link).
+- `src/lib/shell/windowsize.ts`: `compactWindow` (520×700, min
+  460×600) and `fullWindow` (1280×800, min 900×600), each centred,
+  each run once per change, a maximized window left alone.
+  `tauri.conf.json` opens compact; `StartScreen.svelte` grows the
+  window for setup, key missing, restore, or a new book; `App.svelte`
+  grows it when the book opens. Capabilities: `allow-set-size`,
+  `allow-set-min-size`, `allow-center`.
+- `StartScreen.svelte`: passphrase screen as a centred column (mark,
+  name, meaning, book, passphrase, other books and links small);
+  other screens keep their form with the mark beside the title.
+- Tests: `windowsize.test.ts`, `StartScreen.test.ts`, About test.
+
+Gaps: the resize in Tauri and the mark in WebKitGTK not seen in the
+app yet; window size and position not remembered between sessions.
+
+Open (on hold to 2026-10-04): backups in `~/pCloudSync/Backup/Kansha`
+are never pruned by the app, though `backup::prune` deletes the right
+19 on a copy of the folder; Back up now made no backup.

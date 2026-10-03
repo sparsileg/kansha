@@ -1,7 +1,7 @@
 # Tax reports: closer to Quicken — design and plan
 
-Status: steps 1–3 built, step 6 built (spec 0.7.4–0.7.5, 2026-10-03);
-steps 4, 5, 7 open.
+Status: steps 1–3, 5, 6 built (spec 0.7.4–0.7.6); step 7 superseded by
+INV-070 (0.7.6). Open: step 4 (Subtotal by / Sort by, §4.8–4.9).
 Built on spec 0.7.3.
 Requirements: CAT-050, MIG-020, RPT-020, RPT-140, RPT-145.
 
@@ -335,9 +335,9 @@ and a commit message for Stan.
 | 2 | Stan runs *Set tax lines from QIF…* on his book; checks F2 Step 1 | 4.1, 4.3 | — |
 | 3 | Totals on heading, red negatives, one line per row | 4.4–4.6 | ⚠ API (built 0.7.5) |
 | 4 | Tax Summary Subtotal by / Sort by, defaults | 4.8, 4.9 | ⚠ API |
-| 5 | Form order (migration 0010) | 4.2 | ⚠ Schema |
+| 5 | Form order (migration 0010; built 0.7.6) | 4.2 | ⚠ Schema |
 | 6 | Split marker (built 0.7.5; Tag hidden by default too) | 4.7 | — |
-| 7 | Roth conversion: Case A test only, or Case B engine rule | 4.3 | — / spec §18 |
+| 7 | Roth conversion: superseded by INV-070 (0.7.6) | 4.3 | — |
 
 Steps 3–6 are independent of each other; 7 waits on Stan's Step 1.
 
@@ -347,6 +347,11 @@ changes, and a section in `phase-notes/phase-9.md` (files, decisions,
 gaps). Spec 0.7.4 for the set, or one minor bump per committed step.
 
 ## 6. Acceptance (against Quicken 2025)
+
+Note (2026-10-03): the Sch D figure below predates the VTSAX 140 lot
+fix (2025 gains −664.03); recheck against Quicken. 1099-R Total IRA
+taxable distrib. now matches (325,824.15) with the Roth conversions
+converted to INV-070.
 
 After steps 1–2 and Case A/B, Tax Schedule for Last year:
 

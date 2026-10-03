@@ -7,6 +7,11 @@ export const commands = {
 	/**  The running application version, as declared in `tauri.conf.json`. */
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
 	/**
+	 *  The newest database schema version this build understands; an open
+	 *  book is migrated up to it.
+	 */
+	schemaVersion: () => __TAURI_INVOKE<number>("schema_version"),
+	/**
 	 *  Today's date from the app clock (financial dates never come from the
 	 *  browser).
 	 */
