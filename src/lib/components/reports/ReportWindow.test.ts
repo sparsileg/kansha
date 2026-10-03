@@ -19,6 +19,7 @@ const defaults = (kind: string) => ({
   hidden_columns: [],
   cents: true,
   totals_only: false,
+  totals_on_heading: null,
   show_zero: false,
   transfers: true,
   accounts: null,
@@ -92,6 +93,8 @@ const report = {
     { kind: "total", label: "OVERALL TOTAL", cells: ["", "", "11237.14"], drill: null, children: [] },
   ],
   chart: null,
+  totals_on_heading: false,
+  compact: false,
 };
 
 beforeEach(async () => {
@@ -244,6 +247,162 @@ describe("Itemized report toolbar", () => {
     await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "num", sort_desc: true })));
     expect(screen.getByRole("columnheader", { name: /Num/ }).getAttribute("aria-sort")).toBe("descending");
     expect(screen.queryByRole("button", { name: /^Amount/ })).toBeNull();
+  });
+});
+
+describe("Tax Schedule (compact)", () => {
+  const detail = (cells: string[]) => ({
+    kind: "detail",
+    label: "",
+    cells,
+    drill: { kind: "txn", account: 1, txn: 9, date: "2025-04-01" },
+    children: [],
+  });
+  const tax = {
+    ...report,
+    kind: "tax_schedule",
+    title: "Tax Schedule",
+    columns: [
+      { id: "date", label: "Date", kind: "date", from: null, to: null },
+      { id: "account", label: "Account", kind: "text", from: null, to: null },
+      { id: "description", label: "Description", kind: "text", from: null, to: null },
+      { id: "category", label: "Category", kind: "text", from: null, to: null },
+      { id: "amount", label: "Amount", kind: "money", from: null, to: null },
+    ],
+    rows: [
+      {
+        kind: "section",
+        label: "1099-R",
+        cells: ["", "", "", "", "5000.00"],
+        drill: null,
+        children: [
+          {
+            kind: "group",
+            label: "Total IRA taxable distrib.",
+            cells: ["", "", "", "", "5000.00"],
+            drill: null,
+            children: [detail(["2025-04-01", "Checking", "Roth conversion to Vanguard", "[IRA]", "5000.00"])],
+          },
+        ],
+      },
+    ],
+    totals_on_heading: true,
+    compact: true,
+  };
+
+  beforeEach(async () => {
+    run.mockImplementation(() => ok(tax));
+    inst = await reportState.open("tax_schedule");
+  });
+
+  it("has no label column; dates sit under the headings, which carry the totals", async () => {
+    show();
+    await screen.findByText("Roth conversion to Vanguard");
+    const table = document.querySelector("table.report.compact")!;
+    expect(table).toBeTruthy();
+    expect(within(table as HTMLElement).getAllByRole("columnheader").map((h) => h.textContent?.trim())).toEqual([
+      "Date",
+      "Account",
+      "Description",
+      "Category",
+      "Amount",
+    ]);
+    const rows = table.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(3);
+    // The form row is shaded (class section); labels span up to Amount.
+    expect(rows[0].classList.contains("section")).toBe(true);
+    expect(rows[0].querySelector("td.label")?.getAttribute("colspan")).toBe("4");
+    expect(rows[0].textContent).toContain("5,000.00");
+    expect(rows[1].textContent).toContain("5,000.00");
+    expect(rows[2].querySelectorAll("td")).toHaveLength(5);
+    expect(rows[2].querySelector("td")?.textContent?.trim()).toBe("04/01/2025");
+    // Negative amounts get the negative color; others do not.
+    expect(rows[2].querySelector("td.num")?.classList.contains("neg")).toBe(false);
+    // The Date heading lines up with the dates.
+    const date = (table.querySelector("thead th") as HTMLElement).style.paddingLeft;
+    expect(date).toBe("3em");
+    expect(date).toBe((rows[2].querySelector("td") as HTMLElement).style.paddingLeft);
+    expect(screen.queryByText(/^Total Total/)).toBeNull();
+    // Cut text keeps its full text on hover.
+    expect(screen.getByText("Roth conversion to Vanguard").closest("td")?.getAttribute("title")).toBe(
+      "Roth conversion to Vanguard",
+    );
+  });
+
+  it("Save PDF prints one table per page, each with the headings, then goes back", async () => {
+    let printed = 0;
+    savePdf.mockImplementation(() => {
+      printed = document.querySelectorAll(".pages .paper-page table thead").length;
+      return ok("/home/u/Downloads/Tax Schedule.pdf");
+    });
+    show();
+    await screen.findByText("Roth conversion to Vanguard");
+    await fireEvent.click(screen.getByRole("button", { name: "Save PDF…" }));
+    await fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save PDF" }));
+    await waitFor(() => expect(savePdf).toHaveBeenCalled());
+    expect(printed).toBe(1);
+    await waitFor(() => expect(document.querySelector(".pages")).toBeNull());
+  });
+
+  it("negative amounts are marked for the negative color, sign kept", async () => {
+    const neg = {
+      ...tax,
+      rows: [
+        {
+          kind: "section",
+          label: "Schedule A",
+          cells: ["", "", "", "", "-1200.00"],
+          drill: null,
+          children: [detail(["2025-03-15", "Checking", "County", "Tax:Real Estate", "-1200.00"])],
+        },
+      ],
+    };
+    run.mockImplementation(() => ok(neg));
+    inst = await reportState.open("tax_schedule");
+    show();
+    await screen.findByText("County");
+    const cells = [...document.querySelectorAll("table.report.compact tbody td.num")];
+    expect(cells.map((c) => c.textContent?.trim())).toEqual(["-1,200.00", "-1,200.00"]);
+    expect(cells.every((c) => c.classList.contains("neg"))).toBe(true);
+    expect(document.querySelector("td.neg:not(.num)")).toBeNull();
+  });
+
+  it("a column turned back on shows up (widths measured again)", async () => {
+    const without = (r: typeof tax) => ({
+      ...r,
+      columns: r.columns.filter((c) => c.id !== "account"),
+      rows: r.rows.map((s) => ({
+        ...s,
+        cells: s.cells.slice(1),
+        children: s.children.map((g) => ({
+          ...g,
+          cells: g.cells.slice(1),
+          children: g.children.map((d) => ({ ...d, cells: [d.cells[0], ...d.cells.slice(2)] })),
+        })),
+      })),
+    });
+    run.mockImplementation(() => ok(without(tax)));
+    inst = await reportState.open("tax_schedule");
+    show();
+    await screen.findByText("Roth conversion to Vanguard");
+    expect(screen.queryByRole("columnheader", { name: "Account" })).toBeNull();
+    run.mockImplementation(() => ok(tax));
+    await fireEvent.click(screen.getByRole("button", { name: "Customize…" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "OK" }));
+    await screen.findByRole("columnheader", { name: "Account" });
+    await screen.findByText("Checking");
+    expect(document.querySelectorAll("table.report.compact col")).toHaveLength(5);
+  });
+
+  it("Totals on group heading shows the report's default and saves a change", async () => {
+    show();
+    await screen.findByText("Roth conversion to Vanguard");
+    await fireEvent.click(screen.getByRole("button", { name: "Customize…" }));
+    const box = (await screen.findByRole("checkbox", { name: "Totals on group heading" })) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    await fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ totals_on_heading: false })));
   });
 });
 

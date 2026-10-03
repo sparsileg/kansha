@@ -100,7 +100,7 @@
           title={row.incoming ? "Edit this transfer from the account it came from" : "Edit"}>
           <td>{displayDate(row.date)}</td>
           <td>{row.action_label}{#if row.split}&nbsp;{row.split.new}:{row.split.old}{/if}</td>
-          <td class="clip">{row.security_label}{#if row.other_account !== null && row.action === "transfer_shares"} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
+          <td class="clip">{row.security_label}{#if row.other_account !== null && (row.action === "transfer_shares" || row.action === "roth_conversion")} {row.incoming ? "from" : "to"} {listsState.account(row.other_account)?.name ?? ""}{/if}</td>
           <td class="num">{row.quantity ? formatQuantity(row.quantity) : ""}</td>
           <td class="num">{row.price ? formatPrice(row.price) : ""}</td>
           <td class="num">{row.commission === "0.00" ? "" : money(row.commission)}</td>

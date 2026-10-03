@@ -6,7 +6,7 @@
   import { datePattern, displayDate, parseDate } from "../../format/date";
   import { formatMoney, parseMoney } from "../../format/money";
   import { formatPrice, formatQuantity, parsePrice, parseQuantity } from "../../format/quantity";
-  import { ACTIONS, LOT_METHODS, TRUE_UP, actionInfo, buildInput, emptyForm, formFromInput, type InvForm } from "../../invest/form";
+  import { ACTIONS, LOT_METHODS, TRUE_UP, buildInput, canConvert, emptyForm, fieldsFor, formFromInput, type InvForm } from "../../invest/form";
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
@@ -21,13 +21,20 @@
   let lots = $state<LotView[]>([]);
   let busy = $state(false);
 
-  const info = $derived(actionInfo(form.action));
+  const info = $derived(fieldsFor(form));
+  const actions = $derived(ACTIONS.filter((a) => !a.conversion || canConvert(account.account_type)));
   const today = $derived(listsState.today);
   const securities = $derived(
     investState.securities.filter((s) => !s.hidden || s.id === form.security),
   );
   const others = $derived(
-    listsState.accounts.filter((a) => a.investment && a.id !== account.id && a.status === "open"),
+    listsState.accounts.filter(
+      (a) =>
+        a.investment &&
+        a.id !== account.id &&
+        a.status === "open" &&
+        (!info.conversion || a.account_type === "roth_ira"),
+    ),
   );
   const cashAccounts = $derived(
     listsState.accounts.filter((a) => !a.investment && a.status === "open"),
@@ -128,7 +135,7 @@
       Action
       <select bind:value={form.action} disabled={form.action === TRUE_UP.value}>
         {#if form.action === TRUE_UP.value}<option value={TRUE_UP.value}>{TRUE_UP.label}</option>{/if}
-        {#each ACTIONS as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
+        {#each actions as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
       </select>
     </label>
     <label>Trade date <input bind:value={form.date} placeholder={datePattern()} required /></label>
@@ -170,7 +177,7 @@
     {/if}
     {#if info.toAccount}
       <label>
-        To account
+        {info.conversion ? "To Roth IRA" : "To account"}
         <select
           value={form.toAccount ?? ""}
           onchange={(e) => (form.toAccount = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
@@ -179,6 +186,16 @@
           {#each others as a (a.id)}<option value={a.id}>{a.name}</option>{/each}
         </select>
       </label>
+    {/if}
+    {#if info.conversion}
+      <label>Nontaxable part (optional) <input bind:value={form.nontaxable} inputmode="decimal" placeholder="0.00" /></label>
+      <label>Federal tax withheld (optional) <input bind:value={form.withheldFederal} inputmode="decimal" placeholder="0.00" /></label>
+      <label>State tax withheld (optional) <input bind:value={form.withheldState} inputmode="decimal" placeholder="0.00" /></label>
+      <p class="note">
+        No security: a conversion in cash. Tax withheld is paid from this account's cash on top of the value
+        converted; leave it empty if you pay the tax from elsewhere. The nontaxable part is basis from Form 8606 or
+        the plan's 1099-R.
+      </p>
     {/if}
     {#if info.acquired}
       <label>Originally acquired <input bind:value={form.acquired} placeholder="the trade date if empty" /></label>

@@ -92,4 +92,40 @@ describe("Investment entry dialog (INV-030)", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/date/);
     expect(invCreate).not.toHaveBeenCalled();
   });
+
+  it("a Roth conversion: only in an IRA or 401(k); in cash without a security, in kind with one", async () => {
+    // A brokerage does not offer it.
+    render(InvEntryModal, { account, txn: null, onclose: () => {} });
+    const offered = () => [...(screen.getByLabelText("Action") as HTMLSelectElement).options].map((o) => o.value);
+    expect(offered()).not.toContain("roth_conversion");
+    cleanup();
+
+    const ira = { id: 3, name: "IRA", status: "open", account_type: "traditional_ira", investment: {} } as never;
+    const roth = { id: 4, name: "Roth", status: "open", account_type: "roth_ira", investment: {} } as never;
+    listsState.accounts = [account, ira, roth] as never;
+    render(InvEntryModal, { account: ira, txn: null, onclose: () => {} });
+    expect(offered()).toContain("roth_conversion");
+    await fireEvent.change(screen.getByLabelText("Action"), { target: { value: "roth_conversion" } });
+    // In cash: no shares; only Roth IRAs to choose.
+    expect(screen.queryByLabelText("Shares")).toBeNull();
+    const to = screen.getByLabelText("To Roth IRA") as HTMLSelectElement;
+    expect([...to.options].map((o) => o.textContent)).toEqual(["—", "Roth"]);
+    await fireEvent.change(to, { target: { value: "4" } });
+    await fireEvent.input(screen.getByLabelText("Value converted"), { target: { value: "10,000" } });
+    await fireEvent.input(screen.getByLabelText(/Federal tax withheld/), { target: { value: "1,000" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(invCreate).toHaveBeenCalledTimes(1));
+    expect(invCreate.mock.calls[0][0]).toMatchObject({
+      action: "roth_conversion",
+      security: null,
+      quantity: null,
+      amount: "10000.00",
+      to_account: 4,
+      conversion: { nontaxable: "0.00", withheld_federal: "1000.00", withheld_state: "0.00" },
+    });
+    // In kind: a security brings shares and lots back.
+    await fireEvent.change(screen.getByLabelText(/^Security/), { target: { value: "1" } });
+    expect(screen.getByLabelText("Shares")).toBeTruthy();
+    expect(screen.getByLabelText("Lots")).toBeTruthy();
+  });
 });

@@ -1,5 +1,7 @@
 //! CSV export of a report (RPT-050): every group expanded, a heading line
-//! per group and a total line after it, as the printed report reads.
+//! per group and a total line after it, as the printed report reads; with
+//! totals on the heading (RPT-020), the heading line carries them and no
+//! total line follows.
 //! Amounts are plain decimals and dates ISO, so spreadsheets read them
 //! exactly.
 
@@ -22,7 +24,17 @@ fn line(out: &mut String, label: &str, cells: &[String]) {
     out.push_str("\r\n");
 }
 
-fn rows(out: &mut String, list: &[Row], depth: usize) {
+/// A group's closing label: "Total " and the group's, unless the group's
+/// already starts with "Total ".
+fn closing_label(label: &str) -> String {
+    if label.starts_with("Total ") {
+        label.to_string()
+    } else {
+        format!("Total {label}")
+    }
+}
+
+fn rows(out: &mut String, list: &[Row], depth: usize, on_heading: bool) {
     let indent = "  ".repeat(depth);
     for r in list {
         let label = if r.label.is_empty() {
@@ -33,10 +45,18 @@ fn rows(out: &mut String, list: &[Row], depth: usize) {
         match r.kind {
             RowKind::Total => line(out, &r.label, &r.cells),
             _ if r.children.is_empty() => line(out, &label, &r.cells),
+            _ if on_heading => {
+                line(out, &label, &r.cells);
+                rows(out, &r.children, depth + 1, on_heading);
+            }
             _ => {
                 line(out, &label, &vec![String::new(); r.cells.len()]);
-                rows(out, &r.children, depth + 1);
-                line(out, &format!("{indent}Total {}", r.label), &r.cells);
+                rows(out, &r.children, depth + 1, on_heading);
+                line(
+                    out,
+                    &format!("{indent}{}", closing_label(&r.label)),
+                    &r.cells,
+                );
             }
         }
     }
@@ -64,7 +84,7 @@ pub fn to_csv(report: &Report) -> String {
         })
         .collect();
     line(&mut out, "", &header);
-    rows(&mut out, &report.rows, 0);
+    rows(&mut out, &report.rows, 0, report.totals_on_heading);
     out
 }
 
@@ -75,9 +95,8 @@ mod tests {
     use super::*;
     use crate::money::Money;
 
-    #[test]
-    fn groups_expand_with_totals_and_fields_are_quoted() {
-        let report = Report {
+    fn report() -> Report {
+        Report {
             kind: ReportKind::ItemizedCategories,
             title: "Spending, 2026".into(),
             note: String::new(),
@@ -107,11 +126,36 @@ mod tests {
                 ),
             ],
             chart: None,
-        };
-        let csv = to_csv(&report);
+            totals_on_heading: false,
+            compact: false,
+        }
+    }
+
+    #[test]
+    fn groups_expand_with_totals_and_fields_are_quoted() {
+        let csv = to_csv(&report());
         assert_eq!(
             csv,
             "\"Spending, 2026\"\r\n2026-01-01 through 2026-01-31\r\n,Memo,Amount\r\nFood,,\r\n,\"say \"\"hi\"\"\",-1.50\r\nTotal Food,,-1.50\r\nOVERALL TOTAL,,-1.50\r\n"
         );
+    }
+
+    #[test]
+    fn totals_on_heading_drop_the_closing_line() {
+        let mut r = report();
+        r.totals_on_heading = true;
+        assert_eq!(
+            to_csv(&r),
+            "\"Spending, 2026\"\r\n2026-01-01 through 2026-01-31\r\n,Memo,Amount\r\nFood,,-1.50\r\n,\"say \"\"hi\"\"\",-1.50\r\nOVERALL TOTAL,,-1.50\r\n"
+        );
+    }
+
+    #[test]
+    fn a_total_label_gets_no_second_total() {
+        assert_eq!(
+            closing_label("Total IRA taxable distrib."),
+            "Total IRA taxable distrib."
+        );
+        assert_eq!(closing_label("Food"), "Total Food");
     }
 }

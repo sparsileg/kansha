@@ -81,6 +81,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0009_schedule_direction.sql"),
         foreign_keys_off: false,
     },
+    Migration {
+        version: 10,
+        description: "Roth conversion; tax forms in Quicken's order",
+        sql: include_str!("migrations/0010_roth_conversion.sql"),
+        foreign_keys_off: true,
+    },
 ];
 
 /// The newest schema version this build understands.

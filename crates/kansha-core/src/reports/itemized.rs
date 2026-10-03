@@ -27,6 +27,7 @@ pub(super) fn columns(by: By) -> Vec<Column> {
             ("date", "Date", K::Date),
             ("account", "Account", K::Text),
             ("num", "Num", K::Text),
+            ("split", "S", K::Text),
             ("description", "Description", K::Text),
             ("memo", "Memo", K::Text),
             ("tag", "Tag", K::Text),
@@ -37,6 +38,7 @@ pub(super) fn columns(by: By) -> Vec<Column> {
             ("date", "Date", K::Date),
             ("account", "Account", K::Text),
             ("num", "Num", K::Text),
+            ("split", "S", K::Text),
             ("category", "Category", K::Text),
             ("tag", "Tag", K::Text),
             ("memo", "Memo", K::Text),
@@ -47,6 +49,7 @@ pub(super) fn columns(by: By) -> Vec<Column> {
             ("date", "Date", K::Date),
             ("account", "Account", K::Text),
             ("num", "Num", K::Text),
+            ("split", "S", K::Text),
             ("description", "Description", K::Text),
             ("memo", "Memo", K::Text),
             ("category", "Category", K::Text),
@@ -88,6 +91,8 @@ pub(super) fn build(
         columns,
         rows,
         chart: None,
+        totals_on_heading: false,
+        compact: false,
     })
 }
 

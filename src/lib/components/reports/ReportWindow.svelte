@@ -34,6 +34,7 @@
   let { inst }: { inst: ReportInstance } = $props();
 
   let customizing = $state(false);
+  let table = $state<ReturnType<typeof ReportTable>>();
   /** The Save PDF dialog is open. */
   let pdfOpen = $state(false);
   let saving = $state<null | "save" | "as">(null);
@@ -139,15 +140,18 @@
     }
   }
 
-  /** Close the Save PDF dialog first so it is not on the page, then
-   * save. */
+  /** Close the Save PDF dialog first so it is not on the page, split a
+   * compact report into pages, then save. */
   async function savePdf() {
     pdfOpen = false;
     await tick();
     try {
+      await table?.preparePrint();
       await inst.savePdf();
     } catch (e) {
       inst.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      table?.endPrint();
     }
   }
 
@@ -300,7 +304,7 @@
         </div>
       {/if}
       {#if !(report.chart && inst.hideTable)}
-        <ReportTable {report} {inst} ondrill={drill} sort={tableSort} onsort={sortBy} />
+        <ReportTable bind:this={table} {report} {inst} ondrill={drill} sort={tableSort} onsort={sortBy} orientation={inst.orientation} />
       {/if}
     {/if}
   </div>
@@ -309,6 +313,7 @@
 {#if customizing}
   <CustomizeReportModal
     settings={inst.settings}
+    totalsOnHeading={report?.totals_on_heading ?? false}
     onclose={() => (customizing = false)}
     onsave={(s) => {
       customizing = false;
@@ -493,6 +498,10 @@
   /* Paper: a smaller fixed size, whatever the screen setting, so more
      columns fit on a page. */
   @media print {
+    /* Page breaks only work outside flex layout. */
+    .reports {
+      display: block;
+    }
     .page {
       overflow: visible;
       border: 0;

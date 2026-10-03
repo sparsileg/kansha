@@ -45,6 +45,8 @@ export interface ActionInfo {
    * removed: the recipient of shares given away. */
   counterpart: "account_or_category" | "category" | "none";
   counterpartLabel: string;
+  /** Roth conversion (INV-070): nontaxable part and tax withheld. */
+  conversion: boolean;
 }
 
 const base: Omit<ActionInfo, "value" | "label"> = {
@@ -60,6 +62,7 @@ const base: Omit<ActionInfo, "value" | "label"> = {
   acquired: false,
   counterpart: "none",
   counterpartLabel: "From or to",
+  conversion: false,
 };
 
 const a = (value: InvAction, label: string, over: Partial<ActionInfo> = {}): ActionInfo => ({
@@ -94,6 +97,18 @@ export const ACTIONS: ActionInfo[] = [
     counterpart: "account_or_category",
     counterpartLabel: "Given to (optional; needs the price)",
   }),
+  // In kind with a security (shares, price, lots); in cash without one
+  // (see `fieldsFor`).
+  a("roth_conversion", "Roth conversion", {
+    security: "optional",
+    shares: true,
+    price: true,
+    amount: "optional",
+    amountLabel: "Value converted",
+    toAccount: true,
+    lots: true,
+    conversion: true,
+  }),
   a("cash_in", "Cash in", { security: "none", counterpart: "account_or_category" }),
   a("cash_out", "Cash out", { security: "none", counterpart: "account_or_category" }),
   a("fee", "Fee", { security: "optional" }),
@@ -110,6 +125,20 @@ export function actionInfo(action: InvAction): ActionInfo {
   if (action === TRUE_UP.value) return TRUE_UP;
   return ACTIONS.find((x) => x.value === action) ?? ACTIONS[0];
 }
+
+/** The fields the form shows: a Roth conversion without a security is
+ * in cash, with no shares, price, or lots, and needs its amount. */
+export function fieldsFor(f: Pick<InvForm, "action" | "security">): ActionInfo {
+  const info = actionInfo(f.action);
+  if (info.conversion && f.security === null) {
+    return { ...info, shares: false, price: false, lots: false, amount: "required" };
+  }
+  return info;
+}
+
+/** Only a traditional IRA or 401(k) converts to a Roth IRA (INV-070). */
+export const canConvert = (accountType: string | undefined): boolean =>
+  accountType === "traditional_ira" || accountType === "retirement_401k";
 
 export interface InvForm {
   action: InvAction;
@@ -131,6 +160,10 @@ export interface InvForm {
   /** "a:<id>" an account, "c:<id>" a category, "" none. */
   counterpart: string;
   memo: string;
+  /** Roth conversion: nontaxable part and tax withheld, typed. */
+  nontaxable: string;
+  withheldFederal: string;
+  withheldState: string;
 }
 
 export function emptyForm(action: InvAction = "buy", date = ""): InvForm {
@@ -151,6 +184,9 @@ export function emptyForm(action: InvAction = "buy", date = ""): InvForm {
     acquired: "",
     counterpart: "",
     memo: "",
+    nontaxable: "",
+    withheldFederal: "",
+    withheldState: "",
   };
 }
 
@@ -178,8 +214,14 @@ export function formFromInput(i: InvInput): InvForm {
     acquired: i.acquired ? displayDate(i.acquired) : "",
     counterpart: targetKey(i.counterpart),
     memo: i.memo,
+    nontaxable: optionalMoney(i.conversion?.nontaxable),
+    withheldFederal: optionalMoney(i.conversion?.withheld_federal),
+    withheldState: optionalMoney(i.conversion?.withheld_state),
   };
 }
+
+const optionalMoney = (m: string | undefined): string =>
+  m === undefined || m === "0.00" ? "" : formatMoney(m);
 
 export type BuildResult = { ok: true; input: InvInput } | { ok: false; error: string };
 
@@ -190,7 +232,7 @@ function whole(text: string): number | null {
 
 /** Typed form → `InvInput`, or the first thing that does not parse. */
 export function buildInput(account: AccountId, f: InvForm, today: string): BuildResult {
-  const info = actionInfo(f.action);
+  const info = fieldsFor(f);
   const fail = (error: string): BuildResult => ({ ok: false, error });
   const date = parseDate(f.date, today);
   if (date === null) return fail(`Enter the date, like ${dateExample()}.`);
@@ -216,6 +258,7 @@ export function buildInput(account: AccountId, f: InvForm, today: string): Build
     acquired: null,
     counterpart: null,
     memo: f.memo,
+    conversion: null,
   };
   if (info.security === "required" && f.security === null) return fail("Choose a security.");
   if (info.shares) {
@@ -257,6 +300,16 @@ export function buildInput(account: AccountId, f: InvForm, today: string): Build
   if (info.acquired && f.acquired.trim()) {
     input.acquired = parseDate(f.acquired, today);
     if (input.acquired === null) return fail(`Enter the acquisition date like ${dateExample()}, or leave it empty.`);
+  }
+  if (info.conversion) {
+    const money = (text: string): string | null => (text.trim() ? parseMoney(text) : "0.00");
+    const nontaxable = money(f.nontaxable);
+    const federal = money(f.withheldFederal);
+    const state = money(f.withheldState);
+    if (nontaxable === null) return fail("Enter the nontaxable part as an amount, like 1,234.56, or leave it empty.");
+    if (federal === null) return fail("Enter the federal tax withheld as an amount, or leave it empty.");
+    if (state === null) return fail("Enter the state tax withheld as an amount, or leave it empty.");
+    input.conversion = { nontaxable, withheld_federal: federal, withheld_state: state };
   }
   if (info.counterpart !== "none" && f.counterpart) {
     const [kind, id] = f.counterpart.split(":");

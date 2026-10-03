@@ -105,11 +105,12 @@ security = "VTI"
 quantity = "12"
 amount = "2400.00"
 
-# The transfer's shares were sold since: it cannot be undone now.
+# The transfer's shares were sold since: without them the sale cannot
+# be put back in, so the transfer stays.
 [[actions]]
 type = "invest_delete"
 ref = "move"
-expect_error = "date order"
+expect_error = "cannot be put back"
 
 [expect.cash_balances]
 "Old Brokerage" = "500.00"

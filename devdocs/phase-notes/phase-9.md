@@ -488,3 +488,131 @@ the import did not create) / No Kansha line (8096 spouse wages).
 
 Gaps: not run on Stan's book yet (step 2); the modal is untested in
 the real app.
+
+### Step 3 in part: Tax Schedule layout (spec 0.7.5)
+
+Stan's request (2026-10-02): Quicken's Tax Schedule fits one page
+width. Built §4.4 (totals on heading) and §4.6 (one line per row) for
+the Tax Schedule, plus Date under the toggles and shaded form rows.
+
+Files:
+
+- `reports/mod.rs`: `ReportSettings.totals_on_heading` (`Option`,
+  resolved by `totals_on_heading()`), `Report.totals_on_heading`,
+  `Report.compact` (Tax Schedule), set in `run`.
+- `reports/csv.rs`: heading lines carry totals when set;
+  `closing_label` (no "Total Total").
+- `src/lib/reports/fit.ts` (new): `fitColumns` (cut order, floor
+  5 em, scale), `paginate`, measured page sizes.
+- `src/lib/reports/rows.ts`: `flatten(…, onHeading)`, `closingLabel`.
+- `ReportTable.svelte`: compact layout (snippets shared by the screen
+  table and the per-page print tables); `preparePrint` / `endPrint`.
+- `ReportWindow.svelte`: Save PDF paginates first; `.reports` is a
+  block on paper. `WindowFrame.svelte`: same.
+- `CustomizeReportModal.svelte`: Totals on group heading checkbox.
+- Themes: `--report-shade`.
+
+Decisions:
+
+- Widths in em, measured at 9 pt with 3% slack: text at 9 pt runs
+  wider than at screen size (hinting), and the first try cut dates.
+- Row heights for paging are measured with the paper widths and size
+  set on screen (`.paper`), then the class is removed.
+- Letter page measured through WebKitGTK: about 545 × 685 pt
+  portrait, 712 × 515 landscape (CSS pt); `fit.ts` uses 530 × 665
+  and 700 × 495.
+- A flex parent stops page breaks; the window and report are blocks
+  on paper.
+- Tax Summary keeps the old layout (totals on heading only); changed
+  2026-10-03, see below.
+
+Checked: a 98-row Tax Schedule printed through WebKitGTK (the print
+harness) in both orientations: all nine columns fit, Category whole,
+each page has the column headings, no heading ends a page.
+
+Gaps:
+
+- Paper size is assumed Letter; A4 would need its own sizes.
+- Other reports still do not repeat the heading row on paper
+  (RPT-050); the spec said they did.
+- Not run in the real app; the print check used the harness with the
+  component's steps copied into the page.
+- Red negatives (§4.5) not built (built 2026-10-03, below).
+
+Stan tried it in the app (2026-10-02): looks good. Open:
+
+- Date column heading sits left of the dates; indent it to line up
+  with them (details are two levels in).
+- Group and form heading rows: bold their totals too, not just the
+  label.
+- Tax Summary compact layout: on hold until the Tax Schedule is done.
+- Roth conversion (§4.3, F2) was never in the report; still step 7.
+
+Done 2026-10-03 (still 0.7.5, uncommitted):
+
+- Customize: a column turned back on crashed the compact table
+  (widths measured for the old columns); `ReportTable` now keeps the
+  column ids its widths were measured for and measures again.
+- Date heading indented to the dates; form and line heading rows
+  bold across, totals too.
+- Tax Summary compact (`Report.compact` for both tax reports); Tax
+  Item cut with Account (`fit.ts` `CUT_ORDER`).
+- §4.5 red negatives: money cells starting with "-" get `.neg`
+  (`--bad`; the report page is always the light theme, so red-brown
+  on white).
+- §4.7 split marker: `facts::TxnFacts::is_split` (more than one
+  category or transfer line besides the main account's; a holding's
+  basis does not count, so a sale is not a split); column `split`
+  ("S") after Num in both tax reports and the itemized reports.
+  Defaults: itemized reports hide S; tax reports hide Tag. Saved
+  reports keep their hidden columns, so a saved itemized report now
+  shows S until hidden.
+
+## Roth conversion (INV-070), spec 0.7.6, 2026-10-03
+
+Stan wanted a native conversion (Quicken needed sell, WithdrwX to
+TX Acct, transfer to the Roth, buy). Replaces tax-reports-design §4.3.
+
+Files:
+
+- Migration `0010_roth_conversion.sql`: `investment_txn` rebuilt for
+  action `roth_conversion` and columns `nontaxable`,
+  `withheld_federal`, `withheld_state` (set on a conversion only);
+  built-in tax lines renumbered so forms list as Quicken's.
+- `invest/mod.rs`: `InvAction::RothConversion`, `ConversionTax`,
+  `InvInput.conversion`, `InvTxn.conversion`; `to_input` value.
+- `invest/service.rs`: fields, plan (cash: IRA cash −(value + withheld),
+  Roth cash +value; in kind: lots out as `removed`, one Roth lot at
+  value, Opening Balance the difference), `take_out` / `put_back` /
+  `blocking` moved here from `true_up.rs`; `update` and `delete` put
+  later lot events back in instead of refusing.
+- `invest/reads.rs` (Conversion In, cash into the Roth), `period.rs`
+  (flows), `persistence/integrity.rs` (share checks),
+  `persistence/invest.rs` (columns only on a conversion, so older
+  schemas in migration tests still work), `reports/facts.rs`
+  (`conversion_lines`: 1099-R taxable, federal, state; pension lines
+  from a 401(k)); `reports/tax.rs` Schedule D order 350.
+- UI: `invest/form.ts` (`fieldsFor`, `canConvert`), `InvEntryModal`,
+  `InvestmentAccount` (to / from account).
+- Tests: `tests/integration/roth_conversion.rs` (13), migration 0010,
+  INV-006 and INV-008 scenarios updated to the new edit rule,
+  `InvEntryModal.test.ts`.
+
+Decisions:
+
+- Withholding is paid from the IRA's cash on top of the value; the
+  distribution is value + withheld; taxable = that − nontaxable.
+- Kansha does not compute Form 8606; the nontaxable part is entered.
+- One security per entry (one `investment_txn` row has one security).
+- A later share transfer, true-up, or conversion in kind blocks a
+  replay (it makes lots in another holding).
+
+Checked on a scratch copy of Stan's book: migration clean (2,337
+investment transactions kept, integrity clean); converting the
+2024-10-01 (IRA 540, 1,725 VTIAX) and 2025-12-15 (LT IRA 156, VTIAX +
+VTSAX) conversions: 1099-R 2024 154,909.29, 2025 325,824.15 (Quicken's
+figure); cash, holdings, Roth lots, and IRA 540's later gains
+unchanged. Not yet applied to the real book.
+
+Gaps: replaying a changed buy whose lot a later sale picked by hand
+fails (the lot is made again with a new ID); not run in the real app.

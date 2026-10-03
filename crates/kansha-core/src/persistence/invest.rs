@@ -17,7 +17,7 @@ use crate::accounts::{AccountId, CashMode};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::invest::{
-    Adjustment, Disposal, InvAction, InvTxn, Lot, LotId, OpenLot, Plan, SplitRatio,
+    Adjustment, ConversionTax, Disposal, InvAction, InvTxn, Lot, LotId, OpenLot, Plan, SplitRatio,
 };
 use crate::ledger::{Target, TxnId, TxnSource};
 use crate::money::{Money, Quantity};
@@ -70,6 +70,24 @@ pub fn find(conn: &Connection, id: TxnId) -> Result<Option<InvTxn>> {
     else {
         return Ok(None);
     };
+    // Only a Roth conversion (schema 10) has these.
+    let conversion = if action == InvAction::RothConversion {
+        Some(
+            conn.prepare_cached(
+                "SELECT nontaxable, withheld_federal, withheld_state
+                 FROM investment_txn WHERE txn_id = ?1",
+            )?
+            .query_row([id], |r| {
+                Ok(ConversionTax {
+                    nontaxable: r.get(0)?,
+                    withheld_federal: r.get(1)?,
+                    withheld_state: r.get(2)?,
+                })
+            })?,
+        )
+    } else {
+        None
+    };
     let txn = ledger::get(conn, id)?;
     let cash_account = cash_account(conn, account)?;
     let cash = txn
@@ -90,6 +108,7 @@ pub fn find(conn: &Connection, id: TxnId) -> Result<Option<InvTxn>> {
         to_account,
         lot_method,
         settle_date,
+        conversion,
         cash,
         lots: lots_created(conn, id)?,
         disposals: disposals(conn, id)?,
@@ -580,12 +599,26 @@ pub fn delete(tx: &Tx<'_>, before: &InvTxn) -> Result<()> {
 fn write_detail(tx: &Tx<'_>, id: TxnId, plan: &Plan) -> Result<()> {
     let c = tx.conn();
     let i = &plan.input;
-    c.execute(
+    // A Roth conversion's tax columns (schema 10) only on a conversion.
+    let conversion = i
+        .conversion
+        .filter(|_| i.action == InvAction::RothConversion);
+    let (columns, values) = if conversion.is_some() {
+        (
+            ", nontaxable, withheld_federal, withheld_state",
+            ", :nontaxable, :fed, :state",
+        )
+    } else {
+        ("", "")
+    };
+    let sql = format!(
         "INSERT INTO investment_txn (txn_id, account_id, security_id, action, quantity, price,
-             commission, split_new, split_old, to_account_id, lot_method, settle_date)
+             commission, split_new, split_old, to_account_id, lot_method, settle_date{columns})
          VALUES (:id, :account, :security, :action, :quantity, :price, :commission, :new, :old,
-             :to, :method, :settle)",
-        named_params! {
+             :to, :method, :settle{values})"
+    );
+    let mut stmt = c.prepare_cached(&sql)?;
+    let common = named_params! {
             ":id": id,
             ":account": i.account,
             ":security": i.security,
@@ -598,8 +631,21 @@ fn write_detail(tx: &Tx<'_>, id: TxnId, plan: &Plan) -> Result<()> {
             ":to": i.to_account,
             ":method": plan.lot_method,
             ":settle": i.settle_date,
-        },
-    )?;
+    };
+    match conversion {
+        Some(cv) => {
+            let mut all = common.to_vec();
+            all.extend_from_slice(named_params! {
+                ":nontaxable": cv.nontaxable,
+                ":fed": cv.withheld_federal,
+                ":state": cv.withheld_state,
+            });
+            stmt.execute(all.as_slice())?;
+        }
+        None => {
+            stmt.execute(common)?;
+        }
+    }
     let mut lot_stmt = c.prepare_cached(
         "INSERT INTO lot (account_id, security_id, acquired_date, quantity, cost_basis,
              origin_txn_id, source_lot_id)

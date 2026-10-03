@@ -102,7 +102,18 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
     for id in repo::register_ids(conn, account)? {
         let t = repo::get(conn, id)?;
         let incoming = t.to_account == Some(account);
-        let amount = if incoming { Money::ZERO } else { t.cash };
+        // Coming in: the cash this account receives (a Roth conversion
+        // in cash, INV-070); none for shares.
+        let amount = if incoming {
+            t.txn
+                .postings
+                .iter()
+                .filter(|p| p.target == Target::Account(account) && p.security.is_none())
+                .map(|p| p.amount)
+                .sum()
+        } else {
+            t.cash
+        };
         running = running
             .checked_add(amount)
             .ok_or(Error::Overflow("cash balance"))?;
@@ -137,7 +148,9 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
             date: t.txn.date,
             settle_date: t.settle_date,
             action: t.action,
-            action_label: if incoming {
+            action_label: if incoming && t.action == InvAction::RothConversion {
+                "Conversion In".into()
+            } else if incoming {
                 "Transfer In".into()
             } else if t.action == InvAction::TransferShares {
                 "Transfer Out".into()

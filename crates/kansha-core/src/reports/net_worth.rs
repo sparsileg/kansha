@@ -164,5 +164,7 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
         columns,
         rows: sections,
         chart,
+        totals_on_heading: false,
+        compact: false,
     })
 }

@@ -104,6 +104,9 @@ text_enum! {
         /// Lot true-up (MIG-115): the holding's lots set to the broker's
         /// list. Made only by [`true_up`], never from an [`InvInput`].
         TrueUp = "true_up",
+        /// Roth conversion (INV-070): cash, or shares in kind, from a
+        /// traditional IRA or 401(k) into a Roth IRA (`to_account`).
+        RothConversion = "roth_conversion",
     }
 }
 
@@ -149,6 +152,7 @@ impl InvAction {
                 | InvAction::TaxWithholding
                 | InvAction::MiscIncome
                 | InvAction::MiscExpense
+                | InvAction::RothConversion
         )
     }
 
@@ -184,11 +188,15 @@ impl InvAction {
         )
     }
 
-    /// Takes shares out of lots, chosen by a lot selection method.
+    /// Takes shares out of lots, chosen by a lot selection method (a
+    /// Roth conversion only when it is in kind).
     pub const fn disposes(self) -> bool {
         matches!(
             self,
-            InvAction::Sell | InvAction::TransferShares | InvAction::SharesRemoved
+            InvAction::Sell
+                | InvAction::TransferShares
+                | InvAction::SharesRemoved
+                | InvAction::RothConversion
         )
     }
 
@@ -229,7 +237,8 @@ impl InvAction {
             | InvAction::CashOut
             | InvAction::Fee
             | InvAction::TaxWithholding
-            | InvAction::MiscExpense => -1,
+            | InvAction::MiscExpense
+            | InvAction::RothConversion => -1,
             _ => 0,
         }
     }
@@ -273,6 +282,7 @@ impl InvAction {
             InvAction::MiscIncome => "Misc Income",
             InvAction::MiscExpense => "Misc Expense",
             InvAction::TrueUp => "Lot True-up",
+            InvAction::RothConversion => "Roth Conversion",
         }
     }
 }
@@ -329,6 +339,23 @@ pub struct InvInput {
     /// the recipient of shares given away, which gets shares × price.
     pub counterpart: Option<Target>,
     pub memo: String,
+    /// Roth conversion only (INV-070): its nontaxable part and the tax
+    /// withheld from it; `None` is all zero.
+    #[serde(default)]
+    pub conversion: Option<ConversionTax>,
+}
+
+/// The tax side of a Roth conversion (INV-070). The distribution is the
+/// value converted plus the tax withheld; its taxable part is that less
+/// `nontaxable` (basis: nondeductible IRA contributions or after-tax
+/// 401(k) money, from Form 8606 or the plan's 1099-R).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct ConversionTax {
+    pub nontaxable: Money,
+    /// Paid from the converting account's cash.
+    pub withheld_federal: Money,
+    pub withheld_state: Money,
 }
 
 impl InvInput {
@@ -351,6 +378,7 @@ impl InvInput {
             acquired: None,
             counterpart: None,
             memo: String::new(),
+            conversion: None,
         }
     }
 }
@@ -410,6 +438,8 @@ pub struct InvTxn {
     pub to_account: Option<AccountId>,
     pub lot_method: Option<LotMethod>,
     pub settle_date: Option<Date>,
+    /// Roth conversion only (INV-070).
+    pub conversion: Option<ConversionTax>,
     /// The cash posting, as the cash account sees it (+ in, − out);
     /// zero when the action moves no cash.
     pub cash: Money,
@@ -438,6 +468,18 @@ impl InvTxn {
             | InvAction::ReinvestCgShort
             | InvAction::ReinvestCgLong
             | InvAction::SharesAdded => Some(holding(self.account)),
+            // The value converted: the shares the Roth IRA receives, or
+            // the cash paid out less the tax withheld.
+            InvAction::RothConversion => match (self.security, self.to_account) {
+                (Some(_), Some(to)) => Some(holding(to)),
+                _ => {
+                    let c = self.conversion.unwrap_or_default();
+                    self.cash
+                        .checked_neg()
+                        .and_then(|v| v.checked_sub(c.withheld_federal))
+                        .and_then(|v| v.checked_sub(c.withheld_state))
+                }
+            },
             _ => self.cash.checked_neg().map(|n| n.max(self.cash)),
         };
         let counterpart = match self.action {
@@ -491,6 +533,7 @@ impl InvTxn {
             },
             counterpart,
             memo: self.txn.memo.clone(),
+            conversion: self.conversion,
         }
     }
 }

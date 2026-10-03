@@ -30,6 +30,7 @@ use super::{InvAction, investment_account};
 use crate::accounts::AccountId;
 use crate::date::Date;
 use crate::error::{Error, Result};
+use crate::ledger::Target;
 use crate::money::{Money, Quantity, extended_value};
 use crate::persistence::invest as repo;
 use crate::schedule::add_days;
@@ -218,6 +219,29 @@ pub fn account_period(
                 )?;
                 let v = sub(v_in, v_out)?;
                 (Some((s, v)), v)
+            }
+            // A Roth conversion (INV-070) moves value out of the IRA and
+            // into the Roth IRA: shares at the value converted, cash as
+            // cash; tax withheld leaves the IRA's own cash.
+            (InvAction::RothConversion, s) => {
+                let converted = sum(t.lots.iter().map(|l| l.basis))?;
+                let own_cash: Money = t
+                    .txn
+                    .postings
+                    .iter()
+                    .filter(|p| p.target == Target::Account(account) && p.security.is_none())
+                    .map(|p| p.amount)
+                    .sum();
+                match (s, incoming) {
+                    (Some(s), true) => (Some((s, converted)), converted),
+                    (Some(s), false) => (
+                        Some((s, neg(converted)?)),
+                        own_cash
+                            .checked_sub(converted)
+                            .ok_or(Error::Overflow("performance"))?,
+                    ),
+                    (None, _) => (None, own_cash),
+                }
             }
             (InvAction::CashIn | InvAction::CashOut, _) => (None, t.cash),
             (_, s) => {

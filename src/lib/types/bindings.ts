@@ -1002,6 +1002,19 @@ export type ComparisonRow = {
 	differs: boolean,
 };
 
+/**
+ *  The tax side of a Roth conversion (INV-070). The distribution is the
+ *  value converted plus the tax withheld; its taxable part is that less
+ *  `nontaxable` (basis: nondeductible IRA contributions or after-tax
+ *  401(k) money, from Form 8606 or the plan's 1099-R).
+ */
+export type ConversionTax = {
+	nontaxable: string,
+	/**  Paid from the converting account's cash. */
+	withheld_federal: string,
+	withheld_state: string,
+};
+
 /**  What sits on the other side of a register row. */
 export type Counterpart = 
 /**  No other posting (a zero-amount entry). */
@@ -1446,7 +1459,12 @@ export type InvAction = "buy" | "sell" | "dividend" | "interest" | "reinvest_div
  *  Lot true-up (MIG-115): the holding's lots set to the broker's
  *  list. Made only by [`true_up`], never from an [`InvInput`].
  */
-"true_up";
+"true_up" | 
+/**
+ *  Roth conversion (INV-070): cash, or shares in kind, from a
+ *  traditional IRA or 401(k) into a Roth IRA (`to_account`).
+ */
+"roth_conversion";
 
 /**
  *  An investment transaction to be written (INV-010, INV-020). Fields an
@@ -1490,6 +1508,11 @@ export type InvInput = {
 	 */
 	counterpart: Target | null,
 	memo: string,
+	/**
+	 *  Roth conversion only (INV-070): its nontaxable part and the tax
+	 *  withheld from it; `None` is all zero.
+	 */
+	conversion?: ConversionTax | null,
 };
 
 /**  An investment account's register. */
@@ -1556,6 +1579,8 @@ export type InvTxn = {
 	to_account: AccountId | null,
 	lot_method: LotMethod | null,
 	settle_date: string | null,
+	/**  Roth conversion only (INV-070). */
+	conversion: ConversionTax | null,
 	/**
 	 *  The cash posting, as the cash account sees it (+ in, − out);
 	 *  zero when the action moves no cash.
@@ -2192,6 +2217,14 @@ export type Report = {
 	columns: Column[],
 	rows: Row[],
 	chart: Chart | null,
+	/**  A group's totals are on its heading line; no closing total line. */
+	totals_on_heading: boolean,
+	/**
+	 *  Quicken's narrow layout (Tax Schedule and Tax Summary, RPT-145): the first column
+	 *  sits under the group headings, text is cut to fit the page width,
+	 *  and top-level rows are shaded.
+	 */
+	compact: boolean,
 };
 
 /**  The reports Kansha builds. */
@@ -2247,6 +2280,11 @@ export type ReportSettings = {
 	cents?: boolean,
 	/**  Groups and totals only, no transactions. */
 	totals_only?: boolean,
+	/**
+	 *  A group's totals on its heading line, with no closing total line;
+	 *  `None` is the report's default ([`Self::totals_on_heading`]).
+	 */
+	totals_on_heading?: boolean | null,
 	/**  Net worth: list accounts whose balances are all zero. */
 	show_zero?: boolean,
 	/**  Itemized reports: include transfers between accounts. */

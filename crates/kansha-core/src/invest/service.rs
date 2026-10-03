@@ -86,8 +86,10 @@ pub(crate) fn create_with_source(
 }
 
 /// Replace an investment transaction. Memo and settlement date can always
-/// change; anything that changes lots needs nothing after it in its
-/// holding's history (see the module notes). A reconciled cash posting
+/// change. A change to lots takes out its holdings' later lot events
+/// first and puts them back in after it, each choosing its lots again by
+/// its own method (as a true-up does, MIG-115); one that cannot be put
+/// back stops the change and nothing changes. A reconciled cash posting
 /// needs `confirmed` and keeps its reconciliation when its account stays.
 pub fn update(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Result<InvTxn> {
     let conn = tx.conn();
@@ -105,12 +107,93 @@ pub fn update(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Resu
             "a lot true-up cannot be changed, only its memo; delete it and true up again".into(),
         ));
     }
-    if before.action.affects_lots() {
-        check_nothing_after(conn, &before)?;
+    if !before.action.affects_lots() && !input.action.affects_lots() {
+        repo::clear_effects(tx, id)?;
+        let plan = plan(tx.conn(), input, Some(&before))?;
+        return rewrite(tx, &before, plan);
     }
+    // Later events of the old and the new holdings, from the earlier of
+    // the two dates.
+    let mut held = positions(&before);
+    if let Some(s) = input.security {
+        held.push((input.account, s));
+        held.extend(input.to_account.map(|to| (to, s)));
+    }
+    let from = before.txn.date.min(input.date);
+    let later = take_out(tx, &held, from, Some(id))?;
     repo::clear_effects(tx, id)?;
+    // The changed transaction takes its place among them by its new date.
+    let at = later
+        .iter()
+        .position(|t| (t.txn.date, t.txn.id) > (input.date, id))
+        .unwrap_or(later.len());
+    put_back(tx, &later[..at])?;
     let plan = plan(tx.conn(), input, Some(&before))?;
-    rewrite(tx, &before, plan)
+    let changed = rewrite(tx, &before, plan)?;
+    put_back(tx, &later[at..])?;
+    Ok(changed)
+}
+
+/// Clear the lot effects of `positions`' events after (`date`, `after`)
+/// (other than `after` itself), newest first; returns them as they were,
+/// oldest first. Share transfers, true-ups, and Roth conversions in kind
+/// make lots in another holding and are refused (see [`blocking`]).
+pub(crate) fn take_out(
+    tx: &Tx<'_>,
+    positions: &[(AccountId, SecurityId)],
+    date: Date,
+    after: Option<TxnId>,
+) -> Result<Vec<InvTxn>> {
+    let conn = tx.conn();
+    let mut later: Vec<InvTxn> = Vec::new();
+    for &(account, security) in positions {
+        for id in repo::events_after(conn, account, security, date, after)? {
+            if Some(id) == after || later.iter().any(|t| t.txn.id == id) {
+                continue;
+            }
+            let t = repo::get(conn, id)?;
+            if let Some(p) = blocking(conn, &t)? {
+                return Err(Error::Invalid(p));
+            }
+            later.push(t);
+        }
+    }
+    later.sort_by_key(|t| (t.txn.date, t.txn.id));
+    for t in later.iter().rev() {
+        repo::clear_effects(tx, t.txn.id)?;
+    }
+    Ok(later)
+}
+
+/// A later lot event that cannot be taken out and put back in: it makes
+/// lots in another holding, whose later events would lose them.
+pub(crate) fn blocking(conn: &Connection, t: &InvTxn) -> Result<Option<String>> {
+    let what = match t.action {
+        InvAction::TransferShares => "share transfer",
+        InvAction::TrueUp => "lot true-up",
+        InvAction::RothConversion if t.security.is_some() => "Roth conversion in kind",
+        _ => return Ok(None),
+    };
+    let acct = accounts::get(conn, t.account)?;
+    Ok(Some(format!(
+        "{:?} has a {what} on {} after this date; change or delete that first",
+        acct.fields.name, t.txn.date
+    )))
+}
+
+/// Plan each taken-out event again, oldest first.
+pub(crate) fn put_back(tx: &Tx<'_>, later: &[InvTxn]) -> Result<()> {
+    for t in later {
+        replan(tx, t).map_err(|e| {
+            Error::Invalid(format!(
+                "the {} on {} cannot be put back after this change ({e}); change or delete \
+                 that first",
+                t.action.label(),
+                t.txn.date
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// Plan `before` again from its own input, after its effects (and those
@@ -145,8 +228,8 @@ fn rewrite(tx: &Tx<'_>, before: &InvTxn, mut plan: Plan) -> Result<InvTxn> {
     repo::rewrite(tx, before, &plan, &links)
 }
 
-/// Delete an investment transaction and its lot records. One that changed
-/// lots needs nothing after it in its holding's history.
+/// Delete an investment transaction and its lot records. Its holdings'
+/// later lot events are taken out and put back in, as for [`update`].
 pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     let conn = tx.conn();
     let before = repo::get(conn, id)?;
@@ -154,13 +237,15 @@ pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     if before.action == InvAction::TrueUp {
         return super::true_up::delete(tx, &before);
     }
-    if before.action.affects_lots() {
-        check_nothing_after(conn, &before)?;
-    }
     // A cash in or out entered from a schedule (REC-115) gives its
     // occurrence back, as a register transaction does (REC-160).
     crate::schedule::release_txn(tx, id)?;
-    repo::delete(tx, &before)
+    if !before.action.affects_lots() {
+        return repo::delete(tx, &before);
+    }
+    let later = take_out(tx, &positions(&before), before.txn.date, Some(id))?;
+    repo::delete(tx, &before)?;
+    put_back(tx, &later)
 }
 
 /// The amount a trade comes to, for the entry form: buy, shares × price
@@ -180,7 +265,8 @@ pub fn trade_amount(
         InvAction::ReinvestDividend
         | InvAction::ReinvestCgShort
         | InvAction::ReinvestCgLong
-        | InvAction::SharesRemoved => Ok(value),
+        | InvAction::SharesRemoved
+        | InvAction::RothConversion => Ok(value),
         other => Err(Error::Invalid(format!(
             "{} has no shares × price amount",
             other.label()
@@ -224,12 +310,6 @@ fn positions(t: &InvTxn) -> Vec<(AccountId, SecurityId)> {
         out.push((to, s));
     }
     out
-}
-
-/// Nothing sold, transferred, removed, split, or adjusted in `t`'s
-/// holdings after `t` (date, then entry order).
-fn check_nothing_after(conn: &Connection, t: &InvTxn) -> Result<()> {
-    check_order(conn, &positions(t), t.txn.date, Some(t.txn.id))
 }
 
 /// Every lot event already recorded for `positions` (other than
@@ -287,7 +367,10 @@ fn check_fields(i: &InvInput) -> Result<()> {
     if !a.allows_security() && i.security.is_some() {
         return unused("security");
     }
-    if a.takes_quantity() {
+    // A Roth conversion in kind has a security and shares; in cash,
+    // neither (INV-070).
+    let in_kind = a == InvAction::RothConversion && i.security.is_some();
+    if a.takes_quantity() || in_kind {
         match i.quantity {
             None => return Err(Error::Invalid(format!("{name} needs a number of shares"))),
             Some(q) if q.raw() <= 0 => {
@@ -308,7 +391,7 @@ fn check_fields(i: &InvInput) -> Result<()> {
             | InvAction::SharesAdded
             | InvAction::SharesRemoved
             | InvAction::TransferShares
-    );
+    ) || in_kind;
     if !priced && i.price.is_some() {
         return unused("price");
     }
@@ -336,17 +419,34 @@ fn check_fields(i: &InvInput) -> Result<()> {
             unused("split ratio")
         };
     }
-    if (a == InvAction::TransferShares) != i.to_account.is_some() {
-        return if a == InvAction::TransferShares {
-            Err(Error::Invalid(
+    let receives = matches!(a, InvAction::TransferShares | InvAction::RothConversion);
+    if receives != i.to_account.is_some() {
+        return match a {
+            InvAction::TransferShares => Err(Error::Invalid(
                 "choose the account receiving the shares".into(),
-            ))
-        } else {
-            unused("receiving account")
+            )),
+            InvAction::RothConversion => Err(Error::Invalid(
+                "choose the Roth IRA receiving the conversion".into(),
+            )),
+            _ => unused("receiving account"),
         };
     }
-    if !a.disposes() && (i.lot_method.is_some() || !i.lots.is_empty()) {
+    let picks_lots = a.disposes() && (a != InvAction::RothConversion || in_kind);
+    if !picks_lots && (i.lot_method.is_some() || !i.lots.is_empty()) {
         return unused("lot selection");
+    }
+    if let Some(c) = i.conversion {
+        if a != InvAction::RothConversion {
+            return unused("nontaxable part or tax withheld");
+        }
+        if c.nontaxable.is_negative()
+            || c.withheld_federal.is_negative()
+            || c.withheld_state.is_negative()
+        {
+            return Err(Error::Invalid(
+                "enter the nontaxable part and the tax withheld as positive numbers".into(),
+            ));
+        }
     }
     if a != InvAction::SharesAdded && i.acquired.is_some() {
         return unused("acquisition date");
@@ -470,6 +570,24 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
                 ));
             }
             let dest = investment_account(conn, to)?;
+            if action == InvAction::RothConversion {
+                use crate::accounts::AccountType as T;
+                if !matches!(
+                    acct.fields.account_type,
+                    T::TraditionalIra | T::Retirement401k
+                ) {
+                    return Err(Error::Invalid(format!(
+                        "a Roth conversion is entered in a traditional IRA or 401(k), not {:?}",
+                        acct.fields.name
+                    )));
+                }
+                if dest.fields.account_type != T::RothIra {
+                    return Err(Error::Invalid(format!(
+                        "{:?} is not a Roth IRA",
+                        dest.fields.name
+                    )));
+                }
+            }
             if dest.status == AccountStatus::Closed {
                 return Err(Error::Invalid(format!(
                     "account {:?} is closed",
@@ -705,6 +823,76 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
                 "a lot true-up is made from the broker's lot list (True Up Lots)".into(),
             ));
         }
+        // INV-070: the value converted reaches the Roth IRA; the tax
+        // withheld is paid from this account's cash on top of it.
+        InvAction::RothConversion => {
+            let dest = to.ok_or(Error::Invalid("no Roth IRA".into()))?;
+            let conv = input.conversion.unwrap_or_default();
+            let overflow = || Error::Overflow("Roth conversion");
+            let withheld = conv
+                .withheld_federal
+                .checked_add(conv.withheld_state)
+                .ok_or_else(overflow)?;
+            let gross = amount.checked_add(withheld).ok_or_else(overflow)?;
+            if conv.nontaxable > gross {
+                return Err(Error::Invalid(
+                    "the nontaxable part is more than the conversion and the tax withheld".into(),
+                ));
+            }
+            match &security {
+                None => {
+                    b.post(cash, None, neg(gross)?);
+                    b.post(
+                        Target::Account(repo::cash_account(conn, dest)?),
+                        None,
+                        amount,
+                    );
+                }
+                Some(s) => {
+                    let (method, takes, evened) =
+                        choose_lots(input, s, &settings.default_lot_method, &open(s)?, None)?;
+                    lot_method = Some(method);
+                    for (lot, delta) in evened {
+                        b.adjustments.push(Adjustment {
+                            lot,
+                            kind: AdjustmentKind::Average,
+                            quantity_delta: Quantity::ZERO,
+                            basis_delta: delta,
+                        });
+                    }
+                    // Out at basis, no gain (an IRA's sales are not
+                    // taxed); in as one new lot at market value, as
+                    // brokers record it. Opening Balance takes the
+                    // difference, as for a gift of shares.
+                    let basis: Money = takes.iter().map(|t| t.basis).sum();
+                    for t in &takes {
+                        b.disposals.push(disposal(t, DisposalKind::Removed));
+                    }
+                    b.lots.push(PlannedLot {
+                        account: dest,
+                        security: s.id,
+                        acquired: input.date,
+                        quantity: qty,
+                        basis: amount,
+                        source: None,
+                    });
+                    b.post(Target::Account(a), Some(s.id), neg(basis)?);
+                    b.post(Target::Account(dest), Some(s.id), amount);
+                    let rest = sub(basis, amount)?;
+                    if !rest.is_zero() {
+                        b.category(conn, SystemCategory::OpeningBalance, rest)?;
+                    }
+                    if !withheld.is_zero() {
+                        b.post(cash, None, neg(withheld)?);
+                    }
+                }
+            }
+            for w in [conv.withheld_federal, conv.withheld_state] {
+                if !w.is_zero() {
+                    b.category(conn, SystemCategory::TaxWithheld, w)?;
+                }
+            }
+        }
         InvAction::Dividend
         | InvAction::Interest
         | InvAction::CgDistShort
@@ -737,6 +925,9 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
     let mut stored = input.clone();
     if action.disposes() {
         stored.lot_method = lot_method;
+    }
+    if action == InvAction::RothConversion {
+        stored.conversion = Some(input.conversion.unwrap_or_default());
     }
     Ok(Plan {
         txn: TxnInput {
@@ -800,6 +991,13 @@ fn resolve_amount(i: &InvInput) -> Result<Money> {
             ) =>
         {
             trade_amount(i.action, q, p, i.commission)?
+        }
+        // A conversion in kind is worth shares × price (INV-070).
+        (None, Some(q), Some(p)) if i.action == InvAction::RothConversion => extended_value(q, p)?,
+        (None, Some(_), None) if i.action == InvAction::RothConversion => {
+            return Err(Error::Invalid(
+                "a conversion in kind needs the price per share or the value".into(),
+            ));
         }
         _ if i.action.takes_quantity() && i.action != InvAction::SharesAdded => {
             return Err(Error::Invalid(format!(

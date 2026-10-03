@@ -21,6 +21,7 @@ mod reconcile;
 mod register;
 mod reports;
 mod repositories;
+mod roth_conversion;
 mod schedule;
 mod schema;
 mod true_up;

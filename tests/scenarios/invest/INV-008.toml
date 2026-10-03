@@ -1,5 +1,5 @@
 id = "INV-008"
-description = "A holding's history stays in date order: backdated trades after a sale are refused; a trade changes or goes only while nothing follows it; memo edits always work"
+description = "A holding's history stays in date order: new backdated trades after a sale are refused; changing or deleting an earlier trade puts the later sales back in, choosing their lots again; memo edits always work"
 requirements = ["LOT-020", "INV-010", "INT-020", "AUD-030"]
 as_of = "2026-06-30"
 
@@ -82,7 +82,8 @@ security = "AAPL"
 quantity = "1"
 amount = "150.00"
 
-# b1's shares were sold later: it cannot change or go.
+# b1's shares were sold later: the change goes in and s1 and s2 are
+# put back in after it (FIFO from b1 again).
 [[actions]]
 type = "invest_edit"
 ref = "b1"
@@ -92,18 +93,6 @@ date = "2026-01-10"
 security = "AAPL"
 quantity = "10"
 amount = "999.00"
-expect_error = "date order"
-
-[[actions]]
-type = "invest_delete"
-ref = "b1"
-expect_error = "date order"
-
-# s1 has s2 after it (same date, entered later).
-[[actions]]
-type = "invest_delete"
-ref = "s1"
-expect_error = "date order"
 
 # The memo can always change.
 [[actions]]

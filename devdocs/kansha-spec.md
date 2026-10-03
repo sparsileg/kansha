@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.4 (draft) |
+| **Document version** | 0.7.6 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-02 |
+| **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); verification reports (MIG-100) next |
 
@@ -198,7 +198,10 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   Schedule A, B, …; built-in list, migration 0003). An account maps
   transfers out of it and transfers into it to a line each (an IRA
   distribution to 1099-R). Schedule D comes from lot disposals, not a
-  category. Quicken's tax codes (the QIF category list's `R` field)
+  category. A Roth conversion (INV-070) goes to 1099-R by itself.
+  Forms list as Quicken lists them (0.7.6, migration 0010): Form 1040,
+  Schedule A, Schedule B, Schedule D, 1099-DIV, W-2, SSA-1099, 1099-R,
+  1099-G, 1099-SA, Form 8889. Quicken's tax codes (the QIF category list's `R` field)
   map to built-in lines (`import/tax_codes.rs`); Tools > Categories >
   **Set tax lines from QIF…** sets them once on a book's categories
   that have no tax line (a line already set is kept; built-in
@@ -557,6 +560,7 @@ common patterns.
   | Fee | none | − | Investment expense |
   | Tax withholding (federal/foreign) | none | − | Recorded for tax reporting |
   | Miscellaneous income/expense [R] | none | ± | Categorized |
+  | Roth conversion (INV-070) | − here, + Roth IRA (in kind) | − tax withheld (and the value, in cash) | New Roth lot at value; 1099-R distribution |
 
 - **INV-020** [1.0][R] Each investment transaction records trade date
   and, optionally, settlement date.
@@ -577,6 +581,27 @@ common patterns.
   the difference goes to Opening Balance. A recipient needs the price.
   A gift saved with an empty memo gets the memo "Gift / noncash
   donation" (0.7.2); the action stays Shares removed.
+- **INV-070** [1.0][S] **Roth conversion** (built, 0.7.6): entered in a
+  traditional IRA or 401(k), into a Roth IRA. In cash (an amount) or
+  in kind (security, shares, and a price per share or the value; one
+  security per entry). In kind, the chosen lots leave at basis with
+  no gain (disposal kind `removed`) and the Roth IRA gets one new lot
+  at the value converted, dated the conversion (as brokers record
+  it); Opening Balance takes the difference. Optional federal and
+  state tax withheld, paid from the converting account's cash on top
+  of the value converted (many pay the tax from elsewhere and leave
+  these empty), go to the built-in Tax Withheld category. Optional
+  nontaxable part (basis: nondeductible IRA contributions or after-tax
+  401(k) money, from Form 8606 or the plan's 1099-R); Kansha does not
+  work out Form 8606 itself. The distribution is the value converted
+  plus the tax withheld; its taxable part is that less the nontaxable
+  part, which cannot be more. The Tax Schedule and Tax Summary list a
+  conversion on 1099-R whatever the account's transfer tax lines:
+  the taxable part on Total IRA taxable distrib. (from a 401(k), Total
+  pension taxable distrib.), shown as a transfer to the Roth IRA, and
+  the tax withheld on the matching federal and state withheld lines.
+  The registers show Roth Conversion in the IRA and Conversion In in
+  the Roth IRA.
 
 #### 10.4 Cash handling
 
@@ -874,7 +899,12 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   an account, category, payee, security, or tag updates saved
   reports' filters: a merged record's ID becomes the survivor's, a
   deleted one is dropped, and a filter left empty becomes no filter
-  (0.4.1).
+  (0.4.1). Display option **Totals on group heading**: a group's
+  totals sit on its heading line and no closing "Total …" line
+  follows; CSV export does the same. On by default for Tax Schedule
+  and Tax Summary, off for the rest; a saved report without the
+  setting takes the default. A closing label never reads "Total
+  Total …" (0.7.5).
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to
   show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month,
@@ -891,10 +921,16 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   orientation itself and prints only to a file. Save PDF works on
   Linux only for now. On screen and on paper a report is a white page
   with dark text in every theme; its table's heading row stays in view
-  while the report scrolls and repeats on each printed page. A report
-  with a graph can hide the graph or the table. Printing leaves the
-  graph out and sets the report in 9 pt (title 12 pt), whatever the
-  screen font size.
+  while the report scrolls. A report with a graph can hide the graph
+  or the table. Printing leaves the graph out and sets the report in
+  9 pt (title 12 pt), whatever the screen font size. WebKitGTK does
+  not repeat a table's heading row on later pages and ignores page
+  breaks inside a table; a compact report (RPT-145) is therefore
+  printed as one table per page, each with the heading row, split by
+  Kansha so that a group heading never ends a page. Other reports do
+  not yet repeat the heading row (0.7.5). Negative amounts show in
+  the theme's negative color (red-brown on the report's white page),
+  minus sign kept, on screen and on paper (0.7.5).
 
 #### 12.2 Reports in 1.0
 
@@ -912,13 +948,26 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   categories, investment income (dividends, interest, capital gain
   distributions), taxable realized gains (short/long-term), and
   withholdings, for a tax year. This supports tax estimation; it does
-  not compute tax (planning is out of scope).
+  not compute tax (planning is out of scope). Compact layout, as
+  RPT-145 (0.7.5); Tax Item is cut with Account. Column S marks a
+  split transaction (more than one category or transfer line); shown
+  by default in the two tax reports, hidden by default in Itemized
+  Categories and Payees; the tax reports hide Tag by default (0.7.5).
 - **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line
   (CAT-050) with their transactions, from taxable accounts; Schedule D
   by holding period from lot disposals. No overall total. When
   Schedule A "Non-cash charity contributions" is over $500 for the
   period, its label adds "(Form 8283 needed)" (0.7.2); Kansha does not
-  fill Form 8283.
+  fill Form 8283. Compact layout, as Quicken's (0.7.5): no separate
+  label column; a group's label spans the columns before Amount, and
+  a transaction's first column (Date) sits under it; form rows are
+  shaded; totals on the heading lines (RPT-020). Every row is one
+  line and the table fits the page width, on screen and in the PDF
+  for the chosen orientation, with every selected column: Description,
+  Memo, and Tag are cut with "…" first, then Account, each to no less
+  than 5 characters' width; Category and the other columns are never
+  cut. What still does not fit is scaled down on paper and scrolls on
+  screen. Cut text shows in full on hover.
 - **RPT-150** [1.0][S] **Realized gains detail** (Capital Gains) —
   lot-level sales for a period, suitable for checking against broker
   Form 1099-B. Subtotal by short vs. long-term, month, quarter, year,
@@ -1788,7 +1837,11 @@ Modeling choices that affect other sections:
   − here, + there), shares added or removed (holding ± basis against
   Opening Balance; shares given away, INV-060: holding −basis,
   recipient +shares × price, Opening Balance the difference, kept
-  even at zero), cash in or out (cash ± against an account or
+  even at zero), Roth conversion (INV-070; in cash: IRA cash −(value
+  + tax withheld), Roth IRA cash +value; in kind: IRA holding −basis,
+  Roth IRA holding +value, Opening Balance the difference when not
+  zero, IRA cash −tax withheld; Tax Withheld +federal, +state), cash
+  in or out (cash ± against an account or
   category), fee, withholding, and misc (cash ± against the built-in
   or a chosen category). With linked cash (INV-300) every cash posting
   goes to the linked account; cash in and out are refused; cash
@@ -1812,10 +1865,16 @@ Modeling choices that affect other sections:
   holding period. Only lots created by a transaction dated on or
   before the event count; when an event is edited, a lot created later
   the same day (by entry order) does not (0.4.2). **Date order:** a holding's disposals and
-  adjustments form a history in (date, entry) order. A new or changed
+  adjustments form a history in (date, entry) order. A new
   transaction that affects a holding's lots must come after every such
-  event already recorded for it, and one can be changed or deleted
-  only while nothing follows it. Memo and settlement date can always
+  event already recorded for it. Changing or deleting one takes out
+  its holdings' later events, makes the change, and puts them back in
+  (date, entry) order, each choosing its lots again by its own method,
+  as a true-up does (0.7.6; before, only while nothing followed it).
+  A later share transfer, true-up, or Roth conversion in kind (lots
+  made in another holding) is refused, and so is a change after which
+  a later event cannot be put back (its chosen lot gone, too few
+  shares); nothing changes then. Memo and settlement date can always
   change. Investment transactions are deleted, never voided. A
   reconciled cash posting keeps its status through an edit that leaves
   it in the same account (with confirmation). In an account that holds
@@ -2237,6 +2296,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.6 | 2026-10-03 | New INV-070: Roth conversion, in cash or in kind, from a traditional IRA or 401(k) into a Roth IRA, with optional nontaxable part and federal and state tax withheld; on 1099-R in the Tax Schedule and Tax Summary. §18 date order: changing or deleting an investment transaction puts its holdings' later lot events back in (as a true-up does) instead of being refused. CAT-050: forms in Quicken's order. **Schema change:** migration 0010 (`investment_txn` rebuilt: action `roth_conversion`, columns `nontaxable`, `withheld_federal`, `withheld_state`; built-in tax line sort orders). **API change:** `InvAction` gains `roth_conversion`; `InvInput` and `InvTxn` gain `conversion` (new type `ConversionTax`). |
+| 0.7.5 | 2026-10-02 | Tax reports closer to Quicken, step 3 in part (`devdocs/tax-reports-design.md` §4.4, §4.6). RPT-020: Display option Totals on group heading (on by default for the two tax reports; CSV follows; no "Total Total"). RPT-145: compact layout: Date under the group headings, shaded form rows, one line per row, fitted to the page width (Description, Memo, Tag cut first, then Account; Category never). RPT-050: WebKitGTK does not repeat a table's heading row in print (the old text said it did); a compact report prints one table per page, split so a heading never ends a page. RPT-140: Tax Summary uses the same compact layout (Tax Item cut with Account); column S marks splits (tax reports show it, Itemized Categories and Payees hide it by default); Tag hidden by default in the tax reports. RPT-050: negatives in the negative color. Saved reports keep their columns. No schema change. **API change:** `ReportSettings.totals_on_heading: Option<bool>`; `Report` gains `totals_on_heading`, `compact`. |
 | 0.7.4 | 2026-10-02 | Tax reports closer to Quicken, step 1 (`devdocs/tax-reports-design.md` §4.1). CAT-050: Quicken tax codes map to built-in tax lines; Tools > Categories > Set tax lines from QIF… sets them once on categories with no tax line (preview, then apply after a bulk backup; audited; built-in categories untouched). MIG-020: the import sets the tax line on the categories it creates; the result counts lines set and codes with no Kansha line. No schema change. **API change:** new commands `tax_lines_from_qif_preview`, `tax_lines_from_qif_apply`; new types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus`; `ImportResult` gains `tax_lines_set`, `tax_codes_unmapped`. |
 | 0.7.3 | 2026-10-02 | REC-010: a schedule stores its transaction type (payment or deposit). Before, the type was only the sign of the lines, so a 0.00 schedule lost it: the list showed it as a deposit, and an amount set for one occurrence of a 0.00 payment went in as a deposit. A non-zero amount, one-time amount, or entered amount must go the type's way. REC-300: Method shows Payment or Deposit; a transfer is no longer listed as Transfer. The schedule dialog lists accounts most used by existing schedules first. **Schema change:** migration 0009 (`schedule.direction`, filled from the sign of each schedule's lines; 0.00 ones become payments). **API change:** `ScheduleFields` and `OccurrenceView` gain `direction`; new type `Direction`. |
 | 0.7.2 | 2026-10-01 | MIG-150 closed, not needed (schedules re-entered by hand); P-04 settled. INV-060: a gift with an empty memo gets "Gift / noncash donation". RPT-145: Schedule A non-cash line over $500 says "(Form 8283 needed)". No schema change. No API change. |

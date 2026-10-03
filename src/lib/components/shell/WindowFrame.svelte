@@ -33,6 +33,12 @@
     flex: 1;
     min-height: 0;
   }
+  /* Paper: page breaks only work outside flex layout. */
+  @media print {
+    .window {
+      display: block;
+    }
+  }
   .frame {
     display: flex;
     align-items: center;

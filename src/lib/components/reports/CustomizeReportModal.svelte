@@ -22,9 +22,17 @@
 
   let {
     settings,
+    totalsOnHeading = false,
     onsave,
     onclose,
-  }: { settings: ReportSettings; onsave: (s: ReportSettings) => void; onclose: () => void } = $props();
+  }: {
+    settings: ReportSettings;
+    /** Where the report shown now puts its totals, for a setting left
+     * at the report's default. */
+    totalsOnHeading?: boolean;
+    onsave: (s: ReportSettings) => void;
+    onclose: () => void;
+  } = $props();
 
   // svelte-ignore state_referenced_locally
   let draft = $state<ReportSettings>(structuredClone($state.snapshot(settings)));
@@ -231,6 +239,13 @@
             <legend>Show</legend>
             <label class="check"><input type="checkbox" bind:checked={draft.cents} /> Cents (no rounding)</label>
             {#if meta.totalsOnly}<label class="check"><input type="checkbox" bind:checked={draft.totals_only} /> Totals only</label>{/if}
+            <label class="check"
+              ><input
+                type="checkbox"
+                checked={draft.totals_on_heading ?? totalsOnHeading}
+                onchange={(e) => (draft.totals_on_heading = e.currentTarget.checked)}
+              /> Totals on group heading</label
+            >
             {#if meta.transfers}<label class="check"><input type="checkbox" bind:checked={draft.transfers} /> Transfers</label>{/if}
             {#if meta.showZero}<label class="check"><input type="checkbox" bind:checked={draft.show_zero} /> Accounts with zero balances</label>{/if}
           </fieldset>

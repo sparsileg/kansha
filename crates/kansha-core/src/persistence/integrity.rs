@@ -158,9 +158,11 @@ const QUERIES: &[(Check, &str, &str)] = &[
              FROM investment_txn
              WHERE action IN ('buy', 'reinvest_dividend', 'reinvest_cg_short', 'reinvest_cg_long',
                               'shares_added', 'sell', 'shares_removed', 'transfer_shares')
+                OR (action = 'roth_conversion' AND quantity IS NOT NULL)
              UNION ALL
              SELECT to_account_id, security_id, quantity FROM investment_txn
              WHERE action = 'transfer_shares'
+                OR (action = 'roth_conversion' AND quantity IS NOT NULL)
              UNION ALL
              SELECT l.account_id, l.security_id, a.quantity_delta
              FROM lot_adjustment a JOIN lot l ON l.id = a.lot_id
@@ -222,14 +224,14 @@ const QUERIES: &[(Check, &str, &str)] = &[
         Check::LotQuantityMismatch,
         "txn",
         "SELECT i.txn_id, i.action || ' of ' || i.quantity || ' shares; lot records show '
-                || CASE WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares')
+                || CASE WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares', 'roth_conversion')
                         THEN ifnull((SELECT sum(quantity) FROM lot_disposal WHERE txn_id = i.txn_id), 0)
                         ELSE ifnull((SELECT sum(quantity) FROM lot WHERE origin_txn_id = i.txn_id), 0)
                    END
          FROM investment_txn i
          WHERE i.quantity IS NOT NULL
            AND i.quantity <> CASE
-                 WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares')
+                 WHEN i.action IN ('sell', 'shares_removed', 'transfer_shares', 'roth_conversion')
                    THEN ifnull((SELECT sum(quantity) FROM lot_disposal WHERE txn_id = i.txn_id), 0)
                  ELSE ifnull((SELECT sum(quantity) FROM lot WHERE origin_txn_id = i.txn_id), 0)
                END

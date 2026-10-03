@@ -82,6 +82,8 @@
     --row-bg:           #ffffff;
     /* Past rows stripe pale blue, future rows pale gray (and italic). */
     --row-alt:          #f1f9ff;
+    /* A report's top-level rows (a tax form); reports print light. */
+    --report-shade:     rgba(128, 128, 128, 0.15);
     --future-alt:       #f0f0f0;
     --row-sel-bg:       #c9dcf7;
     /* Reconciled text: gray at 4.5:1 or better on either stripe. */

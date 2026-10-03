@@ -1,6 +1,8 @@
 // A report's row tree as the lines the table shows. An expanded group
 // shows a heading line, its rows, and a closing "Total" line carrying its
-// figures; a collapsed group shows one line with its figures.
+// figures, or, with totals on the heading (RPT-020), a heading line
+// carrying them and no closing line; a collapsed group shows one line
+// with its figures.
 
 import type { Drill, Row, RowKind } from "../types/bindings";
 
@@ -12,7 +14,7 @@ export interface Line {
   depth: number;
   kind: RowKind;
   label: string;
-  /** Empty for an expanded group's heading. */
+  /** Empty for an expanded group's heading, unless totals go there. */
   cells: string[];
   drill: Drill | null;
   collapsed: boolean;
@@ -20,7 +22,11 @@ export interface Line {
   closing: boolean;
 }
 
-export function flatten(rows: Row[], isCollapsed: (path: string) => boolean): Line[] {
+/** A group's closing label; a label that already says "Total" gets no
+ * second one. */
+export const closingLabel = (label: string): string => (label.startsWith("Total ") ? label : `Total ${label}`);
+
+export function flatten(rows: Row[], isCollapsed: (path: string) => boolean, onHeading = false): Line[] {
   const out: Line[] = [];
   const walk = (list: Row[], prefix: string, depth: number) => {
     list.forEach((r, i) => {
@@ -37,19 +43,20 @@ export function flatten(rows: Row[], isCollapsed: (path: string) => boolean): Li
         depth,
         kind: r.kind,
         label: r.label,
-        cells: collapsed ? r.cells : r.cells.map(() => ""),
+        cells: collapsed || onHeading ? r.cells : r.cells.map(() => ""),
         drill: r.drill,
         collapsed,
         closing: false,
       });
       if (collapsed) return;
       walk(r.children, path, depth + 1);
+      if (onHeading) return;
       out.push({
         key: `${path}:end`,
         path: null,
         depth,
         kind: r.kind,
-        label: `Total ${r.label}`,
+        label: closingLabel(r.label),
         cells: r.cells,
         drill: r.drill,
         collapsed: false,

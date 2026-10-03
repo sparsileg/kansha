@@ -148,6 +148,8 @@ pub(super) struct Inv {
     pub action: InvAction,
     pub quantity: Option<Quantity>,
     pub security: Option<SecurityId>,
+    pub to_account: Option<AccountId>,
+    pub conversion: Option<crate::invest::ConversionTax>,
 }
 
 /// One transaction with its postings in line order.
@@ -180,6 +182,8 @@ pub(super) fn load(conn: &Connection, range: ResolvedRange) -> Result<Vec<TxnFac
                         action,
                         quantity: p.inv_quantity,
                         security: p.inv_security,
+                        to_account: p.inv_to_account,
+                        conversion: p.inv_conversion,
                     }),
                     _ => None,
                 },
@@ -287,6 +291,18 @@ impl TxnFacts {
         }
     }
 
+    /// A split (the S column): more than one category or transfer line
+    /// besides the main account's; a holding's basis is not a line.
+    pub fn is_split(&self) -> bool {
+        let main = self.main().map(|(i, _)| i);
+        self.postings
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| Some(*i) != main && p.security.is_none())
+            .count()
+            > 1
+    }
+
     /// The Clr column for `account`'s posting.
     pub fn clr(&self, account: AccountId) -> String {
         let cleared = self
@@ -375,6 +391,8 @@ pub(super) struct Line {
     pub tag: String,
     pub tax_line: Option<TaxLineId>,
     pub clr: String,
+    /// The transaction is a split ([`TxnFacts::is_split`]).
+    pub split: bool,
     pub amount: Money,
 }
 
@@ -418,8 +436,19 @@ pub(super) fn lines(
         if !t.payee_ok(s) {
             continue;
         }
+        if want != Want::All {
+            if let Some(inv) = t
+                .inv
+                .as_ref()
+                .filter(|i| i.action == InvAction::RothConversion)
+            {
+                out.extend(conversion_lines(t, inv, s, lk)?);
+                continue;
+            }
+        }
         let description = t.description(lk);
         let num = t.num();
+        let split = t.is_split();
         let base = |account: AccountId, p: &PostingRow, section, target, category: String| Line {
             section,
             target,
@@ -436,6 +465,7 @@ pub(super) fn lines(
             tag: lk.tag_names(&t.tags_for(p)),
             tax_line: None,
             clr: t.clr(account),
+            split,
             amount: Money::ZERO,
         };
 
@@ -633,6 +663,111 @@ fn num_key(num: &str) -> (u8, u64, String) {
 }
 
 /// A line's cell for a column ID.
+/// A Roth conversion's tax lines (INV-070), on 1099-R whatever the
+/// account's transfer settings: the taxable part (value converted plus
+/// tax withheld, less the nontaxable part) as an IRA or, from a 401(k),
+/// a pension distribution, shown as a transfer to the Roth IRA; and the
+/// federal and state tax withheld.
+fn conversion_lines(
+    t: &TxnFacts,
+    inv: &Inv,
+    s: &ReportSettings,
+    lk: &Lookups,
+) -> Result<Vec<Line>> {
+    let (Some(roth), true) = (inv.to_account, s.account_ok(inv.account)) else {
+        return Ok(Vec::new());
+    };
+    let pension = lk
+        .account(inv.account)
+        .is_some_and(|a| a.fields.account_type == crate::accounts::AccountType::Retirement401k);
+    let [total, federal, state] = if pension {
+        [
+            "Total pension taxable distrib.",
+            "Pension federal tax withheld",
+            "Pension state tax withheld",
+        ]
+    } else {
+        [
+            "Total IRA taxable distrib.",
+            "IRA federal tax withheld",
+            "IRA state tax withheld",
+        ]
+    };
+    let tax_line = |line: &str| -> Option<TaxLineId> {
+        lk.tax_lines
+            .iter()
+            .find(|x| x.form == "1099-R" && x.line == line)
+            .map(|x| x.id)
+    };
+    let c = inv.conversion.unwrap_or_default();
+    let overflow = || crate::Error::Overflow("report");
+    // The value converted: shares or cash the Roth IRA side receives.
+    let converted: Money = t
+        .postings
+        .iter()
+        .filter(|p| match inv.security {
+            Some(sec) => p.account == Some(roth) && p.security == Some(sec),
+            None => p.account.is_some() && p.security.is_none() && p.amount.cents() > 0,
+        })
+        .map(|p| p.amount)
+        .sum();
+    let taxable = converted
+        .checked_add(c.withheld_federal)
+        .and_then(|v| v.checked_add(c.withheld_state))
+        .and_then(|v| v.checked_sub(c.nontaxable))
+        .ok_or_else(overflow)?;
+    let Some(first) = t.postings.first() else {
+        return Ok(Vec::new());
+    };
+    let line = |section, target, category: String, tax_line, amount| Line {
+        section,
+        target,
+        txn: t.id,
+        line_no: first.line_no,
+        date: t.date,
+        account: inv.account,
+        payee: t.payee,
+        payee_name: t.payee_name.clone(),
+        num: t.num(),
+        description: t.description(lk),
+        memo: t.memo.clone(),
+        category,
+        tag: lk.tag_names(&t.tags_for(first)),
+        tax_line,
+        clr: t.clr(inv.account),
+        split: false,
+        amount,
+    };
+    let mut out = Vec::new();
+    if !taxable.is_zero() {
+        out.push(line(
+            Section::Transfers,
+            Target::Transfer(roth),
+            format!("[{}]", lk.account_name(roth)),
+            tax_line(total),
+            taxable,
+        ));
+    }
+    let withheld = lk
+        .categories
+        .iter()
+        .find(|x| x.system == Some(crate::categories::SystemCategory::TaxWithheld));
+    if let Some(cat) = withheld {
+        for (amount, name) in [(c.withheld_federal, federal), (c.withheld_state, state)] {
+            if !amount.is_zero() {
+                out.push(line(
+                    Section::Expenses,
+                    Target::Category(cat.id),
+                    lk.category_path(cat.id),
+                    tax_line(name),
+                    amount.checked_neg().ok_or_else(overflow)?,
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
 pub(super) fn cell(l: &Line, id: &str, lk: &Lookups) -> String {
     match id {
         "date" => l.date.to_string(),
@@ -644,6 +779,7 @@ pub(super) fn cell(l: &Line, id: &str, lk: &Lookups) -> String {
         "tag" => l.tag.clone(),
         "tax_item" => lk.tax_label(l.tax_line),
         "clr" => l.clr.clone(),
+        "split" => if l.split { "S" } else { "" }.to_string(),
         "amount" => l.amount.to_string(),
         _ => String::new(),
     }

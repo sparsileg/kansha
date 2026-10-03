@@ -1,6 +1,7 @@
 # Tax reports: closer to Quicken — design and plan
 
-Status: **step 1 built** (spec 0.7.4, 2026-10-02); steps 2–7 open.
+Status: steps 1–3 built, step 6 built (spec 0.7.4–0.7.5, 2026-10-03);
+steps 4, 5, 7 open.
 Built on spec 0.7.3.
 Requirements: CAT-050, MIG-020, RPT-020, RPT-140, RPT-145.
 
@@ -65,8 +66,12 @@ Choices made in this design (Stan may overrule):
 
 - D5. Red negatives apply to **every report**, as the register already
   does (`.neg`); the minus sign stays (not color alone).
-- D6. Truncation is on screen only; print and PDF wrap, since paper has
-  no hover.
+- D6. ~~Truncation is on screen only; print and PDF wrap, since paper
+  has no hover.~~ Changed by Stan, 2026-10-02: the Tax Schedule cuts
+  text on paper too and fits the page width with every selected
+  column (Description, Memo, Tag first, then Account; never
+  Category); Date sits under the group headings; form rows shaded.
+  Built in spec 0.7.5 (§4.6 as built).
 - D7. The split marker is a new column `split` ("S"), on in the tax
   reports, off elsewhere.
 
@@ -167,6 +172,10 @@ after migrating from 9; forms come out in the table's order.
 
 ### 4.3 Roth conversion on 1099-R (F2) — CAT-050, RPT-145
 
+**Superseded (0.7.6):** Kansha has a Roth conversion action (INV-070)
+that reaches 1099-R by itself; Stan's two conversions are converted
+to it. The text below is the first design.
+
 What Quicken holds (`VangLTIRA156.QIF`, `VangRothIRA677.QIF`):
 
 ```
@@ -249,6 +258,16 @@ not.
 
 ### 4.6 One line per row (F5; D6)
 
+**As built (0.7.5), Tax Schedule and Tax Summary** (`Report.compact`): the text
+below was the first design. `src/lib/reports/fit.ts` fits natural
+column widths (measured at 9 pt) to the screen and to the PDF page;
+`ReportTable.svelte` sets them with `table-layout: fixed`. On Save
+PDF the table is split into one table per page (`paginate`), since
+WebKitGTK ignores page breaks in a table and does not repeat its
+heading row. The other reports are unchanged.
+
+First design:
+
 `ReportTable.svelte`: text columns (`kind: text`) get
 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` with a
 `max-width` per column id (Account, Description, Memo, Category, Tax
@@ -314,10 +333,10 @@ and a commit message for Stan.
 |---|---|---|---|
 | 1 | Quicken tax codes: parser, table, import, one-time command + dialog | 4.1 | ⚠ API |
 | 2 | Stan runs *Set tax lines from QIF…* on his book; checks F2 Step 1 | 4.1, 4.3 | — |
-| 3 | Totals on heading, red negatives, one line per row | 4.4–4.6 | ⚠ API |
+| 3 | Totals on heading, red negatives, one line per row | 4.4–4.6 | ⚠ API (built 0.7.5) |
 | 4 | Tax Summary Subtotal by / Sort by, defaults | 4.8, 4.9 | ⚠ API |
 | 5 | Form order (migration 0010) | 4.2 | ⚠ Schema |
-| 6 | Split marker | 4.7 | — |
+| 6 | Split marker (built 0.7.5; Tag hidden by default too) | 4.7 | — |
 | 7 | Roth conversion: Case A test only, or Case B engine rule | 4.3 | — / spec §18 |
 
 Steps 3–6 are independent of each other; 7 waits on Stan's Step 1.

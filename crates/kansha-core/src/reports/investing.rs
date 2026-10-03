@@ -33,6 +33,8 @@ fn report(
         columns,
         rows,
         chart: None,
+        totals_on_heading: false,
+        compact: false,
     }
 }
 

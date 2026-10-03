@@ -208,6 +208,8 @@ mod tests {
                 detail("", vec![m("y"), m("13.50")], None),
             ],
             chart: None,
+            totals_on_heading: false,
+            compact: false,
         };
         hide_columns(&mut report, &["memo".to_string()]);
         assert_eq!(report.columns.len(), 1);

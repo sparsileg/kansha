@@ -471,13 +471,17 @@ fn every_investment_enum_value_is_accepted_by_the_schema() {
         } else {
             (None, None)
         };
-        let to = (*a == InvAction::TransferShares).then_some(other.0);
-        let method = a.disposes().then_some(LotMethod::Fifo);
+        let to =
+            matches!(a, InvAction::TransferShares | InvAction::RothConversion).then_some(other.0);
+        let method = (a.disposes() && *a != InvAction::RothConversion).then_some(LotMethod::Fifo);
+        // A Roth conversion (in cash here) carries its tax columns.
+        let tax = (*a == InvAction::RothConversion).then_some(0_i64);
         c.execute(
             "INSERT INTO investment_txn (txn_id, account_id, security_id, action, quantity,
-                 split_new, split_old, to_account_id, lot_method)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![id, brk.0, security, a, quantity, new, old, to, method],
+                 split_new, split_old, to_account_id, lot_method, nontaxable,
+                 withheld_federal, withheld_state)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?10)",
+            params![id, brk.0, security, a, quantity, new, old, to, method, tax],
         )
         .unwrap_or_else(|e| panic!("{a}: {e}"));
     }

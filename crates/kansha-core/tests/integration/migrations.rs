@@ -736,3 +736,118 @@ fn migration_0009_stores_each_schedules_direction_from_its_sign() {
             .is_err()
     );
 }
+
+#[test]
+fn migration_0010_accepts_roth_conversions_and_orders_forms_as_quicken() {
+    use kansha_core::accounts::{AccountFields, AccountType};
+    use kansha_core::invest::{self, InvAction, InvInput};
+    use kansha_core::persistence::{Origin, accounts, securities};
+    use kansha_core::securities::{SecurityFields, SecurityType};
+
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 9).unwrap();
+    db.write(&clock, Origin::Ui, |tx| {
+        let a = accounts::insert(tx, &AccountFields::new("IRA", AccountType::TraditionalIra))?.id;
+        let s = securities::insert(tx, &SecurityFields::new("Fund", SecurityType::MutualFund))?.id;
+        let mut buy = InvInput::new(a, InvAction::Buy, date("2025-01-10"));
+        buy.security = Some(s);
+        buy.quantity = Some("10".parse()?);
+        buy.amount = Some("1000.00".parse()?);
+        invest::create(tx, &buy)?;
+        Ok(())
+    })
+    .unwrap();
+    let rows = |db: &Db, sql: &str| -> Vec<String> {
+        let mut st = db.conn().prepare(sql).unwrap();
+        st.query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    let inv = "SELECT txn_id || action || quantity || account_id FROM investment_txn";
+    let before = rows(&db, inv);
+    let lines_before = rows(&db, "SELECT form || line FROM tax_line ORDER BY id");
+
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    assert_eq!(rows(&db, inv), before);
+    assert_eq!(
+        rows(&db, "SELECT form || line FROM tax_line ORDER BY id"),
+        lines_before
+    );
+    // Forms by their first line, as Quicken lists them; lines keep their
+    // order within a form.
+    let forms = rows(
+        &db,
+        "SELECT form FROM tax_line GROUP BY form ORDER BY min(sort_order)",
+    );
+    assert_eq!(
+        forms,
+        [
+            "Form 1040",
+            "Schedule A",
+            "Schedule B",
+            "1099-DIV",
+            "W-2",
+            "SSA-1099",
+            "1099-R",
+            "1099-G",
+            "1099-SA",
+            "Form 8889"
+        ]
+    );
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT line FROM tax_line WHERE form = '1099-R' ORDER BY sort_order"
+        )[..3],
+        [
+            "Total IRA taxable distrib.",
+            "IRA federal tax withheld",
+            "IRA state tax withheld"
+        ]
+    );
+    let c = db.conn();
+    let account: i64 = c
+        .query_row("SELECT account_id FROM investment_txn", [], |r| r.get(0))
+        .unwrap();
+    c.execute_batch(
+        "INSERT INTO account (name, type, account_group, tax_treatment, created_at, cash_mode,
+                 mmf_mode, default_lot_method)
+             VALUES ('Roth', 'roth_ira', 'retirement', 'tax_exempt', '2026-06-30T12:00:00Z',
+                 'internal', 'security', 'fifo');
+         INSERT INTO txn (txn_date, origin, created_at)
+             VALUES ('2026-01-01', 'manual', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+    let new_txn: i64 = c
+        .query_row("SELECT max(id) FROM txn", [], |r| r.get(0))
+        .unwrap();
+    let roth: i64 = c
+        .query_row("SELECT id FROM account WHERE name = 'Roth'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    // A conversion in cash needs its tax columns; other actions refuse them.
+    assert!(
+        c.execute(
+            "INSERT INTO investment_txn (txn_id, account_id, action, to_account_id)
+             VALUES (?1, ?2, 'roth_conversion', ?3)",
+            [new_txn, account, roth],
+        )
+        .is_err()
+    );
+    c.execute(
+        "INSERT INTO investment_txn (txn_id, account_id, action, to_account_id, nontaxable,
+             withheld_federal, withheld_state)
+         VALUES (?1, ?2, 'roth_conversion', ?3, 0, 0, 0)",
+        [new_txn, account, roth],
+    )
+    .unwrap();
+    assert!(
+        c.execute(
+            "UPDATE investment_txn SET nontaxable = 0 WHERE action = 'buy'",
+            [],
+        )
+        .is_err()
+    );
+}

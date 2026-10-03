@@ -23,6 +23,7 @@ pub(super) fn columns() -> Vec<Column> {
         ("date", "Date", K::Date),
         ("account", "Account", K::Text),
         ("num", "Num", K::Text),
+        ("split", "S", K::Text),
         ("description", "Description", K::Text),
         ("memo", "Memo", K::Text),
         ("category", "Category", K::Text),
@@ -41,8 +42,8 @@ const NONCASH: (&str, &str) = ("Schedule A", "Non-cash charity contributions");
 const FORM_8283_OVER: Money = Money::from_cents(50_000);
 
 const SCHEDULE_D: &str = "Schedule D";
-/// Schedule D sorts after 1099-DIV (800s), before 1099-SA (900).
-const SCHEDULE_D_ORDER: i64 = 850;
+/// Schedule D sorts after Schedule B (300s), before 1099-DIV (400s).
+const SCHEDULE_D_ORDER: i64 = 350;
 
 pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange) -> Result<Report> {
     let lk = Lookups::load(conn)?;
@@ -133,6 +134,8 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
         columns,
         rows,
         chart: None,
+        totals_on_heading: false,
+        compact: false,
     })
 }
 

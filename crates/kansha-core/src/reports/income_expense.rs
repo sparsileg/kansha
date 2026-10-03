@@ -107,6 +107,8 @@ pub(super) fn build(
         columns,
         rows: sections,
         chart: None,
+        totals_on_heading: false,
+        compact: false,
     })
 }
 

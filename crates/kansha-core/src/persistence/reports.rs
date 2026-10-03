@@ -9,7 +9,7 @@ use crate::accounts::AccountId;
 use crate::categories::{CategoryId, PayeeId, TagId, TaxLine};
 use crate::date::Date;
 use crate::error::{Error, Result};
-use crate::invest::InvAction;
+use crate::invest::{ConversionTax, InvAction};
 use crate::ledger::{Cleared, TxnId};
 use crate::money::{Money, Quantity};
 use crate::reports::{FilterList, ReportKind, ReportSettings, SavedReport, SavedReportId};
@@ -63,6 +63,10 @@ pub struct PostingRow {
     pub inv_action: Option<InvAction>,
     pub inv_quantity: Option<Quantity>,
     pub inv_security: Option<SecurityId>,
+    /// Share transfers and Roth conversions: the receiving account.
+    pub inv_to_account: Option<AccountId>,
+    /// Roth conversions (INV-070).
+    pub inv_conversion: Option<ConversionTax>,
 }
 
 fn tags_from(text: Option<String>) -> rusqlite::Result<Vec<TagId>> {
@@ -88,7 +92,8 @@ pub fn postings(conn: &Connection, from: Option<Date>, to: Date) -> Result<Vec<P
                 p.line_no, p.account_id, p.category_id, p.security_id, p.amount, p.memo,
                 p.cleared,
                 (SELECT group_concat(pt.tag_id) FROM posting_tag pt WHERE pt.posting_id = p.id),
-                i.account_id, i.action, i.quantity, i.security_id
+                i.account_id, i.action, i.quantity, i.security_id, i.to_account_id,
+                i.nontaxable, i.withheld_federal, i.withheld_state
          FROM txn t
          JOIN posting p ON p.txn_id = t.id
          LEFT JOIN payee py ON py.id = t.payee_id
@@ -118,6 +123,17 @@ pub fn postings(conn: &Connection, from: Option<Date>, to: Date) -> Result<Vec<P
             inv_action: r.get(15)?,
             inv_quantity: r.get(16)?,
             inv_security: r.get(17)?,
+            inv_to_account: r.get(18)?,
+            inv_conversion: match (r.get(19)?, r.get(20)?, r.get(21)?) {
+                (Some(nontaxable), Some(withheld_federal), Some(withheld_state)) => {
+                    Some(ConversionTax {
+                        nontaxable,
+                        withheld_federal,
+                        withheld_state,
+                    })
+                }
+                _ => None,
+            },
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { columnHeading, formatCell } from "../format/report";
 import type { Column, Row } from "../types/bindings";
 import { MENU_REPORTS, REPORTS, toggleFilter } from "./meta";
-import { flatten } from "./rows";
+import { fitColumns, MIN_CUT, paginate } from "./fit";
+import { closingLabel, flatten } from "./rows";
 
 const row = (label: string, cells: string[], children: Row[] = [], kind: Row["kind"] = "group"): Row => ({
   kind: children.length ? kind : "detail",
@@ -44,6 +45,112 @@ describe("flatten", () => {
       ["Total EXPENSES", "-15.00", false],
       ["OVERALL TOTAL", "-15.00", false],
     ]);
+  });
+});
+
+describe("flatten, totals on the heading", () => {
+  const tree: Row[] = [
+    row("EXPENSES", ["", "-15.00"], [
+      row("Food", ["", "-15.00"], [row("", ["2026-01-01", "-10.00"]), row("", ["2026-01-02", "-5.00"])]),
+    ], "section"),
+    { kind: "total", label: "OVERALL TOTAL", cells: ["", "-15.00"], drill: null, children: [] },
+  ];
+
+  it("headings carry the figures and no closing lines follow", () => {
+    const lines = flatten(tree, () => false, true);
+    expect(lines.map((l) => [l.depth, l.label, l.cells[1]])).toEqual([
+      [0, "EXPENSES", "-15.00"],
+      [1, "Food", "-15.00"],
+      [2, "", "-10.00"],
+      [2, "", "-5.00"],
+      [0, "OVERALL TOTAL", "-15.00"],
+    ]);
+    expect(lines.some((l) => l.closing)).toBe(false);
+  });
+
+  it("a collapsed group is still one line", () => {
+    const lines = flatten(tree, (p) => p === "0/0", true);
+    expect(lines.map((l) => [l.label, l.cells[1], l.collapsed])).toEqual([
+      ["EXPENSES", "-15.00", false],
+      ["Food", "-15.00", true],
+      ["OVERALL TOTAL", "-15.00", false],
+    ]);
+  });
+
+  it("a label that says Total gets no second one", () => {
+    expect(closingLabel("Total IRA taxable distrib.")).toBe("Total IRA taxable distrib.");
+    expect(closingLabel("Food")).toBe("Total Food");
+  });
+});
+
+describe("fitColumns", () => {
+  const ids = ["date", "account", "description", "memo", "category", "tag", "amount"];
+  const natural = [6, 12, 20, 14, 15, 8, 7]; // 82
+  const total = (w: number[]) => w.reduce((a, b) => a + b, 0);
+
+  it("leaves columns that fit alone", () => {
+    expect(fitColumns(ids, natural, 90)).toEqual({ widths: natural, scale: 1 });
+  });
+
+  it("cuts Description, Memo, and Tag first, the widest first", () => {
+    const f = fitColumns(ids, natural, 76);
+    expect(total(f.widths)).toBeCloseTo(76, 6);
+    expect(f.widths[2]).toBeCloseTo(14, 6);
+    expect(f.widths[3]).toBeCloseTo(14, 6);
+    expect(f.widths[5]).toBe(8);
+    expect([f.widths[0], f.widths[1], f.widths[4], f.widths[6]]).toEqual([6, 12, 15, 7]);
+    expect(f.scale).toBe(1);
+  });
+
+  it("then Account; Category is never cut", () => {
+    // Description, Memo, Tag at the floor: 6 + 12 + 15 + 7 + 3 * MIN_CUT = 55.
+    const f = fitColumns(ids, natural, 50);
+    expect([f.widths[2], f.widths[3], f.widths[5]]).toEqual([MIN_CUT, MIN_CUT, MIN_CUT]);
+    expect(f.widths[1]).toBeCloseTo(7, 6);
+    expect(f.widths[4]).toBe(15);
+    expect(f.scale).toBe(1);
+  });
+
+  it("Tax Summary: Tax Item is cut with Account, the widest first", () => {
+    const f = fitColumns(["description", "account", "tax_item", "category"], [5, 10, 20, 15], 40);
+    expect(f.widths[2]).toBeCloseTo(10, 6);
+    expect(f.widths[1]).toBe(10);
+    expect(f.widths[3]).toBe(15);
+    expect(f.scale).toBe(1);
+  });
+
+  it("scales what still does not fit", () => {
+    const f = fitColumns(ids, natural, 40);
+    expect(f.widths[1]).toBe(MIN_CUT);
+    const w = total(f.widths);
+    expect(w).toBe(6 + 15 + 7 + 4 * MIN_CUT);
+    expect(f.scale).toBeCloseTo(40 / w, 9);
+  });
+
+  it("a narrow column is never widened to the floor", () => {
+    const f = fitColumns(["tag", "category"], [3, 30], 20);
+    expect(f.widths).toEqual([3, 30]);
+    expect(f.scale).toBeCloseTo(20 / 33, 9);
+  });
+});
+
+describe("paginate", () => {
+  const d = { h: 10, heading: false };
+  const hd = { h: 10, heading: true };
+
+  it("fills each page under the column headings; the first page under the title", () => {
+    // Page 100, headings 10, title 30: 6 rows on page 1, then 9 a page.
+    expect(paginate(Array(20).fill(d), 10, 100, 30)).toEqual([0, 6, 15]);
+  });
+
+  it("a heading never ends a page", () => {
+    const rows = [d, d, d, d, hd, hd, d, d, d];
+    // Rows 4 and 5 (a form and its line) would end page 1: they move.
+    expect(paginate(rows, 10, 100, 30)).toEqual([0, 4]);
+  });
+
+  it("one page when everything fits", () => {
+    expect(paginate([hd, d, d], 10, 100, 30)).toEqual([0]);
   });
 });
 

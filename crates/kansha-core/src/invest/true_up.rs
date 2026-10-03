@@ -259,7 +259,7 @@ pub fn preview_true_up(
     for id in repo::events_after(conn, account, security, date, None)? {
         let t = repo::get(conn, id)?;
         if problem.is_none() {
-            problem = blocking(conn, &t)?;
+            problem = service::blocking(conn, &t)?;
         }
         replayed.push(TrueUpReplay {
             txn: id,
@@ -299,20 +299,6 @@ pub fn preview_true_up(
     })
 }
 
-/// A later lot event a true-up cannot put back in.
-fn blocking(conn: &Connection, t: &InvTxn) -> Result<Option<String>> {
-    let what = match t.action {
-        InvAction::TransferShares => "share transfer",
-        InvAction::TrueUp => "lot true-up",
-        _ => return Ok(None),
-    };
-    let acct = crate::persistence::accounts::get(conn, t.account)?;
-    Ok(Some(format!(
-        "{:?} has a {what} on {} after the true-up date; delete it first",
-        acct.fields.name, t.txn.date
-    )))
-}
-
 /// Make the true-up `broker` describes (see [`preview_true_up`]); later
 /// lot events of the holding are put back in after it.
 pub fn true_up(
@@ -328,7 +314,7 @@ pub fn true_up(
     if let Some(p) = preview.problem {
         return Err(Error::Invalid(p));
     }
-    let later = take_out(tx, account, security, date, None)?;
+    let later = service::take_out(tx, &[(account, security)], date, None)?;
 
     let mut lots = Vec::new();
     let mut disposals = Vec::new();
@@ -392,7 +378,7 @@ pub fn true_up(
         adjustments: Vec::new(),
     };
     let made = repo::insert(tx, service::source(tx)?, &plan)?;
-    put_back(tx, &later)?;
+    service::put_back(tx, &later)?;
     Ok(made)
 }
 
@@ -401,52 +387,12 @@ pub(crate) fn delete(tx: &Tx<'_>, before: &InvTxn) -> Result<()> {
     let security = before
         .security
         .ok_or(Error::Invalid("a true-up without a security".into()))?;
-    let later = take_out(
+    let later = service::take_out(
         tx,
-        before.account,
-        security,
+        &[(before.account, security)],
         before.txn.date,
         Some(before.txn.id),
     )?;
     repo::delete(tx, before)?;
-    put_back(tx, &later)
-}
-
-/// Clear the lot effects of the holding's events after (`date`, `after`),
-/// newest first; returns them as they were, oldest first.
-fn take_out(
-    tx: &Tx<'_>,
-    account: AccountId,
-    security: SecurityId,
-    date: Date,
-    after: Option<TxnId>,
-) -> Result<Vec<InvTxn>> {
-    let conn = tx.conn();
-    let mut later = Vec::new();
-    for id in repo::events_after(conn, account, security, date, after)? {
-        let t = repo::get(conn, id)?;
-        if let Some(p) = blocking(conn, &t)? {
-            return Err(Error::Invalid(p));
-        }
-        later.push(t);
-    }
-    for t in later.iter().rev() {
-        repo::clear_effects(tx, t.txn.id)?;
-    }
-    Ok(later)
-}
-
-/// Plan each taken-out event again, oldest first.
-fn put_back(tx: &Tx<'_>, later: &[InvTxn]) -> Result<()> {
-    for t in later {
-        service::replan(tx, t).map_err(|e| {
-            Error::Invalid(format!(
-                "the {} on {} cannot be put back after the true-up ({e}); change or delete it \
-                 first",
-                t.action.label(),
-                t.txn.date
-            ))
-        })?;
-    }
-    Ok(())
+    service::put_back(tx, &later)
 }

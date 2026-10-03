@@ -7,7 +7,7 @@ const today = "2026-06-30";
 describe("action list", () => {
   it("covers every investment action once (INV-010)", () => {
     const values = ACTIONS.map((a) => a.value);
-    expect(new Set(values).size).toBe(20);
+    expect(new Set(values).size).toBe(21);
     expect(actionInfo("split").split).toBe(true);
     expect(actionInfo("cash_in").security).toBe("none");
     expect(actionInfo("sell").lots).toBe(true);
@@ -117,6 +117,7 @@ describe("formFromInput", () => {
       acquired: null,
       counterpart: null,
       memo: "rebalance",
+      conversion: null,
     };
     const f = formFromInput(stored);
     expect(f.quantity).toBe("1,000.5");

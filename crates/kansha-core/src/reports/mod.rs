@@ -190,6 +190,10 @@ pub struct ReportSettings {
     /// Groups and totals only, no transactions.
     #[serde(default)]
     pub totals_only: bool,
+    /// A group's totals on its heading line, with no closing total line;
+    /// `None` is the report's default ([`Self::totals_on_heading`]).
+    #[serde(default)]
+    pub totals_on_heading: Option<bool>,
     /// Net worth: list accounts whose balances are all zero.
     #[serde(default)]
     pub show_zero: bool,
@@ -262,9 +266,16 @@ impl ReportSettings {
                 DetailSort::Date
             },
             sort_desc: false,
-            hidden_columns: Vec::new(),
+            // The S column (split marker) shows by default only in the
+            // tax reports, which hide Tag instead.
+            hidden_columns: match kind {
+                K::ItemizedCategories | K::ItemizedPayees => vec!["split".into()],
+                K::TaxSchedule | K::TaxSummary => vec!["tag".into()],
+                _ => Vec::new(),
+            },
             cents: true,
             totals_only: false,
+            totals_on_heading: None,
             show_zero: false,
             transfers: true,
             accounts: None,
@@ -273,6 +284,15 @@ impl ReportSettings {
             securities: None,
             tags: None,
         }
+    }
+
+    /// Whether a group's totals go on its heading line: as set, else on
+    /// for the tax reports only (RPT-020).
+    pub fn totals_on_heading(&self) -> bool {
+        self.totals_on_heading.unwrap_or(matches!(
+            self.kind,
+            ReportKind::TaxSchedule | ReportKind::TaxSummary
+        ))
     }
 
     fn includes<T: PartialEq>(filter: &Option<Vec<T>>, value: &T) -> bool {
@@ -434,6 +454,12 @@ pub struct Report {
     pub columns: Vec<Column>,
     pub rows: Vec<Row>,
     pub chart: Option<Chart>,
+    /// A group's totals are on its heading line; no closing total line.
+    pub totals_on_heading: bool,
+    /// Quicken's narrow layout (Tax Schedule and Tax Summary, RPT-145): the first column
+    /// sits under the group headings, text is cut to fit the page width,
+    /// and top-level rows are shaded.
+    pub compact: bool,
 }
 
 /// Build a report.
@@ -460,6 +486,11 @@ pub fn run(conn: &Connection, settings: &ReportSettings, today: Date) -> Result<
         ReportKind::AssetAllocation => investing::allocation(conn, settings, range)?,
     };
     tree::hide_columns(&mut report, &settings.hidden_columns);
+    report.totals_on_heading = settings.totals_on_heading();
+    report.compact = matches!(
+        settings.kind,
+        ReportKind::TaxSchedule | ReportKind::TaxSummary
+    );
     if !settings.cents {
         tree::round_to_dollars(&mut report)?;
     }

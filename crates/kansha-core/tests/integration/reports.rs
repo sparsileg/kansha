@@ -257,7 +257,7 @@ fn totals_only_hidden_columns_and_whole_dollars() {
     let mut s = settings(ReportKind::ItemizedCategories);
     s.totals_only = true;
     s.transfers = false;
-    s.hidden_columns = vec!["memo".into(), "tag".into()];
+    s.hidden_columns = vec!["memo".into(), "tag".into(), "split".into()];
     s.cents = false;
     s.categories = Some(vec![fx.book.find_category("Food:Dining").unwrap().unwrap()]);
     let r = run(&fx, &s);
@@ -391,6 +391,7 @@ fn detail_sorts_by_date_then_account_by_num_and_reversed() {
     s.categories = Some(vec![dining]);
     s.transfers = false;
     s.hidden_columns = vec![
+        "split".into(),
         "description".into(),
         "memo".into(),
         "tag".into(),
@@ -553,23 +554,23 @@ fn tax_schedule_by_form_and_line_with_schedule_d() {
     assert_eq!(
         text(&r),
         "\
-# W-2 |  |  |  |  |  |  |  |  | 3000.00
-  + Salary or wages |  |  |  |  |  |  |  |  | 3000.00
-    -  | 2026-01-15 | Checking |  | Employer |  | Salary |  |  | 3000.00
-# 1099-R |  |  |  |  |  |  |  |  | 5000.00
-  + Total IRA taxable distrib. |  |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash Out |  |  | [IRA] |  |  | 5000.00
 # Schedule A |  |  |  |  |  |  |  |  | -1200.00
   + Real estate taxes |  |  |  |  |  |  |  |  | -1200.00
-    -  | 2026-03-15 | Checking |  | County |  | Tax:Real Estate |  |  | -1200.00
+    -  | 2026-03-15 | Checking |  |  | County |  | Tax:Real Estate |  | -1200.00
 # Schedule B |  |  |  |  |  |  |  |  | 50.00
   + Dividend income |  |  |  |  |  |  |  |  | 50.00
-    -  | 2026-03-31 | Brokerage | Dividend | Total Stock Market |  | Dividends |  |  | 50.00
+    -  | 2026-03-31 | Brokerage | Dividend |  | Total Stock Market |  | Dividends |  | 50.00
 # Schedule D |  |  |  |  |  |  |  |  | 500.00
   + Short-term gain/loss |  |  |  |  |  |  |  |  | 100.00
-    -  | 2026-05-01 | Brokerage | Sell | 5 Total Stock Market |  | Realized Gain/Loss |  |  | 100.00
+    -  | 2026-05-01 | Brokerage | Sell |  | 5 Total Stock Market |  | Realized Gain/Loss |  | 100.00
   + Long-term gain/loss |  |  |  |  |  |  |  |  | 400.00
-    -  | 2026-05-01 | Brokerage | Sell | 10 Total Stock Market |  | Realized Gain/Loss |  |  | 400.00"
+    -  | 2026-05-01 | Brokerage | Sell |  | 10 Total Stock Market |  | Realized Gain/Loss |  | 400.00
+# W-2 |  |  |  |  |  |  |  |  | 3000.00
+  + Salary or wages |  |  |  |  |  |  |  |  | 3000.00
+    -  | 2026-01-15 | Checking |  |  | Employer |  | Salary |  | 3000.00
+# 1099-R |  |  |  |  |  |  |  |  | 5000.00
+  + Total IRA taxable distrib. |  |  |  |  |  |  |  |  | 5000.00
+    -  | 2026-04-01 | Checking | Cash Out |  |  |  | [IRA] |  | 5000.00"
     );
 }
 
@@ -582,18 +583,18 @@ fn tax_summary_lists_tax_related_categories_and_mapped_transfers() {
         "\
 # INCOME |  |  |  |  |  |  |  |  |  | 3550.00
   + Dividends |  |  |  |  |  |  |  |  |  | 50.00
-    -  | 2026-03-31 | Brokerage | Dividend | Total Stock Market |  | Dividends |  | Schedule B:Dividend income |  | 50.00
+    -  | 2026-03-31 | Brokerage | Dividend |  | Total Stock Market |  | Dividends | Schedule B:Dividend income |  | 50.00
   + Realized Gain/Loss |  |  |  |  |  |  |  |  |  | 500.00
-    -  | 2026-05-01 | Brokerage | Sell | 15 Total Stock Market |  | Realized Gain/Loss |  |  |  | 500.00
+    -  | 2026-05-01 | Brokerage | Sell |  | 15 Total Stock Market |  | Realized Gain/Loss |  |  | 500.00
   + Salary |  |  |  |  |  |  |  |  |  | 3000.00
-    -  | 2026-01-15 | Checking |  | Employer |  | Salary |  | W-2:Salary or wages |  | 3000.00
+    -  | 2026-01-15 | Checking |  |  | Employer |  | Salary | W-2:Salary or wages |  | 3000.00
 # EXPENSES |  |  |  |  |  |  |  |  |  | -1200.00
   + Tax |  |  |  |  |  |  |  |  |  | -1200.00
     + Real Estate |  |  |  |  |  |  |  |  |  | -1200.00
-      -  | 2026-03-15 | Checking |  | County |  | Tax:Real Estate |  | Schedule A:Real estate taxes |  | -1200.00
+      -  | 2026-03-15 | Checking |  |  | County |  | Tax:Real Estate | Schedule A:Real estate taxes |  | -1200.00
 # TRANSFERS |  |  |  |  |  |  |  |  |  | 5000.00
   + IRA |  |  |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash Out |  |  | [IRA] |  | 1099-R:Total IRA taxable distrib. |  | 5000.00
+    -  | 2026-04-01 | Checking | Cash Out |  |  |  | [IRA] | 1099-R:Total IRA taxable distrib. |  | 5000.00
 = OVERALL TOTAL |  |  |  |  |  |  |  |  |  | 7350.00"
     );
 }
@@ -824,6 +825,70 @@ fn settings_saved_by_an_older_version_still_load() {
     assert_eq!(s.interval, Interval::None);
     assert!(s.cents && s.transfers);
     assert_eq!(s.accounts, None);
+    assert_eq!(s.totals_on_heading, None);
+}
+
+#[test]
+fn totals_on_heading_and_compact_for_tax_reports_only() {
+    let fx = fixture();
+    for (kind, on) in [
+        (ReportKind::TaxSchedule, true),
+        (ReportKind::TaxSummary, true),
+        (ReportKind::ItemizedCategories, false),
+        (ReportKind::CapitalGains, false),
+    ] {
+        let r = run(&fx, &settings(kind));
+        assert_eq!(r.totals_on_heading, on, "{kind:?}");
+        assert_eq!(r.compact, on, "{kind:?}");
+    }
+    let mut s = settings(ReportKind::TaxSchedule);
+    s.totals_on_heading = Some(false);
+    assert!(!run(&fx, &s).totals_on_heading);
+    let mut s = settings(ReportKind::CapitalGains);
+    s.totals_on_heading = Some(true);
+    assert!(run(&fx, &s).totals_on_heading);
+}
+
+#[test]
+fn split_marker_shows_by_default_in_tax_reports_only() {
+    let fx = fixture();
+    // Hidden: S in the itemized reports, Tag in the tax reports.
+    for (kind, hidden) in [
+        (ReportKind::ItemizedCategories, "split"),
+        (ReportKind::ItemizedPayees, "split"),
+        (ReportKind::TaxSchedule, "tag"),
+        (ReportKind::TaxSummary, "tag"),
+    ] {
+        assert_eq!(
+            ReportSettings::defaults(kind).hidden_columns,
+            vec![hidden.to_string()],
+            "{kind:?}"
+        );
+    }
+    // The 2026-02-03 Costco entry is split (groceries and dining); the
+    // others, a sale included, are not.
+    let mut s = settings(ReportKind::ItemizedCategories);
+    s.hidden_columns = Vec::new();
+    let r = run(&fx, &s);
+    let at = r.columns.iter().position(|c| c.id == "split").unwrap();
+    assert_eq!(r.columns[at].label, "S");
+    let mut marks = Vec::new();
+    fn walk(rows: &[Row], at: usize, marks: &mut Vec<(String, String)>) {
+        for r in rows {
+            if r.children.is_empty() && r.cells.len() > at {
+                marks.push((r.cells[0].clone(), r.cells[at].clone()));
+            }
+            walk(&r.children, at, marks);
+        }
+    }
+    walk(&r.rows, at, &mut marks);
+    let split: Vec<_> = marks
+        .iter()
+        .filter(|(_, m)| m == "S")
+        .map(|(d, _)| d.as_str())
+        .collect();
+    assert_eq!(split, ["2026-02-03", "2026-02-03"]);
+    assert!(marks.iter().any(|(d, m)| d == "2026-05-01" && m.is_empty()));
 }
 
 #[test]
