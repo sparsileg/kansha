@@ -33,6 +33,22 @@ pub fn schema_version() -> u32 {
     kansha_core::persistence::migrate::LATEST_VERSION
 }
 
+/// Remember the main window's working size and place, before the
+/// window shrinks to the start screen.
+#[tauri::command]
+#[specta::specta]
+pub fn window_save(window: tauri::Window, state: State<'_, AppState>) {
+    crate::window::save_geometry(&window, &state);
+}
+
+/// Put the main window back at its saved working size and place. False
+/// when none was saved.
+#[tauri::command]
+#[specta::specta]
+pub fn window_restore(window: tauri::Window, state: State<'_, AppState>) -> bool {
+    crate::window::restore_geometry(&window, &state)
+}
+
 /// Today's date from the app clock (financial dates never come from the
 /// browser).
 #[tauri::command]

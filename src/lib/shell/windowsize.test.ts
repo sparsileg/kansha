@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const calls: string[] = [];
 let maximized = false;
+let saved = false;
+
+vi.mock("../api", () => ({
+  commands: {
+    windowSave: () => (calls.push("save"), Promise.resolve(null)),
+    windowRestore: () => (calls.push("restore"), Promise.resolve(saved)),
+  },
+}));
 
 vi.mock("@tauri-apps/api/window", () => ({
   LogicalSize: class {
@@ -27,6 +35,7 @@ async function load() {
 beforeEach(() => {
   calls.length = 0;
   maximized = false;
+  saved = false;
 });
 
 describe("window size", () => {
@@ -36,7 +45,7 @@ describe("window size", () => {
     expect(calls).toEqual([]);
     await w.fullWindow();
     // Grow first, then raise the minimum past the compact size.
-    expect(calls).toEqual(["size 1280x800", "min 900x600", "center"]);
+    expect(calls).toEqual(["restore", "size 1280x800", "min 900x600", "center"]);
   });
 
   it("shrinks after growing, lowering the minimum first", async () => {
@@ -44,7 +53,7 @@ describe("window size", () => {
     await w.fullWindow();
     calls.length = 0;
     await w.compactWindow();
-    expect(calls).toEqual(["min 460x600", "size 520x700", "center"]);
+    expect(calls).toEqual(["save", "min 460x600", "size 520x700", "center"]);
   });
 
   it("each size is set once, not on every call", async () => {
@@ -58,6 +67,22 @@ describe("window size", () => {
     maximized = true;
     const w = await load();
     await w.fullWindow();
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["restore"]);
+  });
+
+  it("grows to the saved size and place when there is one", async () => {
+    saved = true;
+    const w = await load();
+    await w.fullWindow();
+    // Rust put it back; only the minimum is raised.
+    expect(calls).toEqual(["restore", "min 900x600"]);
+  });
+
+  it("remembers the working size before shrinking", async () => {
+    const w = await load();
+    await w.fullWindow();
+    calls.length = 0;
+    await w.compactWindow();
+    expect(calls[0]).toBe("save");
   });
 });

@@ -11,7 +11,6 @@
 use std::path::PathBuf;
 
 use kansha_core::book::BookFiles;
-use kansha_core::local_config::WindowGeometry;
 use tauri::Manager;
 use tauri_specta::{Builder, collect_commands};
 
@@ -19,6 +18,7 @@ use crate::state::AppState;
 
 mod commands;
 mod state;
+mod window;
 
 /// One place that lists every command exposed to the frontend, so the
 /// Tauri registration and the TypeScript export can never drift apart.
@@ -31,6 +31,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::app_version,
             commands::schema_version,
             commands::today,
+            commands::window_save,
+            commands::window_restore,
             commands::book::book_status,
             commands::book::book_setup,
             commands::book::book_unlock,
@@ -224,47 +226,6 @@ fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Er
     Ok(app.path().app_config_dir()?.join("config.json"))
 }
 
-/// Put the main window where it was last closed.
-fn restore_geometry(app: &tauri::App, state: &AppState) {
-    let Some(g) = state.load_config().window else {
-        return;
-    };
-    let Some(w) = app.get_webview_window("main") else {
-        return;
-    };
-    let _ = w.set_size(tauri::PhysicalSize::new(g.width, g.height));
-    let _ = w.set_position(tauri::PhysicalPosition::new(g.x, g.y));
-    if g.maximized {
-        let _ = w.maximize();
-    }
-}
-
-/// Remember the main window's place for next time.
-fn save_geometry(window: &tauri::Window, state: &AppState) {
-    let maximized = window.is_maximized().unwrap_or(false);
-    let mut cfg = state.load_config();
-    if maximized {
-        // Keep the unmaximized size and place from before.
-        if let Some(g) = cfg.window.as_mut() {
-            g.maximized = true;
-        }
-    } else {
-        let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) else {
-            return;
-        };
-        cfg.window = Some(WindowGeometry {
-            x: pos.x,
-            y: pos.y,
-            width: size.width,
-            height: size.height,
-            maximized: false,
-        });
-    }
-    if let Err(e) = state.save_config(&cfg) {
-        eprintln!("could not save the window position: {}", e.message);
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = specta_builder();
@@ -300,13 +261,12 @@ pub fn run() {
                 handle.path().download_dir().ok(),
                 app.package_info().version.to_string(),
             );
-            restore_geometry(app, &state);
             app.manage(state);
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                save_geometry(window, &window.state::<AppState>());
+                window::save_geometry(window, &window.state::<AppState>());
             }
         })
         .build(tauri::generate_context!())

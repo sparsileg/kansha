@@ -16,6 +16,16 @@ export const commands = {
 	 *  browser).
 	 */
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
+	/**
+	 *  Remember the main window's working size and place, before the
+	 *  window shrinks to the start screen.
+	 */
+	windowSave: () => __TAURI_INVOKE<void>("window_save"),
+	/**
+	 *  Put the main window back at its saved working size and place. False
+	 *  when none was saved.
+	 */
+	windowRestore: () => __TAURI_INVOKE<boolean>("window_restore"),
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
 	/**
 	 *  First-run setup (SECU-080), or a new book beside a locked one: a new
