@@ -32,6 +32,7 @@ vi.mock("../../api", async (orig) => {
       invRegister: () => ok(register),
       invInput: () => new Promise(() => {}),
       invTradeAmount: () => ok("2005.00"),
+      invCreate: () => ok(99),
     },
   };
 });
@@ -70,6 +71,20 @@ describe("Investment account register (INV-030)", () => {
       await screen.findByText("Buy");
       const pane = container.querySelector<HTMLDivElement>(".pane")!;
       await waitFor(() => expect(pane.scrollTop).toBe(900));
+    });
+
+    it("after a new transaction, scrolls to the bottom so the empty line shows", async () => {
+      const { container } = render(InvestmentAccount, { account });
+      await screen.findByText("Buy");
+      const pane = container.querySelector<HTMLDivElement>(".pane")!;
+      await waitFor(() => expect(pane.scrollTop).toBe(900));
+      pane.scrollTop = 0;
+      await fireEvent.click(screen.getByLabelText("New transaction"));
+      await fireEvent.change(screen.getByLabelText("Action"), { target: { value: "dividend" } });
+      await fireEvent.input(screen.getByLabelText("Amount"), { target: { value: "12" } });
+      await fireEvent.click(screen.getByRole("button", { name: "Enter/Next" }));
+      await waitFor(() => expect(pane.scrollTop).toBe(900));
+      expect(screen.getByRole("dialog", { name: /New transaction/ })).toBeTruthy();
     });
 
     it("a drill-down's transaction wins over the newest rows", async () => {

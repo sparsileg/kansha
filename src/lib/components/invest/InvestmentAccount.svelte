@@ -66,6 +66,15 @@
     });
   });
 
+  /** A new transaction: show the bottom, so the empty line is in view.
+   * An edit keeps its place. */
+  function afterEnter(created: boolean) {
+    if (!created) return;
+    void tick().then(() => {
+      if (pane) pane.scrollTop = pane.scrollHeight;
+    });
+  }
+
   function openRow(txn: TxnId, incoming: boolean) {
     registerState.selected = txn;
     entry = incoming ? undefined : txn;
@@ -132,7 +141,7 @@
 </div>
 
 {#if entry !== undefined}
-  {#key entry}<InvEntryModal {account} txn={entry} onclose={() => (entry = undefined)} />{/key}
+  {#key entry}<InvEntryModal {account} txn={entry} onclose={() => (entry = undefined)} onentered={afterEnter} />{/key}
 {/if}
 
 <style>

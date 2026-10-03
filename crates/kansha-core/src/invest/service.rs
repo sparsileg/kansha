@@ -370,7 +370,8 @@ fn check_fields(i: &InvInput) -> Result<()> {
     // A Roth conversion in kind has a security and shares; in cash,
     // neither (INV-070).
     let in_kind = a == InvAction::RothConversion && i.security.is_some();
-    if a.takes_quantity() || in_kind {
+    let in_cash = a.in_cash(i.security);
+    if (a.takes_quantity() && !in_cash) || in_kind {
         match i.quantity {
             None => return Err(Error::Invalid(format!("{name} needs a number of shares"))),
             Some(q) if q.raw() <= 0 => {
@@ -391,7 +392,8 @@ fn check_fields(i: &InvInput) -> Result<()> {
             | InvAction::SharesAdded
             | InvAction::SharesRemoved
             | InvAction::TransferShares
-    ) || in_kind;
+    ) && !in_cash
+        || in_kind;
     if !priced && i.price.is_some() {
         return unused("price");
     }
@@ -546,7 +548,8 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
                 Error::Invalid(format!("{:?} has no linked cash account", acct.fields.name))
             })?;
             let l = accounts::get(conn, linked)?;
-            if action.cash_direction() != 0 && l.status == AccountStatus::Closed {
+            let moves_cash = action.cash_direction() != 0 || action.in_cash(input.security);
+            if moves_cash && l.status == AccountStatus::Closed {
                 return Err(Error::Invalid(format!(
                     "linked cash account {:?} is closed",
                     l.fields.name
@@ -643,6 +646,11 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
     let qty = input.quantity.unwrap_or(Quantity::ZERO);
 
     match action {
+        // Reinvested in the cash: a cash dividend (INV-010).
+        InvAction::ReinvestDividend if security.is_none() => {
+            b.post(cash, None, amount);
+            b.category(conn, SystemCategory::Dividends, neg(amount)?)?;
+        }
         InvAction::Buy
         | InvAction::ReinvestDividend
         | InvAction::ReinvestCgShort
@@ -999,7 +1007,10 @@ fn resolve_amount(i: &InvInput) -> Result<Money> {
                 "a conversion in kind needs the price per share or the value".into(),
             ));
         }
-        _ if i.action.takes_quantity() && i.action != InvAction::SharesAdded => {
+        _ if i.action.takes_quantity()
+            && i.action != InvAction::SharesAdded
+            && !i.action.in_cash(i.security) =>
+        {
             return Err(Error::Invalid(format!(
                 "{} needs a price or an amount",
                 i.action.label()
@@ -1022,7 +1033,7 @@ fn resolve_amount(i: &InvInput) -> Result<Money> {
     }
     // Trades and shares added may be worth nothing (a gift, a worthless
     // sale); reinvestments are checked where they are planned.
-    if amount.is_zero() && !i.action.takes_quantity() {
+    if amount.is_zero() && (!i.action.takes_quantity() || i.action.in_cash(i.security)) {
         return Err(Error::Invalid("the amount must be more than zero".into()));
     }
     Ok(amount)

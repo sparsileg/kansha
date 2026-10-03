@@ -694,3 +694,40 @@ Start screen: the 感謝 *kansha* before the meaning removed; the mark
 made the screen's main feature (5.625rem, compact 12.1875rem; Stan
 asked for +25%, then +50% more). Compact window 520×860 (was 520×700)
 to fit it. Not seen in the app yet.
+
+## Reinvested in the cash; Tools > Investments (spec 0.7.10, 2026-10-03)
+
+**⚠ Schema change:** migration 0012 rebuilds `investment_txn`:
+`reinvest_dividend` may have no security, and has shares exactly when
+it has one (the CHECK Roth conversion already used). Core:
+`InvAction::in_cash(security)`; `needs_security` drops
+ReinvestDividend; `check_fields`, `resolve_amount` and `plan` treat it
+as a cash dividend (cash +, Dividends −, no lot); `to_input` takes the
+amount from the cash. Reinvested capital gains unchanged (Stan). The
+import still needs a security for `ReinvDiv`. Tests:
+`invest::a_dividend_may_be_reinvested_in_the_cash` (failed first),
+enum schema test updated, form test. No API change.
+
+Investment form: Trade date, Settlement date and Originally acquired
+are written out in full on blur (`completeDate` in
+`format/date.ts`; "9/28" gets today's year). Tools > Investments
+(`tools.investments`) opens the same view as the nav bar button.
+Neither seen in the app yet.
+
+Register Amount for a reinvestment with a security (Stan): it showed
+blank (the column was the cash moved, none). `invest::register` now
+shows the holding posting's value for the three reinvest actions; the
+running cash balance still counts cash only. Security details use the
+same rows. Test `invest::the_register_shows_the_amount_reinvested`
+(failed first). Shares added still shows no amount (not asked).
+
+Investment entry form buttons (Stan): Enter/Next, Enter/Done (left,
+with Delete and History… when editing); Cancel, Reset (right). Enter
+in a field does nothing. Enter/Next keeps Action and Trade date (a
+true-up goes back to Buy), focuses Action; after an edit it continues
+as a new transaction. Reset: stored values when editing, else
+defaults. `onentered(created)` lets the register scroll to its bottom
+after a new transaction; an edit keeps its place. The banking register
+needs no change: its entry row is outside the scrolling rows. Tests:
+InvEntryModal (4 new), InvestmentAccount scroll (failed first). Not
+seen in the app yet.

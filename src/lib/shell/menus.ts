@@ -56,6 +56,7 @@ export const MENUS: Menu[] = [
       { id: "tools.accounts", label: "Accounts" },
       { id: "tools.calendar", label: "Calendar" },
       { id: "tools.reminders", label: "Reminders" },
+      { id: "tools.investments", label: "Investments" },
       { id: "tools.payees", label: "Memorized Payees", divider: true },
       { id: "tools.categories", label: "Categories" },
       { id: "tools.tags", label: "Tags" },

@@ -146,6 +146,7 @@ impl InvAction {
         !matches!(
             self,
             InvAction::Dividend
+                | InvAction::ReinvestDividend
                 | InvAction::Interest
                 | InvAction::CashIn
                 | InvAction::CashOut
@@ -155,6 +156,13 @@ impl InvAction {
                 | InvAction::MiscExpense
                 | InvAction::RothConversion
         )
+    }
+
+    /// A reinvested dividend with no security is reinvested in the
+    /// account's cash (a settlement fund): it is entered like a cash
+    /// dividend, with no shares (INV-010).
+    pub const fn in_cash(self, security: Option<SecurityId>) -> bool {
+        matches!(self, InvAction::ReinvestDividend) && security.is_none()
     }
 
     /// May name a security (interest, fees, and the like optionally do).
@@ -465,6 +473,7 @@ impl InvTxn {
             | InvAction::TransferShares
             | InvAction::SharesRemoved
             | InvAction::TrueUp => None,
+            InvAction::ReinvestDividend if self.security.is_none() => Some(self.cash),
             InvAction::ReinvestDividend
             | InvAction::ReinvestCgShort
             | InvAction::ReinvestCgLong

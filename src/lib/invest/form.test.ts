@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIONS, actionInfo, buildInput, emptyForm, formFromInput } from "./form";
+import { ACTIONS, actionInfo, buildInput, emptyForm, fieldsFor, formFromInput } from "./form";
 import type { InvInput } from "../types/bindings";
 
 const today = "2026-06-30";
@@ -85,6 +85,17 @@ describe("buildInput", () => {
     expect(gift.ok && gift.input.price).toBe("250");
     expect(gift.ok && gift.input.counterpart).toEqual({ kind: "category", id: 12 });
     expect(gift.ok && gift.input.amount).toBeNull();
+  });
+
+  it("takes a reinvested dividend with no security: in the cash, amount only", () => {
+    const f = { ...emptyForm("reinvest_dividend", "2026-02-28"), amount: "4.17", quantity: "1", price: "4.17" };
+    expect(fieldsFor(f)).toMatchObject({ shares: false, price: false, lots: false, amount: "required" });
+    const div = buildInput(7, f, today);
+    expect(div.ok && div.input).toMatchObject({ security: null, quantity: null, price: null, amount: "4.17" });
+    // With a security it is a trade again; the gain reinvestments still need one.
+    expect(fieldsFor({ ...f, security: 3 })).toMatchObject({ shares: true, price: true });
+    const cg = buildInput(7, { ...emptyForm("reinvest_cg_long", "2026-02-28"), amount: "1.00" }, today);
+    expect(cg.ok).toBe(false);
   });
 
   it("takes a dividend with no security: the cash paid it", () => {

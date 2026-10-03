@@ -47,7 +47,8 @@ pub struct InvRegisterRow {
     pub commission: Money,
     pub split: Option<SplitRatio>,
     /// Cash in (+) or out (−) of the account's cash (or its linked cash
-    /// account); zero when none moves.
+    /// account); zero when none moves. A reinvestment shows the amount
+    /// reinvested, though no cash moves.
     pub amount: Money,
     /// Running cash balance, in date order; `None` with linked cash.
     pub cash_balance: Option<Money>,
@@ -104,7 +105,7 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
         let incoming = t.to_account == Some(account);
         // Coming in: the cash this account receives (a Roth conversion
         // in cash, INV-070); none for shares.
-        let amount = if incoming {
+        let cash = if incoming {
             t.txn
                 .postings
                 .iter()
@@ -115,8 +116,24 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
             t.cash
         };
         running = running
-            .checked_add(amount)
+            .checked_add(cash)
             .ok_or(Error::Overflow("cash balance"))?;
+        // A reinvestment moves no cash; Amount shows what was reinvested,
+        // the value of the shares bought (INV-030).
+        let reinvested = matches!(
+            t.action,
+            InvAction::ReinvestDividend | InvAction::ReinvestCgShort | InvAction::ReinvestCgLong
+        ) && t.security.is_some();
+        let amount = if reinvested {
+            t.txn
+                .postings
+                .iter()
+                .filter(|p| p.target == Target::Account(account) && p.security.is_some())
+                .map(|p| p.amount)
+                .sum()
+        } else {
+            cash
+        };
         let cash_account = repo::cash_account(conn, t.account)?;
         let cash_posting = t
             .txn

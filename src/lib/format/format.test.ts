@@ -7,7 +7,7 @@ import {
   parseMoney,
   splitPaymentDeposit,
 } from "./money";
-import { addDays, applyDateKey, datePattern, displayDate, parseDate } from "./date";
+import { addDays, applyDateKey, completeDate, datePattern, displayDate, parseDate } from "./date";
 import { dateFormatState } from "../state/dateformat.svelte";
 
 describe("parseMoney", () => {
@@ -77,6 +77,13 @@ describe("dates", () => {
     expect(parseDate("2/30/2026", today)).toBeNull();
     expect(parseDate("13/1/2026", today)).toBeNull();
     expect(parseDate("junk", today)).toBeNull();
+  });
+
+  it("writes a typed date out in full when the field is left", () => {
+    expect(completeDate("9/28", today)).toBe(`09/28/${today.slice(0, 4)}`);
+    expect(completeDate("9/28/25", today)).toBe("09/28/2025");
+    expect(completeDate("junk", today)).toBe("junk");
+    expect(completeDate("", today)).toBe("");
   });
 
   it("displays MM/DD/YYYY", () => {

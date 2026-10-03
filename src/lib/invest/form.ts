@@ -80,7 +80,8 @@ export const ACTIONS: ActionInfo[] = [
   a("sell", "Sell", { ...trade, commission: true, lots: true, amountLabel: "Net proceeds" }),
   a("dividend", "Dividend", { security: "optional" }),
   a("interest", "Interest", { security: "optional" }),
-  a("reinvest_dividend", "Reinvest dividend", { ...trade, amountLabel: "Amount reinvested" }),
+  // Without a security, reinvested in the cash (see `fieldsFor`).
+  a("reinvest_dividend", "Reinvest dividend", { ...trade, security: "optional", amountLabel: "Amount reinvested" }),
   a("reinvest_cg_short", "Reinvest ST capital gain", { ...trade, amountLabel: "Amount reinvested" }),
   a("reinvest_cg_long", "Reinvest LT capital gain", { ...trade, amountLabel: "Amount reinvested" }),
   a("cg_dist_short", "ST capital gain distribution"),
@@ -126,11 +127,12 @@ export function actionInfo(action: InvAction): ActionInfo {
   return ACTIONS.find((x) => x.value === action) ?? ACTIONS[0];
 }
 
-/** The fields the form shows: a Roth conversion without a security is
- * in cash, with no shares, price, or lots, and needs its amount. */
+/** The fields the form shows: a Roth conversion or a reinvested
+ * dividend without a security is in cash, with no shares, price, or
+ * lots, and needs its amount. */
 export function fieldsFor(f: Pick<InvForm, "action" | "security">): ActionInfo {
   const info = actionInfo(f.action);
-  if (info.conversion && f.security === null) {
+  if ((info.conversion || f.action === "reinvest_dividend") && f.security === null) {
     return { ...info, shares: false, price: false, lots: false, amount: "required" };
   }
   return info;

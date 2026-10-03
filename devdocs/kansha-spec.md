@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.9 (draft) |
+| **Document version** | 0.7.10 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -561,12 +561,22 @@ common patterns.
 
   A dividend names the security that paid it, or none when the
   account's cash paid it (a settlement fund, 0.7.8), as interest may.
+  A reinvested dividend with no security is reinvested in the cash:
+  no shares or lot, cash in and Dividends out, as a cash dividend
+  (0.7.10). Reinvested capital gains still name the fund.
 
 - **INV-020** [1.0][R] Each investment transaction records trade date
   and, optionally, settlement date.
 - **INV-030** [1.0][R] Entry forms are type-specific (e.g., Sell
   prompts for lot selection); the register shows Date, Action,
-  Security, Quantity, Price, Commission, Amount, Cash Balance.
+  Security, Quantity, Price, Commission, Amount, Cash Balance. A
+  reinvestment's Amount is the amount reinvested, though no cash
+  moves (0.7.10). A date typed without its year ("9/28") is written
+  out in full, with today's year, when the field is left. The entry
+  form saves only by its buttons: Enter/Next (save, then a new one
+  with the same action and date), Enter/Done (save, close); Cancel;
+  Reset (the stored values when editing, else the defaults). After a
+  new transaction the register shows its bottom (0.7.10).
 - **INV-040** [1.0][R] Every investment transaction that affects cash
   also produces the corresponding ledger postings, so investment
   income appears in income/expense reports.
@@ -2302,6 +2312,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.10 | 2026-10-03 | INV-010: a reinvested dividend may name no security; it is reinvested in the cash (no shares or lot; cash in, Dividends out). Reinvested capital gains still need one. INV-030: the investment form writes a date typed without its year out in full when the field is left; the register's Amount shows what a reinvestment reinvested (the cash balance is unchanged); the entry form's buttons are Enter/Next, Enter/Done, Cancel, Reset (Enter in a field no longer saves), and the register scrolls to its bottom after a new transaction. Menus (`UI-conventions.md`): Tools > Investments opens the Investments view (until now only a nav bar button). **Schema change:** migration 0012 (`investment_txn` rebuilt: `reinvest_dividend` may have no security, and then no shares). No API change. |
 | 0.7.9 | 2026-10-03 | INV-010: a dividend may name no security, when the account's cash (a settlement fund) paid it; it goes to Dividends and the income report's no-security row. MIG-020: Quicken's `Div` with no security imports as such a dividend, not misc income. SECU-020: the start screen drops the 感謝 *kansha* before the meaning; the mark is nearly twice its old size, and the passphrase window is 520×860. **Schema change:** migration 0011 (`investment_txn` rebuilt: `dividend` may have no security). No API change. |
 | 0.7.8 | 2026-10-03 | CAT-050: Tools > Categories > Set tax lines from QIF… is removed; it was a one-time tool for categories made before the import set tax lines (0.7.4), and has been run on the production book. No schema change. **API change:** commands `tax_lines_from_qif_preview` and `tax_lines_from_qif_apply` and types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus` removed. |
 | 0.7.7 | 2026-10-03 | UI-047: Help > About shows the 感謝 mark and meaning, app and schema versions, a description, and kansha@sparsile.org. SECU-020: the passphrase screen opens in a small window with the mark, growing to working size when the book opens. The app is version 0.8.0. No schema change. **API change:** new command `schema_version`. |

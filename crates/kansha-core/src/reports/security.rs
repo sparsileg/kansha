@@ -59,7 +59,8 @@ pub struct SecurityTxn {
     pub quantity: Option<Quantity>,
     pub price: Option<Price>,
     pub commission: Money,
-    /// Cash in (+) or out (−) of the account.
+    /// Cash in (+) or out (−) of the account; a reinvestment, the
+    /// amount reinvested.
     pub amount: Money,
     pub memo: String,
     /// Shares arriving from another account.

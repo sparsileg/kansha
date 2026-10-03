@@ -76,6 +76,16 @@ export function displayDate(iso: string): string {
   }
 }
 
+/**
+ * A typed date written out in full when the field is left: "9/28" gets
+ * the year from `today` and shows as "09/28/2026". Text that does not
+ * parse, or an empty field, is kept as typed.
+ */
+export function completeDate(input: string, today: string): string {
+  const iso = parseDate(input, today);
+  return iso === null ? input : displayDate(iso);
+}
+
 /** The format's pattern, for placeholders: "MM/DD/YYYY" and so on. */
 export function datePattern(): string {
   switch (dateFormatState.value) {

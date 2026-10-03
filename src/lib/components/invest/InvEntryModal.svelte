@@ -1,9 +1,12 @@
 <script lang="ts">
   // New or edit investment transaction (INV-010, INV-030). Fields follow
-  // the action; amounts from shares × price come from Rust.
+  // the action; amounts from shares × price come from Rust. Enter/Next
+  // saves and starts a new one with the same action and date; Enter/Done
+  // saves and closes. Only the buttons save: Enter in a field does not.
+  import { tick, untrack } from "svelte";
   import Modal from "../Modal.svelte";
   import { call, commands, DECLINED, withConfirmation } from "../../api";
-  import { datePattern, displayDate, parseDate } from "../../format/date";
+  import { completeDate, datePattern, displayDate, parseDate } from "../../format/date";
   import { formatMoney, parseMoney } from "../../format/money";
   import { formatPrice, formatQuantity, parsePrice, parseQuantity } from "../../format/quantity";
   import { ACTIONS, LOT_METHODS, TRUE_UP, buildInput, canConvert, emptyForm, fieldsFor, formFromInput, type InvForm } from "../../invest/form";
@@ -13,9 +16,26 @@
   import { listsState } from "../../state/lists.svelte";
   import type { Account, LotView, TxnId } from "../../types/bindings";
 
-  let { account, txn, onclose }: { account: Account; txn: TxnId | null; onclose: () => void } = $props();
+  let {
+    account,
+    txn,
+    onclose,
+    onentered,
+  }: {
+    account: Account;
+    txn: TxnId | null;
+    onclose: () => void;
+    /** After a save: `created` when it was a new transaction. */
+    onentered?: (created: boolean) => void;
+  } = $props();
 
-  let form = $state<InvForm>(emptyForm("buy", displayDate(listsState.today)));
+  const defaults = () => emptyForm("buy", displayDate(listsState.today));
+  /** The transaction being edited; `null` once Enter/Next moves on. */
+  let editing = $state<TxnId | null>(untrack(() => txn));
+  /** The edited transaction as stored, for Reset. */
+  let stored: InvForm | null = null;
+  let form = $state<InvForm>(defaults());
+  let actionSelect = $state<HTMLSelectElement>();
   let error = $state<string | null>(null);
   let computed = $state("");
   let lots = $state<LotView[]>([]);
@@ -48,7 +68,10 @@
     if (txn === null) return;
     const id = txn;
     void call(commands.invInput(id))
-      .then((input) => (form = formFromInput(input)))
+      .then((input) => {
+        stored = formFromInput(input);
+        form = formFromInput(input);
+      })
       .catch((e) => (error = e instanceof Error ? e.message : String(e)));
   });
 
@@ -79,8 +102,10 @@
       .catch((e) => (error = e instanceof Error ? e.message : String(e)));
   });
 
-  async function save(e: Event) {
-    e.preventDefault();
+  /** Save; then a fresh form with the same action and date (`next`), or
+   * close. A failed save keeps the form as typed. */
+  async function enter(next: boolean) {
+    if (busy) return;
     error = null;
     const built = buildInput(account.id, form, today);
     if (!built.ok) {
@@ -89,10 +114,11 @@
     }
     busy = true;
     try {
-      if (txn === null) {
+      const created = editing === null;
+      if (editing === null) {
         await call(commands.invCreate(built.input));
       } else {
-        const id = txn;
+        const id = editing;
         const r = await withConfirmation(
           (confirmed) => commands.invUpdate(id, built.input, confirmed),
           confirmState.ask,
@@ -100,7 +126,16 @@
         if (r === DECLINED) return;
       }
       await investState.refresh();
-      onclose();
+      onentered?.(created);
+      if (!next) {
+        onclose();
+        return;
+      }
+      form = emptyForm(form.action === TRUE_UP.value ? "buy" : form.action, form.date);
+      editing = null;
+      stored = null;
+      await tick();
+      actionSelect?.focus();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -108,16 +143,22 @@
     }
   }
 
+  /** Back to the stored transaction when editing; else the defaults. */
+  function reset() {
+    form = stored ? { ...stored, picks: { ...stored.picks } } : defaults();
+    error = null;
+  }
+
   /** The audit history (AUD-020) replaces this dialog. */
   function showHistory() {
-    if (txn === null) return;
-    dialogState.history = { entity: "txn", id: txn };
+    if (editing === null) return;
+    dialogState.history = { entity: "txn", id: editing };
     onclose();
   }
 
   async function remove() {
-    if (txn === null || !(await confirmState.ask("Delete this investment transaction?"))) return;
-    const id = txn;
+    if (editing === null || !(await confirmState.ask("Delete this investment transaction?"))) return;
+    const id = editing;
     try {
       const r = await withConfirmation((confirmed) => commands.invDelete(id, confirmed), confirmState.ask);
       if (r === DECLINED) return;
@@ -129,17 +170,17 @@
   }
 </script>
 
-<Modal title={txn === null ? `New transaction — ${account.name}` : `Edit transaction — ${account.name}`} {onclose} wide>
-  <form class="inv" onsubmit={save}>
+<Modal title={editing === null ? `New transaction — ${account.name}` : `Edit transaction — ${account.name}`} {onclose} wide>
+  <form class="inv" onsubmit={(e) => e.preventDefault()}>
     <label>
       Action
-      <select bind:value={form.action} disabled={form.action === TRUE_UP.value}>
+      <select bind:this={actionSelect} bind:value={form.action} disabled={form.action === TRUE_UP.value}>
         {#if form.action === TRUE_UP.value}<option value={TRUE_UP.value}>{TRUE_UP.label}</option>{/if}
         {#each actions as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
       </select>
     </label>
-    <label>Trade date <input bind:value={form.date} placeholder={datePattern()} required /></label>
-    <label>Settlement date <input bind:value={form.settleDate} placeholder="optional" /></label>
+    <label>Trade date <input bind:value={form.date} placeholder={datePattern()} required onblur={() => (form.date = completeDate(form.date, today))} /></label>
+    <label>Settlement date <input bind:value={form.settleDate} placeholder="optional" onblur={() => (form.settleDate = completeDate(form.settleDate, today))} /></label>
     {#if info.security !== "none"}
       <label>
         Security{info.security === "optional" ? " (optional)" : ""}
@@ -198,7 +239,7 @@
       </p>
     {/if}
     {#if info.acquired}
-      <label>Originally acquired <input bind:value={form.acquired} placeholder="the trade date if empty" /></label>
+      <label>Originally acquired <input bind:value={form.acquired} placeholder="the trade date if empty" onblur={() => (form.acquired = completeDate(form.acquired, today))} /></label>
     {/if}
     {#if info.counterpart !== "none"}
       <label>
@@ -250,12 +291,15 @@
     <label class="wide">Memo <input bind:value={form.memo} /></label>
     {#if error}<p class="err wide" role="alert">{error}</p>{/if}
     <div class="row wide">
-      <button type="submit" disabled={busy}>Save</button>
-      {#if txn !== null}
+      <button type="button" disabled={busy} onclick={() => void enter(true)}>Enter/Next</button>
+      <button type="button" disabled={busy} onclick={() => void enter(false)}>Enter/Done</button>
+      {#if editing !== null}
         <button type="button" onclick={remove}>Delete</button>
         <button type="button" onclick={showHistory}>History…</button>
       {/if}
+      <span class="gap"></span>
       <button type="button" onclick={onclose}>Cancel</button>
+      <button type="button" onclick={reset}>Reset</button>
     </div>
   </form>
 </Modal>
@@ -286,6 +330,9 @@
   .row {
     display: flex;
     gap: 0.5rem;
+  }
+  .gap {
+    flex: 1;
   }
   .lots {
     border-collapse: collapse;

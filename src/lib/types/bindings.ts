@@ -1551,7 +1551,8 @@ export type InvRegisterRow = {
 	split: SplitRatio | null,
 	/**
 	 *  Cash in (+) or out (−) of the account's cash (or its linked cash
-	 *  account); zero when none moves.
+	 *  account); zero when none moves. A reinvestment shows the amount
+	 *  reinvested, though no cash moves.
 	 */
 	amount: string,
 	/**  Running cash balance, in date order; `None` with linked cash. */
@@ -2544,7 +2545,10 @@ export type SecurityTxn = {
 	quantity: string | null,
 	price: string | null,
 	commission: string,
-	/**  Cash in (+) or out (−) of the account. */
+	/**
+	 *  Cash in (+) or out (−) of the account; a reinvestment, the
+	 *  amount reinvested.
+	 */
 	amount: string,
 	memo: string,
 	/**  Shares arriving from another account. */

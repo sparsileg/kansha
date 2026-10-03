@@ -95,6 +95,7 @@ export function runAction(id: string): void {
       case "tools.import_prices":
         dialogState.priceImport = true;
         break;
+      case "tools.investments":
       case INVESTMENTS_ID:
         openPanel("investments");
         break;
@@ -192,6 +193,7 @@ export function isCurrent(id: string): boolean {
     case "tools.tags":
     case "tools.securities":
       return view === "manage" && viewState.params.tab === id.slice("tools.".length);
+    case "tools.investments":
     case INVESTMENTS_ID:
       return windowState.shownKind === "investments";
     default:

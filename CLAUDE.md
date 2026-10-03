@@ -25,8 +25,15 @@ Tauri v2 + Rust core + Svelte 5 (Vite, not SvelteKit). SQLite via rusqlite
 
 - Edit files in place. No zips, no patches, no `~/Downloads/`.
 - Stay in current phase scope.
-- Before calling work done: run `just check`; must be green
-  (`cargo fmt`, `clippy -D warnings`, tests).
+- Testing:
+  - Normally run only the tests for the code changed
+    (`cargo test -p <crate> <name>`, `npx vitest run <file>`).
+  - Run `just check` (must be green: `cargo fmt`,
+    `clippy -D warnings`, tests):
+    - before Stan commits (he asks for a commit message or says
+      he is ready);
+    - after a schema/migration, money, lot, or algorithm change.
+  - Say in each reply which tests ran.
 - Do not commit or push. Stan commits in GitKraken.
 - End each piece of work with a commit message in two separate fenced
   blocks: (1) imperative summary ≤72 chars; (2) body wrapped at 72,

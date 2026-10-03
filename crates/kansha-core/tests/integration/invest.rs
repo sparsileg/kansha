@@ -268,6 +268,87 @@ fn a_dividend_may_be_paid_by_the_cash() {
     assert!(err.to_string().contains("needs a security"), "{err}");
 }
 
+/// A reinvested dividend with no security is reinvested in the cash (a
+/// settlement fund): like a cash dividend, cash in and Dividends out, no
+/// shares and no lot. The capital gain reinvestments still name a fund
+/// (INV-010).
+#[test]
+fn a_dividend_may_be_reinvested_in_the_cash() {
+    let mut b = book();
+    let (brk, _) = funded(&mut b);
+    let mut input = InvInput::new(brk, InvAction::ReinvestDividend, date("2026-02-28"));
+    input.amount = Some(m("4.17"));
+    let t = b.invest(&input).unwrap();
+    let div = b.find_category("Dividends").unwrap().unwrap();
+    let postings: Vec<_> = t
+        .txn
+        .postings
+        .iter()
+        .map(|x| (x.target, x.security, x.amount))
+        .collect();
+    assert_eq!(
+        postings,
+        vec![
+            (Target::Account(brk), None, m("4.17")),
+            (Target::Category(div), None, m("-4.17")),
+        ]
+    );
+    assert!(t.lots.is_empty());
+    assert_eq!(t.cash, m("4.17"));
+    assert_eq!(t.to_input(), input);
+    let stored = invest::find(b.conn(), t.txn.id).unwrap().unwrap();
+    assert_eq!(stored.action, InvAction::ReinvestDividend);
+    assert_eq!(stored.to_input(), input);
+
+    let income = invest::income(b.conn(), brk, None, None).unwrap();
+    assert_eq!(income.rows.len(), 1);
+    assert_eq!(income.rows[0].security, None);
+    assert_eq!(income.rows[0].dividends, m("4.17"));
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+
+    // In the cash there are no shares to count.
+    let mut shares = input.clone();
+    shares.quantity = Some(q("1"));
+    let err = b.invest(&shares).unwrap_err();
+    assert!(err.to_string().contains("takes no shares"), "{err}");
+
+    for action in [InvAction::ReinvestCgShort, InvAction::ReinvestCgLong] {
+        let mut cg = InvInput::new(brk, action, date("2026-02-28"));
+        cg.amount = Some(m("1.00"));
+        let err = b.invest(&cg).unwrap_err();
+        assert!(err.to_string().contains("needs a security"), "{err}");
+    }
+}
+
+/// A reinvestment moves no cash, but the register's Amount shows what was
+/// reinvested; the cash balance is unchanged (INV-030).
+#[test]
+fn the_register_shows_the_amount_reinvested() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let before = invest::register(b.conn(), brk, date("2026-06-30")).unwrap();
+    let cash = before.rows.last().unwrap().cash_balance;
+    for action in [
+        InvAction::ReinvestDividend,
+        InvAction::ReinvestCgShort,
+        InvAction::ReinvestCgLong,
+    ] {
+        let mut r = InvInput::new(brk, action, date("2026-03-31"));
+        r.security = Some(vti);
+        r.quantity = Some(q("0.5"));
+        r.price = Some(p("24.68"));
+        b.invest(&r).unwrap();
+    }
+    let reg = invest::register(b.conn(), brk, date("2026-06-30")).unwrap();
+    let reinvested: Vec<_> = reg
+        .rows
+        .iter()
+        .filter(|r| r.date == date("2026-03-31"))
+        .map(|r| (r.amount, r.cash_balance))
+        .collect();
+    assert_eq!(reinvested, vec![(m("12.34"), cash); 3]);
+}
+
 #[test]
 fn a_cash_posting_can_be_cleared_and_keeps_it_through_an_edit() {
     let mut b = book();
@@ -507,7 +588,8 @@ fn every_investment_enum_value_is_accepted_by_the_schema() {
     for a in InvAction::ALL {
         let id = txn();
         let security = a.needs_security().then_some(sec.0);
-        let quantity = a.takes_quantity().then_some(1_000_000_i64);
+        // A reinvested dividend with no security is in the cash: no shares.
+        let quantity = (a.takes_quantity() && security.is_some()).then_some(1_000_000_i64);
         let (new, old) = if *a == InvAction::Split {
             (Some(2_i64), Some(1_i64))
         } else {

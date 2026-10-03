@@ -23,7 +23,8 @@ vi.mock("../api", async (orig) => {
 import { commands } from "../api";
 import { confirmState } from "../state/confirm.svelte";
 import { statusState } from "../state/status.svelte";
-import { downloadPrices, undoLast } from "./actions";
+import { downloadPrices, isCurrent, runAction, undoLast } from "./actions";
+import { windowState } from "../state/windows.svelte";
 
 const c = vi.mocked(commands, true);
 
@@ -74,5 +75,14 @@ describe("Download Prices (PRC-040)", () => {
     await downloadPrices("2026-06-12");
     expect(statusState.message?.text).toMatch(/turn it on in Settings/);
     expect(statusState.message?.kind).toBe("alert");
+  });
+});
+
+describe("Tools > Investments", () => {
+  it("opens the investments view, as the nav bar button does", () => {
+    runAction("tools.investments");
+    expect(windowState.shownKind).toBe("investments");
+    expect(isCurrent("tools.investments")).toBe(true);
+    expect(isCurrent("view.investments")).toBe(true);
   });
 });

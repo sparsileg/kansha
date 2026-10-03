@@ -5,8 +5,8 @@
 - File has the following options: New, Open, Backup, Restore, Import,
   Export, Integrity Check, Exit
 - Edit has: Settings, Renaming
-- Tools has: Accounts, Calendar, Reminders, Categories, Tags,
-  Reconcile
+- Tools has: Accounts, Calendar, Reminders, Investments, Categories,
+  Tags, Reconcile
 - Reports has: Saved, Investing, Balances, Spending, Taxes
 - Under the menu bar is a Navigation Bar. This has backward and
   forward arrows (future history capability), and a space for
