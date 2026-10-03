@@ -12,10 +12,11 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use super::plan::{Counter, Item, LineTarget, Plan};
+use super::tax_codes;
 use super::{AccountChoice, CategoryChoice, ImportNote, ImportOptions, SecurityChoice};
 use crate::accounts::{AccountId, AccountType, MmfMode};
 use crate::categories::{
-    CategoryFields, CategoryId, CategoryKind, PayeeId, SystemCategory, TagFields, TagId,
+    CategoryFields, CategoryId, CategoryKind, PayeeId, SystemCategory, TagFields, TagId, TaxLineId,
 };
 use crate::date::Clock;
 use crate::error::{Error, Result};
@@ -25,7 +26,7 @@ use crate::money::Money;
 use crate::persistence::audit::AuditEntity;
 use crate::persistence::{
     Db, Origin, Tx, accounts, categories, imports, invest as invest_repo, ledger as ledger_repo,
-    payees, securities, tags,
+    payees, reports, securities, tags,
 };
 use crate::securities::{PricePoint, PriceSource, SecurityFields, SecurityId};
 
@@ -59,6 +60,11 @@ pub struct ImportResult {
     pub transactions: i64,
     pub accounts_created: i64,
     pub categories_created: i64,
+    /// Of those, the ones given a tax line from Quicken's tax code
+    /// (CAT-050).
+    pub tax_lines_set: i64,
+    /// Categories whose Quicken tax code has no Kansha tax line.
+    pub tax_codes_unmapped: i64,
     pub tags_created: i64,
     pub securities_created: i64,
     /// Of those, the ones no account holds once the import is done:
@@ -174,20 +180,37 @@ fn write(tx: &Tx<'_>, plan: &Plan, options: &ImportOptions) -> Result<ImportResu
         ids.accounts.push(id);
     }
 
-    let mut by_path = category_paths(tx)?;
+    let mut by_path = tax_codes::category_paths(conn)?;
+    let tax_lines = reports::tax_lines(conn)?;
     for (i, c) in plan.categories.iter().enumerate() {
         if !c.imported {
             continue;
         }
+        let tax_line = c
+            .tax_code
+            .and_then(|code| tax_codes::tax_line_id(&tax_lines, code));
+        if c.tax_code.is_some() && tax_line.is_none() {
+            r.tax_codes_unmapped += 1;
+        }
+        // An existing category keeps its tax line.
         let id = match &c.choice {
             CategoryChoice::Existing { id } => *id,
             CategoryChoice::Create {
                 path,
                 category_kind: kind,
             } => {
-                let (id, created) = category_at(tx, &mut by_path, path, *kind, c.tax_related)
+                let leaf = Leaf {
+                    tax_related: c.tax_related,
+                    tax_line,
+                };
+                let (id, created) = category_at(tx, &mut by_path, path, *kind, leaf)
                     .map_err(|e| Error::Invalid(format!("category {path:?}: {e}")))?;
                 r.categories_created += created;
+                // Missing parents mean a missing leaf: created > 0 is the
+                // leaf created.
+                if created > 0 && tax_line.is_some() {
+                    r.tax_lines_set += 1;
+                }
                 id
             }
         };
@@ -356,29 +379,21 @@ fn balance(tx: &Tx<'_>, id: AccountId, investment: bool) -> Result<Money> {
     }
 }
 
-/// The book's categories by lower-cased path.
-fn category_paths(tx: &Tx<'_>) -> Result<HashMap<String, CategoryId>> {
-    let mut paths: HashMap<CategoryId, String> = HashMap::new();
-    let mut out = HashMap::new();
-    for c in categories::list(tx.conn())? {
-        let path = match c.fields.parent.and_then(|p| paths.get(&p)) {
-            Some(parent) => format!("{parent}:{}", c.fields.name),
-            None => c.fields.name.clone(),
-        };
-        out.insert(path.to_lowercase(), c.id);
-        paths.insert(c.id, path);
-    }
-    Ok(out)
+/// The tax settings a created category's last level gets.
+struct Leaf {
+    tax_related: bool,
+    tax_line: Option<TaxLineId>,
 }
 
 /// The category at `path`, created with its missing levels (the last one
-/// tax-related if the QIF category was). Returns how many were created.
+/// tax-related if the QIF category was, and on its tax line; a tax line
+/// makes it tax-related). Returns how many were created.
 fn category_at(
     tx: &Tx<'_>,
     by_path: &mut HashMap<String, CategoryId>,
     path: &str,
     kind: CategoryKind,
-    tax_related: bool,
+    leaf: Leaf,
 ) -> Result<(CategoryId, i64)> {
     let parts: Vec<&str> = path.split(':').map(str::trim).collect();
     let mut parent: Option<CategoryId> = None;
@@ -394,7 +409,10 @@ fn category_at(
             None => {
                 let mut f = CategoryFields::new(*name, kind);
                 f.parent = parent;
-                f.tax_related = tax_related && n + 1 == parts.len();
+                if n + 1 == parts.len() {
+                    f.tax_related = leaf.tax_related || leaf.tax_line.is_some();
+                    f.tax_line = leaf.tax_line;
+                }
                 let id = categories::insert(tx, &f)?.id;
                 by_path.insert(key.clone(), id);
                 created += 1;

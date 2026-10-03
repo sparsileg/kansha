@@ -454,6 +454,16 @@ export const commands = {
 	importBatches: () => typedError<ImportBatch[], IpcError>(__TAURI_INVOKE("import_batches")),
 	/**  Roll a committed import back (MIG-080), after a backup. */
 	importRollback: (batch: number) => typedError<RollbackResult, IpcError>(__TAURI_INVOKE("import_rollback", { batch })),
+	/**
+	 *  What setting tax lines from a QIF's category list would do (CAT-050,
+	 *  MIG-020): each coded category against the book's.
+	 */
+	taxLinesFromQifPreview: (path: string) => typedError<TaxLinePlan, IpcError>(__TAURI_INVOKE("tax_lines_from_qif_preview", { path })),
+	/**
+	 *  Set the tax lines the preview marks "set", after a backup. Returns how
+	 *  many were set; a line already set is never changed.
+	 */
+	taxLinesFromQifApply: (path: string) => typedError<number, IpcError>(__TAURI_INVOKE("tax_lines_from_qif_apply", { path })),
 	/**  A report's standard settings. */
 	reportDefaults: (kind: ReportKind) => __TAURI_INVOKE<ReportSettings>("report_defaults", { kind }),
 	/**  The columns a report can show, for the Customize dialog. */
@@ -1378,6 +1388,13 @@ export type ImportResult = {
 	transactions: number,
 	accounts_created: number,
 	categories_created: number,
+	/**
+	 *  Of those, the ones given a tax line from Quicken's tax code
+	 *  (CAT-050).
+	 */
+	tax_lines_set: number,
+	/**  Categories whose Quicken tax code has no Kansha tax line. */
+	tax_codes_unmapped: number,
 	tags_created: number,
 	securities_created: number,
 	/**
@@ -2724,6 +2741,39 @@ export type TaxLine = {
 
 /**  Row ID of a tax line (CAT-050). */
 export type TaxLineId = number;
+
+/**  The QIF's coded categories against the book (MIG-020). */
+export type TaxLinePlan = {
+	/**  In the file's order. */
+	items: TaxLinePlanItem[],
+};
+
+export type TaxLinePlanItem = {
+	/**  As the file writes it (`Tax:Real Estate`). */
+	qif_name: string,
+	code: number,
+	/**  The book's category of that path. */
+	category: CategoryId | null,
+	/**
+	 *  `Set`: the line it gets. `Kept`, `System`: the line it has.
+	 *  `Missing`: the code's line. `Unmapped`: none.
+	 */
+	tax_line: TaxLineId | null,
+	status: TaxLinePlanStatus,
+};
+
+/**  What setting tax lines from a QIF does to one of its categories. */
+export type TaxLinePlanStatus = 
+/**  The category has no tax line and gets the code's. */
+"set" | 
+/**  The category already has a tax line; it is kept. */
+"kept" | 
+/**  Kansha has no line for the code. */
+"unmapped" | 
+/**  No category of that path in the book. */
+"missing" | 
+/**  A built-in category; its tax line is left alone. */
+"system";
 
 /**  Tax treatment (ACCT-030). */
 export type TaxTreatment = "taxable" | "tax_deferred" | "tax_exempt";

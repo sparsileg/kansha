@@ -1,5 +1,6 @@
 <script lang="ts">
   import "./manager.css";
+  import TaxLinesFromQifModal from "./TaxLinesFromQifModal.svelte";
   import { call, commands } from "../api";
   import { confirmState } from "../state/confirm.svelte";
   import { hiddenLast } from "../manage/order";
@@ -20,6 +21,7 @@
   let f = $state<CategoryFields>(blank());
   let mergeInto = $state("");
   let error = $state<string | null>(null);
+  let settingTaxLines = $state(false);
 
   const locked = $derived(selected?.system != null);
 
@@ -90,19 +92,24 @@
 </script>
 
 <div class="mgr">
-  <div class="list">
-    <table>
-      <thead><tr><th>Category</th><th>Kind</th><th>Flags</th></tr></thead>
-      <tbody>
-        {#each hiddenLast(listsState.categories, (c) => listsState.categoryPath(c.id)) as c (c.id)}
-          <tr class:sel={selected?.id === c.id} class:dim={c.hidden} onclick={() => pick(c)}>
-            <td>{listsState.categoryPath(c.id)}{c.system ? " (built-in)" : ""}</td>
-            <td>{c.kind}</td>
-            <td>{[c.tax_related && "tax", c.tax_line !== null && listsState.taxLineLabel(c.tax_line), c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+  <div>
+    <div class="row">
+      <button type="button" onclick={() => (settingTaxLines = true)}>Set tax lines from QIF…</button>
+    </div>
+    <div class="list">
+      <table>
+        <thead><tr><th>Category</th><th>Kind</th><th>Flags</th></tr></thead>
+        <tbody>
+          {#each hiddenLast(listsState.categories, (c) => listsState.categoryPath(c.id)) as c (c.id)}
+            <tr class:sel={selected?.id === c.id} class:dim={c.hidden} onclick={() => pick(c)}>
+              <td>{listsState.categoryPath(c.id)}{c.system ? " (built-in)" : ""}</td>
+              <td>{c.kind}</td>
+              <td>{[c.tax_related && "tax", c.tax_line !== null && listsState.taxLineLabel(c.tax_line), c.hidden && "hidden"].filter(Boolean).join(", ")}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   </div>
   <form onsubmit={save}>
     <h3>{selected ? "Edit category" : "New category"}</h3>
@@ -157,3 +164,5 @@
     {/if}
   </form>
 </div>
+
+{#if settingTaxLines}<TaxLinesFromQifModal onclose={() => (settingTaxLines = false)} />{/if}

@@ -165,6 +165,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::import::import_cancel,
             commands::import::import_batches,
             commands::import::import_rollback,
+            commands::import::tax_lines_from_qif_preview,
+            commands::import::tax_lines_from_qif_apply,
             commands::reports::report_defaults,
             commands::reports::report_columns,
             commands::reports::report_range,

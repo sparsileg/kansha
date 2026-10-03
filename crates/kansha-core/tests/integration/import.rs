@@ -15,7 +15,7 @@ use kansha_core::import::{
 use kansha_core::invest;
 use kansha_core::ledger::{self, Cleared, Target};
 use kansha_core::persistence::imports::{self, BatchStatus};
-use kansha_core::persistence::{Origin, accounts, categories, payees};
+use kansha_core::persistence::{Origin, accounts, categories, payees, reports};
 use kansha_core::{Db, Money};
 
 use crate::fixture::{clock, count, date, db};
@@ -249,12 +249,34 @@ fn imports_balances_transfers_and_status() {
     let mystery = reg.iter().find(|r| r.date == date("2025-02-03")).unwrap();
     assert_eq!(mystery.category, "Uncategorized");
     assert!(payees::find_by_name(conn, "Grocer").unwrap().is_some());
-    assert!(
+    // CAT-050: Quicken's tax codes give the new categories their lines;
+    // Utilities' code (8096, spouse wages) has no Kansha line.
+    let cat = |n: &str| {
         categories::list(conn)
             .unwrap()
-            .iter()
-            .any(|c| c.fields.name == "Salary" && c.fields.tax_related)
+            .into_iter()
+            .find(|c| c.fields.name == n)
+            .unwrap()
+            .fields
+    };
+    let line = |form: &str, l: &str| {
+        reports::tax_lines(conn)
+            .unwrap()
+            .into_iter()
+            .find(|t| t.form == form && t.line == l)
+            .map(|t| t.id)
+    };
+    assert!(cat("Salary").tax_related);
+    assert_eq!(cat("Salary").tax_line, line("W-2", "Salary or wages"));
+    assert!(cat("Interest Inc").tax_related);
+    assert_eq!(
+        cat("Interest Inc").tax_line,
+        line("Schedule B", "Interest income")
     );
+    assert_eq!(cat("Utilities").tax_line, None);
+    assert!(!cat("Utilities").tax_related);
+    assert_eq!(r.tax_lines_set, 2);
+    assert_eq!(r.tax_codes_unmapped, 1);
 
     // BuyX: cash in from Checking, then the buy; the Checking side keeps
     // its cleared mark.
@@ -1066,6 +1088,15 @@ fn a_file_from_disk() {
     }
     for e in r.errors.iter().take(20) {
         println!("  error {:?} {}: {}", e.line, e.account, e.message);
+    }
+    println!(
+        "tax lines set {}, codes not mapped {}",
+        r.tax_lines_set, r.tax_codes_unmapped
+    );
+    let file = s.parse(None);
+    let plan = kansha_core::import::tax_codes::plan(open.db.conn(), &file.categories).unwrap();
+    for i in &plan.items {
+        println!("  tax code {} {}: {:?}", i.code, i.qif_name, i.status);
     }
 }
 

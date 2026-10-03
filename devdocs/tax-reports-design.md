@@ -1,7 +1,7 @@
 # Tax reports: closer to Quicken — design and plan
 
-Status: **proposed** (2026-10-02). Implements on top of spec 0.7.3;
-spec goes to 0.7.4 when built.
+Status: **step 1 built** (spec 0.7.4, 2026-10-02); steps 2–7 open.
+Built on spec 0.7.3.
 Requirements: CAT-050, MIG-020, RPT-020, RPT-140, RPT-145.
 
 ## 1. Why

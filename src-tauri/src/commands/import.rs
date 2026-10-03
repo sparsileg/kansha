@@ -7,6 +7,7 @@ use std::path::Path;
 use kansha_core::backup::BackupKind;
 use kansha_core::import::{
     self, ArchiveTarget, ImportOptions, ImportPreview, ImportResult, RollbackResult, Staged,
+    TaxLinePlan, tax_codes,
 };
 use kansha_core::persistence::imports::{self, ImportBatch};
 use tauri::State;
@@ -126,6 +127,32 @@ pub async fn import_rollback(state: State<'_, AppState>, batch: i64) -> CmdResul
         .map_err(|e| step("The rollback", e))?;
     state.note_import();
     Ok(result)
+}
+
+/// What setting tax lines from a QIF's category list would do (CAT-050,
+/// MIG-020): each coded category against the book's.
+#[tauri::command]
+#[specta::specta]
+pub async fn tax_lines_from_qif_preview(
+    state: State<'_, AppState>,
+    path: String,
+) -> CmdResult<TaxLinePlan> {
+    let file = Staged::read(Path::new(&path))?.parse(None);
+    state.read(|db, _| tax_codes::plan(db.conn(), &file.categories))
+}
+
+/// Set the tax lines the preview marks "set", after a backup. Returns how
+/// many were set; a line already set is never changed.
+#[tauri::command]
+#[specta::specta]
+pub async fn tax_lines_from_qif_apply(state: State<'_, AppState>, path: String) -> CmdResult<i64> {
+    let file = Staged::read(Path::new(&path))?.parse(None);
+    state.backup(BackupKind::Bulk)?;
+    state.write(|tx| {
+        let plan = tax_codes::plan(tx.conn(), &file.categories)?;
+        let n = tax_codes::apply(tx, &plan)?;
+        Ok(i64::try_from(n).unwrap_or(i64::MAX))
+    })
 }
 
 /// Say which step failed: "database error: out of memory" alone does not.

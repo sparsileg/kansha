@@ -443,6 +443,11 @@
       <p>
         New: {result.accounts_created} accounts, {result.categories_created} categories, {result.payees_created} payees,
         {result.tags_created} tags, {result.securities_created} securities, {result.prices} prices.
+        {#if result.tax_lines_set > 0 || result.tax_codes_unmapped > 0}
+          Quicken tax codes gave {result.tax_lines_set} new categories their tax lines{result.tax_codes_unmapped > 0
+            ? `; ${result.tax_codes_unmapped} ${result.tax_codes_unmapped === 1 ? "code has" : "codes have"} no Kansha tax line`
+            : ""}.
+        {/if}
         {#if result.securities_hidden > 0}
           {result.securities_hidden} of the new securities are no longer held, so they are hidden and prices are not
           downloaded for them (Tools &gt; Securities shows them).

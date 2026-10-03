@@ -15,6 +15,7 @@
 mod commit;
 mod plan;
 pub mod qif;
+pub mod tax_codes;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 pub use commit::{AccountResult, ImportResult, RollbackResult, rollback};
 pub use qif::DateOrder;
+pub use tax_codes::{TaxLinePlan, TaxLinePlanItem, TaxLinePlanStatus};
 
 use crate::accounts::{AccountId, AccountType};
 use crate::categories::{CategoryId, CategoryKind};

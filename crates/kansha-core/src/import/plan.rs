@@ -80,6 +80,8 @@ pub(crate) struct PlanCategory {
     pub listed: bool,
     pub income: Option<bool>,
     pub tax_related: bool,
+    /// Quicken's tax code from the category list (CAT-050).
+    pub tax_code: Option<u32>,
     pub used: i64,
     /// Σ postings: spending positive, income negative.
     pub total: Money,
@@ -261,6 +263,7 @@ pub(crate) fn build(conn: &Connection, file: &QifFile, options: &ImportOptions) 
         pc.listed = true;
         pc.income = c.income;
         pc.tax_related = c.tax_related;
+        pc.tax_code = c.tax_code;
     }
     for t in &file.tags {
         b.tag(&t.name);
@@ -432,6 +435,7 @@ impl Builder<'_> {
             listed: false,
             income: None,
             tax_related: false,
+            tax_code: None,
             used: 0,
             total: Money::ZERO,
             choice: CategoryChoice::Create {

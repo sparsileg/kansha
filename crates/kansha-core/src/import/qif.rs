@@ -78,6 +78,9 @@ pub struct QifCategory {
     /// `I` (income) or `E` (expense); `None` when neither is given.
     pub income: Option<bool>,
     pub tax_related: bool,
+    /// `R`: Quicken's tax code (`R4416` → 4416); `None` when absent or
+    /// not a number.
+    pub tax_code: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -464,6 +467,7 @@ impl Parser {
                 None
             },
             tax_related: has('T'),
+            tax_code: field(fields, 'R').trim().parse().ok(),
         });
     }
 

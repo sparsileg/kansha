@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.3 (draft) |
+| **Document version** | 0.7.4 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-02 |
 | **Owner** | Stan |
@@ -198,7 +198,12 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   Schedule A, B, …; built-in list, migration 0003). An account maps
   transfers out of it and transfers into it to a line each (an IRA
   distribution to 1099-R). Schedule D comes from lot disposals, not a
-  category.
+  category. Quicken's tax codes (the QIF category list's `R` field)
+  map to built-in lines (`import/tax_codes.rs`); Tools > Categories >
+  **Set tax lines from QIF…** sets them once on a book's categories
+  that have no tax line (a line already set is kept; built-in
+  categories are left alone), marks those tax-related, after a bulk
+  backup (0.7.4).
 - **CAT-060** [1.0][R] Built-in system categories for investment
   income and transfers (Dividends, Interest, Capital Gains
   Distributions, Realized Gain/Loss, Investment Fees) that cannot be
@@ -731,6 +736,9 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   (`Parent:Child`) and the tax-related flag. A category missing from
   the list takes its kind from the file's `I`/`E` mark, else from the
   sign of its amounts. Lines with no category go to `Uncategorized`.
+  A category the import creates gets the tax line of its Quicken tax
+  code (CAT-050) and becomes tax-related; an existing one keeps its
+  own (0.7.4).
 - **MIG-030** [1.0][S] Import tags (QIF classes, `Category/Tag`;
   several separated by `:`). A simple transaction's tag goes on the
   transaction, a split line's on the line.
@@ -2229,6 +2237,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.4 | 2026-10-02 | Tax reports closer to Quicken, step 1 (`devdocs/tax-reports-design.md` §4.1). CAT-050: Quicken tax codes map to built-in tax lines; Tools > Categories > Set tax lines from QIF… sets them once on categories with no tax line (preview, then apply after a bulk backup; audited; built-in categories untouched). MIG-020: the import sets the tax line on the categories it creates; the result counts lines set and codes with no Kansha line. No schema change. **API change:** new commands `tax_lines_from_qif_preview`, `tax_lines_from_qif_apply`; new types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus`; `ImportResult` gains `tax_lines_set`, `tax_codes_unmapped`. |
 | 0.7.3 | 2026-10-02 | REC-010: a schedule stores its transaction type (payment or deposit). Before, the type was only the sign of the lines, so a 0.00 schedule lost it: the list showed it as a deposit, and an amount set for one occurrence of a 0.00 payment went in as a deposit. A non-zero amount, one-time amount, or entered amount must go the type's way. REC-300: Method shows Payment or Deposit; a transfer is no longer listed as Transfer. The schedule dialog lists accounts most used by existing schedules first. **Schema change:** migration 0009 (`schedule.direction`, filled from the sign of each schedule's lines; 0.00 ones become payments). **API change:** `ScheduleFields` and `OccurrenceView` gain `direction`; new type `Direction`. |
 | 0.7.2 | 2026-10-01 | MIG-150 closed, not needed (schedules re-entered by hand); P-04 settled. INV-060: a gift with an empty memo gets "Gift / noncash donation". RPT-145: Schedule A non-cash line over $500 says "(Form 8283 needed)". No schema change. No API change. |
 | 0.7.1 | 2026-10-01 | New INV-060: gift of shares (a DAF contribution) as Shares removed with a price and a recipient (category or non-investment account); lots leave at basis with no gain, the recipient gets shares × price, Opening Balance the difference. §18 investment rules. Entry form: Shares removed shows Price per share and Given to. NFR-040: 50 MiB page cache (CONVENTIONS §5). No schema change. No API change (`InvInput.counterpart` doc comment only; `trade_amount` accepts Shares removed). |

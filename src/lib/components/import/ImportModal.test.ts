@@ -64,6 +64,8 @@ function result(committed: boolean): ImportResult {
     transactions: 21,
     accounts_created: 4,
     categories_created: 5,
+    tax_lines_set: 2,
+    tax_codes_unmapped: 1,
     tags_created: 1,
     securities_created: 1,
     securities_hidden: 0,
@@ -178,6 +180,7 @@ describe("Import from Quicken (MIG-040 … MIG-100)", () => {
     // A difference is a symbol and bold, never color alone.
     expect(screen.getByText("≠")).toBeTruthy();
     expect(screen.getByText("1,500.00").classList.contains("b")).toBe(true);
+    expect(screen.getByText(/2 new categories their tax lines; 1 code has no Kansha tax line/)).toBeTruthy();
     expect(calls.list).toEqual(["open", "test", "import"]);
   });
 });

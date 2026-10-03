@@ -89,7 +89,8 @@ under `age`).
     same way). To check against Stan's file.
 12. **Investment payees** go into the memo (`payee — memo`).
 13. **Tax lines:** Quicken's `R` tax codes are not mapped; only the
-    tax-related flag is.
+    tax-related flag is. *Resolved 0.7.4* (see the tax reports
+    section below).
 14. **Rollback:** deletes the batch's transactions newest first, then
     each account, category, payee, tag, and security the import
     created that nothing uses. Prices it added to securities that stay
@@ -450,5 +451,40 @@ user picks the column).
 
 ## Next: tax reports closer to Quicken (designed 2026-10-02)
 
-Design and plan: `devdocs/tax-reports-design.md`. Not built. Closes
-gap 13 above (Quicken `R` tax codes) in its step 1.
+Design and plan: `devdocs/tax-reports-design.md`. Closes gap 13
+above (Quicken `R` tax codes) in its step 1.
+
+### Step 1 built (spec 0.7.4)
+
+Files:
+
+- `crates/kansha-core/src/import/tax_codes.rs` (new): code table,
+  `plan`, `apply`, `category_paths` (moved from `commit.rs`); unit
+  tests with Stan's codes.
+- `import/qif.rs`: `QifCategory.tax_code` from `R`.
+- `import/plan.rs`, `import/commit.rs`: a created category gets its
+  code's line and is tax-related; `ImportResult.tax_lines_set`,
+  `tax_codes_unmapped`.
+- `src-tauri/src/commands/import.rs`: `tax_lines_from_qif_preview`,
+  `tax_lines_from_qif_apply` (bulk backup first).
+- `src/lib/components/TaxLinesFromQifModal.svelte` (+ test); button
+  on the Categories tab; import result line in `ImportModal.svelte`.
+- `tests/fixtures/qif/whole.qif`: `R` codes on Salary, Interest Inc,
+  Utilities (unmapped 8096).
+
+Decisions:
+
+- A **button** on the Categories tab, as the Securities tab's
+  "True up lots…", not a gear menu (the tab has none).
+- Core lives in `import/` (not `categories/`): it reads QIF.
+- Commands take the file **path** (`pick_import_file`), so the QIF's
+  encoding is decoded as the import does.
+- Matching is by full path, ignoring case. A category the import
+  renamed or merged shows as "Not in the book"; set those by hand.
+
+Checked: `EVERYTHING.QIF` into a throwaway book sets 22 tax lines;
+a plan run afterwards shows Kept / Not in the book (unused categories
+the import did not create) / No Kansha line (8096 spouse wages).
+
+Gaps: not run on Stan's book yet (step 2); the modal is untested in
+the real app.
