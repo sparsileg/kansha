@@ -53,7 +53,7 @@ describe("window size", () => {
     await w.fullWindow();
     calls.length = 0;
     await w.compactWindow();
-    expect(calls).toEqual(["save", "min 460x600", "size 520x700", "center"]);
+    expect(calls).toEqual(["save", "min 460x600", "size 520x860", "center"]);
   });
 
   it("each size is set once, not on every call", async () => {

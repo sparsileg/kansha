@@ -1,6 +1,5 @@
 <script lang="ts">
   import "./manager.css";
-  import TaxLinesFromQifModal from "./TaxLinesFromQifModal.svelte";
   import { call, commands } from "../api";
   import { confirmState } from "../state/confirm.svelte";
   import { hiddenLast } from "../manage/order";
@@ -21,7 +20,6 @@
   let f = $state<CategoryFields>(blank());
   let mergeInto = $state("");
   let error = $state<string | null>(null);
-  let settingTaxLines = $state(false);
 
   const locked = $derived(selected?.system != null);
 
@@ -93,9 +91,6 @@
 
 <div class="mgr">
   <div>
-    <div class="row">
-      <button type="button" onclick={() => (settingTaxLines = true)}>Set tax lines from QIF…</button>
-    </div>
     <div class="list">
       <table>
         <thead><tr><th>Category</th><th>Kind</th><th>Flags</th></tr></thead>
@@ -165,4 +160,3 @@
   </form>
 </div>
 
-{#if settingTaxLines}<TaxLinesFromQifModal onclose={() => (settingTaxLines = false)} />{/if}

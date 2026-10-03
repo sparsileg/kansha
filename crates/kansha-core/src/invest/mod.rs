@@ -145,7 +145,8 @@ impl InvAction {
     pub const fn needs_security(self) -> bool {
         !matches!(
             self,
-            InvAction::Interest
+            InvAction::Dividend
+                | InvAction::Interest
                 | InvAction::CashIn
                 | InvAction::CashOut
                 | InvAction::Fee

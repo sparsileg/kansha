@@ -87,6 +87,12 @@ describe("buildInput", () => {
     expect(gift.ok && gift.input.amount).toBeNull();
   });
 
+  it("takes a dividend with no security: the cash paid it", () => {
+    const div = buildInput(7, { ...emptyForm("dividend", "2026-02-28"), amount: "4.17" }, today);
+    expect(div.ok && div.input.security).toBeNull();
+    expect(div.ok && div.input.amount).toBe("4.17");
+  });
+
   it("says what does not parse", () => {
     const bad = (over: object, action = "buy" as const) =>
       buildInput(7, { ...emptyForm(action, "2026-06-01"), security: 3, quantity: "1", ...over }, today);

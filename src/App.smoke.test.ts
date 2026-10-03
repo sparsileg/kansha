@@ -250,6 +250,14 @@ describe("App shell", () => {
     await waitFor(() => expect(screen.getByLabelText("Payment")).toBeTruthy());
   });
 
+  it("shows the open book's name on the menu bar, its path on hover", async () => {
+    render(App);
+    await account();
+    const bar = screen.getByRole("navigation", { name: "Menu bar" });
+    const name = within(bar).getByText("kansha");
+    expect(name.getAttribute("title")).toBe("/data/kansha.db");
+  });
+
   it("opens Settings and the Accounts list from the menus", async () => {
     render(App);
     await account();

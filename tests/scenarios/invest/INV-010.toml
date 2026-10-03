@@ -128,7 +128,7 @@ expect_error = "takes no security"
 [[actions]]
 type = "invest"
 account = "Brokerage"
-action = "dividend"
+action = "cg_dist_long"
 date = "2026-02-01"
 amount = "10.00"
 expect_error = "needs a security"

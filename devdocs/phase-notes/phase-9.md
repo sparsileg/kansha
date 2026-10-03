@@ -653,6 +653,44 @@ schema change.
 Gaps: the resize in Tauri and the mark in WebKitGTK not seen in the
 app yet; window size and position not remembered between sessions.
 
-Open (on hold to 2026-10-04): backups in `~/pCloudSync/Backup/Kansha`
-are never pruned by the app, though `backup::prune` deletes the right
-19 on a copy of the folder; Back up now made no backup.
+Backups (resolved 2026-10-03): the book's backup folder setting was
+Downloads, so backups and pruning happened there. Stan set the folder
+again; a manual backup landed there and pruned. Stan had set it before
+and it went back to Downloads: cause not found. Suspect:
+`booksettings.svelte.ts` `update()` writes the whole settings object,
+so a change made before `load()` finishes would store the defaults.
+
+## Window size remembered (2026-10-03, 2c68352)
+
+`src-tauri/src/window.rs`: startup no longer applies the saved
+geometry; `window_restore` puts it back when the book opens (else
+1280×800), `window_save` keeps it before the window shrinks. A window
+under 900 logical px wide is the start screen and is never saved.
+**⚠ API change:** new commands `window_save`, `window_restore`.
+
+## Set tax lines from QIF removed (spec 0.7.8, 2026-10-03)
+
+Stan ran it on the production book. Removed: the Categories button,
+`TaxLinesFromQifModal.svelte` (+ test), commands
+`tax_lines_from_qif_preview`/`_apply`, core `tax_codes::plan`/`apply`
+and the `TaxLinePlan*` types. The import still sets tax lines on the
+categories it creates (`form_line`, `tax_line_id`, `category_paths`
+kept). **⚠ API change.** No schema change.
+
+## Dividend paid by the cash; start screen (spec 0.7.9, 2026-10-03)
+
+Vanguard settlement-fund dividends have no security. **⚠ Schema
+change:** migration 0011 rebuilds `investment_txn` so `dividend` may
+have no security (same pattern as 0010). `InvAction::needs_security`
+drops Dividend; the form's Security is optional for it. The import
+keeps a security-less `Div` as a dividend (CG distributions without a
+security stay misc income). The income report already puts it on the
+no-security row. Tests: `invest::a_dividend_may_be_paid_by_the_cash`,
+`import::a_dividend_without_a_security_stays_a_dividend` (both failed
+first), form test; INV-010 scenario now checks `cg_dist_long` for
+"needs a security". No API change.
+
+Start screen: the 感謝 *kansha* before the meaning removed; the mark
+made the screen's main feature (5.625rem, compact 12.1875rem; Stan
+asked for +25%, then +50% more). Compact window 520×860 (was 520×700)
+to fit it. Not seen in the app yet.

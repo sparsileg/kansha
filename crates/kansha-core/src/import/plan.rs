@@ -738,6 +738,8 @@ impl Builder<'_> {
                         i.security = Some(s);
                         i
                     }
+                    // The account's cash paid it (a settlement fund).
+                    None if action == InvAction::Dividend => item(action),
                     None => {
                         let mut i = item(InvAction::MiscIncome);
                         i.counterpart = Some(Counter::System(system));

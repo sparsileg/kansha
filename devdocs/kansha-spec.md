@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.7 (draft) |
+| **Document version** | 0.7.9 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -201,12 +201,9 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   category. A Roth conversion (INV-070) goes to 1099-R by itself.
   Forms list as Quicken lists them (0.7.6, migration 0010): Form 1040,
   Schedule A, Schedule B, Schedule D, 1099-DIV, W-2, SSA-1099, 1099-R,
-  1099-G, 1099-SA, Form 8889. Quicken's tax codes (the QIF category list's `R` field)
-  map to built-in lines (`import/tax_codes.rs`); Tools > Categories >
-  **Set tax lines from QIF…** sets them once on a book's categories
-  that have no tax line (a line already set is kept; built-in
-  categories are left alone), marks those tax-related, after a bulk
-  backup (0.7.4).
+  1099-G, 1099-SA, Form 8889. Quicken's tax codes (the QIF category
+  list's `R` field) map to built-in lines (`import/tax_codes.rs`); the
+  import sets them on the categories it creates (MIG-020).
 - **CAT-060** [1.0][R] Built-in system categories for investment
   income and transfers (Dividends, Interest, Capital Gains
   Distributions, Realized Gain/Loss, Investment Fees) that cannot be
@@ -561,6 +558,9 @@ common patterns.
   | Tax withholding (federal/foreign) | none | − | Recorded for tax reporting |
   | Miscellaneous income/expense [R] | none | ± | Categorized |
   | Roth conversion (INV-070) | − here, + Roth IRA (in kind) | − tax withheld (and the value, in cash) | New Roth lot at value; 1099-R distribution |
+
+  A dividend names the security that paid it, or none when the
+  account's cash paid it (a settlement fund, 0.7.8), as interest may.
 
 - **INV-020** [1.0][R] Each investment transaction records trade date
   and, optionally, settlement date.
@@ -1970,7 +1970,8 @@ Modeling choices that affect other sections:
   else misc income/expense); an `X` action adds its transfer as a Cash
   In before it (buys, expenses) or a Cash Out after it (sales, income),
   for `$` (else `T`); `ReinvInt` is Interest then Buy; income with no
-  security is misc income in the action's built-in category;
+  security is misc income in the action's built-in category, except
+  `Div`, which stays a dividend paid by the cash (0.7.8);
   `Reminder` is skipped with a note; anything else cannot be imported.
   The payee of an investment record goes into its memo. New
   investment accounts hold cash themselves and treat money market funds
@@ -2301,6 +2302,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.9 | 2026-10-03 | INV-010: a dividend may name no security, when the account's cash (a settlement fund) paid it; it goes to Dividends and the income report's no-security row. MIG-020: Quicken's `Div` with no security imports as such a dividend, not misc income. SECU-020: the start screen drops the 感謝 *kansha* before the meaning; the mark is nearly twice its old size, and the passphrase window is 520×860. **Schema change:** migration 0011 (`investment_txn` rebuilt: `dividend` may have no security). No API change. |
+| 0.7.8 | 2026-10-03 | CAT-050: Tools > Categories > Set tax lines from QIF… is removed; it was a one-time tool for categories made before the import set tax lines (0.7.4), and has been run on the production book. No schema change. **API change:** commands `tax_lines_from_qif_preview` and `tax_lines_from_qif_apply` and types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus` removed. |
 | 0.7.7 | 2026-10-03 | UI-047: Help > About shows the 感謝 mark and meaning, app and schema versions, a description, and kansha@sparsile.org. SECU-020: the passphrase screen opens in a small window with the mark, growing to working size when the book opens. The app is version 0.8.0. No schema change. **API change:** new command `schema_version`. |
 | 0.7.6 | 2026-10-03 | New INV-070: Roth conversion, in cash or in kind, from a traditional IRA or 401(k) into a Roth IRA, with optional nontaxable part and federal and state tax withheld; on 1099-R in the Tax Schedule and Tax Summary. §18 date order: changing or deleting an investment transaction puts its holdings' later lot events back in (as a true-up does) instead of being refused. CAT-050: forms in Quicken's order. **Schema change:** migration 0010 (`investment_txn` rebuilt: action `roth_conversion`, columns `nontaxable`, `withheld_federal`, `withheld_state`; built-in tax line sort orders). **API change:** `InvAction` gains `roth_conversion`; `InvInput` and `InvTxn` gain `conversion` (new type `ConversionTax`). |
 | 0.7.5 | 2026-10-02 | Tax reports closer to Quicken, step 3 in part (`devdocs/tax-reports-design.md` §4.4, §4.6). RPT-020: Display option Totals on group heading (on by default for the two tax reports; CSV follows; no "Total Total"). RPT-145: compact layout: Date under the group headings, shaded form rows, one line per row, fitted to the page width (Description, Memo, Tag cut first, then Account; Category never). RPT-050: WebKitGTK does not repeat a table's heading row in print (the old text said it did); a compact report prints one table per page, split so a heading never ends a page. RPT-140: Tax Summary uses the same compact layout (Tax Item cut with Account); column S marks splits (tax reports show it, Itemized Categories and Payees hide it by default); Tag hidden by default in the tax reports. RPT-050: negatives in the negative color. Saved reports keep their columns. No schema change. **API change:** `ReportSettings.totals_on_heading: Option<bool>`; `Report` gains `totals_on_heading`, `compact`. |

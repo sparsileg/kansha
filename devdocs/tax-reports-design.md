@@ -127,7 +127,7 @@ category that already exists keeps what it has. The import result
 gains counts: tax lines set, codes not mapped.
 
 **One-time command (existing books).** Tools > Categories gear menu:
-**Set tax lines from QIF…**
+**Set tax lines from QIF…** (removed in spec 0.7.8 after Stan ran it)
 
 - Picks a QIF (`pick_import_file`), reads only its `!Type:Cat` list
   (`qif::parse` already reads the whole file; use its categories).
@@ -382,6 +382,7 @@ IRA 510 (125,007.65) and Vanguard LT IRA 156 (200,816.50).
   Expect Kansha's to be higher if investment interest exists.
 - 2/28 and 3/31/2025 Vanguard Grandma 140 rows show action "Misc
   Income" where Quicken shows "Div" (category Dividends is right).
-  Check the import's action mapping (phase 9) separately.
+  Resolved 0.7.9: settlement-fund dividends with no security; a
+  dividend may now have none, and the import keeps it a dividend.
 - Spouse W-2 lines (code 8096) have no Kansha line; add one only if
   needed.

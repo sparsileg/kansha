@@ -226,6 +226,48 @@ fn an_investment_transaction_is_stored_audited_and_edited_whole() {
     assert!(integrity::check(b.conn()).unwrap().is_clean());
 }
 
+/// A dividend paid by the account's cash (a settlement fund) has no
+/// security: cash in, Dividends out, and the income report's
+/// no-security row (INV-010).
+#[test]
+fn a_dividend_may_be_paid_by_the_cash() {
+    let mut b = book();
+    let (brk, _) = funded(&mut b);
+    let mut input = InvInput::new(brk, InvAction::Dividend, date("2026-02-28"));
+    input.amount = Some(m("4.17"));
+    let t = b.invest(&input).unwrap();
+    let div = b.find_category("Dividends").unwrap().unwrap();
+    let postings: Vec<_> = t
+        .txn
+        .postings
+        .iter()
+        .map(|x| (x.target, x.security, x.amount))
+        .collect();
+    assert_eq!(
+        postings,
+        vec![
+            (Target::Account(brk), None, m("4.17")),
+            (Target::Category(div), None, m("-4.17")),
+        ]
+    );
+    assert_eq!(t.to_input(), input);
+    let stored = invest::find(b.conn(), t.txn.id).unwrap().unwrap();
+    assert_eq!(stored.to_input().security, None);
+
+    let income = invest::income(b.conn(), brk, None, None).unwrap();
+    assert_eq!(income.rows.len(), 1);
+    assert_eq!(income.rows[0].security, None);
+    assert_eq!(income.rows[0].dividends, m("4.17"));
+    assert_eq!(income.total.dividends, m("4.17"));
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+
+    // Distributions still name the fund that paid them.
+    let mut cg = InvInput::new(brk, InvAction::CgDistLong, date("2026-02-28"));
+    cg.amount = Some(m("1.00"));
+    let err = b.invest(&cg).unwrap_err();
+    assert!(err.to_string().contains("needs a security"), "{err}");
+}
+
 #[test]
 fn a_cash_posting_can_be_cleared_and_keeps_it_through_an_edit() {
     let mut b = book();

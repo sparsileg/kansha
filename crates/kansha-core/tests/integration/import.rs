@@ -700,6 +700,43 @@ T100.00
     assert_eq!(reg.rows[5].memo, "Bank fee");
 }
 
+/// A Div with no security is the account's cash paying it (a settlement
+/// fund): a Dividend without a security, to Dividends (INV-010).
+#[test]
+fn a_dividend_without_a_security_stays_a_dividend() {
+    let text = "\
+!Account
+NInv
+TInvst
+^
+!Type:Invst
+D2/28'25
+NDiv
+T4.00
+^
+";
+    let mut db = db();
+    let s = Staged::new("inv.qif", text.as_bytes().to_vec());
+    let r = s
+        .run(&mut db, &clock(), &ImportOptions::default(), false, None)
+        .unwrap();
+    assert!(r.committed, "{:?}", r.errors);
+    let conn = db.conn();
+    let inv = account(&db, "Inv");
+    let reg = invest::register(conn, inv, date("2026-06-30")).unwrap();
+    assert_eq!(reg.rows.len(), 1);
+    assert_eq!(reg.rows[0].action.as_str(), "dividend");
+    assert_eq!(reg.rows[0].security, None);
+    let div = categories::system(conn, SystemCategory::Dividends)
+        .unwrap()
+        .id;
+    assert_eq!(ledger::category_total(conn, div, None).unwrap(), m("-4.00"));
+    assert_eq!(
+        kansha_core::persistence::invest::cash_balance(conn, inv, None).unwrap(),
+        m("4.00")
+    );
+}
+
 /// Quicken may write a day's sale before that day's reinvestment, selling
 /// shares the reinvestment brings in. Shares are held by the day: the
 /// sale goes last and takes them all.
@@ -1093,11 +1130,6 @@ fn a_file_from_disk() {
         "tax lines set {}, codes not mapped {}",
         r.tax_lines_set, r.tax_codes_unmapped
     );
-    let file = s.parse(None);
-    let plan = kansha_core::import::tax_codes::plan(open.db.conn(), &file.categories).unwrap();
-    for i in &plan.items {
-        println!("  tax code {} {}: {:?}", i.code, i.qif_name, i.status);
-    }
 }
 
 #[test]

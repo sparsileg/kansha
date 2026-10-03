@@ -78,7 +78,7 @@ const trade = { shares: true, price: true, amount: "optional" as Need };
 export const ACTIONS: ActionInfo[] = [
   a("buy", "Buy", { ...trade, commission: true, amountLabel: "Total cost" }),
   a("sell", "Sell", { ...trade, commission: true, lots: true, amountLabel: "Net proceeds" }),
-  a("dividend", "Dividend"),
+  a("dividend", "Dividend", { security: "optional" }),
   a("interest", "Interest", { security: "optional" }),
   a("reinvest_dividend", "Reinvest dividend", { ...trade, amountLabel: "Amount reinvested" }),
   a("reinvest_cg_short", "Reinvest ST capital gain", { ...trade, amountLabel: "Amount reinvested" }),

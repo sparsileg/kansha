@@ -87,6 +87,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0010_roth_conversion.sql"),
         foreign_keys_off: true,
     },
+    Migration {
+        version: 11,
+        description: "dividend without a security",
+        sql: include_str!("migrations/0011_cash_dividend.sql"),
+        foreign_keys_off: true,
+    },
 ];
 
 /// The newest schema version this build understands.

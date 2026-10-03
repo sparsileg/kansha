@@ -109,7 +109,7 @@
       <span class="mark" style:--mark="url({mark})" role="img" aria-label="感謝, kansha, in brush calligraphy"></span>
       <div>
         <h1>Kansha</h1>
-        <p class="meaning"><span lang="ja">感謝</span> <i>kansha</i> — Japanese for gratitude, heartfelt thanks.</p>
+        <p class="meaning">Japanese for gratitude, heartfelt thanks.</p>
       </div>
     </header>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}
@@ -273,7 +273,7 @@
   .mark {
     display: block;
     flex: none;
-    width: 3rem;
+    width: 5.625rem;
     aspect-ratio: 224 / 417;
     /* The image, set on the element. */
     --mark: none;
@@ -306,7 +306,7 @@
     gap: 0.75rem;
   }
   .compact .mark {
-    width: 6.5rem;
+    width: 12.1875rem;
   }
   .compact .brand > div {
     padding-bottom: 1rem;

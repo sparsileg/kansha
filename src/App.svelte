@@ -126,7 +126,12 @@
 <StartScreen />
 {:else}
 <div class="app" style:--account-panel-w={settingsState.accountPanelCss}>
-  <MenuBar {menus} onselect={runAction}><ThemePicker /></MenuBar>
+  <MenuBar {menus} onselect={runAction}>
+    <div class="bar-end">
+      <span class="book" title={bookState.status?.db_path}>{bookState.status?.name}</span>
+      <ThemePicker />
+    </div>
+  </MenuBar>
   <NavBar />
   <AccountBar />
   {#if listsState.error}<p class="err">{listsState.error}</p>{/if}
@@ -205,6 +210,22 @@
 <style>
   /* Global element styles are in src/css/base.css; colors and the font
      family in src/css/themes. */
+  /* The open book's name, muted, left of the theme pickers. */
+  .bar-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+  }
+  .book {
+    opacity: 0.75;
+    font-size: var(--fs-small);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 20rem;
+  }
   .app {
     position: fixed;
     inset: 0;
