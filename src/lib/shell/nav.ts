@@ -19,16 +19,21 @@ export async function openAccount(id: AccountId): Promise<void> {
   if (id !== registerState.accountId) await registerState.open(id);
 }
 
-/** The Home button: always the dashboard. */
+/** The Insights button (once Home): the Insights view, first tab. */
 export function goHome(): void {
   viewState.navigate("dashboard");
+}
+
+/** One insight's tab in the Insights view. */
+export function openInsight(id: number): void {
+  viewState.navigate("dashboard", { insight: id });
 }
 
 /** Which views startup can open, by label; `null` for those it cannot
  * (they need an account, a search, or a window). A `Record` over every
  * view and panel, so adding one fails to compile until it is listed. */
 const STARTUP_VIEWS: Record<ViewId, string | null> = {
-  dashboard: "Dashboard",
+  dashboard: "Insights",
   account: null, // each account is its own choice
   window: null,
   manage: null,

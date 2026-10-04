@@ -499,6 +499,19 @@ export const commands = {
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
 	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
 	dashboard: (upcomingDays: number) => typedError<Dashboard, IpcError>(__TAURI_INVOKE("dashboard", { upcomingDays })),
+	/**  Every insight, in tab order. */
+	insightList: () => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_list")),
+	/**  A new insight, after the others. */
+	insightCreate: (name: string, cards: string[]) => typedError<Insight, IpcError>(__TAURI_INVOKE("insight_create", { name, cards })),
+	/**  Rename an insight and set its cards. */
+	insightUpdate: (id: InsightId, name: string, cards: string[]) => typedError<Insight, IpcError>(__TAURI_INVOKE("insight_update", { id, name, cards })),
+	/**  Delete an insight; the last one stays. */
+	insightDelete: (id: InsightId) => typedError<null, IpcError>(__TAURI_INVOKE("insight_delete", { id })),
+	/**
+	 *  Move an insight one tab left (-1) or right (1); every insight, in the
+	 *  new order.
+	 */
+	insightMove: (id: InsightId, delta: number) => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_move", { id, delta })),
 	/**  Net worth today, for the foot of the account list (ACCT-240). */
 	netWorth: () => typedError<string, IpcError>(__TAURI_INVOKE("net_worth")),
 	/**
@@ -706,7 +719,7 @@ export type AssetSubtype = "house" | "vehicle" | "other";
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -1471,6 +1484,17 @@ export type IncomeRow = {
 	other: string,
 	total: string,
 };
+
+/**  One insight, a tab of cards. */
+export type Insight = {
+	id: InsightId,
+	name: string,
+	/**  Card IDs, in the order they show. */
+	cards: string[],
+};
+
+/**  Row ID of an insight. */
+export type InsightId = number;
 
 /**  Result of an integrity check. */
 export type IntegrityReport = {
@@ -2699,11 +2723,6 @@ export type Settings = {
 	 *  default.
 	 */
 	invest_views: string | null,
-	/**
-	 *  Which dashboard cards show and in what order (DSH-040), as the UI's
-	 *  JSON; `None` = every card, in the default order.
-	 */
-	dashboard_cards: string | null,
 	/**
 	 *  A price older than this many days is stale (SET-040), unless the
 	 *  security sets its own.

@@ -107,6 +107,7 @@ vi.mock("../../api", async (orig) => {
       tagList: () => ok([]),
       payeeList: () => ok([]),
       taxLineList: () => ok([]),
+      insightList: () => ok([]),
       today: () => ok("2026-06-30"),
       securityList: () => ok([]),
       scheduleList: () => ok([]),

@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.15 (draft) |
+| **Document version** | 0.7.17 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-03 |
+| **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); verification reports (MIG-100) next |
 
@@ -932,21 +932,22 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   after asking, or a folder with no reports).
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to
   show the contributing transactions (traceability principle).
-- **RPT-040** [1.0][R] Date range presets: this month, last month,
-  YTD, last year, last 12 months, custom; plus comparison to a prior
-  period. The Date range dropdown (0.7.15), on the report bar and in
-  Customize, lists in groups split by a line: Include all dates;
-  Monthly, Quarterly, Yearly (Tax Schedule only); Month to date,
-  Quarter to date, Year to date; Last month, Last quarter, Last year,
-  Last 30 days, Last 12 months, Custom dates. Monthly, Quarterly, or
-  Yearly shows a second dropdown beside it: this month back to the
-  same month a year ago (13), this quarter back to the same quarter
-  last year (5), or the last five years with this one. The current
-  period is picked first. A saved report keeps the period it was
-  saved with; one no longer in the list is added at its end. This
-  month, This quarter, and This year are no longer offered (they
-  differ from "to date" only by future-dated transactions); a report
-  saved with one still opens with it, shown at the end of the list.
+- **RPT-040** [1.0][R] Date range presets: this month, last month, YTD,
+  last year, last 12 months, custom; plus comparison to a prior period.
+  The Date range dropdown (0.7.15), on the report bar and in Customize,
+  lists in groups, in this order (no line between them, since the native
+  dropdown draws one as a tall blank row): Include all dates; Monthly,
+  Quarterly, Yearly (Tax Schedule only); Month to date, Quarter to date,
+  Year to date; Last month, Last quarter, Last year, Last 30 days, Last
+  12 months, Custom dates. Monthly, Quarterly, or Yearly shows a second
+  dropdown beside it: this month back to the same month a year ago (13),
+  this quarter back to the same quarter last year (5), or the last five
+  years with this one. The current period is picked first. A saved
+  report keeps the period it was saved with; one no longer in the list
+  is added at its end. This month, This quarter, and This year are no
+  longer offered (they differ from "to date" only by future-dated
+  transactions); a report saved with one still opens with it, shown at
+  the end of the list.
 - **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the
   Downloads folder, every group expanded; printing and PDF show only
   the report. Save PDF… asks Portrait or Landscape (remembered while
@@ -1054,16 +1055,40 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   checked),
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
-- **DSH-040** [1.0][R] The dashboard is a set of cards, each with a
-  stable ID and name (net worth, this month, net worth trend, due soon,
-  needs attention). A gear in the dashboard's title band opens
-  Customize: tick the cards to show and move them up or down. The
-  choice is kept in the book (`dashboard_cards`); none stored, or the
-  default, shows every card in the default order. A card added by a
-  later release shows after the others until hidden. The cards sit in
-  one outlined sheet whose shaded top band holds the title "Dashboard"
-  (the UI convention: a view's title sits in a shaded band at the top
-  of its sheet; other views follow later).
+- **DSH-040** [1.0][R] The dashboard is made of cards, each with a
+  stable ID and name: Net worth, This month, Net worth, last 12 months,
+  Due soon, Needs attention. Since 0.7.16 the dashboard is the first
+  insight (INS-010), and its cards are chosen as for any insight
+  (INS-030). Migration 0014 turned the old card choice
+  (`dashboard_cards`) into that insight, named "Dashboard".
+
+#### 12.4 Insights
+
+- **INS-010** [1.0][R] Insights are views made of cards the user
+  chooses, giving quick answers about income, spending, investments,
+  and planning. The Insights view (once Home) is on the navigation bar
+  and in Tools > Insights, after Investments. It is one outlined sheet;
+  its shaded title band holds the title "Insights", one tab per insight
+  in the user's order, and a gear. Opening Insights shows the first
+  tab. A book always has at least one insight; the first is the
+  dashboard (DSH-010 … DSH-040).
+- **INS-020** [1.0][R] An insight is a name (unique, any case) and an
+  ordered list of card IDs, kept in the book (`insight` table). The
+  same card can be on several insights, at most once on each. The card
+  catalog is the UI's; an ID it does not know is skipped.
+- **INS-030** [1.0][R] The gear acts on the tab shown: Customize…,
+  Create new insight…, Move left, Move right, Delete insight…. Move
+  left and Move right are greyed out at the ends. Delete asks first and
+  is greyed out while only one insight remains; any insight, the first
+  included, can be deleted while another remains. Customize and Create
+  open the same dialog, laid out as Edit > Navigation Bar: a Name
+  field; Available cards on the left, the insight's cards on the
+  right; Add › and ‹ Remove; ▲ Up and ▼ Down; Save and Cancel. Create
+  shows a new tab while the dialog is open; Cancel removes it and
+  makes nothing, Save makes the insight and shows its tab. A refused
+  name keeps the dialog open with the reason.
+- **INS-040** [1.0][R] Each insight can go on the navigation bar
+  (UI-020) as its own button, which opens its tab.
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -1270,12 +1295,19 @@ platform has one.
 
 - **UI-010** [1.0][S] One "Accounts" panel beside the register,
   left or right (Settings), with the grouped account list and "Show
-  closed accounts". Closed, only its button stays, and clicking it
-  drops the list down to pick an account ("Keep open" brings the panel
-  back). Open or closed is remembered.
+  closed accounts". It is headed by an "Accounts" bar as wide as the
+  panel, shown open or closed: the triangle at its left opens the panel
+  (kept open) or closes it; while the panel is closed, the rest of the
+  bar drops the list down to pick an account; the gear at its right
+  arranges the list (ACCT-240).
+  Status messages show in the same row, on the other side. The panel
+  and the drop-down slide open and shut (at once for reduced motion);
+  the panel ends level with the view's sheet. Open or closed is
+  remembered.
 - **UI-020** [1.0][S] Navigation bar under the menu bar with
-  user-configurable buttons (Edit > Navigation Bar): Home, the
-  Investments screen, any menu item, or any account, in the user's
+  user-configurable buttons (Edit > Navigation Bar): Insights (once
+  Home), the Investments screen, any menu item, any insight (INS-040),
+  or any account, in the user's
   order, each with an icon and a text label; Reminders shows the
   number due. The search box (UI-070) is at its right.
 - **UI-030** [1.0][S] Account-centric design: each account opens to
@@ -1381,10 +1413,11 @@ platform has one.
   (SECU-040); Show database key (SECU-020); Verify backup… (BAK-080):
   Settings offers these three in one "Backup tools" list with an Apply
   button. Allow price download (PRC-040, SECU-070; default off).
-- **SET-060** [1.0][R] Startup behavior: "On startup open to:" the
-  dashboard, Investments, Reminders, Calendar, Accounts, or any
-  account (every new view or account joins the list); run integrity
-  check at startup. The Home button always opens the dashboard.
+- **SET-060** [1.0][R] Startup behavior: "On startup open to:"
+  Insights, Investments, Reminders, Calendar, Accounts, or any account
+  (every new view or account joins the list); run integrity check at
+  startup. The Insights button always opens Insights at its first tab
+  (INS-010).
 - **SET-080** [1.0][R] The Settings dialog is a category list (Interface,
   Data, Investments, Register, Notifications, Backups) over one card
   showing that category's settings, with OK and Cancel below on the
@@ -1691,7 +1724,7 @@ Rule: modules interact only through their public APIs; only
   open windows, settings).
 - `src/lib/components/` — reusable components (register grid, split
   editor, money input, date input, modal, account picker).
-- `src/views/` — top-level views (Dashboard, Account, Accounts,
+- `src/views/` — top-level views (Insights, Account, Accounts,
   Investments, Scheduled, Calendar, Reconcile, Manage, Search, the
   start screen). Reports open in windows
   (`src/lib/components/reports/`); Settings is a dialog.
@@ -2350,6 +2383,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.17 | 2026-10-04 | UI-010: the Accounts button becomes a bar as wide as the panel; its triangle opens (kept open) or closes the panel, the rest drops the account list down while the panel is closed, the gear sits inside at its right. "Keep open" removed. The panel and drop-down slide open and shut; the panel stops level with the sheet. RPT-040: no line between the Date range groups. |
+| 0.7.16 | 2026-10-04 | New §12.4 Insights, **INS-010 … INS-040**: the Home view is renamed Insights (navigation bar, new Tools > Insights after Investments, startup choice); one tab per insight in the title band; the gear offers Customize…, Create new insight…, Move left, Move right, Delete insight…; a new dialog modelled on Edit > Navigation Bar (Name, Available cards, the insight's cards, Add, Remove, Up, Down) replaces Customize dashboard; each insight can be a navigation bar button. DSH-040: the dashboard is the first insight. UI-020, SET-060 updated. **Schema change:** migration 0014 (new table `insight`; the setting `dashboard_cards` becomes the insight "Dashboard" and is removed; `audit_log` rebuilt to accept entity `insight`). **API change:** new commands `insight_list`, `insight_create`, `insight_update`, `insight_delete`, `insight_move`; new types `Insight`, `InsightId`; `Settings` loses `dashboard_cards`; `AuditEntity` gains `insight`. |
 | 0.7.15 | 2026-10-04 | RPT-040: Date range dropdown in groups split by a line (Include all dates; Monthly, Quarterly, Yearly; to date; Last … and Custom dates). Monthly, Quarterly, Yearly (Tax Schedule only, RPT-145) pick one period from a second dropdown: 13 months, 5 quarters, or 5 years, the current one first; a saved report keeps its period. This month, This quarter, This year no longer offered; saved reports using them still open. No schema change. **API change:** `DatePreset` values `monthly`, `quarterly`, `yearly`; new command `report_period_choices`, new type `PeriodChoice`. |
 | 0.7.14 | 2026-10-03 | Tax reports closer to Quicken, step 4 (`devdocs/tax-reports-design.md` §4.8–4.9). RPT-140: Tax Summary Subtotal by Category (default), Tax line, Account, Payee, Tag, Month, Quarter, Year, or none; no INCOME/EXPENSES/TRANSFERS sections except by Category. Subtotal by and Sort by on the report bar; column headings sort. New Tax Summary reports default to Last year, Account/Date; saved ones keep theirs. No schema change. **API change:** `ReportSettings.tax_group`, new type `TaxGroup`. |
 | 0.7.13 | 2026-10-03 | POS-040: an expanded account row keeps its rolled-up Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss, and Day %. No schema change. No API change. |

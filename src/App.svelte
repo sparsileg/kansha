@@ -50,7 +50,7 @@
   import { viewState } from "./lib/state/view.svelte";
   import { windowState } from "./lib/state/windows.svelte";
   import Calendar from "./views/Calendar.svelte";
-  import Dashboard from "./views/Dashboard.svelte";
+  import Insights from "./views/Insights.svelte";
   import Investments from "./views/Investments.svelte";
   import EmptyBook from "./views/EmptyBook.svelte";
   import Manage from "./views/Manage.svelte";
@@ -108,7 +108,7 @@
   });
 
   const views: Record<string, Component> = {
-    dashboard: Dashboard,
+    dashboard: Insights,
     account: Account,
     manage: Manage,
     search: Search,
@@ -245,7 +245,8 @@
     flex-direction: row-reverse;
   }
   main {
-    padding: 1rem;
+    /* Less on top: the Accounts bar above makes up the rest. */
+    padding: 0.5rem 1rem 1rem;
     flex: 1;
     min-width: 0;
     min-height: 0;

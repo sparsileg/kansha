@@ -23,6 +23,9 @@ export interface ViewParams {
   account?: number;
   /** The "window" view: which window (windows.svelte.ts). */
   window?: number;
+  /** The Insights view ("dashboard"): which insight's tab; the first
+   * when absent. */
+  insight?: number;
 }
 
 interface Entry {

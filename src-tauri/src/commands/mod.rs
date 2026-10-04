@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod book;
 pub mod import;
+pub mod insights;
 pub mod invest;
 pub mod ledger;
 pub mod lists;

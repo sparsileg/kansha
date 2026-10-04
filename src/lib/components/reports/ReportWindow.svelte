@@ -251,7 +251,6 @@
       Date range
       <select value={st.range.preset} onchange={(e) => quickRange(e.currentTarget)}>
         {#each presetGroups(st.kind, st.range.preset) as group, i (i)}
-          {#if i > 0}<hr />{/if}
           {#each group as [v, label] (v)}<option value={v}>{v === "custom" ? `${label}…` : label}</option>{/each}
         {/each}
       </select>

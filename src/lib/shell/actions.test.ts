@@ -26,6 +26,7 @@ import { statusState } from "../state/status.svelte";
 import { downloadPrices, isCurrent, runAction, undoLast } from "./actions";
 import { windowState } from "../state/windows.svelte";
 import { reportState } from "../state/reports.svelte";
+import { viewState } from "../state/view.svelte";
 import type { SavedReport } from "../types/bindings";
 
 const c = vi.mocked(commands, true);
@@ -86,6 +87,26 @@ describe("Tools > Investments", () => {
     expect(windowState.shownKind).toBe("investments");
     expect(isCurrent("tools.investments")).toBe(true);
     expect(isCurrent("view.investments")).toBe(true);
+  });
+});
+
+describe("Tools > Insights (INS-010)", () => {
+  it("opens the Insights view at its first tab, as the nav bar's Insights does", () => {
+    viewState.reset();
+    viewState.navigate("manage", { tab: "tags" });
+    runAction("tools.insights");
+    expect(viewState.current).toBe("dashboard");
+    expect(viewState.params).toEqual({});
+    expect(isCurrent("tools.insights")).toBe(true);
+    expect(isCurrent("home")).toBe(true);
+  });
+
+  it("a nav bar insight opens its own tab", () => {
+    viewState.reset();
+    runAction("insight:3");
+    expect(viewState.params).toEqual({ insight: 3 });
+    expect(isCurrent("insight:3")).toBe(true);
+    expect(isCurrent("insight:4")).toBe(false);
   });
 });
 

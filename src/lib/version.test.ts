@@ -16,7 +16,7 @@ describe("version", () => {
     expect({ pkg, tauri, cargo }).toEqual({ pkg, tauri: pkg, cargo: pkg });
   });
 
-  it("is 0.8.0", () => {
-    expect((JSON.parse(PACKAGE) as { version: string }).version).toBe("0.8.0");
+  it("is 0.9.0", () => {
+    expect((JSON.parse(PACKAGE) as { version: string }).version).toBe("0.9.0");
   });
 });

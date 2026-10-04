@@ -1,8 +1,9 @@
 // What the navigation bar can hold, and the pure list operations the
-// "Navigation Bar" dialog uses. An item is a menu action, Home, or an
-// account: everything that can be run has an id (see actions.ts). No I/O.
+// "Navigation Bar" dialog uses. An item is a menu action, Insights, an
+// insight, or an account: everything that can be run has an id (see
+// actions.ts). No I/O.
 
-import type { Account } from "../types/bindings";
+import type { Account, Insight } from "../types/bindings";
 import { MENUS, leafItems } from "./menus";
 
 export interface NavEntry {
@@ -15,7 +16,9 @@ export interface NavEntry {
   disabled?: string;
 }
 
+/** The Insights view (once Home); the id is kept so saved bars work. */
 export const HOME_ID = "home";
+export const INSIGHT_PREFIX = "insight:";
 export const INVESTMENTS_ID = "view.investments";
 export const DEFAULT_NAV = [HOME_ID, "tools.reminders", "tools.calendar", "tools.reconcile", INVESTMENTS_ID];
 
@@ -47,11 +50,11 @@ const NAV_LABEL: Record<string, string> = {
 
 const plain = (label: string) => label.replace(/…$/, "");
 
-/** Everything that can go on the bar: Home, the investments view, every
- * menu item, and every account. */
-export function navCatalog(accounts: Account[]): NavEntry[] {
+/** Everything that can go on the bar: Insights, the investments view,
+ * every menu item, every insight, and every account. */
+export function navCatalog(accounts: Account[], insights: Insight[] = []): NavEntry[] {
   const out: NavEntry[] = [
-    { id: HOME_ID, label: "Home", group: "General" },
+    { id: HOME_ID, label: "Insights", group: "General" },
     { id: INVESTMENTS_ID, label: "Investments", group: "General" },
   ];
   for (const menu of MENUS) {
@@ -63,6 +66,9 @@ export function navCatalog(accounts: Account[]): NavEntry[] {
         disabled: item.disabled,
       });
     }
+  }
+  for (const i of insights) {
+    out.push({ id: `${INSIGHT_PREFIX}${i.id}`, label: i.name, group: "Insights" });
   }
   for (const a of accounts) {
     out.push({ id: `account:${a.id}`, label: a.name, group: "Accounts" });

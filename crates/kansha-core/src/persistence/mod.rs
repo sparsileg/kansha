@@ -10,6 +10,7 @@ pub mod audit;
 pub mod backup;
 pub mod categories;
 pub mod imports;
+pub mod insights;
 pub mod integrity;
 pub mod invest;
 pub mod ledger;

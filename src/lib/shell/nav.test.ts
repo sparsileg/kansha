@@ -87,7 +87,7 @@ describe("startupChoices", () => {
     ] as never;
     const choices = startupChoices();
     expect(choices.map((c) => c.label)).toEqual([
-      "Dashboard",
+      "Insights",
       "Investments",
       "Reminders",
       "Calendar",

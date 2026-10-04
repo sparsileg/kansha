@@ -1,47 +1,93 @@
 <script lang="ts">
-  // The household dashboard (DSH-010 … DSH-030): net worth and its parts,
-  // this month's income and spending, a year of net worth, what is due,
-  // and what needs attention, each a card (`lib/dashboard/cards.ts`). The
-  // gear chooses which cards show and their order (DSH-040). Every figure
-  // comes from Rust.
+  // Insights (INS-010 … INS-040): named tabs of cards, in the sheet's
+  // title band. The first is the household dashboard (DSH-010 … DSH-030):
+  // net worth and its parts, this month's income and spending, a year of
+  // net worth, what is due, and what needs attention, each a card
+  // (`lib/dashboard/cards.ts`). The gear acts on the tab shown:
+  // Customize…, Create new insight…, Move left/right, Delete insight….
+  // Every figure comes from Rust.
   import { onMount, type Snippet } from "svelte";
   import { call, commands } from "../lib/api";
   import ContextMenu from "../lib/components/ContextMenu.svelte";
-  import CustomizeDashboardModal from "../lib/components/CustomizeDashboardModal.svelte";
   import GearButton from "../lib/components/GearButton.svelte";
+  import InsightModal from "../lib/components/InsightModal.svelte";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
-  import { parseLayout, shownCards, storedLayout, type CardId, type CardLayout } from "../lib/dashboard/cards";
+  import { cardsOf, type CardId } from "../lib/dashboard/cards";
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
-  import { openAccount } from "../lib/shell/nav";
+  import { goHome, openAccount, openInsight } from "../lib/shell/nav";
+  import { confirmState } from "../lib/state/confirm.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { reportState } from "../lib/state/reports.svelte";
+  import { statusState } from "../lib/state/status.svelte";
+  import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { Dashboard } from "../lib/types/bindings";
+  import type { Dashboard, Insight } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
   let data = $state<Dashboard | null>(null);
   let error = $state<string | null>(null);
-  let version = $state("");
   let menu = $state<{ x: number; y: number } | null>(null);
-  let customizing = $state(false);
+  /** The insight being customized, or "new" for Create: its tab shows
+   * until Save makes it or Cancel drops it (INS-030). */
+  let editing = $state<Insight | "new" | null>(null);
 
-  const layout = $derived(parseLayout(bookSettings.value.dashboard_cards));
-  const cards = $derived(shownCards(layout));
+  const insights = $derived(listsState.insights);
+  const selected = $derived(insights.find((i) => i.id === viewState.params.insight) ?? insights[0] ?? null);
+  const at = $derived(selected === null ? -1 : insights.indexOf(selected));
+  const creating = $derived(editing === "new");
+  const cards = $derived(creating || selected === null ? [] : cardsOf(selected.cards));
 
   function openMenu(e: MouseEvent) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     menu = menu ? null : { x: r.right, y: r.bottom };
   }
 
-  function saveLayout(l: CardLayout) {
-    customizing = false;
-    void bookSettings.update({ dashboard_cards: storedLayout(l) });
+  async function save(name: string, ids: string[]) {
+    if (editing === "new") {
+      const made = await call(commands.insightCreate(name, ids));
+      await listsState.loadInsights();
+      editing = null;
+      openInsight(made.id);
+    } else if (editing !== null) {
+      await call(commands.insightUpdate(editing.id, name, ids));
+      await listsState.loadInsights();
+      editing = null;
+    }
   }
 
+  async function move(delta: -1 | 1) {
+    if (selected === null) return;
+    try {
+      listsState.insights = await call(commands.insightMove(selected.id, delta));
+    } catch (e) {
+      statusState.show(e instanceof Error ? e.message : String(e), "alert");
+    }
+  }
+
+  async function remove() {
+    const target = selected;
+    if (target === null) return;
+    if (!(await confirmState.ask(`Delete the insight “${target.name}”? Its cards stay available to other insights.`))) return;
+    try {
+      await call(commands.insightDelete(target.id));
+      await listsState.loadInsights();
+      goHome();
+    } catch (e) {
+      statusState.show(e instanceof Error ? e.message : String(e), "alert");
+    }
+  }
+
+  const menuItems = $derived([
+    { label: "Customize…", action: () => (editing = selected), disabled: selected === null },
+    { label: "Create new insight…", action: () => (editing = "new") },
+    { label: "Move left", action: () => void move(-1), disabled: at <= 0 },
+    { label: "Move right", action: () => void move(1), disabled: at < 0 || at >= insights.length - 1 },
+    { label: "Delete insight…", action: () => void remove(), disabled: insights.length <= 1 },
+  ]);
+
   onMount(async () => {
-    version = await commands.appVersion();
     try {
       // Days ahead for upcoming scheduled items (DSH-020).
       data = await call(commands.dashboard(bookSettings.value.upcoming_days));
@@ -69,19 +115,27 @@
 
 <section class="dash view-sheet" aria-labelledby="dash-title">
   <header class="view-title">
-    <h1 id="dash-title">Dashboard</h1>
-    <GearButton label="Dashboard options" onclick={openMenu} />
+    <h1 id="dash-title">Insights</h1>
+    <div class="tabs" role="tablist" aria-labelledby="dash-title">
+      {#each insights as i (i.id)}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!creating && i.id === selected?.id}
+          onclick={() => openInsight(i.id)}>{i.name}</button
+        >
+      {/each}
+      {#if creating}<button type="button" role="tab" aria-selected="true">New insight</button>{/if}
+    </div>
+    <GearButton label="Insight options" onclick={openMenu} />
   </header>
   {#if menu}
-    <ContextMenu
-      x={menu.x}
-      y={menu.y}
-      onclose={() => (menu = null)}
-      items={[{ label: "Customize…", action: () => (customizing = true) }]}
-    />
+    <ContextMenu x={menu.x} y={menu.y} onclose={() => (menu = null)} items={menuItems} />
   {/if}
-  {#if customizing}
-    <CustomizeDashboardModal {layout} onsave={saveLayout} onclose={() => (customizing = false)} />
+  {#if editing === "new"}
+    <InsightModal title="New insight" name="" cards={[]} onsave={save} onclose={() => (editing = null)} />
+  {:else if editing !== null}
+    <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onclose={() => (editing = null)} />
   {/if}
   <div class="view-body">
     {#if error}<p class="err" role="alert">{error}</p>{/if}
@@ -95,11 +149,10 @@
           </article>
         {/each}
       </div>
-      {#if cards.length === 0}<p class="sub">No cards chosen. Use the gear to choose some.</p>{/if}
+      {#if cards.length === 0}<p class="sub">No cards on this insight. Use the gear’s Customize… to add some.</p>{/if}
     {:else if !error}
       <p class="sub">Loading…</p>
     {/if}
-    <p class="ver">Kansha {version}</p>
   </div>
 </section>
 
@@ -177,7 +230,38 @@
 {/snippet}
 
 <style>
-  /* Cards (base.css) inside the dashboard's sheet. */
+  /* The tabs share the title band with the heading and the gear. */
+  section.view-sheet > header.view-title > h1 {
+    flex: none;
+  }
+  .tabs {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  [role="tab"] {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0.15rem 0.6rem;
+    cursor: pointer;
+  }
+  [role="tab"]:hover {
+    border-color: var(--line-soft);
+  }
+  /* The shown tab: the sheet's own background, an outline, and bold
+     text, so it does not rest on color alone. */
+  [role="tab"][aria-selected="true"] {
+    background: var(--row-bg);
+    color: var(--fg);
+    border-color: var(--line);
+    font-weight: 700;
+  }
+  /* Cards (base.css) inside the insight's sheet. */
   .cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
@@ -239,10 +323,6 @@
   }
   .warn .link {
     margin: 0;
-  }
-  .ver {
-    opacity: 0.6;
-    font-size: var(--fs-register);
   }
   .err {
     color: var(--bad);

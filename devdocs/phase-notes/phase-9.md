@@ -777,3 +777,26 @@ clear and the ink kept as alpha (soft edges kept), trimmed, and
 resized to 390×866. It is still drawn as a mask in `--fg`. Widths are
 cut so the heights stay as before (the new mark is narrower). Not
 seen in the app yet.
+
+## Insights, step 1 (spec 0.7.16, 2026-10-04)
+
+INS-010 … INS-040, DSH-040. Migration 0014: table `insight(id, name
+UNIQUE NOCASE, position, cards JSON array, created_at)`; the setting
+`dashboard_cards` becomes the insight "Dashboard" (shown cards in its
+order, unlisted cards after, hidden left out; the five card IDs are in
+the SQL) and is deleted; `audit_log` rebuilt for entity `insight`.
+`Settings.dashboard_cards` removed. Core: `insights.rs` (types),
+`persistence/insights.rs` (`list`, `get`, `insert`, `update`,
+`delete` refuses the last, `move_by` ±1 renumbers positions; one
+audit entry each). Commands `insight_*` in `commands/insights.rs`.
+UI: `views/Dashboard.svelte` → `views/Insights.svelte` (tabs in the
+title band, gear menu acting on the shown tab); `InsightModal.svelte`
+replaces `CustomizeDashboardModal.svelte`; `cards.ts` cut to the
+catalog plus `cardsOf`, `cardsNotIn`. `listsState.insights` loads with
+the lists. The view id stays `dashboard` and the nav id `home` (saved
+bars and the startup setting keep working); label "Insights". The
+shown tab is `ViewParams.insight` (absent = first). Nav item
+`insight:<id>`; `tools.insights` after Investments. Tests: Rust
+integration `insights` (3), migration 0014; vitest Insights view
+(12), cards, navitems, actions, menus. Not seen in the app yet.
+Deferred: more cards; per-insight card sizes.

@@ -32,22 +32,25 @@ beforeEach(() => {
 });
 
 describe("AccountBar", () => {
-  it("open: the Accounts button closes the panel, and the choice is kept", async () => {
+  it("the triangle closes the open panel and opens it again, kept open", async () => {
     render(AccountBar);
-    const head = screen.getByRole("button", { name: "Accounts" });
-    expect(head.getAttribute("aria-expanded")).toBe("true");
-    await fireEvent.click(head);
+    await fireEvent.click(screen.getByRole("button", { name: "Close the account list" }));
     expect(settingsState.accountPanelOpen).toBe(false);
     expect(bookSettings.value.account_panel_open).toBe(false);
-    expect(screen.getByRole("button", { name: "Accounts" }).getAttribute("aria-expanded")).toBe("false");
+    await fireEvent.click(screen.getByRole("button", { name: "Keep the account list open" }));
+    expect(settingsState.accountPanelOpen).toBe(true);
+    expect(bookSettings.value.account_panel_open).toBe(true);
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("closed: Accounts drops the list down; picking one opens it and closes the drop-down", async () => {
     settingsState.setAccountPanelOpen(false);
     render(AccountBar);
-    await fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
+    const head = screen.getByRole("button", { name: "Accounts" });
+    await fireEvent.click(head);
+    expect(head.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("menu", { name: "Accounts" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Keep open" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Old/ })).toBeNull(); // closed accounts hidden
     await fireEvent.click(screen.getByLabelText("Show closed accounts"));
     expect(screen.getByRole("button", { name: /Old \(closed\)/ })).toBeTruthy();
@@ -58,12 +61,10 @@ describe("AccountBar", () => {
     expect(settingsState.accountPanelOpen).toBe(false); // still closed
   });
 
-  it("the drop-down can bring the panel back", async () => {
-    settingsState.setAccountPanelOpen(false);
+  it("open: Accounts is only a label; no drop-down", () => {
     render(AccountBar);
-    await fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Keep open" }));
-    expect(settingsState.accountPanelOpen).toBe(true);
+    expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+    expect(screen.getByText("Accounts")).toBeTruthy();
     expect(screen.queryByRole("menu")).toBeNull();
   });
 

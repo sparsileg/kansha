@@ -13,6 +13,7 @@ pub mod csv;
 pub mod date;
 pub mod error;
 pub mod import;
+pub mod insights;
 pub mod integrity;
 pub mod invest;
 pub mod ledger;

@@ -212,7 +212,6 @@
         Date range
         <select value={draft.range.preset} onchange={(e) => setPreset(e.currentTarget.value)}>
           {#each presetGroups(draft.kind, draft.range.preset) as group, i (i)}
-            {#if i > 0}<hr />{/if}
             {#each group as [v, label] (v)}<option value={v}>{label}</option>{/each}
           {/each}
         </select>

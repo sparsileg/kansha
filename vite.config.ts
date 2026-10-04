@@ -23,5 +23,6 @@ export default defineConfig(async () => ({
     globals: true,
     // Keep stylesheet contents, so tests can read the theme files (?raw).
     css: true,
+    setupFiles: ["src/test-setup.ts"],
   },
 }));

@@ -26,11 +26,11 @@ describe("NavBar", () => {
     expect(await screen.findByRole("button", { name: "Reminders 3" })).toBeTruthy();
   });
 
-  it("quick jumps navigate; Home goes to the dashboard, not the startup setting", async () => {
+  it("quick jumps navigate; Insights goes to the Insights view, not the startup setting", async () => {
     render(NavBar);
     await fireEvent.click(screen.getByRole("button", { name: "Reminders" }));
     expect(windowState.shownKind).toBe("scheduled");
-    await fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Insights" }));
     expect(viewState.current).toBe("dashboard");
     expect(windowState.shownKind).toBeNull();
   });
@@ -73,7 +73,7 @@ describe("NavBar contents come from the setting", () => {
     render(NavBar);
     await fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
     expect(screen.getByRole("button", { name: "Calendar" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("button", { name: "Home" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("button", { name: "Insights" }).getAttribute("aria-current")).toBeNull();
   });
 });
 

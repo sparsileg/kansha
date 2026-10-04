@@ -185,6 +185,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::report_folder_delete,
             commands::reports::tax_line_list,
             commands::reports::dashboard,
+            commands::insights::insight_list,
+            commands::insights::insight_create,
+            commands::insights::insight_update,
+            commands::insights::insight_delete,
+            commands::insights::insight_move,
             commands::reports::net_worth,
             commands::pdf::report_save_pdf,
         ])

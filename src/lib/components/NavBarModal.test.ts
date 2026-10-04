@@ -9,6 +9,8 @@ import { settingsState } from "../state/settings.svelte";
 
 const shown = () => within(screen.getByLabelText("On the bar (left to right)")).getAllByRole("option").map((o) => o.textContent?.trim());
 const available = () => within(screen.getByLabelText("Available")).getAllByRole("option").map((o) => o.textContent?.trim());
+const availableIds = () =>
+  within(screen.getByLabelText("Available")).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
 const choose = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
 beforeEach(() => {
@@ -21,27 +23,27 @@ beforeEach(() => {
 describe("Navigation bar dialog", () => {
   it("lists what is on the bar in order, and what else is available", () => {
     render(NavBarModal);
-    expect(shown()).toEqual(["Home", "Calendar"]);
+    expect(shown()).toEqual(["Insights", "Calendar"]);
     expect(available()).toContain("Checking");
     expect(available()).toContain("Reconcile");
-    expect(available()).not.toContain("Home");
+    expect(availableIds()).not.toContain("home");
   });
 
   it("adds, moves, and removes; Save keeps the result and closes", async () => {
     render(NavBarModal);
     await choose("Available", "account:1");
     await fireEvent.click(screen.getByRole("button", { name: "Add ›" }));
-    expect(shown()).toEqual(["Home", "Calendar", "Checking"]);
+    expect(shown()).toEqual(["Insights", "Calendar", "Checking"]);
     expect(available()).not.toContain("Checking");
     // The added item is selected on the right; move it to the front.
     await fireEvent.click(screen.getByRole("button", { name: /Move up/ }));
     await fireEvent.click(screen.getByRole("button", { name: /Move up/ }));
-    expect(shown()).toEqual(["Checking", "Home", "Calendar"]);
+    expect(shown()).toEqual(["Checking", "Insights", "Calendar"]);
     expect((screen.getByRole("button", { name: /Move up/ }) as HTMLButtonElement).disabled).toBe(true);
     await choose("On the bar (left to right)", "home");
     await fireEvent.click(screen.getByRole("button", { name: "‹ Remove" }));
     expect(shown()).toEqual(["Checking", "Calendar"]);
-    expect(available()).toContain("Home");
+    expect(availableIds()).toContain("home");
     await fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(settingsState.navItems).toEqual(["account:1", "tools.calendar"]);
     expect(parseNav(bookSettings.value.nav_items ?? "")).toEqual(["account:1", "tools.calendar"]);
@@ -60,13 +62,13 @@ describe("Navigation bar dialog", () => {
   it("Reset to default restores the standard bar", async () => {
     render(NavBarModal);
     await fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
-    expect(shown()).toEqual(["Home", "Reminders", "Calendar", "Reconcile", "Investments"]);
+    expect(shown()).toEqual(["Insights", "Reminders", "Calendar", "Reconcile", "Investments"]);
   });
 
   it("Up and Down need a selection; a deleted account is dropped on Save", async () => {
     settingsState.setNavItems(["home", "account:99"]);
     render(NavBarModal);
-    expect(shown()).toEqual(["Home"]);
+    expect(shown()).toEqual(["Insights"]);
     expect((screen.getByRole("button", { name: /Move down/ }) as HTMLButtonElement).disabled).toBe(true);
     await fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(settingsState.navItems).toEqual(["home"]);

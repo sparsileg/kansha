@@ -10,7 +10,7 @@
   let left = $state("");
   let right = $state("");
 
-  const catalog = $derived(navCatalog(listsState.accounts));
+  const catalog = $derived(navCatalog(listsState.accounts, listsState.insights));
   const shown = $derived(resolveNav(draft, catalog));
   const shownIds = $derived(shown.map((e) => e.id));
   const available = $derived(catalog.filter((e) => !shownIds.includes(e.id)));

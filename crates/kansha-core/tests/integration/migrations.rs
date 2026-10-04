@@ -17,6 +17,7 @@ const TABLES: &[&str] = &[
     "audit_log",
     "category",
     "import_batch",
+    "insight",
     "investment_txn",
     "lot",
     "lot_adjustment",
@@ -892,4 +893,60 @@ fn migration_0013_files_saved_reports_in_unfiled_and_keeps_the_audit_log() {
         c.execute("UPDATE saved_report SET folder_id = 99", [])
             .is_err()
     );
+}
+
+#[test]
+fn migration_0014_turns_the_dashboard_cards_into_the_first_insight() {
+    let clock = clock();
+    let cards_after = |setting: Option<&str>| -> String {
+        let mut db = Db::open_in_memory_at(&clock, 13).unwrap();
+        if let Some(v) = setting {
+            db.conn()
+                .execute(
+                    "INSERT INTO setting (key, value) VALUES ('dashboard_cards', ?1)",
+                    [v],
+                )
+                .unwrap();
+        }
+        assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+        assert_eq!(count(&db, "setting WHERE key = 'dashboard_cards'"), 0);
+        db.conn()
+            .query_row(
+                "SELECT cards FROM insight WHERE name = 'Dashboard' AND position = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let all = r#"["net_worth","this_month","net_worth_trend","upcoming","attention"]"#;
+    assert_eq!(cards_after(None), all);
+    assert_eq!(cards_after(Some("not json")), all);
+    // Shown cards in their order; repeats and unknown IDs dropped; cards
+    // the list lacked (net_worth_trend) after them; hidden ones left out.
+    assert_eq!(
+        cards_after(Some(
+            r#"{"order":["attention","zzz","net_worth","attention","this_month","upcoming"],
+                "hidden":["this_month","upcoming"]}"#
+        )),
+        r#"["attention","net_worth","net_worth_trend"]"#
+    );
+    assert_eq!(
+        cards_after(Some(
+            r#"{"order":[],"hidden":["net_worth","this_month","net_worth_trend","upcoming","attention"]}"#
+        )),
+        "[]"
+    );
+
+    // The audit log takes insights and is still append-only.
+    let mut db = Db::open_in_memory_at(&clock, 13).unwrap();
+    db.migrate(&clock).unwrap();
+    let c = db.conn();
+    c.execute(
+        "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+             VALUES ('2026-01-01T00:00:00Z', 'insight', 1, 'create', '{}', 'ui')",
+        [],
+    )
+    .unwrap();
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+    assert!(c.execute("UPDATE insight SET cards = '{}'", []).is_err());
 }

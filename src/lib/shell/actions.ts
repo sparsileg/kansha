@@ -12,18 +12,20 @@ import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
 import { statusState, type StatusKind } from "../state/status.svelte";
 import { viewState } from "../state/view.svelte";
-import { exitApp, goHome, openAccount, openReconcile } from "./nav";
+import { exitApp, goHome, openAccount, openInsight, openReconcile } from "./nav";
 import { openPanel } from "./panels";
 import { windowState } from "../state/windows.svelte";
-import { HOME_ID, INVESTMENTS_ID } from "./navitems";
+import { HOME_ID, INSIGHT_PREFIX, INVESTMENTS_ID } from "./navitems";
 import { SAVED_PREFIX } from "./menus";
 import type { BackupResult } from "../types/bindings";
 import { bookState } from "../state/book.svelte";
 import { openBookFile, RECENT_PREFIX, switchBook } from "./books";
 
 export function runAction(id: string): void {
-  if (id === HOME_ID) {
+  if (id === HOME_ID || id === "tools.insights") {
     goHome();
+  } else if (id.startsWith(INSIGHT_PREFIX)) {
+    openInsight(Number(id.slice(INSIGHT_PREFIX.length)));
   } else if (id.startsWith("account:")) {
     void openAccount(Number(id.slice("account:".length)));
   } else if (id.startsWith(RECENT_PREFIX)) {
@@ -182,7 +184,14 @@ export function isCurrent(id: string): boolean {
   if (id.startsWith("account:")) {
     return view === "account" && registerState.accountId === Number(id.slice("account:".length));
   }
+  if (id.startsWith(INSIGHT_PREFIX)) {
+    const insight = Number(id.slice(INSIGHT_PREFIX.length));
+    return view === "dashboard" && windowState.shown === null && viewState.params.insight === insight;
+  }
   switch (id) {
+    case HOME_ID:
+    case "tools.insights":
+      return view === "dashboard" && windowState.shown === null;
     case "tools.accounts":
       return windowState.shownKind === "accounts";
     case "tools.calendar":

@@ -8,12 +8,18 @@ const accounts = [
 ] as never;
 
 describe("navCatalog", () => {
-  const catalog = navCatalog(accounts);
+  const insights = [
+    { id: 1, name: "Status", cards: [] },
+    { id: 4, name: "Spending", cards: [] },
+  ];
+  const catalog = navCatalog(accounts, insights);
   const byId = (id: string) => catalog.find((e) => e.id === id);
 
-  it("holds Home, the investments view, every menu item, and every account", () => {
+  it("holds Insights, the investments view, every menu item, every insight, and every account", () => {
     expect(byId("reports.spending")).toBeUndefined(); // a submenu, not an action
-    expect(byId("home")?.label).toBe("Home");
+    expect(byId("home")?.label).toBe("Insights");
+    expect(byId("tools.insights")?.label).toBe("Insights");
+    expect(byId("insight:4")).toMatchObject({ label: "Spending", group: "Insights" });
     expect(byId("view.investments")?.disabled).toBeUndefined();
     for (const m of MENUS) for (const i of leafItems(m.items)) expect(byId(i.id), i.id).toBeTruthy();
     expect(byId("account:2")).toMatchObject({ label: "Savings", group: "Accounts" });

@@ -12,6 +12,7 @@ vi.mock("../api", async (orig) => {
       tagList: vi.fn(),
       payeeList: vi.fn(),
       taxLineList: vi.fn(),
+      insightList: vi.fn(),
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
     },
@@ -53,6 +54,7 @@ describe("listsState", () => {
     c.tagList.mockReturnValue(ok([]));
     c.payeeList.mockReturnValue(ok([]));
     c.taxLineList.mockReturnValue(ok([]));
+    c.insightList.mockReturnValue(ok([]));
     expect(listsState.isEmptyBook).toBe(false);
     await listsState.loadAll();
     expect(listsState.today).toBe("2026-09-24");
@@ -73,6 +75,7 @@ describe("listsState", () => {
     c.tagList.mockReturnValue(ok([]));
     c.payeeList.mockReturnValue(ok([]));
     c.taxLineList.mockReturnValue(ok([]));
+    c.insightList.mockReturnValue(ok([]));
     await listsState.loadAll();
     expect(listsState.error).toBe("boom");
     expect(listsState.loaded).toBe(true);

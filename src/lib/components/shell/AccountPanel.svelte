@@ -2,6 +2,7 @@
   import { formatMoney } from "../../format/money";
   import { listsState } from "../../state/lists.svelte";
   import { settingsState } from "../../state/settings.svelte";
+  import { drawer } from "../../shell/motion";
   import AccountList from "./AccountList.svelte";
 
   const MIN = 160;
@@ -46,7 +47,7 @@
   }
 </script>
 
-<aside class="panel" class:right bind:this={panel} aria-label="Accounts">
+<aside class="panel" class:right bind:this={panel} aria-label="Accounts" transition:drawer>
   <!-- Drag the edge to change the width; arrows nudge it, Home or a double
        click restores the stock width. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -66,27 +67,45 @@
     onkeydown={key}
     ondblclick={() => settingsState.setAccountPanelWidth(0)}
   ></div>
-  <div class="list"><AccountList /></div>
-  <!-- Net worth today, from Rust (ACCT-240). -->
-  <footer>
-    <span>Net Worth</span>
-    <span class="num" class:neg={listsState.netWorth?.startsWith("-")}>
-      {listsState.netWorth === null ? "—" : formatMoney(listsState.netWorth)}
-    </span>
-  </footer>
+  <div class="inner">
+    <div class="list"><AccountList /></div>
+    <!-- Net worth today, from Rust (ACCT-240). -->
+    <footer>
+      <span>Net Worth</span>
+      <span class="num" class:neg={listsState.netWorth?.startsWith("-")}>
+        {listsState.netWorth === null ? "—" : formatMoney(listsState.netWorth)}
+      </span>
+    </footer>
+  </div>
 </aside>
 
 <style>
-  /* The header above it (the Accounts bar's toggle) takes the same width. */
+  /* The header above it (the Accounts bar) takes the same width. It stops
+     short of the window's bottom by the view's padding, level with the
+     sheet beside it. */
   .panel {
     box-sizing: border-box;
     width: var(--account-panel-w);
     flex: none;
     display: flex;
-    flex-direction: column;
+    justify-content: flex-end;
+    margin-bottom: 1rem;
     border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
     background: var(--panel-bg);
     position: relative;
+  }
+  /* Full width even while the panel slides (motion.ts): held against the
+     inner edge, it comes out from under the outer edge like a drawer. */
+  .inner {
+    box-sizing: border-box;
+    width: calc(var(--account-panel-w) - 1px);
+    flex: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel.right {
+    justify-content: flex-start;
   }
   /* A strip over the panel's inner edge, the register's side. */
   .grip {

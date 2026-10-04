@@ -3,6 +3,7 @@
 
 const ICONS: Record<string, string> = {
   home: "M2 8l6-5 6 5M4 7v6.5h8V7",
+  insight: "M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z",
   "tools.reminders": "M4 11V7a4 4 0 018 0v4l1.2 1.2H2.8zM6.5 14a1.5 1.5 0 003 0",
   "tools.calendar": "M2 6.5h12M5 1.5v3M11 1.5v3M3 3h10a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1z",
   "tools.reconcile": "M3 8.5l3.5 3.5L13 4.5",
@@ -23,6 +24,7 @@ export const SPLIT_ICON =
 export function navIcon(id: string): string {
   if (ICONS[id]) return ICONS[id];
   if (id.startsWith("account:")) return ICONS.account;
+  if (id.startsWith("insight:") || id === "tools.insights") return ICONS.insight;
   if (id === "tools.payees" || id === "tools.categories" || id === "tools.tags") return ICONS.tag;
   if (id.startsWith("reports.")) return ICONS.report;
   if (id.startsWith("edit.")) return ICONS.gear;

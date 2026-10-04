@@ -66,9 +66,6 @@ pub struct Settings {
     /// The Investments screen's named views, as the UI's JSON; `None` =
     /// default.
     pub invest_views: Option<String>,
-    /// Which dashboard cards show and in what order (DSH-040), as the UI's
-    /// JSON; `None` = every card, in the default order.
-    pub dashboard_cards: Option<String>,
     /// A price older than this many days is stale (SET-040), unless the
     /// security sets its own.
     pub stale_price_days: i64,
@@ -121,7 +118,6 @@ impl Default for Settings {
             account_panel_side: PanelSide::Left,
             account_panel_width: 0,
             invest_views: None,
-            dashboard_cards: None,
             stale_price_days: DEFAULT_STALE_DAYS,
             default_lot_method: LotMethod::Fifo,
             price_download: false,
@@ -187,7 +183,6 @@ pub fn load(conn: &Connection) -> Result<Settings> {
             _ => d.account_panel_width,
         },
         invest_views: get_text(conn, "invest_views")?,
-        dashboard_cards: get_text(conn, "dashboard_cards")?,
         stale_price_days: get_in(
             conn,
             "stale_price_days",
@@ -285,7 +280,6 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         &s.account_panel_width.to_string(),
     )?;
     put_text(tx, "invest_views", s.invest_views.as_deref())?;
-    put_text(tx, "dashboard_cards", s.dashboard_cards.as_deref())?;
     repo::set(tx, "stale_price_days", &s.stale_price_days.to_string())?;
     repo::set(tx, "default_lot_method", s.default_lot_method.as_str())?;
     repo::set(tx, "price_download", &s.price_download.to_string())?;

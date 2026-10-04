@@ -30,7 +30,6 @@ vi.mock("./lib/api", async (orig) => {
     account_panel_side: "left",
     account_panel_width: 0,
     invest_views: null,
-    dashboard_cards: null,
     stale_price_days: 7,
     default_lot_method: "fifo",
     price_download: false,
@@ -130,6 +129,7 @@ vi.mock("./lib/api", async (orig) => {
       tagList: () => ok([]),
       payeeList: () => ok([]),
       taxLineList: () => ok([]),
+      insightList: () => ok([]),
       dashboard: () =>
         Promise.resolve({
           status: "error" as const,
@@ -182,7 +182,7 @@ describe("App shell", () => {
     for (const m of ["File", "Edit", "Tools", "Reports", "Help"]) {
       expect(screen.getByRole("button", { name: m })).toBeTruthy();
     }
-    expect(screen.getByRole("button", { name: "Home" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Insights" })).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: "Search" })).toHaveProperty(
       "disabled",
       false,
@@ -204,7 +204,7 @@ describe("App shell", () => {
     render(App);
     await fireEvent.click(await account());
     await waitFor(() => expect(screen.getByRole("grid")).toBeTruthy());
-    await fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Insights" }));
     await waitFor(() => expect(screen.queryByRole("grid")).toBeNull());
     await fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "Categories" }));

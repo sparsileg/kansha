@@ -29,6 +29,7 @@ text_enum! {
         ImportBatch = "import_batch",
         SavedReport = "saved_report",
         ReportFolder = "report_folder",
+        Insight = "insight",
     }
 }
 

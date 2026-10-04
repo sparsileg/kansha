@@ -9,7 +9,7 @@
   import { viewState } from "../../state/view.svelte";
 
   // The buttons and their order are the user's (Edit > Navigation Bar).
-  const entries = $derived(resolveNav(settingsState.navItems, navCatalog(listsState.accounts)));
+  const entries = $derived(resolveNav(settingsState.navItems, navCatalog(listsState.accounts, listsState.insights)));
 
   // Search: Enter shows the matches in the Search view. Inside an account
   // the search can be limited to that account.
