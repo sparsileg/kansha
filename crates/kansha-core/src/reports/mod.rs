@@ -28,7 +28,7 @@ mod tree;
 pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;
 pub use dashboard::{Dashboard, Warning, WarningKind, dashboard, net_worth};
-pub use range::{period_label, periods, resolve};
+pub use range::{period_choices, period_label, periods, resolve};
 pub use security::{
     ChartSpan, SecurityChartKind, SecurityTxn, security_chart, security_transactions, span_dates,
 };
@@ -104,9 +104,16 @@ impl ReportKind {
 }
 
 text_enum! {
-    /// Date range presets (RPT-040).
+    /// Date range presets (RPT-040). This month, quarter, and year are
+    /// no longer offered but still read in saved reports and used by
+    /// the dashboard.
     pub enum DatePreset {
         AllDates = "all_dates",
+        /// One calendar month, quarter, or year, chosen from a list
+        /// (Tax Schedule, RPT-040). `from` is its first day.
+        Monthly = "monthly",
+        Quarterly = "quarterly",
+        Yearly = "yearly",
         MonthToDate = "month_to_date",
         QuarterToDate = "quarter_to_date",
         YearToDate = "year_to_date",
@@ -185,10 +192,21 @@ text_enum! {
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct DateRange {
     pub preset: DatePreset,
-    /// `Custom` only; `None` means from the first transaction.
+    /// `Custom`: `None` means from the first transaction. Monthly,
+    /// Quarterly, Yearly: a day in the period; `None` means today's.
     pub from: Option<Date>,
     /// `Custom` only; `None` means today.
     pub to: Option<Date>,
+}
+
+/// One period offered for Monthly, Quarterly, or Yearly: its dates and
+/// its name ("Oct 2026", "Q4 2026", "2026").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct PeriodChoice {
+    pub from: Date,
+    pub to: Date,
+    pub label: String,
 }
 
 /// A range resolved against today: `from` is `None` when no transaction

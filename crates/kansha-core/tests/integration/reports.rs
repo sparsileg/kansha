@@ -575,6 +575,25 @@ fn tax_schedule_by_form_and_line_with_schedule_d() {
 }
 
 #[test]
+fn tax_schedule_for_a_chosen_year_matches_its_custom_dates() {
+    let fx = fixture();
+    let mut yearly = settings(ReportKind::TaxSchedule);
+    yearly.range = DateRange {
+        preset: DatePreset::Yearly,
+        from: Some(date("2026-01-01")),
+        to: None,
+    };
+    let mut custom = settings(ReportKind::TaxSchedule);
+    custom.range.to = Some(date("2026-12-31"));
+    let (y, c) = (run(&fx, &yearly), run(&fx, &custom));
+    assert_eq!(
+        (y.from, y.to),
+        (Some(date("2026-01-01")), date("2026-12-31"))
+    );
+    assert_eq!(text(&y), text(&c));
+}
+
+#[test]
 fn tax_summary_lists_tax_related_categories_and_mapped_transfers() {
     let fx = fixture();
     let r = run(&fx, &settings(ReportKind::TaxSummary));

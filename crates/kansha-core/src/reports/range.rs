@@ -3,7 +3,7 @@
 use chrono::{Duration, Months, NaiveDate};
 use rusqlite::Connection;
 
-use super::{DatePreset, DateRange, Interval, ResolvedRange};
+use super::{DatePreset, DateRange, Interval, PeriodChoice, ResolvedRange};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::persistence::reports as repo;
@@ -50,6 +50,10 @@ pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<Reso
     let month_start = ymd(today.year(), today.month(), 1)?;
     let (from, to) = match range.preset {
         P::AllDates => (repo::first_txn_date(conn)?, today),
+        P::Monthly | P::Quarterly | P::Yearly => {
+            let (start, end) = period_of(range.preset, range.from.unwrap_or(today))?;
+            (Some(start), end)
+        }
         P::MonthToDate => (Some(month_start), today),
         P::QuarterToDate => (Some(quarter_start(today)?), today),
         P::YearToDate => (Some(year_start), today),
@@ -91,6 +95,65 @@ pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<Reso
         ));
     }
     Ok(ResolvedRange { from, to })
+}
+
+/// The calendar month, quarter, or year (by `preset`) holding `d`.
+fn period_of(preset: DatePreset, d: Date) -> Result<(Date, Date)> {
+    match preset {
+        DatePreset::Monthly => {
+            let start = ymd(d.year(), d.month(), 1)?;
+            Ok((start, month_end(start, 0)?))
+        }
+        DatePreset::Quarterly => {
+            let start = quarter_start(d)?;
+            Ok((start, month_end(start, 2)?))
+        }
+        _ => Ok((ymd(d.year(), 1, 1)?, ymd(d.year(), 12, 31)?)),
+    }
+}
+
+fn period_interval(preset: DatePreset) -> Interval {
+    match preset {
+        DatePreset::Monthly => Interval::Month,
+        DatePreset::Quarterly => Interval::Quarter,
+        _ => Interval::Year,
+    }
+}
+
+/// The periods offered for Monthly, Quarterly, or Yearly, newest first:
+/// this month back to the same month last year (13), this quarter back
+/// to the same quarter last year (5), or the last five years with this
+/// one. The period `range.from` picks is added at the end when it is
+/// older (a saved report). Other presets have none.
+pub fn period_choices(range: &DateRange, today: Date) -> Result<Vec<PeriodChoice>> {
+    let (count, step): (u32, u32) = match range.preset {
+        DatePreset::Monthly => (13, 1),
+        DatePreset::Quarterly => (5, 3),
+        DatePreset::Yearly => (5, 12),
+        _ => return Ok(Vec::new()),
+    };
+    let interval = period_interval(range.preset);
+    let choice = |d: Date| -> Result<PeriodChoice> {
+        let (from, to) = period_of(range.preset, d)?;
+        Ok(PeriodChoice {
+            from,
+            to,
+            label: period_label(from, interval),
+        })
+    };
+    let (current, _) = period_of(range.preset, today)?;
+    let mut out = Vec::new();
+    for i in 0..count {
+        let d = Date::from_naive(sub_months(current.naive(), i * step)?);
+        out.push(choice(d)?);
+    }
+    if let Some(f) = range.from {
+        let picked = choice(f)?;
+        if !out.iter().any(|c| c.from == picked.from) {
+            out.push(picked);
+        }
+    }
+    Ok(out)
 }
 
 /// Split `from..=to` into periods. Months, quarters, half-years, and
@@ -219,6 +282,89 @@ mod tests {
         );
         // No transactions yet: all dates has no start.
         assert_eq!(r(DatePreset::AllDates).from, None);
+    }
+
+    #[test]
+    fn period_presets_resolve_to_the_chosen_period_or_todays() {
+        let today = d("2026-10-03");
+        let db = Db::open_in_memory(&FixedClock::new(today)).unwrap();
+        let r = |preset, from: Option<&str>| {
+            let x = resolve(
+                db.conn(),
+                &DateRange {
+                    preset,
+                    from: from.map(d),
+                    to: None,
+                },
+                today,
+            )
+            .unwrap();
+            format!("{}..{}", x.from.unwrap(), x.to)
+        };
+        assert_eq!(r(DatePreset::Monthly, None), "2026-10-01..2026-10-31");
+        assert_eq!(
+            r(DatePreset::Monthly, Some("2026-02-01")),
+            "2026-02-01..2026-02-28"
+        );
+        assert_eq!(r(DatePreset::Quarterly, None), "2026-10-01..2026-12-31");
+        assert_eq!(
+            r(DatePreset::Quarterly, Some("2025-04-01")),
+            "2025-04-01..2025-06-30"
+        );
+        assert_eq!(r(DatePreset::Yearly, None), "2026-01-01..2026-12-31");
+        assert_eq!(
+            r(DatePreset::Yearly, Some("2023-01-01")),
+            "2023-01-01..2023-12-31"
+        );
+    }
+
+    #[test]
+    fn period_choices_run_back_a_year_or_five_years() {
+        let today = d("2026-10-03");
+        let labels = |preset, from: Option<&str>| -> Vec<String> {
+            let range = DateRange {
+                preset,
+                from: from.map(d),
+                to: None,
+            };
+            period_choices(&range, today)
+                .unwrap()
+                .into_iter()
+                .map(|c| c.label)
+                .collect()
+        };
+        let months = labels(DatePreset::Monthly, None);
+        assert_eq!(months.len(), 13);
+        assert_eq!(months[0], "Oct 2026");
+        assert_eq!(months[1], "Sep 2026");
+        assert_eq!(months[12], "Oct 2025");
+        assert_eq!(
+            labels(DatePreset::Quarterly, None),
+            ["Q4 2026", "Q3 2026", "Q2 2026", "Q1 2026", "Q4 2025"]
+        );
+        assert_eq!(
+            labels(DatePreset::Yearly, None),
+            ["2026", "2025", "2024", "2023", "2022"]
+        );
+        // A saved period off the list is added at the end; one on it is not.
+        assert_eq!(
+            labels(DatePreset::Yearly, Some("2019-01-01"))
+                .last()
+                .unwrap(),
+            "2019"
+        );
+        assert_eq!(labels(DatePreset::Yearly, Some("2024-01-01")).len(), 5);
+        assert!(labels(DatePreset::LastYear, None).is_empty());
+        let q = period_choices(
+            &DateRange {
+                preset: DatePreset::Quarterly,
+                from: None,
+                to: None,
+            },
+            today,
+        )
+        .unwrap();
+        assert_eq!((q[4].from, q[4].to), (d("2025-10-01"), d("2025-12-31")));
     }
 
     #[test]

@@ -6,18 +6,19 @@
   import { displayDate } from "../../format/date";
   import {
     INTERVALS,
-    PRESETS,
+    PERIOD_PRESETS,
     REPORTS,
     SORTS,
     SUBTOTALS,
     TAX_GROUPS,
     TAB_LABELS,
+    presetGroups,
     toggleFilter,
     type FilterTab,
   } from "../../reports/meta";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
-  import type { Column, ReportSettings, ResolvedRange } from "../../types/bindings";
+  import type { Column, PeriodChoice, ReportSettings, ResolvedRange } from "../../types/bindings";
   import DatePicker from "../invest/DatePicker.svelte";
   import Modal from "../Modal.svelte";
 
@@ -40,6 +41,8 @@
   let tab = $state<"display" | FilterTab>("display");
   let columns = $state<Column[]>([]);
   let resolved = $state<ResolvedRange | null>(null);
+  /** Monthly, Quarterly, Yearly: the periods to pick from. */
+  let periods = $state<PeriodChoice[]>([]);
   let showHidden = $state(false);
   let contains = $state("");
   let error = $state<string | null>(null);
@@ -64,8 +67,32 @@
     );
   });
 
-  function setPreset(value: string) {
-    draft.range.preset = value as ReportSettings["range"]["preset"];
+  $effect(() => {
+    const range = $state.snapshot(draft.range);
+    if (!PERIOD_PRESETS.includes(range.preset)) {
+      periods = [];
+      return;
+    }
+    call(commands.reportPeriodChoices(range)).then(
+      (c) => (periods = c),
+      (e) => (error = e instanceof Error ? e.message : String(e)),
+    );
+  });
+
+  async function setPreset(value: string) {
+    const preset = value as ReportSettings["range"]["preset"];
+    if (PERIOD_PRESETS.includes(preset)) {
+      // The current period first; the second list picks another.
+      try {
+        const [first] = await call(commands.reportPeriodChoices({ preset, from: null, to: null }));
+        draft.range = { preset, from: first.from, to: null };
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+      return;
+    }
+    if (PERIOD_PRESETS.includes(draft.range.preset)) draft.range = { preset, from: null, to: null };
+    draft.range.preset = preset;
     if (value === "custom" && resolved) {
       draft.range.from = draft.range.from ?? resolved.from;
       draft.range.to = draft.range.to ?? resolved.to;
@@ -184,9 +211,17 @@
       <label>
         Date range
         <select value={draft.range.preset} onchange={(e) => setPreset(e.currentTarget.value)}>
-          {#each PRESETS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+          {#each presetGroups(draft.kind, draft.range.preset) as group, i (i)}
+            {#if i > 0}<hr />{/if}
+            {#each group as [v, label] (v)}<option value={v}>{label}</option>{/each}
+          {/each}
         </select>
       </label>
+      {#if PERIOD_PRESETS.includes(draft.range.preset) && periods.length}
+        <select aria-label="Period" value={draft.range.from ?? periods[0].from} onchange={(e) => (draft.range.from = e.currentTarget.value)}>
+          {#each periods as c (c.from)}<option value={c.from}>{c.label}</option>{/each}
+        </select>
+      {/if}
       {#if draft.range.preset === "custom"}
         <span class="dates">
           From <DatePicker label="From" value={draft.range.from ?? ""} {today} onchange={(d) => (draft.range.from = d)} />

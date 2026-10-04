@@ -10,9 +10,9 @@
   import ReportTable from "./ReportTable.svelte";
   import Modal from "../Modal.svelte";
   import DatePicker from "../invest/DatePicker.svelte";
-  import { commands } from "../../api";
+  import { call, commands } from "../../api";
   import { displayDate } from "../../format/date";
-  import { INTERVALS, PRESETS, SORTABLE, SORTS, SUBTOTALS, TAX_GROUPS } from "../../reports/meta";
+  import { INTERVALS, PERIOD_PRESETS, SORTABLE, SORTS, SUBTOTALS, TAX_GROUPS, presetGroups } from "../../reports/meta";
   import type { Line } from "../../reports/rows";
   import { openAccount } from "../../shell/nav";
   import { investState } from "../../state/invest.svelte";
@@ -80,7 +80,18 @@
       openCustom();
       return;
     }
-    await change({ range: { preset: select.value as DatePreset, from: null, to: null } });
+    const preset = select.value as DatePreset;
+    if (PERIOD_PRESETS.includes(preset)) {
+      // The current period first; the second list picks another.
+      try {
+        const [first] = await call(commands.reportPeriodChoices({ preset, from: null, to: null }));
+        await change({ range: { preset, from: first.from, to: null } });
+      } catch (e) {
+        inst.error = e instanceof Error ? e.message : String(e);
+      }
+      return;
+    }
+    await change({ range: { preset, from: null, to: null } });
   }
 
   function openCustom() {
@@ -239,9 +250,21 @@
     <label>
       Date range
       <select value={st.range.preset} onchange={(e) => quickRange(e.currentTarget)}>
-        {#each PRESETS as [v, label] (v)}<option value={v}>{v === "custom" ? `${label}…` : label}</option>{/each}
+        {#each presetGroups(st.kind, st.range.preset) as group, i (i)}
+          {#if i > 0}<hr />{/if}
+          {#each group as [v, label] (v)}<option value={v}>{v === "custom" ? `${label}…` : label}</option>{/each}
+        {/each}
       </select>
     </label>
+    {#if PERIOD_PRESETS.includes(st.range.preset) && inst.periods.length}
+      <select
+        aria-label="Period"
+        value={st.range.from ?? inst.periods[0].from}
+        onchange={(e) => change({ range: { preset: st.range.preset, from: e.currentTarget.value, to: null } })}
+      >
+        {#each inst.periods as c (c.from)}<option value={c.from}>{c.label}</option>{/each}
+      </select>
+    {/if}
     {#if st.range.preset === "custom"}<button type="button" onclick={openCustom}>Change Dates…</button>{/if}
     {#if SORTABLE.includes(st.kind)}
       <label>

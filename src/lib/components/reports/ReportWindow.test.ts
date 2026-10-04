@@ -38,6 +38,11 @@ vi.mock("../../api", async (orig) => {
       reportDefaults: (kind: string) => Promise.resolve(defaults(kind)),
       reportRun: (s: unknown) => run(s),
       reportRange: () => ok({ from: "2025-01-01", to: "2025-12-31" }),
+      reportPeriodChoices: (r: { from: string | null }) => {
+        const years = ["2026", "2025", "2024", "2023", "2022"];
+        if (r.from && !years.includes(r.from.slice(0, 4))) years.push(r.from.slice(0, 4));
+        return ok(years.map((y) => ({ from: `${y}-01-01`, to: `${y}-12-31`, label: y })));
+      },
       reportColumns: () => Promise.resolve([]),
       savedReportCreate: (name: string, s: unknown) => create(name, s),
       savedReportUpdate: (id: number, name: string, s: unknown) => update(id, name, s),
@@ -257,6 +262,61 @@ describe("Itemized report toolbar", () => {
     );
   });
 
+  it("Tax Schedule: Monthly/Quarterly/Yearly after all dates; Yearly picks a year (RPT-040)", async () => {
+    run.mockImplementation(() => ok({ ...itemized, kind: "tax_schedule", title: "Tax Schedule" }));
+    inst = await reportState.open("tax_schedule");
+    show();
+    const select = (await screen.findByRole("combobox", { name: "Date range" })) as HTMLSelectElement;
+    const texts = Array.from(select.options).map((o) => o.text);
+    expect(texts.slice(0, 5)).toEqual(["Include all dates", "Monthly", "Quarterly", "Yearly", "Month to date"]);
+    expect(texts).not.toContain("This month");
+    expect(screen.queryByRole("combobox", { name: "Period" })).toBeNull();
+
+    await fireEvent.change(select, { target: { value: "yearly" } });
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(
+        expect.objectContaining({ range: { preset: "yearly", from: "2026-01-01", to: null } }),
+      ),
+    );
+    const period = (await screen.findByRole("combobox", { name: "Period" })) as HTMLSelectElement;
+    expect(Array.from(period.options).map((o) => o.text)).toEqual(["2026", "2025", "2024", "2023", "2022"]);
+    expect(await screen.findByRole("heading", { name: /- 2026$/ })).toBeTruthy();
+    await fireEvent.change(period, { target: { value: "2024-01-01" } });
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(
+        expect.objectContaining({ range: { preset: "yearly", from: "2024-01-01", to: null } }),
+      ),
+    );
+    expect(await screen.findByRole("heading", { name: /- 2024$/ })).toBeTruthy();
+  });
+
+  it("Customize: Yearly shows the year list; OK applies the year picked", async () => {
+    run.mockImplementation(() => ok({ ...itemized, kind: "tax_schedule", title: "Tax Schedule" }));
+    inst = await reportState.open("tax_schedule");
+    show();
+    await fireEvent.click(await screen.findByRole("button", { name: "Customize…" }));
+    const dialog = await screen.findByRole("dialog");
+    await fireEvent.change(within(dialog).getByRole("combobox", { name: "Date range" }), { target: { value: "yearly" } });
+    const period = (await within(dialog).findByRole("combobox", { name: "Period" })) as HTMLSelectElement;
+    await waitFor(() => expect(period.value).toBe("2026-01-01"));
+    await fireEvent.change(period, { target: { value: "2023-01-01" } });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(
+        expect.objectContaining({ range: { preset: "yearly", from: "2023-01-01", to: null } }),
+      ),
+    );
+  });
+
+  it("other reports have no Monthly/Quarterly/Yearly", async () => {
+    show();
+    const select = (await screen.findByRole("combobox", { name: "Date range" })) as HTMLSelectElement;
+    const texts = Array.from(select.options).map((o) => o.text);
+    expect(texts).not.toContain("Monthly");
+    expect(texts).not.toContain("This year");
+    expect(texts[0]).toBe("Include all dates");
+  });
+
   it("column headings sort, and a second click reverses", async () => {
     show();
     await fireEvent.click(await screen.findByRole("button", { name: /^Num/ }));
@@ -409,7 +469,7 @@ describe("Tax Schedule (compact)", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "OK" }));
     await screen.findByRole("columnheader", { name: "Account" });
     await screen.findByText("Checking");
-    expect(document.querySelectorAll("table.report.compact col")).toHaveLength(5);
+    await waitFor(() => expect(document.querySelectorAll("table.report.compact col")).toHaveLength(5));
   });
 
   it("Totals on group heading shows the report's default and saves a change", async () => {

@@ -9,7 +9,7 @@
   import { openBookFile, switchBook } from "../lib/shell/books";
   import type { RecentBook } from "../lib/types/bindings";
   import { compactWindow, fullWindow } from "../lib/shell/windowsize";
-  import mark from "../assets/kansha-mark.webp";
+  import mark from "../assets/kansha-mark.png";
 
   const status = $derived(bookState.status);
 
@@ -273,8 +273,8 @@
   .mark {
     display: block;
     flex: none;
-    width: 5.625rem;
-    aspect-ratio: 224 / 417;
+    width: 4.7rem;
+    aspect-ratio: 390 / 866;
     /* The image, set on the element. */
     --mark: none;
     background: var(--fg);
@@ -307,7 +307,7 @@
     gap: 0.75rem;
   }
   .compact .mark {
-    width: 12.1875rem;
+    width: 10.2rem;
   }
   .compact .brand > div {
     padding-bottom: 1rem;

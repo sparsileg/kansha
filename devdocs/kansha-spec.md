@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.14 (draft) |
+| **Document version** | 0.7.15 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -934,7 +934,19 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month,
   YTD, last year, last 12 months, custom; plus comparison to a prior
-  period.
+  period. The Date range dropdown (0.7.15), on the report bar and in
+  Customize, lists in groups split by a line: Include all dates;
+  Monthly, Quarterly, Yearly (Tax Schedule only); Month to date,
+  Quarter to date, Year to date; Last month, Last quarter, Last year,
+  Last 30 days, Last 12 months, Custom dates. Monthly, Quarterly, or
+  Yearly shows a second dropdown beside it: this month back to the
+  same month a year ago (13), this quarter back to the same quarter
+  last year (5), or the last five years with this one. The current
+  period is picked first. A saved report keeps the period it was
+  saved with; one no longer in the list is added at its end. This
+  month, This quarter, and This year are no longer offered (they
+  differ from "to date" only by future-dated transactions); a report
+  saved with one still opens with it, shown at the end of the list.
 - **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the
   Downloads folder, every group expanded; printing and PDF show only
   the report. Save PDF… asks Portrait or Landscape (remembered while
@@ -986,7 +998,8 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   the report bar. Defaults: Last year, sorted Account/Date.
 - **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line
   (CAT-050) with their transactions, from taxable accounts; Schedule D
-  by holding period from lot disposals. No overall total. When
+  by holding period from lot disposals. No overall total. Its Date
+  range also offers Monthly, Quarterly, and Yearly (RPT-040). When
   Schedule A "Non-cash charity contributions" is over $500 for the
   period, its label adds "(Form 8283 needed)" (0.7.2); Kansha does not
   fill Form 8283. Compact layout, as Quicken's (0.7.5): no separate
@@ -2337,6 +2350,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.15 | 2026-10-04 | RPT-040: Date range dropdown in groups split by a line (Include all dates; Monthly, Quarterly, Yearly; to date; Last … and Custom dates). Monthly, Quarterly, Yearly (Tax Schedule only, RPT-145) pick one period from a second dropdown: 13 months, 5 quarters, or 5 years, the current one first; a saved report keeps its period. This month, This quarter, This year no longer offered; saved reports using them still open. No schema change. **API change:** `DatePreset` values `monthly`, `quarterly`, `yearly`; new command `report_period_choices`, new type `PeriodChoice`. |
 | 0.7.14 | 2026-10-03 | Tax reports closer to Quicken, step 4 (`devdocs/tax-reports-design.md` §4.8–4.9). RPT-140: Tax Summary Subtotal by Category (default), Tax line, Account, Payee, Tag, Month, Quarter, Year, or none; no INCOME/EXPENSES/TRANSFERS sections except by Category. Subtotal by and Sort by on the report bar; column headings sort. New Tax Summary reports default to Last year, Account/Date; saved ones keep theirs. No schema change. **API change:** `ReportSettings.tax_group`, new type `TaxGroup`. |
 | 0.7.13 | 2026-10-03 | POS-040: an expanded account row keeps its rolled-up Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss, and Day %. No schema change. No API change. |
 | 0.7.12 | 2026-10-03 | RPT-020: saved report folders: one level, one folder per report, a permanent "Unfiled" folder where new saved reports go; Reports > Saved Reports lists folders as submenus of their reports, then Manage Saved Reports… (folder toggles; Open, Create folder, Move to folder, Rename, Delete). SECU-020: the passphrase window is 520×760, with more space above the mark. **Schema change:** migration 0013 (new table `report_folder` with "Unfiled" as ID 1; `saved_report.folder_id`, table rebuilt; `audit_log` rebuilt to accept entity `report_folder`). **API change:** new commands `saved_report_move`, `report_folder_list`, `report_folder_create`, `report_folder_rename`, `report_folder_delete`; new types `ReportFolder`, `ReportFolderId`; `SavedReport` gains `folder`; `AuditEntity` gains `report_folder`. |

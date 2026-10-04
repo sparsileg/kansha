@@ -4,10 +4,11 @@
 // remembers view state.
 
 import { call, commands } from "../api";
-import { presetLabel } from "../reports/meta";
+import { PERIOD_PRESETS, presetLabel } from "../reports/meta";
 import { statusState } from "./status.svelte";
 import type {
   PageOrientation,
+  PeriodChoice,
   ReportFolder,
   ReportKind,
   ReportSettings,
@@ -31,6 +32,9 @@ export class ReportInstance {
   readonly id: number;
   settings = $state() as ReportSettings;
   report = $state<Report | null>(null);
+  /** Monthly, Quarterly, Yearly: the periods to pick from, newest
+   * first (from Rust). Empty for other presets. */
+  periods = $state<PeriodChoice[]>([]);
   /** The saved report being shown, if it is one. */
   saved = $state<SavedReport | null>(null);
   /** Paths ("0/2/1") of collapsed groups. */
@@ -71,8 +75,13 @@ export class ReportInstance {
    * custom range shows only the title. */
   get heading(): string {
     if (this.saved) return this.saved.name;
-    const p = this.settings.range.preset;
-    return p === "custom" ? this.settings.title : `${this.settings.title} - ${presetLabel(p)}`;
+    const { preset: p, from } = this.settings.range;
+    if (p === "custom") return this.settings.title;
+    if (PERIOD_PRESETS.includes(p)) {
+      const period = this.periods.find((c) => c.from === from) ?? (from ? undefined : this.periods[0]);
+      if (period) return `${this.settings.title} - ${period.label}`;
+    }
+    return `${this.settings.title} - ${presetLabel(p)}`;
   }
 
   /** The settings differ from how the report opened or was last saved. */
@@ -91,9 +100,14 @@ export class ReportInstance {
     const seq = ++this.#seq;
     this.loading = true;
     try {
-      const report = await call(commands.reportRun($state.snapshot(this.settings)));
+      const range = $state.snapshot(this.settings.range);
+      const [report, periods] = await Promise.all([
+        call(commands.reportRun($state.snapshot(this.settings))),
+        PERIOD_PRESETS.includes(range.preset) ? call(commands.reportPeriodChoices(range)) : [],
+      ]);
       if (seq !== this.#seq) return;
       this.report = report;
+      this.periods = periods;
       this.error = null;
     } catch (e) {
       if (seq !== this.#seq) return;

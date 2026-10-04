@@ -475,6 +475,8 @@ export const commands = {
 	reportColumns: (kind: ReportKind) => __TAURI_INVOKE<Column[]>("report_columns", { kind }),
 	/**  A date range's dates today. */
 	reportRange: (range: DateRange) => typedError<ResolvedRange, IpcError>(__TAURI_INVOKE("report_range", { range })),
+	/**  The periods offered for Monthly, Quarterly, or Yearly (RPT-040). */
+	reportPeriodChoices: (range: DateRange) => typedError<PeriodChoice[], IpcError>(__TAURI_INVOKE("report_period_choices", { range })),
 	reportRun: (settings: ReportSettings) => typedError<Report, IpcError>(__TAURI_INVOKE("report_run", { settings })),
 	/**
 	 *  Write the report as CSV to the Downloads folder (RPT-050); returns
@@ -1075,13 +1077,25 @@ export type DateOrder =
 /**  Day first: `1/5'26` is 1 May 2026. */
 "dmy";
 
-/**  Date range presets (RPT-040). */
-export type DatePreset = "all_dates" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
+/**
+ *  Date range presets (RPT-040). This month, quarter, and year are
+ *  no longer offered but still read in saved reports and used by
+ *  the dashboard.
+ */
+export type DatePreset = "all_dates" | 
+/**
+ *  One calendar month, quarter, or year, chosen from a list
+ *  (Tax Schedule, RPT-040). `from` is its first day.
+ */
+"monthly" | "quarterly" | "yearly" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
 
 /**  A date range: a preset, or `Custom` with its own dates. */
 export type DateRange = {
 	preset: DatePreset,
-	/**  `Custom` only; `None` means from the first transaction. */
+	/**
+	 *  `Custom`: `None` means from the first transaction. Monthly,
+	 *  Quarterly, Yearly: a day in the period; `None` means today's.
+	 */
 	from: string | null,
 	/**  `Custom` only; `None` means today. */
 	to: string | null,
@@ -1873,6 +1887,16 @@ export type Performance = {
 	as_of: string,
 	rows: PerfRow[],
 	total: PerfRow,
+};
+
+/**
+ *  One period offered for Monthly, Quarterly, or Yearly: its dates and
+ *  its name ("Oct 2026", "Q4 2026", "2026").
+ */
+export type PeriodChoice = {
+	from: string,
+	to: string,
+	label: string,
 };
 
 export type Portfolio = {

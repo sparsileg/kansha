@@ -4,7 +4,7 @@
   import { commands } from "../api";
   import { dialogState } from "../state/dialogs.svelte";
   import Modal from "./Modal.svelte";
-  import mark from "../../assets/kansha-mark.webp";
+  import mark from "../../assets/kansha-mark.png";
 
   let version = $state("");
   let schema = $state("");
@@ -64,8 +64,8 @@
   /* Drawn in the text colour, so it reads on every theme. */
   .mark {
     flex: none;
-    width: 3.5rem;
-    aspect-ratio: 224 / 417;
+    width: 2.95rem;
+    aspect-ratio: 390 / 866;
     /* The image, set on the element. */
     --mark: none;
     background: var(--fg);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { columnHeading, formatCell } from "../format/report";
 import type { Column, Row } from "../types/bindings";
-import { MENU_REPORTS, REPORTS, toggleFilter } from "./meta";
+import { MENU_REPORTS, REPORTS, presetGroups, toggleFilter } from "./meta";
 import { fitColumns, MIN_CUT, paginate } from "./fit";
 import { closingLabel, flatten } from "./rows";
 
@@ -188,5 +188,31 @@ describe("report menu", () => {
   it("every menu report is known and Capital Gains is listed twice", () => {
     for (const kind of Object.values(MENU_REPORTS)) expect(REPORTS[kind]).toBeDefined();
     expect(Object.values(MENU_REPORTS).filter((k) => k === "capital_gains")).toHaveLength(2);
+  });
+});
+
+describe("presetGroups (RPT-040)", () => {
+  const labels = (g: ReturnType<typeof presetGroups>) => g.map((x) => x.map(([, l]) => l));
+  const rest = [
+    ["Month to date", "Quarter to date", "Year to date"],
+    ["Last month", "Last quarter", "Last year", "Last 30 days", "Last 12 months", "Custom dates"],
+  ];
+
+  it("Tax Schedule: all dates, then Monthly/Quarterly/Yearly, then the rest", () => {
+    expect(labels(presetGroups("tax_schedule", "last_year"))).toEqual([
+      ["Include all dates"],
+      ["Monthly", "Quarterly", "Yearly"],
+      ...rest,
+    ]);
+  });
+
+  it("other reports: no period group, and no This month/quarter/year", () => {
+    const g = presetGroups("itemized_categories", "year_to_date");
+    expect(labels(g)).toEqual([["Include all dates"], ...rest]);
+    expect(g.flat().map(([p]) => p)).not.toContain("this_month");
+  });
+
+  it("a saved report's old preset is added at the end", () => {
+    expect(labels(presetGroups("net_worth", "this_month")).at(-1)).toEqual(["This month"]);
   });
 });

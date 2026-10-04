@@ -750,3 +750,30 @@ design's "each with descending" options. Tests: integration
 `tax_summary_subtotals_by_each_choice_with_one_overall_total`,
 `tax_summary_defaults_to_last_year_by_category_sorted_by_account`;
 ReportWindow toolbar test. Not seen in the app yet.
+
+## Date range groups; Monthly / Quarterly / Yearly (spec 0.7.15, 2026-10-04)
+
+RPT-040, RPT-145. `DatePreset` gains `monthly`, `quarterly`,
+`yearly`; `DateRange.from` is a day in the chosen period (`None` =
+today's). `range.rs`: `period_of`, `resolve` for the three, and
+`period_choices(range, today)` (13 months / 5 quarters / 5 years,
+newest first; a saved `from` off the list is appended). Command
+`report_period_choices`. `meta.ts`: `presetGroups(kind, current)`
+(period group for Tax Schedule only; an old preset such as
+`this_month` appended), `PERIOD_PRESETS`. Separators are `<hr>` in the
+`<select>`; not yet checked in WebKitGTK (fallback: a disabled
+"──────" option). `ReportInstance.periods` loads with each run and
+names the heading ("Tax Schedule - 2025"). Bar and Customize: second
+"Period" select. This month/quarter/year stay in the enum (dashboard,
+saved reports). Tests: range unit tests (2 new), integration
+`tax_schedule_for_a_chosen_year_matches_its_custom_dates`, meta
+`presetGroups` (3), ReportWindow (3 new). Not seen in the app yet.
+
+## New kanji (2026-10-04)
+
+`src/assets/kansha-mark.png` replaces `kansha-mark.webp` on the start
+page and in About: Stan's `kansha-2.png`, with the white paper made
+clear and the ink kept as alpha (soft edges kept), trimmed, and
+resized to 390×866. It is still drawn as a mask in `--fg`. Widths are
+cut so the heights stay as before (the new mark is narrower). Not
+seen in the app yet.

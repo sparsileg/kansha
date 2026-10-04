@@ -7,8 +7,8 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, Column, Dashboard, DateRange, Report, ReportFolder, ReportFolderId, ReportKind,
-    ReportSettings, ResolvedRange, SavedReport, SavedReportId,
+    self, Column, Dashboard, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
+    ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
 };
 use tauri::{Manager, State};
 
@@ -33,6 +33,16 @@ pub fn report_columns(kind: ReportKind) -> Vec<Column> {
 #[specta::specta]
 pub fn report_range(state: State<'_, AppState>, range: DateRange) -> CmdResult<ResolvedRange> {
     state.read(|db, today| reports::resolve(db.conn(), &range, today))
+}
+
+/// The periods offered for Monthly, Quarterly, or Yearly (RPT-040).
+#[tauri::command]
+#[specta::specta]
+pub fn report_period_choices(
+    state: State<'_, AppState>,
+    range: DateRange,
+) -> CmdResult<Vec<PeriodChoice>> {
+    state.read(|_, today| reports::period_choices(&range, today))
 }
 
 #[tauri::command]

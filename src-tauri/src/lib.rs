@@ -171,6 +171,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::report_defaults,
             commands::reports::report_columns,
             commands::reports::report_range,
+            commands::reports::report_period_choices,
             commands::reports::report_run,
             commands::reports::report_export_csv,
             commands::reports::saved_report_list,

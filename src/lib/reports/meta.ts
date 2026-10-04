@@ -124,8 +124,12 @@ export const TAB_LABELS: Record<FilterTab, string> = {
   tags: "Tags",
 };
 
+/** Every preset's name, offered or not. */
 export const PRESETS: [DatePreset, string][] = [
   ["all_dates", "Include all dates"],
+  ["monthly", "Monthly"],
+  ["quarterly", "Quarterly"],
+  ["yearly", "Yearly"],
   ["month_to_date", "Month to date"],
   ["quarter_to_date", "Quarter to date"],
   ["year_to_date", "Year to date"],
@@ -142,6 +146,26 @@ export const PRESETS: [DatePreset, string][] = [
 
 export const presetLabel = (p: DatePreset): string =>
   PRESETS.find(([v]) => v === p)?.[1] ?? p;
+
+/** Presets that pick one month, quarter, or year from a second list. */
+export const PERIOD_PRESETS: DatePreset[] = ["monthly", "quarterly", "yearly"];
+
+const labelled = (ps: DatePreset[]): [DatePreset, string][] => ps.map((p) => [p, presetLabel(p)]);
+
+/** The Date range dropdown, in groups shown with a separator between
+ * them (RPT-040). Monthly, Quarterly, Yearly: Tax Schedule only. A
+ * report saved with a preset no longer offered (This month) gets it as
+ * a last group. */
+export function presetGroups(kind: ReportKind, current: DatePreset): [DatePreset, string][][] {
+  const groups = [
+    labelled(["all_dates"]),
+    ...(kind === "tax_schedule" ? [labelled(PERIOD_PRESETS)] : []),
+    labelled(["month_to_date", "quarter_to_date", "year_to_date"]),
+    labelled(["last_month", "last_quarter", "last_year", "last_30_days", "last_12_months", "custom"]),
+  ];
+  if (!groups.some((g) => g.some(([p]) => p === current))) groups.push(labelled([current]));
+  return groups;
+}
 
 export const INTERVALS: [Interval, string][] = [
   ["none", "None"],
