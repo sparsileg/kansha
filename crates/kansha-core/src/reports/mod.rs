@@ -150,6 +150,24 @@ text_enum! {
 }
 
 text_enum! {
+    /// Tax Summary grouping ("Subtotal by", RPT-140). Apart from
+    /// [`Subtotal`] so neither report offers the other's choices.
+    pub enum TaxGroup {
+        /// INCOME, EXPENSES, TRANSFERS, then the category tree.
+        Category = "category",
+        /// Form, then line, in Tax Schedule order.
+        TaxLine = "tax_line",
+        Account = "account",
+        Payee = "payee",
+        Tag = "tag",
+        Month = "month",
+        Quarter = "quarter",
+        Year = "year",
+        None = "none",
+    }
+}
+
+text_enum! {
     /// Order of transactions inside a group.
     pub enum DetailSort {
         /// Date, then account.
@@ -194,6 +212,9 @@ pub struct ReportSettings {
     /// Capital gains.
     #[serde(default = "default_subtotal")]
     pub subtotal: Subtotal,
+    /// Tax Summary.
+    #[serde(default = "default_tax_group")]
+    pub tax_group: TaxGroup,
     /// Net worth, income and expense.
     #[serde(default = "default_interval")]
     pub interval: Interval,
@@ -242,6 +263,9 @@ const fn yes() -> bool {
 const fn default_subtotal() -> Subtotal {
     Subtotal::Term
 }
+const fn default_tax_group() -> TaxGroup {
+    TaxGroup::Category
+}
 const fn default_interval() -> Interval {
     Interval::None
 }
@@ -266,7 +290,7 @@ impl ReportSettings {
             K::Holdings => ("Holdings", DatePreset::YearToDate),
             K::AssetAllocation => ("Asset Allocation", DatePreset::YearToDate),
             K::TaxSchedule => ("Tax Schedule", DatePreset::LastYear),
-            K::TaxSummary => ("Tax Summary", DatePreset::YearToDate),
+            K::TaxSummary => ("Tax Summary", DatePreset::LastYear),
         };
         ReportSettings {
             kind,
@@ -277,12 +301,13 @@ impl ReportSettings {
                 to: None,
             },
             subtotal: Subtotal::Term,
+            tax_group: TaxGroup::Category,
             interval: if kind == K::NetWorth {
                 Interval::Month
             } else {
                 Interval::None
             },
-            sort: if kind == K::ItemizedPayees {
+            sort: if matches!(kind, K::ItemizedPayees | K::TaxSummary) {
                 DetailSort::AccountDate
             } else {
                 DetailSort::Date

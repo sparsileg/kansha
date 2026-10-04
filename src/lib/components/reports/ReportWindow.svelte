@@ -12,7 +12,7 @@
   import DatePicker from "../invest/DatePicker.svelte";
   import { commands } from "../../api";
   import { displayDate } from "../../format/date";
-  import { INTERVALS, PRESETS, SORTABLE, SORTS, SUBTOTALS } from "../../reports/meta";
+  import { INTERVALS, PRESETS, SORTABLE, SORTS, SUBTOTALS, TAX_GROUPS } from "../../reports/meta";
   import type { Line } from "../../reports/rows";
   import { openAccount } from "../../shell/nav";
   import { investState } from "../../state/invest.svelte";
@@ -29,6 +29,7 @@
     Interval,
     ReportSettings,
     Subtotal,
+    TaxGroup,
   } from "../../types/bindings";
 
   let { inst }: { inst: ReportInstance } = $props();
@@ -248,6 +249,14 @@
         <select value={st.sort} onchange={(e) => change({ sort: e.currentTarget.value as DetailSort, sort_desc: false })}>
           {#each SORTS as [v, label] (v)}<option value={v}>{label}</option>{/each}
           {#if st.sort === "num"}<option value="num">Num</option>{/if}
+        </select>
+      </label>
+    {/if}
+    {#if st.kind === "tax_summary"}
+      <label>
+        Subtotal by:
+        <select value={st.tax_group ?? "category"} onchange={(e) => change({ tax_group: e.currentTarget.value as TaxGroup })}>
+          {#each TAX_GROUPS as [v, label] (v)}<option value={v}>{label}</option>{/each}
         </select>
       </label>
     {/if}

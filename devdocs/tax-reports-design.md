@@ -334,7 +334,7 @@ and a commit message for Stan.
 | 1 | Quicken tax codes: parser, table, import, one-time command + dialog | 4.1 | ⚠ API |
 | 2 | Stan runs *Set tax lines from QIF…* on his book; checks F2 Step 1 | 4.1, 4.3 | — |
 | 3 | Totals on heading, red negatives, one line per row | 4.4–4.6 | ⚠ API (built 0.7.5) |
-| 4 | Tax Summary Subtotal by / Sort by, defaults | 4.8, 4.9 | ⚠ API |
+| 4 | Tax Summary Subtotal by / Sort by, defaults (built 0.7.14) | 4.8, 4.9 | ⚠ API |
 | 5 | Form order (migration 0010; built 0.7.6) | 4.2 | ⚠ Schema |
 | 6 | Split marker (built 0.7.5; Tag hidden by default too) | 4.7 | — |
 | 7 | Roth conversion: superseded by INV-070 (0.7.6) | 4.3 | — |

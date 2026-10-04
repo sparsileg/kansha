@@ -731,3 +731,22 @@ after a new transaction; an edit keeps its place. The banking register
 needs no change: its entry row is outside the scrolling rows. Tests:
 InvEntryModal (4 new), InvestmentAccount scroll (failed first). Not
 seen in the app yet.
+
+## Tax Summary Subtotal by / Sort by (spec 0.7.14, 2026-10-03)
+
+Step 4 of `tax-reports-design.md` (§4.8–4.9). `TaxGroup` in
+`reports/mod.rs`, `ReportSettings.tax_group` (serde default
+`category`, so saved reports load unchanged). `itemized.rs`: Category
+keeps INCOME/EXPENSES/TRANSFERS; Tax line groups form → line in Tax
+Schedule order (shared `Lookups::form_order`), "(No tax line)" last;
+Account (drills to the account), Payee (`payee_groups`), Tag ("(No
+tag)" last; a line with two tags groups under "A, B"), Month,
+Quarter, Year (`period_label`); None lists the lines. Totals only with
+None leaves only OVERALL TOTAL. Defaults: Last year, Account/Date (new
+reports only). Bar: Subtotal by and Sort by; Tax Summary added to
+`SORTABLE`, so column headings sort too. Sort by uses the itemized
+reports' list (descending by a second heading click), not the
+design's "each with descending" options. Tests: integration
+`tax_summary_subtotals_by_each_choice_with_one_overall_total`,
+`tax_summary_defaults_to_last_year_by_category_sorted_by_account`;
+ReportWindow toolbar test. Not seen in the app yet.

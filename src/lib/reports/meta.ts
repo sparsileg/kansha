@@ -7,6 +7,7 @@ import type {
   Interval,
   ReportKind,
   Subtotal,
+  TaxGroup,
 } from "../types/bindings";
 
 export type FilterTab = "accounts" | "categories" | "payees" | "securities" | "tags";
@@ -18,6 +19,8 @@ export interface ReportMeta {
   /** Filter tabs after Display. */
   tabs: FilterTab[];
   subtotal?: boolean;
+  /** Tax Summary's own "Subtotal by". */
+  taxGroup?: boolean;
   interval?: boolean;
   sort?: boolean;
   totalsOnly?: boolean;
@@ -107,6 +110,7 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     kind: "tax_summary",
     name: "Tax Summary",
     tabs: SPENDING,
+    taxGroup: true,
     sort: true,
     totalsOnly: true,
   },
@@ -160,6 +164,18 @@ export const SUBTOTALS: [Subtotal, string][] = [
   ["none", "Don't subtotal"],
 ];
 
+export const TAX_GROUPS: [TaxGroup, string][] = [
+  ["category", "Category"],
+  ["tax_line", "Tax line"],
+  ["account", "Account"],
+  ["payee", "Payee"],
+  ["tag", "Tag"],
+  ["month", "Month"],
+  ["quarter", "Quarter"],
+  ["year", "Year"],
+  ["none", "Don't subtotal"],
+];
+
 export const SORTS: [DetailSort, string][] = [
   ["date", "Date/Account"],
   ["account_date", "Account/Date"],
@@ -174,7 +190,7 @@ export const COLUMN_SORTS: Record<string, DetailSort> = {
 };
 
 /** Reports with a "Sort by" dropdown and sortable column headings. */
-export const SORTABLE: ReportKind[] = ["itemized_categories", "itemized_payees"];
+export const SORTABLE: ReportKind[] = ["itemized_categories", "itemized_payees", "tax_summary"];
 
 /** The Reports menu: item id → report kind. Capital Gains is listed under
  * Investing and again under Tax. */

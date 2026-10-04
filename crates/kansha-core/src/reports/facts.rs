@@ -123,6 +123,16 @@ impl Lookups {
         self.tax_lines.iter().find(|t| t.id == id)
     }
 
+    /// A form's place among the forms: its first line's order.
+    pub fn form_order(&self, tl: &TaxLine) -> i64 {
+        self.tax_lines
+            .iter()
+            .filter(|x| x.form == tl.form)
+            .map(|x| x.sort_order)
+            .min()
+            .unwrap_or(tl.sort_order)
+    }
+
     pub fn tax_label(&self, id: Option<TaxLineId>) -> String {
         id.and_then(|t| self.tax_line(t))
             .map_or_else(String::new, TaxLine::label)

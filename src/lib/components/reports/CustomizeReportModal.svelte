@@ -10,6 +10,7 @@
     REPORTS,
     SORTS,
     SUBTOTALS,
+    TAX_GROUPS,
     TAB_LABELS,
     toggleFilter,
     type FilterTab,
@@ -216,6 +217,14 @@
               Subtotal by
               <select bind:value={draft.subtotal}>
                 {#each SUBTOTALS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+              </select>
+            </label>
+          {/if}
+          {#if meta.taxGroup}
+            <label>
+              Subtotal by
+              <select bind:value={draft.tax_group}>
+                {#each TAX_GROUPS as [v, label] (v)}<option value={v}>{label}</option>{/each}
               </select>
             </label>
           {/if}

@@ -13,6 +13,7 @@ const defaults = (kind: string) => ({
   title: kind === "capital_gains" ? "Capital Gains" : "Itemized Categories",
   range: { preset: "last_year", from: null, to: null },
   subtotal: "term",
+  tax_group: "category",
   interval: "none",
   sort: "date",
   sort_desc: false,
@@ -236,6 +237,23 @@ describe("Itemized report toolbar", () => {
     await fireEvent.change(select, { target: { value: "account_date" } });
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "account_date", sort_desc: false })),
+    );
+  });
+
+  it("Tax Summary: Subtotal by and Sort by on the bar (RPT-140)", async () => {
+    run.mockImplementation(() => ok({ ...itemized, kind: "tax_summary", title: "Tax Summary" }));
+    inst = await reportState.open("tax_summary");
+    show();
+    const group = await screen.findByRole("combobox", { name: "Subtotal by:" });
+    const labels = Array.from((group as HTMLSelectElement).options).map((o) => o.text);
+    expect(labels).toEqual(["Category", "Tax line", "Account", "Payee", "Tag", "Month", "Quarter", "Year", "Don't subtotal"]);
+    expect((group as HTMLSelectElement).value).toBe("category");
+    await fireEvent.change(group, { target: { value: "tax_line" } });
+    await waitFor(() => expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ tax_group: "tax_line" })));
+    const sort = screen.getByRole("combobox", { name: "Sort by:" });
+    await fireEvent.change(sort, { target: { value: "amount" } });
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ tax_group: "tax_line", sort: "amount", sort_desc: false })),
     );
   });
 

@@ -85,15 +85,8 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
                 label.push_str(" (Form 8283 needed)");
             }
         }
-        let form_order = lk
-            .tax_lines
-            .iter()
-            .filter(|x| x.form == tl.form)
-            .map(|x| x.sort_order)
-            .min()
-            .unwrap_or(tl.sort_order);
         forms
-            .entry((form_order, tl.form.clone()))
+            .entry((lk.form_order(tl), tl.form.clone()))
             .or_default()
             .insert((tl.sort_order, label), ls.into_iter().map(to_row).collect());
     }

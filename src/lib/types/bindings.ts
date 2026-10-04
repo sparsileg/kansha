@@ -2296,6 +2296,8 @@ export type ReportSettings = {
 	range: DateRange,
 	/**  Capital gains. */
 	subtotal?: Subtotal,
+	/**  Tax Summary. */
+	tax_group?: TaxGroup,
 	/**  Net worth, income and expense. */
 	interval?: Interval,
 	/**  Itemized and tax reports. */
@@ -2796,6 +2798,16 @@ export type TagPreview = {
 
 /**  What a posting is to. */
 export type Target = { kind: "account"; id: AccountId } | { kind: "category"; id: CategoryId };
+
+/**
+ *  Tax Summary grouping ("Subtotal by", RPT-140). Apart from
+ *  [`Subtotal`] so neither report offers the other's choices.
+ */
+export type TaxGroup = 
+/**  INCOME, EXPENSES, TRANSFERS, then the category tree. */
+"category" | 
+/**  Form, then line, in Tax Schedule order. */
+"tax_line" | "account" | "payee" | "tag" | "month" | "quarter" | "year" | "none";
 
 /**
  *  One line of a tax form, e.g. "Schedule A" / "Real estate taxes"

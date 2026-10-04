@@ -10,7 +10,7 @@ use kansha_core::persistence::audit::{self, AuditAction, AuditEntity};
 use kansha_core::persistence::{categories, reports as repo};
 use kansha_core::reports::{
     self, DatePreset, DateRange, DetailSort, Drill, Interval, Report, ReportKind, ReportSettings,
-    Row, RowKind, Subtotal,
+    Row, RowKind, Subtotal, TaxGroup,
 };
 use kansha_core::securities::SecurityType;
 use kansha_core::testkit::Book;
@@ -597,6 +597,156 @@ fn tax_summary_lists_tax_related_categories_and_mapped_transfers() {
     -  | 2026-04-01 | Checking | Cash Out |  |  |  | [IRA] | 1099-R:Total IRA taxable distrib. |  | 5000.00
 = OVERALL TOTAL |  |  |  |  |  |  |  |  |  | 7350.00"
     );
+}
+
+/// Top-level rows as `mark label = amount` (the last cell).
+fn tops(r: &Report) -> Vec<String> {
+    r.rows
+        .iter()
+        .map(|x| {
+            let mark = match x.kind {
+                RowKind::Section => "#",
+                RowKind::Group => "+",
+                RowKind::Detail => "-",
+                RowKind::Total => "=",
+            };
+            let amount = x.cells.last().map_or("", String::as_str);
+            format!("{mark} {} = {amount}", x.label)
+        })
+        .collect()
+}
+
+#[test]
+fn tax_summary_subtotals_by_each_choice_with_one_overall_total() {
+    // RPT-140: the fixture's tax lines plus a tagged salary in June.
+    let mut fx = fixture();
+    let bonus = fx.book.tag("Bonus").unwrap();
+    let salary = fx.book.find_category("Salary").unwrap().unwrap();
+    fx.book
+        .entry(fx.checking, date("2026-06-01"))
+        .payee("Employer")
+        .amount(m("100.00"))
+        .tag(bonus)
+        .category(salary)
+        .save()
+        .unwrap();
+    let by = |g: TaxGroup| {
+        let mut s = settings(ReportKind::TaxSummary);
+        s.tax_group = g;
+        run(&fx, &s)
+    };
+    let total = "= OVERALL TOTAL = 7450.00";
+    let cases: [(TaxGroup, &[&str]); 8] = [
+        (
+            TaxGroup::Category,
+            &[
+                "# INCOME = 3650.00",
+                "# EXPENSES = -1200.00",
+                "# TRANSFERS = 5000.00",
+            ],
+        ),
+        (
+            TaxGroup::TaxLine,
+            &[
+                "# Schedule A = -1200.00",
+                "# Schedule B = 50.00",
+                "# W-2 = 3100.00",
+                "# 1099-R = 5000.00",
+                "# (No tax line) = 500.00",
+            ],
+        ),
+        (
+            TaxGroup::Account,
+            &["+ Checking = 6900.00", "+ Brokerage = 550.00"],
+        ),
+        (
+            TaxGroup::Payee,
+            &[
+                "+ County = -1200.00",
+                "+ Employer = 3100.00",
+                "+ (No payee) = 5550.00",
+            ],
+        ),
+        (TaxGroup::Tag, &["+ Bonus = 100.00", "+ (No tag) = 7350.00"]),
+        (
+            TaxGroup::Month,
+            &[
+                "+ Jan 2026 = 3000.00",
+                "+ Mar 2026 = -1150.00",
+                "+ Apr 2026 = 5000.00",
+                "+ May 2026 = 500.00",
+                "+ Jun 2026 = 100.00",
+            ],
+        ),
+        (
+            TaxGroup::Quarter,
+            &["+ Q1 2026 = 1850.00", "+ Q2 2026 = 5600.00"],
+        ),
+        (TaxGroup::Year, &["+ 2026 = 7450.00"]),
+    ];
+    for (g, want) in cases {
+        let mut want: Vec<String> = want.iter().map(|x| (*x).to_string()).collect();
+        want.push(total.to_string());
+        assert_eq!(tops(&by(g)), want, "{g:?}");
+    }
+
+    // The line's tax line is under its form; drill to the account.
+    let r = by(TaxGroup::TaxLine);
+    assert_eq!(r.rows[2].children[0].label, "Salary or wages");
+    assert_eq!(r.rows[2].children[0].children.len(), 2);
+    let r = by(TaxGroup::Account);
+    assert_eq!(
+        r.rows[0].drill,
+        Some(Drill::Account {
+            account: fx.checking
+        })
+    );
+
+    // None: the lines, sorted (by default Account/Date: Checking, then
+    // Brokerage), then the total; totals only leaves the total alone.
+    let r = by(TaxGroup::None);
+    let dates: Vec<&str> = r.rows.iter().map(|x| x.cells[0].as_str()).collect();
+    assert_eq!(
+        dates,
+        [
+            "2026-01-15",
+            "2026-03-15",
+            "2026-04-01",
+            "2026-06-01",
+            "2026-03-31",
+            "2026-05-01",
+            ""
+        ]
+    );
+    let mut s = settings(ReportKind::TaxSummary);
+    s.tax_group = TaxGroup::None;
+    s.totals_only = true;
+    assert_eq!(tops(&run(&fx, &s)), [total]);
+
+    // Filters still apply.
+    let mut s = settings(ReportKind::TaxSummary);
+    s.tax_group = TaxGroup::Month;
+    s.accounts = Some(vec![fx.brokerage]);
+    assert_eq!(
+        tops(&run(&fx, &s)),
+        [
+            "+ Mar 2026 = 50.00",
+            "+ May 2026 = 500.00",
+            "= OVERALL TOTAL = 550.00"
+        ]
+    );
+}
+
+#[test]
+fn tax_summary_defaults_to_last_year_by_category_sorted_by_account() {
+    let s = ReportSettings::defaults(ReportKind::TaxSummary);
+    assert_eq!(s.range.preset, DatePreset::LastYear);
+    assert_eq!(s.sort, DetailSort::AccountDate);
+    assert_eq!(s.tax_group, TaxGroup::Category);
+    // Saved before the setting existed: by category.
+    let json = r#"{"kind":"tax_summary","title":"T","range":{"preset":"year_to_date","from":null,"to":null}}"#;
+    let old: ReportSettings = serde_json::from_str(json).unwrap();
+    assert_eq!(old.tax_group, TaxGroup::Category);
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.13 (draft) |
+| **Document version** | 0.7.14 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -978,6 +978,12 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   split transaction (more than one category or transfer line); shown
   by default in the two tax reports, hidden by default in Itemized
   Categories and Payees; the tax reports hide Tag by default (0.7.5).
+  Subtotal by (0.7.14): Category (the default: INCOME, EXPENSES, and
+  TRANSFERS, then the category tree), Tax line (form, then line, in
+  Tax Schedule order; lines with no tax line last), Account, Payee,
+  Tag, Month, Quarter, Year, or Don't subtotal; every choice but
+  Category has no sections, as Quicken. Subtotal by and Sort by are on
+  the report bar. Defaults: Last year, sorted Account/Date.
 - **RPT-145** [1.0][S] **Tax Schedule** — amounts by tax form and line
   (CAT-050) with their transactions, from taxable accounts; Schedule D
   by holding period from lot disposals. No overall total. When
@@ -2331,6 +2337,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.14 | 2026-10-03 | Tax reports closer to Quicken, step 4 (`devdocs/tax-reports-design.md` §4.8–4.9). RPT-140: Tax Summary Subtotal by Category (default), Tax line, Account, Payee, Tag, Month, Quarter, Year, or none; no INCOME/EXPENSES/TRANSFERS sections except by Category. Subtotal by and Sort by on the report bar; column headings sort. New Tax Summary reports default to Last year, Account/Date; saved ones keep theirs. No schema change. **API change:** `ReportSettings.tax_group`, new type `TaxGroup`. |
 | 0.7.13 | 2026-10-03 | POS-040: an expanded account row keeps its rolled-up Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss, and Day %. No schema change. No API change. |
 | 0.7.12 | 2026-10-03 | RPT-020: saved report folders: one level, one folder per report, a permanent "Unfiled" folder where new saved reports go; Reports > Saved Reports lists folders as submenus of their reports, then Manage Saved Reports… (folder toggles; Open, Create folder, Move to folder, Rename, Delete). SECU-020: the passphrase window is 520×760, with more space above the mark. **Schema change:** migration 0013 (new table `report_folder` with "Unfiled" as ID 1; `saved_report.folder_id`, table rebuilt; `audit_log` rebuilt to accept entity `report_folder`). **API change:** new commands `saved_report_move`, `report_folder_list`, `report_folder_create`, `report_folder_rename`, `report_folder_delete`; new types `ReportFolder`, `ReportFolderId`; `SavedReport` gains `folder`; `AuditEntity` gains `report_folder`. |
 | 0.7.11 | 2026-10-03 | RPT-205: Itemized Categories and Itemized Payees use the compact layout (RPT-145): INCOME, EXPENSES, and TRANSFERS shaded, group totals on the heading lines (no closing "Total" lines), overall total kept. RPT-020: Totals on group heading on by default for them too; a saved report is headed by its name; a report from the Reports menu replaces the menu's open copy of it (asking to save changes first), and a saved report opened again replaces its open copy. No schema change. No API change. |
