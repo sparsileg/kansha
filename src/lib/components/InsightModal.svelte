@@ -2,7 +2,7 @@
   // Name an insight and choose its cards, in order (INS-030). Laid out as
   // Edit > Navigation Bar: what is available on the left, what is on the
   // insight on the right. Nothing changes until Save.
-  import { CARDS, cardsNotIn } from "../dashboard/cards";
+  import { CARDS, cardsNotIn } from "../insights/cards";
   import { addNav, moveNav, removeNav } from "../shell/navitems";
   import Modal from "./Modal.svelte";
 

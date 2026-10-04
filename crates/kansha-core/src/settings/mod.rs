@@ -75,7 +75,7 @@ pub struct Settings {
     /// Price download from the internet is allowed (PRC-040, SECU-070);
     /// off until the user turns it on.
     pub price_download: bool,
-    /// Days ahead the dashboard lists scheduled items (DSH-020).
+    /// Days ahead the Due soon card lists scheduled items (CARD-020).
     pub upcoming_days: i64,
     /// Backup folder (SET-050, BAK-030); `None` = the Downloads folder.
     pub backup_folder: Option<String>,
@@ -111,7 +111,7 @@ impl Default for Settings {
         Settings {
             date_format: DateFormat::Mdy,
             week_start: WeekStart::Sunday,
-            startup: "dashboard".into(),
+            startup: "insights".into(),
             integrity_at_startup: false,
             nav_items: None,
             account_panel_open: true,
@@ -351,7 +351,7 @@ pub fn stale_price_days(conn: &Connection) -> Result<i64> {
     )
 }
 
-/// The last backup and verification (BAK-080, DSH-030).
+/// The last backup and verification (BAK-080, CARD-030).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct BackupStatus {

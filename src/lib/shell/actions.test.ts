@@ -95,18 +95,9 @@ describe("Tools > Insights (INS-010)", () => {
     viewState.reset();
     viewState.navigate("manage", { tab: "tags" });
     runAction("tools.insights");
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     expect(viewState.params).toEqual({});
     expect(isCurrent("tools.insights")).toBe(true);
-    expect(isCurrent("home")).toBe(true);
-  });
-
-  it("a nav bar insight opens its own tab", () => {
-    viewState.reset();
-    runAction("insight:3");
-    expect(viewState.params).toEqual({ insight: 3 });
-    expect(isCurrent("insight:3")).toBe(true);
-    expect(isCurrent("insight:4")).toBe(false);
   });
 });
 

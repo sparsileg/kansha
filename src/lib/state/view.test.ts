@@ -12,7 +12,7 @@ describe("view history", () => {
     viewState.back();
     expect(viewState.current).toBe("search");
     viewState.back();
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     expect(viewState.canBack).toBe(false);
     viewState.forward();
     viewState.forward();
@@ -24,7 +24,7 @@ describe("view history", () => {
     viewState.navigate("search");
     viewState.navigate("search");
     viewState.back();
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     // A different tab of the same view is a different place.
     viewState.navigate("manage", { tab: "payees" });
     viewState.navigate("manage", { tab: "tags" });
@@ -36,7 +36,7 @@ describe("view history", () => {
     viewState.navigate("search");
     viewState.navigate("manage");
     viewState.back();
-    viewState.navigate("dashboard");
+    viewState.navigate("insights");
     expect(viewState.canForward).toBe(false);
     viewState.back();
     expect(viewState.current).toBe("search");

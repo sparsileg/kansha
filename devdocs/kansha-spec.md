@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.17 (draft) |
+| **Document version** | 0.7.22 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
@@ -172,7 +172,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   list; a gear at its end opens Arrange accounts: every section with
   its accounts, each moved up or down within its section or to
   another, stored on Save (an account's place is its `sort_order`).
-  The list ends with "Net Worth" and today's net worth (as DSH-010).
+  The list ends with "Net Worth" and today's net worth (as CARD-010).
 
 ### 6. Categories, Payees, and Tags (CAT, PAY, TAG)
 
@@ -523,7 +523,8 @@ common patterns.
   before the valuation date; reports show the price date used and flag
   stale prices (older than the stale-price setting, SET-040, unless the
   security sets its own): Holdings marks them ⚠ and says so under the
-  report; the Investments screen and the dashboard warn too.
+  report; the Investments screen and the Needs attention card warn
+  too.
 - **PRC-060** [Later][R] **Price pruning:** reduce a security's stored
   prices to one per week, the close of the week's last trading day
   (normally Friday), to cut the data kept, shown, and searched. Also
@@ -891,7 +892,7 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   institutions, with duplicate detection and matching (shares the
   staging area of MIG-040).
 
-### 12. Reports and Dashboard (RPT, DSH)
+### 12. Reports and Insights (RPT, CARD, INS)
 
 #### 12.1 General report features
 
@@ -1042,36 +1043,39 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
 - **RPT-310** [1.0][R] Performance reports (TWR/IRR): Investment
   Performance (POS-030).
 
-#### 12.3 Dashboard
+#### 12.3 Household cards (was Dashboard)
 
-- **DSH-010** [1.0][S] Household dashboard showing net worth with
+The cards the Insights view shows (§12.4). Until 0.7.21 these were
+DSH-010 … DSH-040, from when they made a fixed dashboard; older
+entries in Appendix A and migration 0014 use those IDs.
+
+- **CARD-010** [1.0][S] Household cards showing net worth with
   breakdown (Investments, Cash, Other assets, Liabilities) and this
   month's income, expenses, and net.
-- **DSH-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
+- **CARD-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
-- **DSH-030** [1.0][R] Warnings panel: missing and stale prices,
+- **CARD-030** [1.0][R] Warnings panel: missing and stale prices,
   checking, savings, and credit card accounts with uncleared
   transactions more than 60 days old (each by name; no other type is
   checked),
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
-- **DSH-040** [1.0][R] The dashboard is made of cards, each with a
-  stable ID and name: Net worth, This month, Net worth, last 12 months,
-  Due soon, Needs attention. Since 0.7.16 the dashboard is the first
-  insight (INS-010), and its cards are chosen as for any insight
-  (INS-030). Migration 0014 turned the old card choice
-  (`dashboard_cards`) into that insight, named "Dashboard".
+- **CARD-040** [1.0][R] Each card has a stable ID and name: Net
+  worth, This month, Net worth, last 12 months, Due soon, Needs
+  attention. Insights choose and order them (INS-030). Migration 0014
+  turned the old fixed dashboard's card choice (`dashboard_cards`)
+  into the first insight; migration 0015 names it "Status".
 
 #### 12.4 Insights
 
 - **INS-010** [1.0][R] Insights are views made of cards the user
   chooses, giving quick answers about income, spending, investments,
-  and planning. The Insights view (once Home) is on the navigation bar
-  and in Tools > Insights, after Investments. It is one outlined sheet;
+  and planning. The Insights view is in Tools > Insights, after
+  Investments, and can be put on the navigation bar. It is one outlined sheet;
   its shaded title band holds the title "Insights", one tab per insight
   in the user's order, and a gear. Opening Insights shows the first
-  tab. A book always has at least one insight; the first is the
-  dashboard (DSH-010 … DSH-040).
+  tab. A book always has at least one insight; a new book's first is
+  named "Status" and holds every card (CARD-010 … CARD-040).
 - **INS-020** [1.0][R] An insight is a name (unique, any case) and an
   ordered list of card IDs, kept in the book (`insight` table). The
   same card can be on several insights, at most once on each. The card
@@ -1087,8 +1091,9 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   shows a new tab while the dialog is open; Cancel removes it and
   makes nothing, Save makes the insight and shows its tab. A refused
   name keeps the dialog open with the reason.
-- **INS-040** [1.0][R] Each insight can go on the navigation bar
-  (UI-020) as its own button, which opens its tab.
+- **INS-040** Withdrawn in 0.7.22. Was: each insight can go on the
+  navigation bar as its own button. Only Insights itself can
+  (INS-010).
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -1150,8 +1155,8 @@ platform has one.
   computer; a cloud-synced folder, network drive, or
   USB drive does. Before each backup the folder is checked to be an
   existing folder. If it is not (e.g. after a restore on another
-  computer), the backup goes to Downloads and the dashboard warns
-  until a folder is chosen; Kansha never creates a file or folder at
+  computer), the backup goes to Downloads and the Needs attention
+  card warns until a folder is chosen; Kansha never creates a file or folder at
   the missing path.
 - **BAK-035** [1.0][R] Each backup is one `.zip` file named with its
   date and time; an existing file is never overwritten. It holds:
@@ -1234,12 +1239,12 @@ platform has one.
   integrity check before it is encrypted; after writing, the zip is
   read back and its manifest, structure, and checksum checked. A full
   decrypt-and-check needs the passphrase: "Verify backup…" and the
-  restore drill (§20.3). The dashboard shows the last backup's age and
-  the date of the last full verification (DSH-030). A snapshot with
-  integrity problems is still backed up (a backup of a damaged book
-  beats none); the problems are counted and the dashboard warns
-  (INT-040). A backup before a merge or import that fails stops the
-  merge or import.
+  restore drill (§20.3). The Needs attention card shows the last
+  backup's age and the date of the last full verification
+  (CARD-030). A snapshot with integrity problems is still backed up
+  (a backup of a damaged book beats none); the problems are counted
+  and the Needs attention card warns (INT-040). A backup before a
+  merge or import that fails stops the merge or import.
 
 #### 13.4 Security
 
@@ -1305,11 +1310,10 @@ platform has one.
   the panel ends level with the view's sheet. Open or closed is
   remembered.
 - **UI-020** [1.0][S] Navigation bar under the menu bar with
-  user-configurable buttons (Edit > Navigation Bar): Insights (once
-  Home), the Investments screen, any menu item, any insight (INS-040),
-  or any account, in the user's
-  order, each with an icon and a text label; Reminders shows the
-  number due. The search box (UI-070) is at its right.
+  user-configurable buttons (Edit > Navigation Bar): the Investments
+  screen, any menu item (Insights among them), or any account, in the
+  user's order, each with an icon and a text label; Reminders shows
+  the number due. The search box (UI-070) is at its right.
 - **UI-030** [1.0][S] Account-centric design: each account opens to
   its own view with tabs appropriate to its type (banking: Register |
   Scheduled | Reconcile history; investment: see POS-040).
@@ -1423,7 +1427,7 @@ platform has one.
   showing that category's settings, with OK and Cancel below on the
   right. Edits are kept until OK. Interface: date format, first day of
   week, startup view, account list side. Data: integrity check at
-  startup, dashboard look-ahead days. Investments: stale price days,
+  startup, Due soon look-ahead days. Investments: stale price days,
   lot method, price download. Register: REG-070, REG-100 … REG-120.
   Notifications: REG-130 … REG-150. Backups: SET-050.
 - **SET-070** [1.0][R] Settings are stored in the book's database
@@ -1433,6 +1437,52 @@ platform has one.
   recent books list with their paths (UI-080). Those are kept in a config file
   in the OS configuration folder, written by Rust. Browser storage
   (localStorage) is not used for settings.
+
+#### 14.3 Command line entry (CLI)
+
+Under discussion; nothing here is decided. Entry through the register
+is unchanged. Open points are D-150 … D-180 (Part V).
+
+- **CLI-010** [Later][S] Kansha accepts a limited set of commands from
+  a command line. The first command adds one transaction; others may
+  follow. The register stays the main way to enter transactions.
+- **CLI-020** [Later][S] Commands use a formally defined set of words
+  (a grammar), not free English (D-170). For example:
+
+  ```
+  kansha add today walmart 23.47 food:groceries using "double cash"
+  ```
+
+  Payee, category, and account are matched by name. A name that
+  matches nothing, or more than one, is an error listing the choices;
+  nothing is guessed. Amounts are read as text into cents, never
+  through a float.
+- **CLI-030** [Later][S] Two ways to run, one or both (D-160):
+  - **One-shot:** `kansha` started from the command line, with no
+    window, opens the book with a secret read from a file only the
+    user can read (mode 0600 on Linux; an owner-only ACL on Windows),
+    runs the command, and exits. A file others can read is refused.
+  - **Background:** Kansha runs in the system tray with the book open
+    (the window may be closed) and accepts commands as text through a
+    local channel open only to the user.
+- **CLI-040** [Later][S] Everything entered through the command line
+  is **unverified**. Unverified transactions are not part of the
+  book's financial data: they change no balance, register, report,
+  reconciliation, or lot (D-180). When the book is next opened (or, in
+  the background, the window next shown), Kansha lists them for
+  review. Each is approved (it becomes an ordinary transaction),
+  edited and approved, or rejected. Review can be put off; the list
+  stays until it is empty.
+- **CLI-050** [Later][R] Commands only write. None returns balances or
+  other book data, so the command line cannot leak the book; it
+  answers only "accepted (unverified)" or the error.
+- **CLI-060** [Later][R] Off by default; a Settings switch turns it on
+  for the book. The secret file (CLI-030, one-shot) is the user's
+  choice and risk: anyone running as the user, or holding a copy of
+  the file, can open the book. Turning it on warns as SECU-030 does.
+- **CLI-070** [Later][R] Each command is audited with source `cli`,
+  the command text, and the time received; approval and rejection are
+  audited too.
 
 ---
 
@@ -1697,7 +1747,7 @@ reaches the page (PRC-030).
 | `reconcile` | Reconciliation sessions and history | ledger |
 | `securities` | Security master, prices, price list import, price download | persistence |
 | `invest` | Investment transactions, lots, cost basis, positions, returns, lot seeding | ledger, securities |
-| `reports` | Report definitions, queries, saved reports, dashboard | ledger, invest |
+| `reports` | Report definitions, queries, saved reports, Insights card figures | ledger, invest |
 | `import` | Staging, QIF parser, mapping, commit, rollback, archive (Phase 9); later OFX/CSV (MIG-200) | ledger, invest, categories, securities |
 | `integrity` | Invariant checks | all read-only |
 | `audit` | Append-only change log, per-field history | persistence |
@@ -2279,6 +2329,8 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
   it supports.
 - This document is versioned in Git alongside the code; significant
   changes are logged in Appendix A.
+- Every release follows `devdocs/release-checklist.md`: the checks,
+  tests, and steps before a build is installed over the book.
 
 ---
 
@@ -2303,6 +2355,10 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
 | D-140 | Chart library | **Decided** (2026-09-27) | None: hand-drawn SVG. Rust places values on the axis; the frontend only scales. Series differ by pattern and shape as well as color (red-green colorblind). |
+| D-150 | CLI one-shot secret file (CLI-030): the backup passphrase, or the database key alone | Open | Database key alone: it opens the book but not the backups or the private key |
+| D-160 | CLI modes: one-shot, background (tray), or both | Open | — |
+| D-170 | CLI grammar: words, order, date forms, defaults, splits | Open | Start with one payee, one category, one account; no splits, transfers, or investments |
+| D-180 | Where unverified CLI entries live (CLI-040) | Open | A separate pending table outside the ledger, not `txn` rows with a flag, so no report or balance can miss a filter |
 
 ### Placeholders
 
@@ -2340,15 +2396,15 @@ all IPC and never performs money arithmetic.
 
 **Built in the prototype (Phases 0–8):** ACCT, CAT, PAY, TAG, TXN,
 REG, REC, CAL, RCN, SEC, PRC (manual, price list import, download),
-INV, LOT (all five methods), POS, RPT, DSH, INT, AUD, BAK, SECU, UI,
+INV, LOT (all five methods), POS, RPT, CARD, INT, AUD, BAK, SECU, UI,
 SET, TEST, and MIG-120's lot seeding on synthetic data. Phase 9
 (after the prototype) built the Quicken QIF import (MIG, except
 MIG-115 and the open P-02 part). Not built: the [1.0] items
 listed as missing in
 `devdocs/phase-notes/prototype-review.md`, which keep their status
 until decided (RPT-040 comparison, RPT-120, RPT-190, RPT-200,
-TAG-030 grouping, UI-030 tabs, UI-050, TEST-070, TEST-090, TEST-150,
-and TEST-140 while CI is off). [Later] items are out of scope.
+TAG-030 grouping, UI-030 tabs, UI-050, and TEST-140 while CI is
+off). [Later] items are out of scope.
 
 ### 24. Phases
 
@@ -2383,6 +2439,11 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.22 | 2026-10-04 | **INS-040 withdrawn**: a single insight can no longer be a navigation bar button; only Insights (`tools.insights`) can. UI-020 updated. A saved bar that still holds an insight (`insight:N`) drops it. No schema or API change. |
+| 0.7.21 | 2026-10-04 | No more "home" or "dashboard" names. §12.3: **DSH-010 … DSH-040 renumbered CARD-010 … CARD-040** (DSH-010 → CARD-010, DSH-020 → CARD-020, DSH-030 → CARD-030, DSH-040 → CARD-040); older entries here and migration 0014 keep the old IDs. CARD-040, INS-010: a new book's first insight is named "Status". INS-010: Insights is in Tools > Insights and can be put on the navigation bar; the nav bar item's stored ID is `tools.insights` (was `home`; a saved bar that still holds `home` drops it). **Schema change:** migration 0015 renames the insight 0014 made from "Dashboard" to "Status", unless renamed already or another insight is named "Status". No API change. |
+| 0.7.20 | 2026-10-04 | Names follow Insights, not the old fixed dashboard. §12 is "Reports and Insights"; §12.3 is "Household cards (was Dashboard)"; the DSH IDs stay. Text that said the dashboard warns now names the Needs attention card; the Settings look-ahead is "Due soon". Code: `reports/dashboard.rs` → `reports/cards.rs` (`card_data`, `CardData`); the view ID `dashboard` → `insights`; `src/lib/dashboard/` → `src/lib/insights/`. A new book starts on `insights`; a book still set to `dashboard` opens Insights as before (unknown startup values fall back to it). Nav bar items keep their stored ID `home`. No schema change. **API change:** command `dashboard` → `card_data`, type `Dashboard` → `CardData`. |
+| 0.7.19 | 2026-10-04 | TEST-070, TEST-090, TEST-150 built: `just trace` lists [1.0] engine requirements no test cites (INT-050 exempt: no caches exist); report snapshots (`insta`) of Net Worth, Capital Gains, Income/Expense, Tax Schedule, Tax Summary, Holdings, and Investment Income on the sample book for 2025, reviewed with `just snap-review`; `just cov` measures engine coverage (`cargo-llvm-cov`). §21 points to the new `devdocs/release-checklist.md`. §23 updated. No schema change. No API change. |
+| 0.7.18 | 2026-10-04 | New §14.3 Command line entry, **CLI-010 … CLI-070** [Later], under discussion: a limited command set (first: add a transaction) in a defined grammar; one-shot with a secret read from an owner-only file, or in the background from the tray; command entries are unverified, outside the ledger, until approved at the next sign-in; write-only, off by default, audited. New open decisions D-150 … D-180. No schema change. No API change. |
 | 0.7.17 | 2026-10-04 | UI-010: the Accounts button becomes a bar as wide as the panel; its triangle opens (kept open) or closes the panel, the rest drops the account list down while the panel is closed, the gear sits inside at its right. "Keep open" removed. The panel and drop-down slide open and shut; the panel stops level with the sheet. RPT-040: no line between the Date range groups. |
 | 0.7.16 | 2026-10-04 | New §12.4 Insights, **INS-010 … INS-040**: the Home view is renamed Insights (navigation bar, new Tools > Insights after Investments, startup choice); one tab per insight in the title band; the gear offers Customize…, Create new insight…, Move left, Move right, Delete insight…; a new dialog modelled on Edit > Navigation Bar (Name, Available cards, the insight's cards, Add, Remove, Up, Down) replaces Customize dashboard; each insight can be a navigation bar button. DSH-040: the dashboard is the first insight. UI-020, SET-060 updated. **Schema change:** migration 0014 (new table `insight`; the setting `dashboard_cards` becomes the insight "Dashboard" and is removed; `audit_log` rebuilt to accept entity `insight`). **API change:** new commands `insight_list`, `insight_create`, `insight_update`, `insight_delete`, `insight_move`; new types `Insight`, `InsightId`; `Settings` loses `dashboard_cards`; `AuditEntity` gains `insight`. |
 | 0.7.15 | 2026-10-04 | RPT-040: Date range dropdown in groups split by a line (Include all dates; Monthly, Quarterly, Yearly; to date; Last … and Custom dates). Monthly, Quarterly, Yearly (Tax Schedule only, RPT-145) pick one period from a second dropdown: 13 months, 5 quarters, or 5 years, the current one first; a saved report keeps its period. This month, This quarter, This year no longer offered; saved reports using them still open. No schema change. **API change:** `DatePreset` values `monthly`, `quarterly`, `yearly`; new command `report_period_choices`, new type `PeriodChoice`. |

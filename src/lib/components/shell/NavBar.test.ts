@@ -12,7 +12,7 @@ beforeEach(() => {
   windowState.reset();
   viewState.reset();
   settingsState.setStartup("calendar");
-  settingsState.setNavItems(["home", "tools.reminders", "tools.calendar", "tools.reconcile", "view.investments"]);
+  settingsState.setNavItems(["tools.insights", "tools.reminders", "tools.calendar", "tools.reconcile", "view.investments"]);
   scheduleState.due = [];
   scheduleState.review = [];
 });
@@ -31,7 +31,7 @@ describe("NavBar", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Reminders" }));
     expect(windowState.shownKind).toBe("scheduled");
     await fireEvent.click(screen.getByRole("button", { name: "Insights" }));
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     expect(windowState.shownKind).toBeNull();
   });
 
@@ -42,7 +42,7 @@ describe("NavBar", () => {
     expect(backup.getAttribute("aria-disabled")).toBe("true");
     expect(backup.getAttribute("title")).toBe("Planned: export");
     await fireEvent.click(backup);
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     const inv = screen.getByRole("button", { name: "Investments" });
     expect(inv.getAttribute("aria-disabled")).toBeNull();
     await fireEvent.click(inv);
@@ -83,7 +83,7 @@ describe("NavBar search", () => {
   it("Enter shows the Search view with the text; an empty box does nothing", async () => {
     render(NavBar);
     await fireEvent.submit(box().closest("form")!);
-    expect(viewState.current).toBe("dashboard");
+    expect(viewState.current).toBe("insights");
     await fireEvent.input(box(), { target: { value: "  costco " } });
     await fireEvent.submit(box().closest("form")!);
     expect(viewState.current).toBe("search");

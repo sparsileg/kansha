@@ -336,6 +336,7 @@ mod tests {
         assert_eq!(c.ticks.len(), 2);
     }
 
+    /// A graph's date axis (RPT-010).
     #[test]
     fn the_date_axis_names_days_months_or_years() {
         let d = |s: &str| -> Date { s.parse().unwrap() };

@@ -64,7 +64,7 @@ const view = (over: Partial<OccurrenceView> = {}): OccurrenceView => ({
 beforeEach(() => {
   vi.clearAllMocks();
   registerState.prefill = null;
-  viewState.navigate("dashboard");
+  viewState.navigate("insights");
 });
 
 describe("OccurrenceRow", () => {

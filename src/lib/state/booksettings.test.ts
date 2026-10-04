@@ -53,13 +53,13 @@ describe("book settings (SET-070)", () => {
 
   it("changes are stored in the book, not in localStorage", async () => {
     settingsState.setAccountPanelSide("right");
-    settingsState.setNavItems(["home"]);
+    settingsState.setNavItems(["tools.insights"]);
     dateFormatState.set("ymd");
     await vi.waitFor(() => expect((store.saved as Settings).date_format).toBe("ymd"));
     const saved = store.saved as Settings;
     expect(saved.account_panel_side).toBe("right");
-    expect(saved.nav_items).toBe('["home"]');
-    expect(settingsState.navItems).toEqual(["home"]);
+    expect(saved.nav_items).toBe('["tools.insights"]');
+    expect(settingsState.navItems).toEqual(["tools.insights"]);
     expect(localStorage.length).toBe(0);
   });
 

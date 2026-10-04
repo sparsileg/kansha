@@ -8,18 +8,13 @@ const accounts = [
 ] as never;
 
 describe("navCatalog", () => {
-  const insights = [
-    { id: 1, name: "Status", cards: [] },
-    { id: 4, name: "Spending", cards: [] },
-  ];
-  const catalog = navCatalog(accounts, insights);
+  const catalog = navCatalog(accounts);
   const byId = (id: string) => catalog.find((e) => e.id === id);
 
-  it("holds Insights, the investments view, every menu item, every insight, and every account", () => {
+  it("holds the investments view, every menu item, and every account, but no single insight", () => {
     expect(byId("reports.spending")).toBeUndefined(); // a submenu, not an action
-    expect(byId("home")?.label).toBe("Insights");
     expect(byId("tools.insights")?.label).toBe("Insights");
-    expect(byId("insight:4")).toMatchObject({ label: "Spending", group: "Insights" });
+    expect(catalog.some((e) => e.id.startsWith("insight:"))).toBe(false);
     expect(byId("view.investments")?.disabled).toBeUndefined();
     for (const m of MENUS) for (const i of leafItems(m.items)) expect(byId(i.id), i.id).toBeTruthy();
     expect(byId("account:2")).toMatchObject({ label: "Savings", group: "Accounts" });
@@ -44,8 +39,8 @@ describe("navCatalog", () => {
 describe("list operations", () => {
   it("resolveNav skips unknown ids (a deleted account) and repeats, keeping the order", () => {
     const catalog = navCatalog(accounts);
-    const r = resolveNav(["tools.calendar", "account:9", "home", "home", "account:1"], catalog);
-    expect(r.map((e) => e.id)).toEqual(["tools.calendar", "home", "account:1"]);
+    const r = resolveNav(["tools.calendar", "account:9", "tools.insights", "tools.insights", "account:1"], catalog);
+    expect(r.map((e) => e.id)).toEqual(["tools.calendar", "tools.insights", "account:1"]);
   });
 
   it("moveNav swaps with a neighbour and stops at the ends", () => {

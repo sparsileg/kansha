@@ -158,9 +158,9 @@ D-40 decided; Appendix A in one order, newest first.
 | RPT-040 | Compare with a prior period |
 | RPT-120, RPT-190, RPT-200 | Account balances, cash flow, transaction reports (D-90) |
 | TAG-030 | Group a report by tag (filter works) |
-| TEST-070 | `just trace`; RPT, DSH, UI tests cite no IDs |
-| TEST-090 | `insta` (text snapshots in `reports.rs` stand in) |
-| TEST-150 | Coverage |
+| ~~TEST-070~~ | Built 2026-10-04: `just trace` |
+| ~~TEST-090~~ | Built 2026-10-04: `insta` snapshots of 7 reports |
+| ~~TEST-150~~ | Built 2026-10-04: `just cov` |
 | TEST-140 | CI, disabled since 2026-09-24 |
 
 Also open by the phase exit rules: `just test` on Windows (Phases 5,

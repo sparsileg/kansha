@@ -44,7 +44,7 @@
 
   const NUMBERS: [keyof Settings, string][] = [
     ["stale_price_days", "Price is stale after"],
-    ["upcoming_days", "Dashboard items due within"],
+    ["upcoming_days", "Due soon items within"],
     ["backup_keep_last", "Backups to keep"],
     ["backup_keep_months", "Months of monthly backups"],
     ["backup_timeout_minutes", "Minutes before a timed backup"],
@@ -121,7 +121,7 @@
           <input type="checkbox" bind:checked={s.integrity_at_startup} />
         </label>
         <label>
-          <span>Dashboard shows items due within (days)</span>
+          <span>Due soon shows items due within (days)</span>
           <input type="number" min="1" max="366" bind:value={s.upcoming_days} />
         </label>
       {:else if category === "investments"}

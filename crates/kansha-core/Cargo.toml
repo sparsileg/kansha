@@ -27,6 +27,8 @@ sha2 = "=0.10.9"
 specta = ["dep:specta"]
 
 [dev-dependencies]
+# Report snapshots (TEST-090); review changes with `cargo insta review`.
+insta = "1"
 proptest.workspace = true
 tempfile.workspace = true
 toml.workspace = true

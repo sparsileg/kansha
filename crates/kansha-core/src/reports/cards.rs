@@ -1,6 +1,6 @@
-//! The household dashboard (DSH-010 … DSH-030): net worth and its parts,
-//! this month's income and spending, a year of net worth, what is due,
-//! and what needs attention.
+//! What the Insights cards show (CARD-010 … CARD-030): net worth and its
+//! parts, this month's income and spending, a year of net worth, what is
+//! due, and what needs attention.
 
 use std::collections::BTreeMap;
 
@@ -26,7 +26,7 @@ use crate::{integrity, invest};
 pub const UNCLEARED_DAYS: i64 = 60;
 
 text_enum! {
-    /// What a warning is about (DSH-030).
+    /// What a warning is about (CARD-030).
     pub enum WarningKind {
         StalePrice = "stale_price",
         MissingPrice = "missing_price",
@@ -48,12 +48,12 @@ pub struct Warning {
     pub account: Option<AccountId>,
 }
 
-/// The dashboard's figures.
+/// The figures the Insights cards show.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
-pub struct Dashboard {
+pub struct CardData {
     pub today: Date,
-    /// Assets minus liabilities today (DSH-010).
+    /// Assets minus liabilities today (CARD-010).
     pub net_worth: Money,
     /// Checking, savings, cash, and money market accounts.
     pub cash: Money,
@@ -72,16 +72,16 @@ pub struct Dashboard {
     pub net: Money,
     /// Net worth at each of the last twelve month ends, today last.
     pub trend: Chart,
-    /// Overdue and upcoming scheduled transactions (DSH-020).
+    /// Overdue and upcoming scheduled transactions (CARD-020).
     pub upcoming: Vec<OccurrenceView>,
     pub upcoming_days: i64,
     pub warnings: Vec<Warning>,
-    /// Last backup and last full verification (DSH-030, BAK-080).
+    /// Last backup and last full verification (CARD-030, BAK-080).
     pub backup: BackupStatus,
 }
 
 fn add(a: Money, b: Money) -> Result<Money> {
-    a.checked_add(b).ok_or(Error::Overflow("dashboard"))
+    a.checked_add(b).ok_or(Error::Overflow("insight cards"))
 }
 
 /// Net worth's parts today: cash, investments, other assets, and
@@ -121,17 +121,17 @@ impl Parts {
     fn net_worth(&self) -> Result<Money> {
         add(add(self.cash, self.investments)?, self.other_assets)?
             .checked_sub(self.liabilities)
-            .ok_or(Error::Overflow("dashboard"))
+            .ok_or(Error::Overflow("insight cards"))
     }
 }
 
-/// Net worth today, as the dashboard shows it (DSH-010): for the foot of
+/// Net worth today, as the Net worth card shows it (CARD-010): for the foot of
 /// the account list (ACCT-240).
 pub fn net_worth(conn: &Connection, today: Date) -> Result<Money> {
     Parts::load(conn, today)?.net_worth()
 }
 
-pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<Dashboard> {
+pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<CardData> {
     let parts = Parts::load(conn, today)?;
     let net_worth = parts.net_worth()?;
     let Parts {
@@ -165,7 +165,9 @@ pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<D
             Section::Transfers => {}
         }
     }
-    let expenses = spent.checked_neg().ok_or(Error::Overflow("dashboard"))?;
+    let expenses = spent
+        .checked_neg()
+        .ok_or(Error::Overflow("insight cards"))?;
     let net = add(income, spent)?;
 
     // Net worth at each month end for a year.
@@ -188,7 +190,9 @@ pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<D
         for a in &all {
             let v = shown_balance(conn, a, *d)?;
             total = if a.fields.account_type.is_liability() {
-                total.checked_sub(v).ok_or(Error::Overflow("dashboard"))?
+                total
+                    .checked_sub(v)
+                    .ok_or(Error::Overflow("insight cards"))?
             } else {
                 add(total, v)?
             };
@@ -210,7 +214,7 @@ pub fn dashboard(conn: &Connection, today: Date, upcoming_days: i64) -> Result<D
     upcoming.sort_by_key(|o| (o.date, o.nominal, o.schedule));
     upcoming.dedup_by_key(|o| (o.schedule, o.nominal));
 
-    Ok(Dashboard {
+    Ok(CardData {
         today,
         net_worth,
         cash,
@@ -266,7 +270,7 @@ fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>
     }
     out.extend(prices.into_values());
 
-    // Accounts with old uncleared transactions (DSH-030): only checking,
+    // Accounts with old uncleared transactions (CARD-030): only checking,
     // savings, and credit card accounts, each by name. Others (cash,
     // investment, assets) are not reconciled against statements.
     let before = schedule::add_days(today, -UNCLEARED_DAYS).unwrap_or(today);

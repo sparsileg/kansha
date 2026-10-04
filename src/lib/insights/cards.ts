@@ -1,4 +1,4 @@
-// The cards an insight can show (INS-020, DSH-010 … DSH-030). Each has a
+// The cards an insight can show (INS-020, CARD-010 … CARD-030). Each has a
 // stable ID; an insight stores the IDs of its cards, in order, in the
 // book (`insight` table). One card can be on several insights.
 //

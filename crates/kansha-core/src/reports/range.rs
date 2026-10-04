@@ -235,6 +235,7 @@ mod tests {
         }
     }
 
+    /// Date range presets (RPT-040).
     #[test]
     fn presets_resolve_against_today() {
         let today = d("2026-09-27");

@@ -1,0 +1,9 @@
+---
+source: crates/kansha-core/tests/integration/report_snapshots.rs
+expression: body
+---
+Account | Security | Shares | Bought | Sold | Gross Proceeds | Cost Basis | Realized Gain/Loss
++ LONG TERM |  |  |  |  |  | 3213.55 | 2500.77 | 712.78
+  -  | Brokerage | Apple Inc | 25 | 2023-06-06 | 2025-01-15 | 1811.55 | 1125.77 | 685.78
+  -  | Brokerage | Vanguard Total International Stock ETF | 25 | 2023-06-06 | 2025-01-15 | 1402.00 | 1375.00 | 27.00
+= OVERALL TOTAL |  |  |  |  |  | 3213.55 | 2500.77 | 712.78

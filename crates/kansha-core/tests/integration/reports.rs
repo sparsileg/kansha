@@ -1,6 +1,6 @@
 //! Reports against a real database (Phase 7): each report on one small
 //! book, compared as text snapshots, plus drill-down, filters, saved
-//! reports, CSV, and the dashboard.
+//! reports, CSV, and the Insights cards.
 
 use kansha_core::accounts::{AccountFields, AccountId, AccountType};
 use kansha_core::categories::{CategoryKind, TaxLineId};
@@ -10,7 +10,7 @@ use kansha_core::persistence::audit::{self, AuditAction, AuditEntity};
 use kansha_core::persistence::{categories, reports as repo};
 use kansha_core::reports::{
     self, DatePreset, DateRange, DetailSort, Drill, Interval, Report, ReportKind, ReportSettings,
-    Row, RowKind, Subtotal, TaxGroup,
+    Row, RowKind, Subtotal, TaxGroup, WarningKind,
 };
 use kansha_core::securities::SecurityType;
 use kansha_core::testkit::Book;
@@ -23,7 +23,7 @@ fn m(s: &str) -> Money {
 }
 
 /// Render rows as indented text: `label | cell | cell`.
-fn text(report: &Report) -> String {
+pub(crate) fn text(report: &Report) -> String {
     fn walk(out: &mut Vec<String>, rows: &[Row], depth: usize) {
         for r in rows {
             let mark = match r.kind {
@@ -200,6 +200,7 @@ fn run(fx: &Fx, s: &ReportSettings) -> Report {
     reports::run(fx.book.conn(), s, date("2026-06-30")).unwrap()
 }
 
+/// Itemized Categories (RPT-205).
 #[test]
 fn itemized_categories_groups_income_expenses_and_transfers() {
     let fx = fixture();
@@ -339,6 +340,7 @@ fn itemized_payees_groups_by_payee() {
     );
 }
 
+/// Spending and income by category and period (RPT-100).
 #[test]
 fn income_expense_by_month_rolls_up_subcategories() {
     let fx = fixture();
@@ -487,6 +489,7 @@ fn income_expense_by_payee_totals_each_payee() {
     );
 }
 
+/// Realized gains detail (RPT-150).
 #[test]
 fn capital_gains_by_term_from_taxable_accounts() {
     let fx = fixture();
@@ -511,6 +514,69 @@ fn capital_gains_by_term_from_taxable_accounts() {
     assert!(matches!(r.rows[0].drill, Some(Drill::Txn { .. })));
 }
 
+/// Capital Gains subtotals by month, quarter, year, account, and
+/// security (RPT-150): each group's figures, one overall total.
+#[test]
+fn capital_gains_subtotals_by_each_choice() {
+    let mut fx = fixture();
+    let vti = kansha_core::persistence::securities::list(fx.book.conn())
+        .unwrap()
+        .into_iter()
+        .find(|s| s.fields.ticker.as_deref() == Some("VTI"))
+        .unwrap()
+        .id;
+    // The last 5 shares of the 2026 lot, in June: short term, 150.00 gain.
+    let mut sell = InvInput::new(fx.brokerage, InvAction::Sell, date("2026-06-15"));
+    sell.security = Some(vti);
+    sell.quantity = Some("5".parse().unwrap());
+    sell.amount = Some(m("750.00"));
+    fx.book.invest(&sell).unwrap();
+
+    let groups = |by: Subtotal| {
+        let mut s = settings(ReportKind::CapitalGains);
+        s.subtotal = by;
+        let r = run(&fx, &s);
+        r.rows
+            .iter()
+            .map(|g| format!("{} | {}", g.label, g.cells[5..].join(" | ")))
+            .collect::<Vec<_>>()
+    };
+    let total = "OVERALL TOTAL | 2850.00 | 2200.00 | 650.00";
+    assert_eq!(
+        groups(Subtotal::Month),
+        [
+            "May 2026 | 2100.00 | 1600.00 | 500.00",
+            "Jun 2026 | 750.00 | 600.00 | 150.00",
+            total
+        ]
+    );
+    assert_eq!(
+        groups(Subtotal::Quarter),
+        ["Q2 2026 | 2850.00 | 2200.00 | 650.00", total]
+    );
+    assert_eq!(
+        groups(Subtotal::Year),
+        ["2026 | 2850.00 | 2200.00 | 650.00", total]
+    );
+    assert_eq!(
+        groups(Subtotal::Account),
+        ["Brokerage | 2850.00 | 2200.00 | 650.00", total]
+    );
+    assert_eq!(
+        groups(Subtotal::Security),
+        ["Total Stock Market | 2850.00 | 2200.00 | 650.00", total]
+    );
+    assert_eq!(
+        groups(Subtotal::Term),
+        [
+            "SHORT TERM | 1450.00 | 1200.00 | 250.00",
+            "LONG TERM | 1400.00 | 1000.00 | 400.00",
+            total
+        ]
+    );
+}
+
+/// Net worth over time, with a graph (RPT-110).
 #[test]
 fn net_worth_by_month_with_graph() {
     let fx = fixture();
@@ -547,6 +613,7 @@ fn net_worth_by_month_with_graph() {
     assert_eq!(chart.series[2].values[1], m("63290.00"));
 }
 
+/// Tax Schedule (RPT-145).
 #[test]
 fn tax_schedule_by_form_and_line_with_schedule_d() {
     let fx = fixture();
@@ -838,6 +905,7 @@ fn income_in_tax_deferred_accounts_stays_out_of_tax_reports() {
     assert!(all.contains("2026-06-15 | IRA | Dividend"), "{all}");
 }
 
+/// Drill-down from every figure (RPT-030).
 #[test]
 fn every_figure_drills_to_a_transaction_or_account() {
     let fx = fixture();
@@ -888,6 +956,7 @@ fn voided_transactions_are_left_out() {
     assert!(!all.contains("Oops"), "{all}");
 }
 
+/// Named reports saved and rerun (RPT-020).
 #[test]
 fn saved_reports_round_trip_with_audit() {
     let mut fx = fixture();
@@ -1177,6 +1246,7 @@ fn split_marker_shows_by_default_in_tax_reports_only() {
     assert!(marks.iter().any(|(d, m)| d == "2026-05-01" && m.is_empty()));
 }
 
+/// CSV export (RPT-050).
 #[test]
 fn csv_export_expands_every_group() {
     let fx = fixture();
@@ -1198,9 +1268,9 @@ fn csv_export_expands_every_group() {
 }
 
 #[test]
-fn dashboard_sums_net_worth_month_and_due_items() {
+fn cards_sum_net_worth_month_and_due_items() {
     let fx = fixture();
-    let d = reports::dashboard(fx.book.conn(), date("2026-06-30"), 14).unwrap();
+    let d = reports::card_data(fx.book.conn(), date("2026-06-30"), 14).unwrap();
     assert_eq!(d.cash, m("7640.00"));
     assert_eq!(d.investments, m("55700.00"));
     assert_eq!(d.other_assets, Money::ZERO);
@@ -1220,7 +1290,7 @@ fn dashboard_sums_net_worth_month_and_due_items() {
         d.warnings
     );
     // Only checking, savings, and credit card accounts are checked for old
-    // uncleared transactions (DSH-030): no line for investment accounts.
+    // uncleared transactions (CARD-030): no line for investment accounts.
     assert!(
         d.warnings
             .iter()
@@ -1235,6 +1305,133 @@ fn dashboard_sums_net_worth_month_and_due_items() {
         !d.warnings
             .iter()
             .any(|w| w.account == Some(fx.brokerage) || w.account == Some(fx.ira))
+    );
+}
+
+/// CARD-010: this month's income and spending, other assets, and the
+/// net worth the account list shows (ACCT-240).
+#[test]
+fn cards_sum_this_months_income_and_spending_and_other_assets() {
+    let mut fx = fixture();
+    let house = fx.book.account("House", AccountType::OtherAsset).unwrap();
+    fx.book
+        .opening_balance(house, date("2026-01-01"), m("300000.00"))
+        .unwrap();
+    // January: salary 3,000.00 and groceries 100.00; the brokerage buy
+    // and the opening balances are neither.
+    let d = reports::card_data(fx.book.conn(), date("2026-01-31"), 14).unwrap();
+    assert_eq!(d.month_from, date("2026-01-01"));
+    assert_eq!(d.income, m("3000.00"));
+    assert_eq!(d.expenses, m("100.00"));
+    assert_eq!(d.net, m("2900.00"));
+    assert_eq!(d.other_assets, m("300000.00"));
+    assert_eq!(
+        reports::net_worth(fx.book.conn(), date("2026-01-31")).unwrap(),
+        d.net_worth
+    );
+    assert_eq!(
+        d.net_worth,
+        d.cash + d.investments + d.other_assets - d.liabilities
+    );
+}
+
+/// CARD-030: missing and stale prices (once per security, none for a
+/// security sold out), integrity problems, and backup problems.
+#[test]
+fn cards_warn_about_prices_integrity_and_backups() {
+    use kansha_core::{Timestamp, settings};
+    let today = date("2026-06-30");
+    let mut book = Book::new(today).unwrap();
+    let brk = book.account("Brokerage", AccountType::Brokerage).unwrap();
+    let ira = book.account("IRA", AccountType::TraditionalIra).unwrap();
+    let opening = book.find_category("Opening Balance").unwrap().unwrap();
+    let new = |s: &mut Book, name: &str, ticker: &str| {
+        s.security(name, ticker, SecurityType::Stock).unwrap()
+    };
+    let (none, old, gone) = (
+        new(&mut book, "No Price", "NOP"),
+        new(&mut book, "Old Price", "OLD"),
+        new(&mut book, "Sold Out", "OUT"),
+    );
+    book.price(old, date("2026-05-01"), "10".parse().unwrap())
+        .unwrap();
+    book.price(gone, date("2026-06-30"), "10".parse().unwrap())
+        .unwrap();
+    let trade = |b: &mut Book, a, action, sec, shares: &str| {
+        let mut i = InvInput::new(a, action, date("2026-02-01"));
+        i.security = Some(sec);
+        i.quantity = Some(shares.parse().unwrap());
+        i.amount = Some(m("100.00"));
+        b.invest(&i).unwrap();
+    };
+    for a in [brk, ira] {
+        let mut cash = InvInput::new(a, InvAction::CashIn, date("2026-01-02"));
+        cash.amount = Some(m("1000.00"));
+        cash.counterpart = Some(Target::Category(opening));
+        book.invest(&cash).unwrap();
+        // Held in both accounts: still one warning each.
+        trade(&mut book, a, InvAction::Buy, none, "10");
+        trade(&mut book, a, InvAction::Buy, old, "10");
+    }
+    trade(&mut book, brk, InvAction::Buy, gone, "10");
+    trade(&mut book, brk, InvAction::Sell, gone, "10");
+
+    // One unbalanced transaction.
+    let chk = book.account("Checking", AccountType::Checking).unwrap();
+    let food = book.category("Food", CategoryKind::Expense).unwrap();
+    let t = book
+        .entry(chk, date("2026-06-29"))
+        .amount(m("-10.00"))
+        .cleared(Cleared::Cleared)
+        .category(food)
+        .save()
+        .unwrap();
+    book.conn()
+        .execute(
+            "UPDATE posting SET amount = 999 WHERE txn_id = ?1 AND line_no = 2",
+            [t.id.0],
+        )
+        .unwrap();
+
+    // The last backup went to Downloads and carried two problems.
+    book.write(|tx| {
+        settings::record_backup(
+            tx,
+            Timestamp::from_ymd_hms(2026, 6, 29, 12, 0, 0)?,
+            "/tmp/b.kbak",
+            2,
+            true,
+        )
+    })
+    .unwrap();
+
+    let d = reports::card_data(book.conn(), today, 14).unwrap();
+    let got: Vec<_> = d
+        .warnings
+        .iter()
+        .map(|w| (w.kind, w.message.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (WarningKind::MissingPrice, "NOP has no price."),
+            (
+                WarningKind::StalePrice,
+                "OLD price is out of date (last 2026-05-01)."
+            ),
+            (
+                WarningKind::Integrity,
+                "The integrity check found 1 problem."
+            ),
+            (
+                WarningKind::Backup,
+                "The backup folder is missing, so backups go to Downloads. Choose a folder in Settings."
+            ),
+            (
+                WarningKind::Backup,
+                "The last backup was made with 2 integrity problems."
+            ),
+        ]
     );
 }
 

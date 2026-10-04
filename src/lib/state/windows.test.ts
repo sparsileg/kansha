@@ -39,7 +39,7 @@ describe("windows", () => {
     windowState.show(a);
     expect(await windowState.close(a)).toBe(true);
     expect(viewState.current).toBe("search");
-    expect(viewState.entries.map((e) => e.view)).toEqual(["dashboard", "search"]);
+    expect(viewState.entries.map((e) => e.view)).toEqual(["insights", "search"]);
   });
 
   it("a kind's hook can keep a window open", async () => {

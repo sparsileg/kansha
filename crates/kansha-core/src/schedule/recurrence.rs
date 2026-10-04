@@ -677,4 +677,97 @@ mod tests {
         w.interval = 2;
         assert_eq!(w.describe(), "Every 2 weeks on Friday");
     }
+
+    /// REC-300: the "How often" text for each frequency.
+    #[test]
+    fn descriptions_of_every_frequency() {
+        let r = |f: Frequency, interval: i64| Recurrence {
+            interval,
+            ..Recurrence::new(f, d("2026-01-04"))
+        };
+        assert_eq!(r(Frequency::Once, 1).describe(), "Only once");
+        assert_eq!(r(Frequency::Daily, 1).describe(), "Every day");
+        assert_eq!(r(Frequency::Daily, 3).describe(), "Every 3 days");
+        assert_eq!(r(Frequency::Weekly, 1).describe(), "Every week on Sunday");
+        let t = Recurrence {
+            day1: Some(1),
+            day2: Some(23),
+            ..r(Frequency::TwiceMonthly, 1)
+        };
+        assert_eq!(t.describe(), "Twice a month, 1st and 23rd");
+        let mut m = monthly(11, "2026-01-11");
+        m.interval = 6;
+        assert_eq!(m.describe(), "Twice a year on the 11th");
+        m.interval = 2;
+        assert_eq!(m.describe(), "Every 2 months on the 11th");
+        assert_eq!(
+            r(Frequency::MonthlyLastDay, 1).describe(),
+            "Monthly on the last day"
+        );
+        assert_eq!(
+            r(Frequency::MonthlyLastDay, 3).describe(),
+            "Every 3 months on the last day"
+        );
+        let mut n = Recurrence {
+            weekday: Some(5),
+            week_of_month: Some(-1),
+            ..r(Frequency::MonthlyNthWeekday, 2)
+        };
+        assert_eq!(n.describe(), "The last Friday every 2 months");
+        for (wd, wk, text) in [
+            (1, 1, "The first Monday of every month"),
+            (3, 3, "The third Wednesday of every month"),
+            (4, 4, "The fourth Thursday of every month"),
+            (6, 1, "The first Saturday of every month"),
+            (7, 1, "The first Sunday of every month"),
+        ] {
+            n.interval = 1;
+            n.weekday = Some(wd);
+            n.week_of_month = Some(wk);
+            assert_eq!(n.describe(), text);
+        }
+        assert_eq!(r(Frequency::Yearly, 1).describe(), "Yearly");
+        assert_eq!(r(Frequency::Yearly, 2).describe(), "Every 2 years");
+    }
+
+    #[test]
+    fn daily_and_yearly_from_a_later_date_jump_ahead() {
+        let mut r = Recurrence::new(Frequency::Daily, d("2026-01-01"));
+        r.interval = 10;
+        assert_eq!(take(&r, "2026-03-05", 2), ["2026-03-12", "2026-03-22"]);
+        let mut y = Recurrence::new(Frequency::Yearly, d("2020-07-04"));
+        y.interval = 2;
+        assert_eq!(take(&y, "2027-01-01", 2), ["2028-07-04", "2030-07-04"]);
+    }
+
+    #[test]
+    fn dates_end_at_the_calendars_limit() {
+        // chrono's calendar ends in 262142: one date, then none.
+        let start = Date::from_ymd(262_142, 6, 1).unwrap();
+        let y = Recurrence::new(Frequency::Yearly, start);
+        assert_eq!(y.dates_from(start).count(), 1);
+    }
+
+    #[test]
+    fn validate_explains_each_bad_combination() {
+        let msg = |r: Recurrence| r.validate().unwrap_err().to_string();
+        let t = |day1, day2| Recurrence {
+            day1,
+            day2,
+            ..Recurrence::new(Frequency::TwiceMonthly, d("2026-01-01"))
+        };
+        assert!(msg(t(Some(1), None)).contains("choose two days"));
+        assert!(msg(t(Some(1), Some(32))).contains("choose two days"));
+        assert!(msg(t(Some(15), Some(1))).contains("must come before"));
+        let w = Recurrence {
+            day1: Some(1),
+            ..Recurrence::new(Frequency::Weekly, d("2026-01-01"))
+        };
+        assert!(msg(w).contains("only to monthly"));
+        let m = Recurrence {
+            day2: Some(15),
+            ..monthly(1, "2026-01-01")
+        };
+        assert!(msg(m).contains("only to twice a month"));
+    }
 }

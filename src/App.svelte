@@ -108,7 +108,7 @@
   });
 
   const views: Record<string, Component> = {
-    dashboard: Insights,
+    insights: Insights,
     account: Account,
     manage: Manage,
     search: Search,

@@ -20,6 +20,34 @@ test-frontend:
 perf:
     cargo test --release -p kansha-core --test integration perf:: -- --ignored --nocapture
 
+# Engine requirements no test cites (TEST-070)
+trace:
+    cargo test -p kansha-core --test trace -- --ignored --nocapture
+
+# Engine test coverage (TEST-150): summary here, detail in target/llvm-cov/html/index.html
+cov:
+    cargo llvm-cov -p kansha-core --html
+    cargo llvm-cov report -p kansha-core --summary-only
+
+# Review changed report snapshots (TEST-090): accept or reject each diff
+snap-review:
+    cargo insta review
+
+# Trace, then coverage; a trace failure does not stop coverage
+report:
+    -just trace
+    just cov
+
+# Every automated release check, with a PASS/FAIL/NOTE summary; BASE = last release (default: latest tag)
+[unix]
+release-check BASE="":
+    scripts/release-check.sh {{BASE}}
+
+# Set the app version in all the places it is written, e.g. `just version 0.9.1`
+[unix]
+version V:
+    scripts/set-version.sh {{V}}
+
 # Formatting, lints, type-checking, and tests: what CI runs
 check: fmt-check clippy typecheck test
 

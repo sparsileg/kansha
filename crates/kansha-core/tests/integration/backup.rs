@@ -345,7 +345,7 @@ fn backup_integrity_problems_are_counted_not_fatal() {
 
 /// BAK-030, BAK-040: the whole routine. A missing chosen folder sends the
 /// backup to Downloads, creates nothing at the missing path, and is
-/// recorded for the dashboard; choosing a folder clears it. Retention
+/// recorded for the Needs attention card; choosing a folder clears it. Retention
 /// prunes old automatic backups only.
 #[test]
 fn back_up_falls_back_to_downloads_and_records_status() {

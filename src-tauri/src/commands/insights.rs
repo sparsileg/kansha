@@ -1,4 +1,4 @@
-//! Insights: named tabs of dashboard cards (INS-010 … INS-040).
+//! Insights: named tabs of cards (INS-010 … INS-040).
 
 use kansha_core::insights::{Insight, InsightId};
 use kansha_core::persistence::insights as repo;

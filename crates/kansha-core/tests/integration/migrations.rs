@@ -911,11 +911,9 @@ fn migration_0014_turns_the_dashboard_cards_into_the_first_insight() {
         assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
         assert_eq!(count(&db, "setting WHERE key = 'dashboard_cards'"), 0);
         db.conn()
-            .query_row(
-                "SELECT cards FROM insight WHERE name = 'Dashboard' AND position = 1",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT cards FROM insight WHERE position = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap()
     };
     let all = r#"["net_worth","this_month","net_worth_trend","upcoming","attention"]"#;
@@ -949,4 +947,42 @@ fn migration_0014_turns_the_dashboard_cards_into_the_first_insight() {
     .unwrap();
     assert!(c.execute("DELETE FROM audit_log", []).is_err());
     assert!(c.execute("UPDATE insight SET cards = '{}'", []).is_err());
+}
+
+#[test]
+fn migration_0015_names_the_first_insight_status() {
+    let clock = clock();
+    let names_after = |sql: &str| -> Vec<String> {
+        let mut db = Db::open_in_memory_at(&clock, 14).unwrap();
+        db.conn().execute_batch(sql).unwrap();
+        assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+        let mut st = db
+            .conn()
+            .prepare("SELECT name FROM insight ORDER BY position, id")
+            .unwrap();
+        st.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    // 0014's insight is renamed.
+    assert_eq!(names_after(""), ["Status"]);
+    // One the user renamed, or made with that name, is kept.
+    assert_eq!(names_after("UPDATE insight SET name = 'Mine'"), ["Mine"]);
+    assert_eq!(
+        names_after(
+            "UPDATE insight SET name = 'Old' WHERE id = 1;
+             INSERT INTO insight (name, position, cards, created_at)
+                 VALUES ('Dashboard', 2, '[]', '2026-10-01T00:00:00Z');"
+        ),
+        ["Old", "Dashboard"]
+    );
+    // A "Status" already there (any case) leaves "Dashboard" alone.
+    assert_eq!(
+        names_after(
+            "INSERT INTO insight (name, position, cards, created_at)
+                 VALUES ('STATUS', 2, '[]', '2026-10-01T00:00:00Z');"
+        ),
+        ["Dashboard", "STATUS"]
+    );
 }

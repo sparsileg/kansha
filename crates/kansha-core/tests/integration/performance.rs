@@ -247,6 +247,83 @@ fn shares_moved_between_accounts_count_at_market_value_and_cancel_when_combined(
     assert_eq!(both.gain().unwrap(), m("575.00"));
 }
 
+/// The Brokerage period for 2026, after a true-up on 30 September that
+/// sets its VTI lots to `broker` (MIG-115).
+fn after_true_up(broker: &[(&str, &str, &str)]) -> invest::AccountPeriod {
+    let mut fx = fixture();
+    let lots: Vec<invest::TrueUpLot> = broker
+        .iter()
+        .map(|(d, shares, basis)| invest::TrueUpLot {
+            acquired: date(d),
+            quantity: shares.parse().unwrap(),
+            basis: m(basis),
+        })
+        .collect();
+    fx.book
+        .write(|tx| invest::true_up(tx, fx.brokerage, fx.vti, date("2026-09-30"), &lots, ""))
+        .unwrap();
+    invest::account_period(
+        fx.book.conn(),
+        fx.brokerage,
+        date("2026-01-01"),
+        date("2026-12-31"),
+    )
+    .unwrap()
+}
+
+fn vti_track(a: &invest::AccountPeriod) -> &Track {
+    &a.securities.first().unwrap().1
+}
+
+#[test]
+fn a_true_up_that_only_changes_basis_moves_no_money() {
+    let fx = fixture();
+    let before = invest::account_period(
+        fx.book.conn(),
+        fx.brokerage,
+        date("2026-01-01"),
+        date("2026-12-31"),
+    )
+    .unwrap();
+    // Same shares; the broker has the June lot at 1,050.00, not 1,100.00.
+    let a = after_true_up(&[
+        ("2025-12-31", "10", "1000.00"),
+        ("2026-06-30", "10", "1050.00"),
+    ]);
+    assert_eq!(a.total.flows.get(&date("2026-09-30")), None);
+    assert_eq!(vti_track(&a).flows.get(&date("2026-09-30")), None);
+    assert_eq!(summary(&a.total), summary(&before.total));
+}
+
+#[test]
+fn a_true_up_that_removes_shares_counts_them_as_money_out_at_market_value() {
+    // The broker never had the June lot: 10 shares leave at 110.00.
+    let a = after_true_up(&[("2025-12-31", "10", "1000.00")]);
+    let out = Some(&m("-1100.00"));
+    assert_eq!(a.total.flows.get(&date("2026-09-30")), out);
+    assert_eq!(vti_track(&a).flows.get(&date("2026-09-30")), out);
+    // Net in: June buy 1,100.00, true-up -1,100.00, dividend paid out
+    // -20.00. Gain: 10 shares at 121.00 - 1,000.00 at the start + 20.00.
+    let t = vti_track(&a);
+    assert_eq!(t.net_in().unwrap(), m("-20.00"));
+    assert_eq!(t.end, m("1210.00"));
+    assert_eq!(t.gain().unwrap(), m("230.00"));
+}
+
+#[test]
+fn a_true_up_that_adds_shares_counts_them_as_money_in_at_market_value() {
+    // The broker also has 5 shares from January: they arrive at 110.00.
+    let a = after_true_up(&[
+        ("2025-12-31", "10", "1000.00"),
+        ("2026-01-15", "5", "500.00"),
+        ("2026-06-30", "10", "1100.00"),
+    ]);
+    let into = Some(&m("550.00"));
+    assert_eq!(a.total.flows.get(&date("2026-09-30")), into);
+    assert_eq!(vti_track(&a).flows.get(&date("2026-09-30")), into);
+    assert_eq!(vti_track(&a).end, m("3025.00"));
+}
+
 // --- The investing reports on the same book -------------------------------
 
 use kansha_core::reports::{
@@ -286,6 +363,7 @@ fn run(fx: &Fx, kind: ReportKind) -> Report {
     reports::run(fx.book.conn(), &s, date("2026-12-31")).unwrap()
 }
 
+/// Investment Performance (RPT-310).
 #[test]
 fn performance_report_by_account_and_security() {
     let fx = fixture();
@@ -308,6 +386,8 @@ fn performance_report_by_account_and_security() {
     );
 }
 
+/// Investment Income, Holdings, and Asset Allocation (RPT-160, RPT-170,
+/// RPT-180).
 #[test]
 fn income_holdings_and_allocation_reports() {
     let fx = fixture();

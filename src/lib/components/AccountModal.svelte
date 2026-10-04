@@ -159,7 +159,7 @@
       await call(commands.accountDelete(account!.id));
       if (registerState.accountId === account!.id) {
         registerState.close();
-        viewState.navigate("dashboard");
+        viewState.navigate("insights");
       }
     });
   }

@@ -6,7 +6,7 @@
 // without reworking the callers (UI-conventions).
 
 export type ViewId =
-  | "dashboard"
+  | "insights"
   | "account"
   | "window"
   | "manage"
@@ -23,7 +23,7 @@ export interface ViewParams {
   account?: number;
   /** The "window" view: which window (windows.svelte.ts). */
   window?: number;
-  /** The Insights view ("dashboard"): which insight's tab; the first
+  /** The Insights view ("insights"): which insight's tab; the first
    * when absent. */
   insight?: number;
 }
@@ -38,7 +38,7 @@ const same = (a: Entry, view: ViewId, params: ViewParams) =>
   a.view === view && JSON.stringify(a.params) === JSON.stringify(params);
 
 class ViewState {
-  entries = $state<Entry[]>([{ view: "dashboard", params: {} }]);
+  entries = $state<Entry[]>([{ view: "insights", params: {} }]);
   index = $state(0);
 
   get current(): ViewId {
@@ -73,7 +73,7 @@ class ViewState {
     for (let i = this.index; i >= 0; i--) {
       if (this.entries[i].view !== "window") return this.entries[i];
     }
-    return { view: "dashboard", params: {} };
+    return { view: "insights", params: {} };
   }
 
   /** Drop the entries `drop` matches (a closed window's), and repeats
@@ -87,14 +87,14 @@ class ViewState {
       if (!drop(e) && !(last && same(last, e.view, e.params))) out.push(e);
       if (i <= this.index) index = Math.max(out.length - 1, 0);
     });
-    if (out.length === 0) out.push({ view: "dashboard", params: {} });
+    if (out.length === 0) out.push({ view: "insights", params: {} });
     this.entries = out;
     this.index = index;
   }
 
   /** Forget the history (tests). */
   reset() {
-    this.entries = [{ view: "dashboard", params: {} }];
+    this.entries = [{ view: "insights", params: {} }];
     this.index = 0;
   }
 

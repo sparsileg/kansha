@@ -1275,3 +1275,83 @@ fn a_money_market_price_is_never_stale() {
     assert!(stale(vti));
     assert!(!stale(mm));
 }
+
+/// Cash below zero is allowed but flagged (INV-310).
+#[test]
+fn negative_cash_is_allowed_and_flagged() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    b.invest(&buy(brk, vti, "2026-03-01", "60", "12000.00"))
+        .unwrap();
+    let reg = invest::register(b.conn(), brk, date("2026-06-30")).unwrap();
+    assert_eq!(reg.cash, Some(m("-2000.00")));
+    assert!(reg.negative_cash);
+
+    let opening = b.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-04-01"));
+    cash.amount = Some(m("3000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    b.invest(&cash).unwrap();
+    let reg = invest::register(b.conn(), brk, date("2026-06-30")).unwrap();
+    assert_eq!(reg.cash, Some(m("1000.00")));
+    assert!(!reg.negative_cash);
+}
+
+/// The lot view (LOT-150): each open lot's date, open shares and basis,
+/// basis per share, market value, unrealized gain, and holding period.
+#[test]
+fn lot_view_values_each_open_lot() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-06-01", "5", "1100.00"))
+        .unwrap();
+    // First in, first out: 4 shares leave the February lot.
+    let mut sell = InvInput::new(brk, InvAction::Sell, date("2026-06-15"));
+    sell.security = Some(vti);
+    sell.quantity = Some(q("4"));
+    sell.amount = Some(m("900.00"));
+    b.invest(&sell).unwrap();
+    b.price(vti, date("2027-03-01"), p("200")).unwrap();
+
+    let lots = invest::open_lots(b.conn(), brk, None, date("2027-03-01")).unwrap();
+    let got: Vec<_> = lots
+        .iter()
+        .map(|l| {
+            (
+                l.lot.acquired,
+                l.open_quantity,
+                l.open_basis,
+                l.per_share,
+                l.market_value,
+                l.unrealized,
+                l.term,
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (
+                date("2026-02-01"),
+                q("6"),
+                m("1200.00"),
+                Some(p("200")),
+                Some(m("1200.00")),
+                Some(m("0.00")),
+                Term::Long,
+            ),
+            (
+                date("2026-06-01"),
+                q("5"),
+                m("1100.00"),
+                Some(p("220")),
+                Some(m("1000.00")),
+                Some(m("-100.00")),
+                Term::Short,
+            ),
+        ]
+    );
+    assert!(lots.iter().all(|l| l.security_label == "VTI"));
+}

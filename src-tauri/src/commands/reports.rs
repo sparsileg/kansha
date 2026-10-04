@@ -1,5 +1,5 @@
-//! Reports, saved reports, tax lines, and the dashboard (RPT, DSH,
-//! CAT-050).
+//! Reports, saved reports, tax lines, and what the Insights cards show
+//! (RPT, CARD, CAT-050).
 
 use std::path::PathBuf;
 
@@ -7,7 +7,7 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, Column, Dashboard, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
+    self, CardData, Column, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
     ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
 };
 use tauri::{Manager, State};
@@ -202,11 +202,12 @@ pub fn tax_line_list(state: State<'_, AppState>) -> CmdResult<Vec<TaxLine>> {
     state.read(|db, _| repo::tax_lines(db.conn()))
 }
 
-/// The dashboard; scheduled items due within `upcoming_days` (DSH-020).
+/// What the Insights cards show; scheduled items due within
+/// `upcoming_days` (CARD-020).
 #[tauri::command]
 #[specta::specta]
-pub fn dashboard(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<Dashboard> {
-    state.read(|db, today| reports::dashboard(db.conn(), today, upcoming_days))
+pub fn card_data(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<CardData> {
+    state.read(|db, today| reports::card_data(db.conn(), today, upcoming_days))
 }
 
 /// Net worth today, for the foot of the account list (ACCT-240).

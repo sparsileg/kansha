@@ -1,4 +1,4 @@
-//! Insights (INS-010 … INS-040): named views of dashboard cards, shown as
+//! Insights (INS-010 … INS-040): named views of cards, shown as
 //! tabs. Each is a name and an ordered list of card IDs; one card can be
 //! on several insights. The card catalog and the cards' contents belong
 //! to the UI, so the IDs are only checked for shape here. Stored by

@@ -1,0 +1,16 @@
+---
+source: crates/kansha-core/tests/integration/report_snapshots.rs
+expression: body
+---
+Ticker | Shares | Price | Price Date | Stale | Cost Basis | Market Value | Gain/Loss | Gain %
++ Brokerage |  |  |  |  |  | 60684.92 | 78914.68 | 14625.06 | 
+  - Apple Inc | AAPL | 103 | 76.46 | 2025-12-31 |  | 4638.19 | 7875.38 | 3237.19 | 69.79
+  - Vanguard Total Bond Market ETF | BND | 150 | 72.61 | 2025-12-31 |  | 10800.00 | 10891.50 | 91.50 | 0.85
+  - Vanguard Total International Stock ETF | VXUS | 150 | 58.36 | 2025-12-31 |  | 8250.00 | 8754.00 | 504.00 | 6.11
+  - Vanguard Total Stock Market ETF | VTI | 159.771 | 299.11 | 2025-12-31 |  | 36996.73 | 47789.10 | 10792.37 | 29.17
+  - Cash |  |  |  |  |  |  | 3604.70 |  | 
++ Roth IRA |  |  |  |  |  | 37572.97 | 58629.85 | 20631.88 | 
+  - Vanguard Total Stock Market ETF | VTI | 50 | 299.11 | 2025-12-31 |  | 7500.00 | 14955.50 | 7455.50 | 99.41
+  - Vanguard Wellington Fund Investor | VWELX | 932.098 | 46.4 | 2025-12-31 |  | 30072.97 | 43249.35 | 13176.38 | 43.81
+  - Cash |  |  |  |  |  |  | 425.00 |  | 
+= OVERALL TOTAL |  |  |  |  |  | 98257.89 | 137544.53 | 35256.94 |

@@ -22,7 +22,7 @@ vi.mock("../lib/api", async (orig) => {
       insightUpdate: (id: number, name: string, cards: string[]) => ins.update(id, name, cards),
       insightMove: (id: number, delta: number) => ins.move(id, delta),
       insightDelete: (id: number) => ins.remove(id),
-      dashboard: () =>
+      cardData: () =>
         ok({
           today: "2026-09-27",
           net_worth: "10019506.27",
@@ -51,8 +51,8 @@ vi.mock("../lib/shell/nav", async (orig) => {
   return { ...real, openAccount: (id: number) => openAcct(id) };
 });
 
-import Dashboard from "./Insights.svelte";
-import { CARDS } from "../lib/dashboard/cards";
+import Insights from "./Insights.svelte";
+import { CARDS } from "../lib/insights/cards";
 import { bookSettings } from "../lib/state/booksettings.svelte";
 import { confirmState } from "../lib/state/confirm.svelte";
 import { listsState } from "../lib/state/lists.svelte";
@@ -82,16 +82,16 @@ async function gear(item: string) {
   await fireEvent.click(screen.getByRole("menuitem", { name: item }));
 }
 
-describe("Insights: the Status insight (DSH-010 … DSH-030)", () => {
+describe("Insights: the Status insight (CARD-010 … CARD-030)", () => {
   it("shows net worth, its parts, this month, what is due, and warnings", async () => {
-    render(Dashboard);
+    render(Insights);
     expect(await screen.findByText("10,019,506.27")).toBeTruthy();
     for (const t of ["121,251.89", "9,176,614.40", "725,100.00", "−3,460.02", "5,000.00", "1,234.56", "3,765.44"]) {
       expect(screen.getByText(t)).toBeTruthy();
     }
     expect(screen.getByText("Overdue")).toBeTruthy();
     expect(screen.getByRole("img", { name: /Net Worth/ })).toBeTruthy();
-    // Backup status and the missing-folder warning (DSH-030).
+    // Backup status and the missing-folder warning (CARD-030).
     expect(screen.getByText(/backup folder is missing/)).toBeTruthy();
     expect(screen.getByText(/Last backup: 2026-09-26T22:00:00Z\. Last full verification:\s+never\./)).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: /uncleared/ }));
@@ -99,7 +99,7 @@ describe("Insights: the Status insight (DSH-010 … DSH-030)", () => {
   });
 
   it("shows each card, in order, named by its ID and heading", async () => {
-    const { container } = render(Dashboard);
+    const { container } = render(Insights);
     await screen.findByText("10,019,506.27");
     const ids = [...container.querySelectorAll("[data-card]")].map((e) => e.getAttribute("data-card"));
     expect(ids).toEqual(CARDS.map((c) => c.id));
@@ -108,7 +108,7 @@ describe("Insights: the Status insight (DSH-010 … DSH-030)", () => {
   });
 
   it("the title sits in a shaded band inside one outlined sheet holding the cards", async () => {
-    const { container } = render(Dashboard);
+    const { container } = render(Insights);
     await screen.findByText("10,019,506.27");
     const sheet = container.querySelector(".view-sheet") as HTMLElement;
     const title = sheet.querySelector(":scope > .view-title") as HTMLElement;
@@ -120,10 +120,10 @@ describe("Insights: the Status insight (DSH-010 … DSH-030)", () => {
 
 });
 
-describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
+describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {
   it("shows one tab per insight; the first opens unless one is named", async () => {
     listsState.insights = [status, spending];
-    const { container } = render(Dashboard);
+    const { container } = render(Insights);
     await screen.findByText("10,019,506.27");
     expect(tabs()).toEqual([
       ["Status", "true"],
@@ -137,8 +137,8 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
 
   it("the same card can be on two insights", async () => {
     listsState.insights = [status, spending];
-    viewState.navigate("dashboard", { insight: 2 });
-    const { container } = render(Dashboard);
+    viewState.navigate("insights", { insight: 2 });
+    const { container } = render(Insights);
     await screen.findByText("10,019,506.27");
     expect(shownCards(container)).toEqual(["attention", "net_worth"]);
     await fireEvent.click(screen.getByRole("tab", { name: "Status" }));
@@ -146,7 +146,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
   });
 
   it("Create shows a new tab with the modal; Cancel drops it and makes nothing", async () => {
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Create new insight…");
     expect(tabs()).toEqual([
@@ -164,7 +164,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
     const made: Insight = { id: 7, name: "Plans", cards: ["upcoming", "net_worth"] };
     ins.create.mockReturnValue(ok(made));
     ins.list.mockReturnValue(ok([status, made]));
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Create new insight…");
     const dlg = screen.getByRole("dialog", { name: "New insight" });
@@ -191,7 +191,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
   it("Customize renames the insight and sets its cards", async () => {
     ins.update.mockImplementation((id: number, name: string, cards: string[]) => ok({ id, name, cards }));
     ins.list.mockReturnValue(ok([{ id: 1, name: "Overview", cards: ["this_month"] }]));
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Customize…");
     const dlg = screen.getByRole("dialog", { name: "Customize insight" });
@@ -212,7 +212,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
     ins.create.mockReturnValue(
       Promise.resolve({ status: "error", error: { kind: "invalid", message: "an insight named \"Status\" already exists" } }),
     );
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Create new insight…");
     const dlg = screen.getByRole("dialog", { name: "New insight" });
@@ -223,7 +223,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
   });
 
   it("moves and deletes are greyed out where they cannot apply", async () => {
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await fireEvent.click(screen.getByRole("button", { name: "Insight options" }));
     const off = (n: string) => (screen.getByRole("menuitem", { name: n }) as HTMLButtonElement).disabled;
@@ -234,7 +234,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
   it("Move right reorders the tabs", async () => {
     listsState.insights = [status, spending];
     ins.move.mockReturnValue(ok([spending, status]));
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Move right");
     await waitFor(() => expect(ins.move).toHaveBeenCalledWith(1, 1));
@@ -243,11 +243,11 @@ describe("Insights: tabs and the gear (INS-010 … INS-040)", () => {
 
   it("Delete asks first, then removes the insight and shows the first tab", async () => {
     listsState.insights = [status, spending];
-    viewState.navigate("dashboard", { insight: 2 });
+    viewState.navigate("insights", { insight: 2 });
     const ask = vi.spyOn(confirmState, "ask").mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     ins.remove.mockReturnValue(ok(null));
     ins.list.mockReturnValue(ok([status]));
-    render(Dashboard);
+    render(Insights);
     await screen.findByText("10,019,506.27");
     await gear("Delete insight…");
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));

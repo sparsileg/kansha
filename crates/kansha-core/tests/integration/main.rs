@@ -20,6 +20,7 @@ mod perf;
 mod performance;
 mod reconcile;
 mod register;
+mod report_snapshots;
 mod reports;
 mod repositories;
 mod roth_conversion;

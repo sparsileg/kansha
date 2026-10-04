@@ -6,7 +6,7 @@ vi.mock("../state/register.svelte", async () => {
   return { registerState: registerStub(open) };
 });
 
-import { goHome, openAccount, openStartup, startupChoices } from "./nav";
+import { openAccount, openInsights, openStartup, startupChoices } from "./nav";
 import { listsState } from "../state/lists.svelte";
 import { registerState } from "../state/register.svelte";
 import { settingsState } from "../state/settings.svelte";
@@ -34,12 +34,12 @@ describe("openAccount", () => {
   });
 });
 
-describe("goHome", () => {
-  it("always goes to the dashboard, whatever the startup setting", () => {
+describe("openInsights", () => {
+  it("always goes to Insights, whatever the startup setting", () => {
     settingsState.setStartup("calendar");
     viewState.navigate("search");
-    goHome();
-    expect(viewState.current).toBe("dashboard");
+    openInsights();
+    expect(viewState.current).toBe("insights");
     expect(windowState.wins).toHaveLength(0);
   });
 });
@@ -68,12 +68,12 @@ describe("openStartup", () => {
     expect(open).toHaveBeenCalledWith(7);
   });
 
-  it("falls back to the dashboard for an account that is gone or a setting it cannot open", async () => {
+  it("falls back to Insights for an account that is gone or a setting it cannot open", async () => {
     for (const to of ["account:99", "nonsense", "search", "reconcile", "window"]) {
       viewState.navigate("manage");
       settingsState.setStartup(to);
       await openStartup();
-      expect(viewState.current, to).toBe("dashboard");
+      expect(viewState.current, to).toBe("insights");
     }
     expect(windowState.wins).toHaveLength(0);
   });
@@ -103,7 +103,7 @@ describe("startupChoices", () => {
       await openStartup();
       const went = windowState.shownKind ?? viewState.current;
       expect(went, c.value).not.toBe("manage");
-      if (c.value !== "dashboard") expect(went, c.value).not.toBe("dashboard");
+      if (c.value !== "insights") expect(went, c.value).not.toBe("insights");
     }
   });
 });

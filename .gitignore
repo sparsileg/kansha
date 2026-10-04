@@ -28,6 +28,7 @@ node_modules/
 
 # insta pending snapshots
 *.pending-snap
+*.snap.new
 
 # macOS
 .DS_Store

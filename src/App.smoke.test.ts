@@ -23,7 +23,7 @@ vi.mock("./lib/api", async (orig) => {
   const DEFAULT_SETTINGS = {
     date_format: "mdy",
     week_start: "sunday",
-    startup: "dashboard",
+    startup: "insights",
     integrity_at_startup: false,
     nav_items: null,
     account_panel_open: true,
@@ -130,7 +130,7 @@ vi.mock("./lib/api", async (orig) => {
       payeeList: () => ok([]),
       taxLineList: () => ok([]),
       insightList: () => ok([]),
-      dashboard: () =>
+      cardData: () =>
         Promise.resolve({
           status: "error" as const,
           error: { kind: "internal" as const, message: "not in this test" },
@@ -169,7 +169,7 @@ beforeEach(() => {
   book.settings = null;
   book.unlocks = [];
   settingsState.setAccountPanelOpen(true);
-  settingsState.setStartup("dashboard");
+  settingsState.setStartup("insights");
   registerState.accountId = null;
   windowState.reset();
   viewState.reset();

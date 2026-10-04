@@ -111,6 +111,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0014_insights.sql"),
         foreign_keys_off: false,
     },
+    Migration {
+        version: 15,
+        description: "status insight",
+        sql: include_str!("migrations/0015_status_insight.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

@@ -137,8 +137,8 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     }
 
     let t = Instant::now();
-    reports::dashboard(db.conn(), today, 14).unwrap();
-    check("dashboard", t.elapsed(), 2000, &mut failures);
+    reports::card_data(db.conn(), today, 14).unwrap();
+    check("insight cards", t.elapsed(), 2000, &mut failures);
 
     // Integrity check (INT): timed, no limit.
     let t = Instant::now();

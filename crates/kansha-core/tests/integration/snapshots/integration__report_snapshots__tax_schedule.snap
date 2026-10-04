@@ -1,0 +1,88 @@
+---
+source: crates/kansha-core/tests/integration/report_snapshots.rs
+expression: body
+---
+Date | Account | Num | S | Description | Memo | Category | Clr | Amount
+# Schedule A |  |  |  |  |  |  |  |  | -10636.38
+  + Real estate taxes |  |  |  |  |  |  |  |  | -3074.00
+    -  | 2025-04-10 | Checking |  |  | County Treasurer |  | Taxes:Property | R | -1537.00
+    -  | 2025-10-10 | Checking |  |  | County Treasurer |  | Taxes:Property | R | -1537.00
+  + Cash charity contributions |  |  |  |  |  |  |  |  | -7562.38
+    -  | 2025-01-16 | Checking | 1059 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-02-16 | Checking | 1062 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-03-16 | Checking | 1065 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-04-16 | Checking | 1068 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-04-30 | Checking |  |  | Red Cross |  | Charity:Other Giving | R | -90.20
+    -  | 2025-05-16 | Checking | 1071 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-06-02 | Checking |  |  | Red Cross |  | Charity:Other Giving | R | -67.36
+    -  | 2025-06-16 | Checking | 1074 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-07-16 | Checking | 1077 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-08-16 | Checking | 1080 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-08-26 | Checking |  |  | Red Cross |  | Charity:Other Giving | R | -92.94
+    -  | 2025-09-16 | Checking | 1083 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-09-30 | Checking |  |  | Red Cross |  | Charity:Other Giving | R | -35.48
+    -  | 2025-10-01 | Checking |  |  | Red Cross |  | Charity:Other Giving | R | -26.00
+    -  | 2025-10-16 | Checking | 1086 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-11-16 | Checking | 1089 |  | Church |  | Charity:Tithe | R | -604.20
+    -  | 2025-12-16 | Checking | 1092 |  | Church |  | Charity:Tithe | R | -604.20
+# Schedule B |  |  |  |  |  |  |  |  | 1360.71
+  + Interest income |  |  |  |  |  |  |  |  | 140.50
+    -  | 2025-01-31 | Brokerage | Interest |  |  |  | Interest |  | 16.13
+    -  | 2025-02-28 | Brokerage | Interest |  |  |  | Interest |  | 15.12
+    -  | 2025-03-31 | Brokerage | Interest |  |  |  | Interest |  | 14.73
+    -  | 2025-04-30 | Brokerage | Interest |  |  |  | Interest |  | 13.72
+    -  | 2025-05-31 | Brokerage | Interest |  |  |  | Interest |  | 12.71
+    -  | 2025-06-30 | Brokerage | Interest |  |  |  | Interest |  | 12.33
+    -  | 2025-07-31 | Brokerage | Interest |  |  |  | Interest |  | 11.31
+    -  | 2025-08-31 | Brokerage | Interest |  |  |  | Interest |  | 10.29
+    -  | 2025-09-30 | Brokerage | Interest |  |  |  | Interest |  | 9.91
+    -  | 2025-10-31 | Brokerage | Interest |  |  |  | Interest |  | 8.89
+    -  | 2025-11-30 | Brokerage | Interest |  |  |  | Interest |  | 7.87
+    -  | 2025-12-31 | Brokerage | Interest |  |  |  | Interest |  | 7.49
+  + Dividend income |  |  |  |  |  |  |  |  | 1220.21
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends |  | 122.67
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends |  | 60.00
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends |  | 90.00
+    -  | 2025-03-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends |  | 25.75
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends |  | 127.17
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends |  | 60.00
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends |  | 90.00
+    -  | 2025-06-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends |  | 25.75
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends |  | 131.56
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends |  | 60.00
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends |  | 90.00
+    -  | 2025-09-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends |  | 25.75
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends |  | 135.81
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends |  | 60.00
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends |  | 90.00
+    -  | 2025-12-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends |  | 25.75
+# Schedule D |  |  |  |  |  |  |  |  | 712.78
+  + Long-term gain/loss |  |  |  |  |  |  |  |  | 712.78
+    -  | 2025-01-15 | Brokerage | Sell |  | 25 Apple Inc |  | Realized Gain/Loss |  | 685.78
+    -  | 2025-01-15 | Brokerage | Sell |  | 25 Vanguard Total International Stock ETF |  | Realized Gain/Loss |  | 27.00
+# W-2 |  |  |  |  |  |  |  |  | 72504.00
+  + Salary or wages |  |  |  |  |  |  |  |  | 72504.00
+    -  | 2025-01-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-01-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-02-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-02-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-03-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-03-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-04-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-04-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-05-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-05-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-06-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-06-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-07-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-07-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-08-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-08-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-09-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-09-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-10-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-10-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-11-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-11-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-12-01 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00
+    -  | 2025-12-15 | Checking |  |  | Employer |  | Income:Salary | R | 3021.00

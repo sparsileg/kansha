@@ -1,4 +1,5 @@
-//! Reports (RPT-010 … RPT-150) and the dashboard (DSH-010 … DSH-030).
+//! Reports (RPT-010 … RPT-150) and the figures the Insights cards show
+//! (CARD-010 … CARD-030).
 //!
 //! Every report is built here as one shape, [`Report`]: named columns and
 //! a tree of rows. Groups carry their totals, so a collapsed group shows
@@ -12,9 +13,9 @@
 //! negative (a category or transfer amount is minus its posting).
 
 mod capital_gains;
+mod cards;
 mod chart;
 mod csv;
-mod dashboard;
 mod facts;
 mod income_expense;
 mod investing;
@@ -25,9 +26,9 @@ mod security;
 mod tax;
 mod tree;
 
+pub use cards::{CardData, Warning, WarningKind, card_data, net_worth};
 pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;
-pub use dashboard::{Dashboard, Warning, WarningKind, dashboard, net_worth};
 pub use range::{period_choices, period_label, periods, resolve};
 pub use security::{
     ChartSpan, SecurityChartKind, SecurityTxn, security_chart, security_transactions, span_dates,
@@ -106,7 +107,7 @@ impl ReportKind {
 text_enum! {
     /// Date range presets (RPT-040). This month, quarter, and year are
     /// no longer offered but still read in saved reports and used by
-    /// the dashboard.
+    /// the Insights cards.
     pub enum DatePreset {
         AllDates = "all_dates",
         /// One calendar month, quarter, or year, chosen from a list

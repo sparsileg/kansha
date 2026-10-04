@@ -86,6 +86,7 @@ fn enter(fx: &mut Fx, id: ScheduleId, due: &str) -> kansha_core::Result<schedule
         .write(|tx| schedule::enter(tx, id, date(due), &EnterEdits::default(), false))
 }
 
+/// Create a schedule (REC-100).
 #[test]
 fn create_sets_first_occurrence_and_audits() {
     let mut fx = fx();
@@ -579,6 +580,7 @@ fn a_later_occurrence_can_have_an_override_that_lands_in_the_due_list() {
     assert!(due[0].actionable);
 }
 
+/// Edit a schedule (REC-100).
 #[test]
 fn series_edit_keeps_history_and_drops_overrides() {
     let mut fx = fx();
@@ -634,6 +636,7 @@ fn series_edit_can_move_the_next_date_and_revive_an_ended_schedule() {
     assert_eq!(s.next_due, Some(date("2026-10-01")));
 }
 
+/// Delete a schedule (REC-100).
 #[test]
 fn delete_removes_an_unused_schedule_and_keeps_a_used_one() {
     let mut fx = fx();
@@ -886,6 +889,7 @@ fn ledger_create_still_refuses_the_scheduler_origin() {
     assert!(err.to_string().contains("through their schedule"), "{err}");
 }
 
+/// The Scheduled Transactions list's columns and order (REC-300).
 #[test]
 fn list_rows_describe_and_order_schedules() {
     let mut fx = fx();
@@ -1057,6 +1061,7 @@ fn projection_counts_overdue_items_today_and_real_future_entries_on_their_dates(
     assert_eq!(later[0].balance.to_string(), "4000.00");
 }
 
+/// "Schedule this" from an existing transaction (REC-140).
 #[test]
 fn from_entry_prefills_a_monthly_schedule() {
     let mut fx = fx();
@@ -1257,6 +1262,7 @@ fn one_line(account: AccountId, target: Target, amount: &str) -> ScheduleFields 
     }
 }
 
+/// A schedule on an investment account (REC-115).
 #[test]
 fn a_schedule_on_an_investment_account_enters_as_cash_out() {
     let mut fx = fx();
@@ -1459,4 +1465,106 @@ fn a_schedule_from_an_entry_takes_its_direction() {
         schedule::from_entry(&entry).unwrap().direction,
         Direction::Payment
     );
+}
+
+/// REC-070, REC-030: auto-entry stops when "# left" runs out.
+#[test]
+fn auto_enter_stops_when_the_schedule_ends() {
+    let mut fx = fx();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.mode = EntryMode::Auto;
+    f.end = End::AfterCount { count: 2 };
+    let id = create(&mut fx, &f);
+    let clock = FixedClock::new(date("2026-12-15"));
+    let report = schedule::auto_enter_due(fx.book.db_mut(), &clock).unwrap();
+    let dates: Vec<String> = report.entered.iter().map(|e| e.date.to_string()).collect();
+    assert_eq!(dates, ["2026-07-01", "2026-08-01"]);
+    assert_eq!(get(&fx, id).status, ScheduleStatus::Ended);
+}
+
+/// CAL-020: a skipped occurrence shows as done on its due date with the
+/// schedule's amount; the account filter (CAL-040) applies to done ones
+/// too.
+#[test]
+fn calendar_lists_skipped_occurrences() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    fx.book
+        .write(|tx| schedule::skip(tx, id, date("2026-07-01")))
+        .unwrap();
+    let between = |accounts: &[AccountId]| {
+        schedule::occurrences_between(
+            fx.book.conn(),
+            date("2026-07-01"),
+            date("2026-07-31"),
+            date("2026-06-30"),
+            Some(accounts),
+            true,
+        )
+        .unwrap()
+    };
+    let done = between(&[fx.chk]);
+    assert_eq!(done.len(), 1);
+    assert_eq!(done[0].status, OccurrenceStatus::Skipped);
+    assert_eq!(done[0].date, date("2026-07-01"));
+    assert_eq!(done[0].amount, m("-1000.00"));
+    assert!(between(&[fx.sav]).is_empty());
+}
+
+/// CAL-050: a split schedule in another account counts only its line
+/// that transfers into the projected account; a schedule that does not
+/// touch it counts nothing.
+#[test]
+fn projection_counts_the_split_line_that_transfers_in() {
+    let mut fx = fx();
+    let mut sv = rent_fields(&fx, "2026-07-15");
+    sv.account = fx.sav;
+    sv.recurrence.day1 = Some(15);
+    sv.lines = vec![
+        ScheduleLine {
+            target: Target::Account(fx.chk),
+            amount: m("-200.00"),
+            memo: String::new(),
+            tag: None,
+        },
+        ScheduleLine {
+            target: Target::Category(fx.rent),
+            amount: m("-100.00"),
+            memo: String::new(),
+            tag: None,
+        },
+    ];
+    create(&mut fx, &sv);
+    let mut other = rent_fields(&fx, "2026-07-01");
+    other.account = fx.sav;
+    create(&mut fx, &other);
+
+    let days = schedule::projected_balances(
+        fx.book.conn(),
+        fx.chk,
+        date("2026-06-30"),
+        date("2026-07-31"),
+        date("2026-06-30"),
+    )
+    .unwrap();
+    let at = |d: &str| days.iter().find(|x| x.date == date(d)).unwrap().balance;
+    assert_eq!(at("2026-07-14"), m("5000.00"));
+    assert_eq!(at("2026-07-15"), m("5200.00"));
+}
+
+/// REC-100: a series edit that leaves no date after the last one acted
+/// on ends the schedule.
+#[test]
+fn series_edit_with_nothing_left_ends_the_schedule() {
+    let mut fx = fx();
+    let id = create_rent(&mut fx, "2026-07-01");
+    enter(&mut fx, id, "2026-07-01").unwrap();
+    let mut f = rent_fields(&fx, "2026-07-01");
+    f.end = End::OnDate {
+        date: date("2026-07-15"),
+    };
+    fx.book.write(|tx| schedule::update(tx, id, &f)).unwrap();
+    let s = get(&fx, id);
+    assert_eq!(s.status, ScheduleStatus::Ended);
+    assert_eq!(s.next_due, None);
 }

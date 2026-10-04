@@ -11,7 +11,7 @@ import type { Settings } from "../types/bindings";
 export const DEFAULT_SETTINGS: Settings = {
   date_format: "mdy",
   week_start: "sunday",
-  startup: "dashboard",
+  startup: "insights",
   integrity_at_startup: false,
   nav_items: null,
   account_panel_open: true,

@@ -1,9 +1,8 @@
 <script lang="ts">
-  // Insights (INS-010 … INS-040): named tabs of cards, in the sheet's
-  // title band. The first is the household dashboard (DSH-010 … DSH-030):
-  // net worth and its parts, this month's income and spending, a year of
-  // net worth, what is due, and what needs attention, each a card
-  // (`lib/dashboard/cards.ts`). The gear acts on the tab shown:
+  // Insights (INS-010 … INS-030): named tabs of cards, in the sheet's
+  // title band. The cards (CARD-010 … CARD-040, `lib/insights/cards.ts`)
+  // show net worth and its parts, this month's income and spending, a
+  // year of net worth, what is due, and what needs attention. The gear acts on the tab shown:
   // Customize…, Create new insight…, Move left/right, Delete insight….
   // Every figure comes from Rust.
   import { onMount, type Snippet } from "svelte";
@@ -12,21 +11,21 @@
   import GearButton from "../lib/components/GearButton.svelte";
   import InsightModal from "../lib/components/InsightModal.svelte";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
-  import { cardsOf, type CardId } from "../lib/dashboard/cards";
+  import { cardsOf, type CardId } from "../lib/insights/cards";
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
-  import { goHome, openAccount, openInsight } from "../lib/shell/nav";
+  import { openAccount, openInsight, openInsights } from "../lib/shell/nav";
   import { confirmState } from "../lib/state/confirm.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { reportState } from "../lib/state/reports.svelte";
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { Dashboard, Insight } from "../lib/types/bindings";
+  import type { CardData, Insight } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
-  let data = $state<Dashboard | null>(null);
+  let data = $state<CardData | null>(null);
   let error = $state<string | null>(null);
   let menu = $state<{ x: number; y: number } | null>(null);
   /** The insight being customized, or "new" for Create: its tab shows
@@ -73,7 +72,7 @@
     try {
       await call(commands.insightDelete(target.id));
       await listsState.loadInsights();
-      goHome();
+      openInsights();
     } catch (e) {
       statusState.show(e instanceof Error ? e.message : String(e), "alert");
     }
@@ -89,8 +88,8 @@
 
   onMount(async () => {
     try {
-      // Days ahead for upcoming scheduled items (DSH-020).
-      data = await call(commands.dashboard(bookSettings.value.upcoming_days));
+      // Days ahead for upcoming scheduled items (CARD-020).
+      data = await call(commands.cardData(bookSettings.value.upcoming_days));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -104,7 +103,7 @@
   const accountName = (id: number) => listsState.account(id)?.name ?? `#${id}`;
 
   /** Each card's contents, by card ID (see `cards.ts`). */
-  const bodies: Record<CardId, Snippet<[Dashboard]>> = {
+  const bodies: Record<CardId, Snippet<[CardData]>> = {
     net_worth: netWorth,
     this_month: thisMonth,
     net_worth_trend: trend,
@@ -156,7 +155,7 @@
   </div>
 </section>
 
-{#snippet netWorth(d: Dashboard)}
+{#snippet netWorth(d: CardData)}
   <p class="big">{formatMoney(d.net_worth)}</p>
   <table>
     <tbody>
@@ -169,7 +168,7 @@
   <button type="button" class="link" onclick={() => openReport("net_worth")}>Net Worth report</button>
 {/snippet}
 
-{#snippet thisMonth(d: Dashboard)}
+{#snippet thisMonth(d: CardData)}
   <p class="sub">{displayDate(d.month_from)} to {displayDate(d.today)}</p>
   <table>
     <tbody>
@@ -181,11 +180,11 @@
   <button type="button" class="link" onclick={() => openReport("income_expense")}>Income/Expense report</button>
 {/snippet}
 
-{#snippet trend(d: Dashboard)}
+{#snippet trend(d: CardData)}
   <ReportChart chart={d.trend} height={200} />
 {/snippet}
 
-{#snippet upcoming(d: Dashboard)}
+{#snippet upcoming(d: CardData)}
   {#if d.upcoming.length}
     <table>
       <tbody>
@@ -206,7 +205,7 @@
   <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
 {/snippet}
 
-{#snippet attention(d: Dashboard)}
+{#snippet attention(d: CardData)}
   {#if d.warnings.length}
     <ul class="warn">
       {#each d.warnings as w, i (i)}

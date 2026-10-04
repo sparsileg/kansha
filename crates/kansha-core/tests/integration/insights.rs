@@ -1,4 +1,4 @@
-//! Insights (INS-010 … INS-040): named tabs of dashboard cards.
+//! Insights (INS-010 … INS-040): named tabs of cards.
 
 use kansha_core::Error;
 use kansha_core::insights::Insight;
@@ -25,11 +25,11 @@ fn names(book: &Book) -> Vec<String> {
 }
 
 #[test]
-fn a_new_book_has_the_dashboard_insight_with_every_card() {
+fn a_new_book_has_the_status_insight_with_every_card() {
     let b = book();
     let all = repo::list(b.conn()).unwrap();
     assert_eq!(all.len(), 1);
-    assert_eq!(all[0].name, "Dashboard");
+    assert_eq!(all[0].name, "Status");
     assert_eq!(
         all[0].cards,
         cards(&[
@@ -56,16 +56,16 @@ fn insights_are_created_updated_moved_and_deleted_with_audit() {
     let plans = b
         .write(|tx| repo::insert(tx, "Plans", &cards(&[])))
         .unwrap();
-    assert_eq!(names(&b), ["Dashboard", "Spending", "Plans"]);
+    assert_eq!(names(&b), ["Status", "Spending", "Plans"]);
 
     let renamed = b
-        .write(|tx| repo::update(tx, first.id, "Status", &cards(&["attention", "upcoming"])))
+        .write(|tx| repo::update(tx, first.id, "Overview", &cards(&["attention", "upcoming"])))
         .unwrap();
     assert_eq!(
         renamed,
         Insight {
             id: first.id,
-            name: "Status".into(),
+            name: "Overview".into(),
             cards: cards(&["attention", "upcoming"]),
         }
     );
@@ -74,11 +74,11 @@ fn insights_are_created_updated_moved_and_deleted_with_audit() {
     // Moves: one place; nothing at an end.
     let order = b.write(|tx| repo::move_by(tx, plans.id, -1)).unwrap();
     let order: Vec<_> = order.into_iter().map(|i| i.name).collect();
-    assert_eq!(order, ["Status", "Plans", "Spending"]);
+    assert_eq!(order, ["Overview", "Plans", "Spending"]);
     b.write(|tx| repo::move_by(tx, first.id, -1)).unwrap();
-    assert_eq!(names(&b), ["Status", "Plans", "Spending"]);
+    assert_eq!(names(&b), ["Overview", "Plans", "Spending"]);
     b.write(|tx| repo::move_by(tx, first.id, 1)).unwrap();
-    assert_eq!(names(&b), ["Plans", "Status", "Spending"]);
+    assert_eq!(names(&b), ["Plans", "Overview", "Spending"]);
 
     // The first can be deleted while another remains; the last cannot.
     b.write(|tx| repo::delete(tx, plans.id)).unwrap();
@@ -108,7 +108,7 @@ fn bad_names_and_cards_are_refused() {
     let id = repo::list(b.conn()).unwrap()[0].id;
     for (name, list) in [
         ("  ", cards(&[])),
-        ("dashboard", cards(&[])),
+        ("status", cards(&[])),
         ("Twice", cards(&["net_worth", "net_worth"])),
         ("Blank", cards(&[" "])),
     ] {
@@ -116,12 +116,12 @@ fn bad_names_and_cards_are_refused() {
         assert!(matches!(err, Error::Invalid(_)), "{name}: {err}");
     }
     let err = b
-        .write(|tx| repo::update(tx, id, "Dashboard", &cards(&["upcoming", "upcoming"])))
+        .write(|tx| repo::update(tx, id, "Status", &cards(&["upcoming", "upcoming"])))
         .unwrap_err();
     assert!(matches!(err, Error::Invalid(_)), "{err}");
     let err = b.write(|tx| repo::move_by(tx, id, 2)).unwrap_err();
     assert!(matches!(err, Error::Invalid(_)), "{err}");
     // Renaming to its own name in other letters is fine.
-    b.write(|tx| repo::update(tx, id, "DASHBOARD", &cards(&[])))
+    b.write(|tx| repo::update(tx, id, "STATUS", &cards(&[])))
         .unwrap();
 }

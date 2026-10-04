@@ -1,0 +1,133 @@
+---
+source: crates/kansha-core/tests/integration/report_snapshots.rs
+expression: body
+---
+Date | Account | Num | S | Description | Memo | Category | Tax Item | Clr | Amount
+# INCOME |  |  |  |  |  |  |  |  |  | 75817.49
+  + Dividends |  |  |  |  |  |  |  |  |  | 1220.21
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends | Schedule B:Dividend income |  | 122.67
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends | Schedule B:Dividend income |  | 60.00
+    -  | 2025-03-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends | Schedule B:Dividend income |  | 90.00
+    -  | 2025-03-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends | Schedule B:Dividend income |  | 25.75
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends | Schedule B:Dividend income |  | 127.17
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends | Schedule B:Dividend income |  | 60.00
+    -  | 2025-06-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends | Schedule B:Dividend income |  | 90.00
+    -  | 2025-06-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends | Schedule B:Dividend income |  | 25.75
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends | Schedule B:Dividend income |  | 131.56
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends | Schedule B:Dividend income |  | 60.00
+    -  | 2025-09-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends | Schedule B:Dividend income |  | 90.00
+    -  | 2025-09-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends | Schedule B:Dividend income |  | 25.75
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total Stock Market ETF |  | Dividends | Schedule B:Dividend income |  | 135.81
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total International Stock ETF |  | Dividends | Schedule B:Dividend income |  | 60.00
+    -  | 2025-12-20 | Brokerage | Dividend |  | Vanguard Total Bond Market ETF |  | Dividends | Schedule B:Dividend income |  | 90.00
+    -  | 2025-12-20 | Brokerage | Dividend |  | Apple Inc |  | Dividends | Schedule B:Dividend income |  | 25.75
+  + Income |  |  |  |  |  |  |  |  |  | 73744.00
+    + Refunds |  |  |  |  |  |  |  |  |  | 1240.00
+      -  | 2025-04-15 | Checking |  |  | IRS |  | Income:Refunds |  | R | 1240.00
+    + Salary |  |  |  |  |  |  |  |  |  | 72504.00
+      -  | 2025-01-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-01-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-02-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-02-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-03-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-03-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-04-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-04-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-05-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-05-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-06-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-06-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-07-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-07-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-08-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-08-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-09-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-09-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-10-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-10-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-11-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-11-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-12-01 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+      -  | 2025-12-15 | Checking |  |  | Employer |  | Income:Salary | W-2:Salary or wages | R | 3021.00
+  + Interest |  |  |  |  |  |  |  |  |  | 140.50
+    -  | 2025-01-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 16.13
+    -  | 2025-02-28 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 15.12
+    -  | 2025-03-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 14.73
+    -  | 2025-04-30 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 13.72
+    -  | 2025-05-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 12.71
+    -  | 2025-06-30 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 12.33
+    -  | 2025-07-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 11.31
+    -  | 2025-08-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 10.29
+    -  | 2025-09-30 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 9.91
+    -  | 2025-10-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 8.89
+    -  | 2025-11-30 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 7.87
+    -  | 2025-12-31 | Brokerage | Interest |  |  |  | Interest | Schedule B:Interest income |  | 7.49
+  + Realized Gain/Loss |  |  |  |  |  |  |  |  |  | 712.78
+    -  | 2025-01-15 | Brokerage | Sell |  | 25 Apple Inc |  | Realized Gain/Loss |  |  | 685.78
+    -  | 2025-01-15 | Brokerage | Sell |  | 25 Vanguard Total International Stock ETF |  | Realized Gain/Loss |  |  | 27.00
+# EXPENSES |  |  |  |  |  |  |  |  |  | -15355.25
+  + Charity |  |  |  |  |  |  |  |  |  | -7562.38
+    + Other Giving |  |  |  |  |  |  |  |  |  | -311.98
+      -  | 2025-04-30 | Checking |  |  | Red Cross |  | Charity:Other Giving | Schedule A:Cash charity contributions | R | -90.20
+      -  | 2025-06-02 | Checking |  |  | Red Cross |  | Charity:Other Giving | Schedule A:Cash charity contributions | R | -67.36
+      -  | 2025-08-26 | Checking |  |  | Red Cross |  | Charity:Other Giving | Schedule A:Cash charity contributions | R | -92.94
+      -  | 2025-09-30 | Checking |  |  | Red Cross |  | Charity:Other Giving | Schedule A:Cash charity contributions | R | -35.48
+      -  | 2025-10-01 | Checking |  |  | Red Cross |  | Charity:Other Giving | Schedule A:Cash charity contributions | R | -26.00
+    + Tithe |  |  |  |  |  |  |  |  |  | -7250.40
+      -  | 2025-01-16 | Checking | 1059 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-02-16 | Checking | 1062 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-03-16 | Checking | 1065 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-04-16 | Checking | 1068 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-05-16 | Checking | 1071 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-06-16 | Checking | 1074 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-07-16 | Checking | 1077 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-08-16 | Checking | 1080 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-09-16 | Checking | 1083 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-10-16 | Checking | 1086 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-11-16 | Checking | 1089 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+      -  | 2025-12-16 | Checking | 1092 |  | Church |  | Charity:Tithe | Schedule A:Cash charity contributions | R | -604.20
+  + Health |  |  |  |  |  |  |  |  |  | -4718.87
+    + Doctor |  |  |  |  |  |  |  |  |  | -264.70
+      -  | 2025-01-04 | Checking |  |  | Dr. Smith |  | Health:Doctor |  | R | -91.21
+      -  | 2025-01-05 | Checking |  |  | Dr. Smith |  | Health:Doctor |  | R | -173.49
+    + Insurance |  |  |  |  |  |  |  |  |  | -3943.20
+      -  | 2025-01-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-02-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-03-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-04-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-05-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-06-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-07-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-08-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-09-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-10-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-11-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+      -  | 2025-12-08 | Checking |  |  | Blue Cross |  | Health:Insurance |  | R | -328.60
+    + Pharmacy |  |  |  |  |  |  |  |  |  | -510.97
+      -  | 2025-01-31 | Checking |  |  | CVS |  | Health:Pharmacy |  | R | -59.40
+      -  | 2025-03-12 | Checking |  | S | Amazon |  | Health:Pharmacy |  | R | -17.36
+      -  | 2025-06-04 | Checking |  |  | CVS |  | Health:Pharmacy |  | R | -59.34
+      -  | 2025-09-04 | Checking |  |  | CVS |  | Health:Pharmacy |  | R | -8.48
+      -  | 2025-09-17 | Checking |  | S | Costco |  | Health:Pharmacy |  | R | -30.20
+      -  | 2025-09-24 | Checking |  | S | Costco |  | Health:Pharmacy |  | R | -12.69
+      -  | 2025-10-04 | Checking |  |  | CVS |  | Health:Pharmacy |  | R | -50.70
+      -  | 2025-02-21 | Visa |  | S | Target |  | Health:Pharmacy |  | R | -11.14
+      -  | 2025-02-28 | Visa |  |  | CVS |  | Health:Pharmacy |  | R | -22.72
+      -  | 2025-03-16 | Visa |  | S | Costco |  | Health:Pharmacy |  | R | -35.08
+      -  | 2025-03-22 | Visa |  | S | Target |  | Health:Pharmacy |  | R | -9.58
+      -  | 2025-03-26 | Visa |  | S | Target |  | Health:Pharmacy |  | R | -12.02
+      -  | 2025-04-07 | Visa |  | S | Costco |  | Health:Pharmacy |  | R | -33.09
+      -  | 2025-04-28 | Visa |  | S | Target |  | Health:Pharmacy |  | R | -12.85
+      -  | 2025-07-01 | Visa |  |  | CVS |  | Health:Pharmacy |  | R | -8.00
+      -  | 2025-07-16 | Visa |  | S | Whole Foods |  | Health:Pharmacy |  | R | -14.66
+      -  | 2025-07-19 | Visa |  |  | CVS |  | Health:Pharmacy |  | R | -34.01
+      -  | 2025-10-01 | Visa |  | S | Amazon |  | Health:Pharmacy |  | R | -11.91
+      -  | 2025-10-01 | Visa |  | S | Amazon |  | Health:Pharmacy |  | R | -14.62
+      -  | 2025-10-15 | Visa |  |  | CVS |  | Health:Pharmacy |  | R | -33.39
+      -  | 2025-11-12 | Visa |  | S | Target |  | Health:Pharmacy |  | R | -10.71
+      -  | 2025-12-31 | Visa |  |  | CVS |  | Health:Pharmacy |  | R | -9.02
+  + Taxes |  |  |  |  |  |  |  |  |  | -3074.00
+    + Property |  |  |  |  |  |  |  |  |  | -3074.00
+      -  | 2025-04-10 | Checking |  |  | County Treasurer |  | Taxes:Property | Schedule A:Real estate taxes | R | -1537.00
+      -  | 2025-10-10 | Checking |  |  | County Treasurer |  | Taxes:Property | Schedule A:Real estate taxes | R | -1537.00
+= OVERALL TOTAL |  |  |  |  |  |  |  |  |  | 60462.24

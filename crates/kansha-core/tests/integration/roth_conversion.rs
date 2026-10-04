@@ -514,3 +514,65 @@ fn a_401k_conversion_is_a_pension_distribution() {
         ]
     );
 }
+
+/// Performance across conversions (POS-030): the IRA's value leaves as
+/// money out and arrives in the Roth as money in, at the value
+/// converted; neither side shows the conversion as a gain or loss.
+#[test]
+fn performance_counts_a_conversion_as_money_out_and_in() {
+    let (mut b, ira, roth, vti) = setup();
+    let price = |b: &mut Book, d: &str, p: &str| b.price(vti, date(d), p.parse().unwrap()).unwrap();
+    price(&mut b, "2025-12-31", "70");
+    price(&mut b, "2026-03-02", "80");
+    price(&mut b, "2026-12-31", "90");
+    // In kind: 40 shares at 80.00.
+    let mut i = conversion(ira, roth, "2026-03-02");
+    i.security = Some(vti);
+    i.quantity = Some(q("40"));
+    i.price = Some("80".parse().unwrap());
+    b.invest(&i).unwrap();
+    // Cash: 5,000.00 to the Roth, 500.00 withheld.
+    let mut c = conversion(ira, roth, "2026-06-01");
+    c.amount = Some(m("5000.00"));
+    c.conversion = tax("0.00", "500.00", "0.00");
+    b.invest(&c).unwrap();
+
+    let (from, to) = (date("2026-01-01"), date("2026-12-31"));
+    // (start, net in, end, gain)
+    let figures = |t: &invest::Track| {
+        (
+            t.start.to_string(),
+            t.net_in().unwrap().to_string(),
+            t.end.to_string(),
+            t.gain().unwrap().to_string(),
+        )
+    };
+    let s = |a: &str, n: &str, e: &str, g: &str| (a.into(), n.into(), e.into(), g.into());
+
+    // IRA: 15,000.00 cash and 100 shares at 70.00 to start; 40 shares
+    // (3,200.00) and 5,500.00 cash out; 9,500.00 cash and 60 shares at
+    // 90.00 at the end. The gain is the shares' alone.
+    let p = invest::account_period(b.conn(), ira, from, to).unwrap();
+    assert_eq!(
+        figures(&p.total),
+        s("22000.00", "-8700.00", "14900.00", "1600.00")
+    );
+    assert_eq!(p.securities.len(), 1);
+    assert_eq!(
+        figures(&p.securities[0].1),
+        s("7000.00", "-3200.00", "5400.00", "1600.00")
+    );
+    assert_eq!(
+        figures(&p.rest),
+        s("15000.00", "-5500.00", "9500.00", "0.00")
+    );
+
+    // Roth: 3,200.00 in shares and 5,000.00 cash in; the shares gain
+    // 10.00 each after.
+    let p = invest::account_period(b.conn(), roth, from, to).unwrap();
+    assert_eq!(figures(&p.total), s("0.00", "8200.00", "8600.00", "400.00"));
+    assert_eq!(
+        figures(&p.securities[0].1),
+        s("0.00", "3200.00", "3600.00", "400.00")
+    );
+}

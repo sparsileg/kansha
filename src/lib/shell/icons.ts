@@ -24,7 +24,7 @@ export const SPLIT_ICON =
 export function navIcon(id: string): string {
   if (ICONS[id]) return ICONS[id];
   if (id.startsWith("account:")) return ICONS.account;
-  if (id.startsWith("insight:") || id === "tools.insights") return ICONS.insight;
+  if (id === "tools.insights") return ICONS.insight;
   if (id === "tools.payees" || id === "tools.categories" || id === "tools.tags") return ICONS.tag;
   if (id.startsWith("reports.")) return ICONS.report;
   if (id.startsWith("edit.")) return ICONS.gear;

@@ -497,8 +497,11 @@ export const commands = {
 	reportFolderDelete: (id: ReportFolderId) => typedError<null, IpcError>(__TAURI_INVOKE("report_folder_delete", { id })),
 	/**  Every tax line, in form and line order (CAT-050). */
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
-	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
-	dashboard: (upcomingDays: number) => typedError<Dashboard, IpcError>(__TAURI_INVOKE("dashboard", { upcomingDays })),
+	/**
+	 *  What the Insights cards show; scheduled items due within
+	 *  `upcoming_days` (CARD-020).
+	 */
+	cardData: (upcomingDays: number) => typedError<CardData, IpcError>(__TAURI_INVOKE("card_data", { upcomingDays })),
 	/**  Every insight, in tab order. */
 	insightList: () => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_list")),
 	/**  A new insight, after the others. */
@@ -792,7 +795,7 @@ export type BackupResult = {
 	pruned: number,
 };
 
-/**  The last backup and verification (BAK-080, DSH-030). */
+/**  The last backup and verification (BAK-080, CARD-030). */
 export type BackupStatus = {
 	last_at: string | null,
 	last_path: string | null,
@@ -846,6 +849,36 @@ export type CalendarTxn = {
 	payee: PayeeId | null,
 	/**  The account's amount (sign as in its register). */
 	amount: string,
+};
+
+/**  The figures the Insights cards show. */
+export type CardData = {
+	today: string,
+	/**  Assets minus liabilities today (CARD-010). */
+	net_worth: string,
+	/**  Checking, savings, cash, and money market accounts. */
+	cash: string,
+	/**  Investment accounts at market value. */
+	investments: string,
+	/**  Every other asset (houses, vehicles, ...). */
+	other_assets: string,
+	/**  Owed on credit cards, loans, and other liabilities (positive). */
+	liabilities: string,
+	/**  This month so far. */
+	month_from: string,
+	income: string,
+	/**  Spent (positive). */
+	expenses: string,
+	/**  Income minus spending. */
+	net: string,
+	/**  Net worth at each of the last twelve month ends, today last. */
+	trend: Chart,
+	/**  Overdue and upcoming scheduled transactions (CARD-020). */
+	upcoming: OccurrenceView[],
+	upcoming_days: number,
+	warnings: Warning[],
+	/**  Last backup and last full verification (CARD-030, BAK-080). */
+	backup: BackupStatus,
 };
 
 /**  Where an investment account's cash lives (INV-300). */
@@ -1050,36 +1083,6 @@ export type Counterpart =
 /**  More than one other posting (REG-050 "--Split--"). */
 { kind: "split" };
 
-/**  The dashboard's figures. */
-export type Dashboard = {
-	today: string,
-	/**  Assets minus liabilities today (DSH-010). */
-	net_worth: string,
-	/**  Checking, savings, cash, and money market accounts. */
-	cash: string,
-	/**  Investment accounts at market value. */
-	investments: string,
-	/**  Every other asset (houses, vehicles, ...). */
-	other_assets: string,
-	/**  Owed on credit cards, loans, and other liabilities (positive). */
-	liabilities: string,
-	/**  This month so far. */
-	month_from: string,
-	income: string,
-	/**  Spent (positive). */
-	expenses: string,
-	/**  Income minus spending. */
-	net: string,
-	/**  Net worth at each of the last twelve month ends, today last. */
-	trend: Chart,
-	/**  Overdue and upcoming scheduled transactions (DSH-020). */
-	upcoming: OccurrenceView[],
-	upcoming_days: number,
-	warnings: Warning[],
-	/**  Last backup and last full verification (DSH-030, BAK-080). */
-	backup: BackupStatus,
-};
-
 /**  How dates are shown and typed (SET-030). */
 export type DateFormat = "mdy" | "dmy" | "ymd";
 
@@ -1093,7 +1096,7 @@ export type DateOrder =
 /**
  *  Date range presets (RPT-040). This month, quarter, and year are
  *  no longer offered but still read in saved reports and used by
- *  the dashboard.
+ *  the Insights cards.
  */
 export type DatePreset = "all_dates" | 
 /**
@@ -2738,7 +2741,7 @@ export type Settings = {
 	 *  off until the user turns it on.
 	 */
 	price_download: boolean,
-	/**  Days ahead the dashboard lists scheduled items (DSH-020). */
+	/**  Days ahead the Due soon card lists scheduled items (CARD-020). */
 	upcoming_days: number,
 	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */
 	backup_folder: string | null,
@@ -2981,7 +2984,7 @@ export type Warning = {
 	account: AccountId | null,
 };
 
-/**  What a warning is about (DSH-030). */
+/**  What a warning is about (CARD-030). */
 export type WarningKind = "stale_price" | "missing_price" | "unreconciled" | "integrity" | 
 /**
  *  The backup folder is missing, no backup was ever made, or the

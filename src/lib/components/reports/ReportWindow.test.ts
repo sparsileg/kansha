@@ -539,7 +539,7 @@ describe("Report windows", () => {
   it("Save on close names a new report, saves, then closes", async () => {
     show();
     await inst.apply({ ...inst.settings, subtotal: "year" });
-    viewState.navigate("dashboard");
+    viewState.navigate("insights");
     const closing = windowState.close(inst.id);
     await waitFor(() => expect(confirmState.message).not.toBeNull());
     confirmState.answer("Save");

@@ -99,13 +99,12 @@ section records what was decided about it.
   each book has its own passphrase, key file, and backups. No OS
   keyring. Switching closes the current book first.
 
-### Home, startup, and Due count
+### Insights, startup, and Due count
 
-- **Home is the Dashboard** (changed 2026-09-28, spec 0.3.23). The Home
-  icon in the navigation bar always opens the Dashboard (DSH-010: net
-  worth with its breakdown, and this month's income, expenses, and
-  net).
-- **"On startup open to:"** setting: Dashboard, Investments, Reminders,
+- **Insights replaced Home and the Dashboard** (spec 0.7.16, 0.7.21).
+  Tools > Insights opens the Insights view, first tab; it can be put
+  on the navigation bar (CARD-010 … CARD-040, INS-010 … INS-030).
+- **"On startup open to:"** setting: Insights, Investments, Reminders,
   Calendar, Accounts, or any account; every new view or account joins
   the list. Kept on this computer until settings move into the book
   (SET-070).

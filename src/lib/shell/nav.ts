@@ -19,21 +19,21 @@ export async function openAccount(id: AccountId): Promise<void> {
   if (id !== registerState.accountId) await registerState.open(id);
 }
 
-/** The Insights button (once Home): the Insights view, first tab. */
-export function goHome(): void {
-  viewState.navigate("dashboard");
+/** The Insights view, first tab. */
+export function openInsights(): void {
+  viewState.navigate("insights");
 }
 
 /** One insight's tab in the Insights view. */
 export function openInsight(id: number): void {
-  viewState.navigate("dashboard", { insight: id });
+  viewState.navigate("insights", { insight: id });
 }
 
 /** Which views startup can open, by label; `null` for those it cannot
  * (they need an account, a search, or a window). A `Record` over every
  * view and panel, so adding one fails to compile until it is listed. */
 const STARTUP_VIEWS: Record<ViewId, string | null> = {
-  dashboard: "Insights",
+  insights: "Insights",
   account: null, // each account is its own choice
   window: null,
   manage: null,
@@ -61,7 +61,7 @@ export function startupChoices(): { value: string; label: string }[] {
   return out;
 }
 
-/** Open what the startup setting names; the dashboard if it names
+/** Open what the startup setting names; Insights if it names
  * nothing that exists. */
 export async function openStartup(): Promise<void> {
   const to = settingsState.startup;
@@ -78,7 +78,7 @@ export async function openStartup(): Promise<void> {
     viewState.navigate(to as ViewId);
     return;
   }
-  goHome();
+  openInsights();
 }
 
 /** Set once the user has agreed to quit, so closing does not ask twice. */
