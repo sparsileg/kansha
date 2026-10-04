@@ -81,9 +81,9 @@ export function buildRows(
       account: a.account,
       toggleKey: ak,
       expanded: open,
-      // Collapsed: the account's rolled-up figures.
-      cells: open ? {} : totalCells(a.totals),
-      warn: open ? undefined : warning(a.totals),
+      // Collapsed or expanded: the account's rolled-up figures.
+      cells: totalCells(a.totals),
+      warn: warning(a.totals),
     });
     if (!open) continue;
     for (const p of a.positions) {

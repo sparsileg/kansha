@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.12 (draft) |
+| **Document version** | 0.7.13 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -699,10 +699,11 @@ income and fees) is its own row, so the rows add up to the account.
   under each, its current equities, then its cash; under each equity,
   its open lots. Columns: Name (always), Ticker Symbol, Quote/Price,
   Shares, Cost Basis, Market Value, Gain/Loss, Day Gain/Loss, Price
-  Day Change (%). A collapsed account shows rolled-up Cost Basis,
-  Market Value, Gain/Loss, Day Gain/Loss, and Day %; a collapsed
-  equity shows every column it has data for; an expanded row shows its
-  children instead; Totals close the list. An as-of date (default
+  Day Change (%). An account row, collapsed or expanded, shows rolled-up
+  Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss,
+  and Day % (0.7.13); a collapsed equity shows every column it has
+  data for; an expanded equity shows its lots instead; Totals close the
+  list. An as-of date (default
   today) sets the valuation; a date with no price uses the latest
   earlier price, and the day columns are blank unless a price is dated
   exactly that day and an earlier one exists. Five named views
@@ -2330,6 +2331,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.13 | 2026-10-03 | POS-040: an expanded account row keeps its rolled-up Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss, and Day %. No schema change. No API change. |
 | 0.7.12 | 2026-10-03 | RPT-020: saved report folders: one level, one folder per report, a permanent "Unfiled" folder where new saved reports go; Reports > Saved Reports lists folders as submenus of their reports, then Manage Saved Reports… (folder toggles; Open, Create folder, Move to folder, Rename, Delete). SECU-020: the passphrase window is 520×760, with more space above the mark. **Schema change:** migration 0013 (new table `report_folder` with "Unfiled" as ID 1; `saved_report.folder_id`, table rebuilt; `audit_log` rebuilt to accept entity `report_folder`). **API change:** new commands `saved_report_move`, `report_folder_list`, `report_folder_create`, `report_folder_rename`, `report_folder_delete`; new types `ReportFolder`, `ReportFolderId`; `SavedReport` gains `folder`; `AuditEntity` gains `report_folder`. |
 | 0.7.11 | 2026-10-03 | RPT-205: Itemized Categories and Itemized Payees use the compact layout (RPT-145): INCOME, EXPENSES, and TRANSFERS shaded, group totals on the heading lines (no closing "Total" lines), overall total kept. RPT-020: Totals on group heading on by default for them too; a saved report is headed by its name; a report from the Reports menu replaces the menu's open copy of it (asking to save changes first), and a saved report opened again replaces its open copy. No schema change. No API change. |
 | 0.7.10 | 2026-10-03 | INV-010: a reinvested dividend may name no security; it is reinvested in the cash (no shares or lot; cash in, Dividends out). Reinvested capital gains still need one. INV-030: the investment form writes a date typed without its year out in full when the field is left; the register's Amount shows what a reinvestment reinvested (the cash balance is unchanged); the entry form's buttons are Enter/Next, Enter/Done, Cancel, Reset (Enter in a field no longer saves), and the register scrolls to its bottom after a new transaction. Menus (`UI-conventions.md`): Tools > Investments opens the Investments view (until now only a nav bar button). **Schema change:** migration 0012 (`investment_txn` rebuilt: `reinvest_dividend` may have no security, and then no shares). No API change. |

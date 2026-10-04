@@ -45,10 +45,11 @@ describe("investment rows", () => {
     expect(rows[1].cells.market_value).toBe("10,050.00");
   });
 
-  it("expanded account: blank header, collapsed equities with all figures, then cash", () => {
+  it("expanded account: rolled-up figures kept, collapsed equities with all figures, then cash", () => {
     const rows = buildRows(pf, new Set(["a2"]), name);
     expect(rows.map((r) => r.kind)).toEqual(["account", "position", "cash", "total"]);
-    expect(rows[0].cells).toEqual({});
+    expect(rows[0].cells).toEqual(buildRows(pf, new Set(), name)[0].cells);
+    expect(rows[0].cells.market_value).toBe("10,050.00");
     expect(rows[2].cells).toEqual({ market_value: "6,900.00" });
     expect(rows[1].cells).toEqual({
       ticker: "VTI", price: "210.00", shares: "15", cost_basis: "3,100.00",
