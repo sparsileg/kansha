@@ -6,7 +6,7 @@
     onclose,
     wide = false,
     fit = false,
-    side = false,
+    modeless = false,
     top = false,
     children,
   }: {
@@ -15,8 +15,9 @@
     wide?: boolean;
     /** As wide as its widest row (up to the window), never narrower than `wide`. */
     fit?: boolean;
-    /** Docked to the right with the page still usable beside it: no dimming, clicks pass through. */
-    side?: boolean;
+    /** The page behind stays usable: no dimming, clicks outside the
+     * dialog reach the page. */
+    modeless?: boolean;
     /** Above every other dialog, menu, and drop-down: the Confirm dialog,
      * which other dialogs open. */
     top?: boolean;
@@ -41,13 +42,13 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" class:side class:top {onkeydown}>
+<div class="backdrop" class:modeless class:top {onkeydown}>
   <div
     class="modal"
     class:wide
     class:fit
     role="dialog"
-    aria-modal={!side}
+    aria-modal={!modeless}
     aria-label={title}
     bind:this={dialog}
   >
@@ -73,15 +74,12 @@
   .backdrop.top {
     z-index: 90;
   }
-  .backdrop.side {
+  .backdrop.modeless {
     background: none;
     pointer-events: none;
-    justify-content: flex-end;
-    padding-right: 1rem;
   }
-  .backdrop.side .modal {
+  .backdrop.modeless .modal {
     pointer-events: auto;
-    width: min(40rem, 94vw);
     box-shadow: var(--shadow-popup);
   }
   .modal {

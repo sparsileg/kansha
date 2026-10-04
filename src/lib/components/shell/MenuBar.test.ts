@@ -14,6 +14,10 @@ const menus: Menu[] = [
     { id: "b.sub", label: "More", items: [
       { id: "b.sub.x", label: "Ex" },
       { id: "b.sub.y", label: "Why" },
+      { id: "b.sub.f", label: "Folder", items: [
+        { id: "b.sub.f.r", label: "Report" },
+        { id: "b.sub.f.s", label: "Second" },
+      ] },
     ] },
   ] },
 ];
@@ -112,5 +116,36 @@ describe("MenuBar", () => {
     await fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(screen.queryByRole("menuitem", { name: "Ex" })).toBeNull();
     expect(screen.getByRole("menu", { name: "Beta" })).toBeTruthy();
+  });
+
+  it("a submenu item opens a third level by mouse or keys", async () => {
+    const onselect = setup();
+    await fireEvent.click(screen.getByRole("button", { name: "Beta" }));
+    await fireEvent.mouseEnter(screen.getByRole("menuitem", { name: /More/ }).parentElement!);
+    await fireEvent.mouseEnter(screen.getByRole("menuitem", { name: /Folder/ }).parentElement!);
+    expect(screen.getByRole("menu", { name: "Folder" })).toBeTruthy();
+    // Moving to a plain item closes the third level.
+    await fireEvent.mouseEnter(screen.getByRole("menuitem", { name: "Ex" }));
+    expect(screen.queryByRole("menu", { name: "Folder" })).toBeNull();
+
+    // Keys: Right opens it on its first item, Down moves, Left goes back.
+    const folder = screen.getByRole("menuitem", { name: /Folder/ });
+    folder.focus();
+    await fireEvent.keyDown(folder, { key: "ArrowRight" });
+    const report = await screen.findByRole("menuitem", { name: "Report" });
+    await waitFor(() => expect(document.activeElement).toBe(report));
+    await fireEvent.keyDown(report, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Second" }));
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+    expect(screen.queryByRole("menu", { name: "Folder" })).toBeNull();
+    expect(document.activeElement).toBe(folder);
+    // Down in the submenu still reaches its own items, not the third level's.
+    await fireEvent.keyDown(folder, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Ex" }));
+
+    await fireEvent.click(screen.getByRole("menuitem", { name: /Folder/ }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "Second" }));
+    expect(onselect).toHaveBeenCalledWith("b.sub.f.s");
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

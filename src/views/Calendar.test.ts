@@ -124,7 +124,9 @@ describe("Calendar day with more than three items", () => {
     occurrences = [item(1)];
     render(Calendar);
     await fireEvent.click(await screen.findByRole("gridcell", { name: displayDate("2026-09-24") }));
-    expect(await screen.findByRole("dialog", { name: `Transactions: ${displayDate("2026-09-24")}` })).toBeTruthy();
+    const first = await screen.findByRole("dialog", { name: `Transactions: ${displayDate("2026-09-24")}` });
+    // Modeless: the calendar behind stays clickable (jsdom ignores the CSS).
+    expect(first.getAttribute("aria-modal")).toBe("false");
     occCalls.mockClear();
     await fireEvent.click(screen.getByRole("gridcell", { name: displayDate("2026-09-23") }));
     await waitFor(() =>

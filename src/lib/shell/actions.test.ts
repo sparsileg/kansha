@@ -25,6 +25,8 @@ import { confirmState } from "../state/confirm.svelte";
 import { statusState } from "../state/status.svelte";
 import { downloadPrices, isCurrent, runAction, undoLast } from "./actions";
 import { windowState } from "../state/windows.svelte";
+import { reportState } from "../state/reports.svelte";
+import type { SavedReport } from "../types/bindings";
 
 const c = vi.mocked(commands, true);
 
@@ -84,5 +86,16 @@ describe("Tools > Investments", () => {
     expect(windowState.shownKind).toBe("investments");
     expect(isCurrent("tools.investments")).toBe(true);
     expect(isCurrent("view.investments")).toBe(true);
+  });
+});
+
+describe("Reports > Saved Reports (RPT-020)", () => {
+  it("a saved report's menu item opens that report", async () => {
+    const r = { id: 4, name: "Mine", folder: 1, settings: {} } as unknown as SavedReport;
+    reportState.savedList = [r];
+    const open = vi.spyOn(reportState, "openSaved").mockResolvedValue({} as never);
+    runAction("saved:4");
+    expect(open).toHaveBeenCalledWith(r);
+    open.mockRestore();
   });
 });

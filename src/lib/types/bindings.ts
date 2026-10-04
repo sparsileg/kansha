@@ -485,6 +485,14 @@ export const commands = {
 	savedReportCreate: (name: string, settings: ReportSettings) => typedError<SavedReport, IpcError>(__TAURI_INVOKE("saved_report_create", { name, settings })),
 	savedReportUpdate: (id: SavedReportId, name: string, settings: ReportSettings) => typedError<SavedReport, IpcError>(__TAURI_INVOKE("saved_report_update", { id, name, settings })),
 	savedReportDelete: (id: SavedReportId) => typedError<null, IpcError>(__TAURI_INVOKE("saved_report_delete", { id })),
+	/**  Move a saved report to another folder (RPT-020). */
+	savedReportMove: (id: SavedReportId, folder: ReportFolderId) => typedError<SavedReport, IpcError>(__TAURI_INVOKE("saved_report_move", { id, folder })),
+	/**  Saved report folders, by name (RPT-020). */
+	reportFolderList: () => typedError<ReportFolder[], IpcError>(__TAURI_INVOKE("report_folder_list")),
+	reportFolderCreate: (name: string) => typedError<ReportFolder, IpcError>(__TAURI_INVOKE("report_folder_create", { name })),
+	reportFolderRename: (id: ReportFolderId, name: string) => typedError<ReportFolder, IpcError>(__TAURI_INVOKE("report_folder_rename", { id, name })),
+	/**  Delete an empty folder; Unfiled stays. */
+	reportFolderDelete: (id: ReportFolderId) => typedError<null, IpcError>(__TAURI_INVOKE("report_folder_delete", { id })),
 	/**  Every tax line, in form and line order (CAT-050). */
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
 	/**  The dashboard; scheduled items due within `upcoming_days` (DSH-020). */
@@ -696,7 +704,7 @@ export type AssetSubtype = "house" | "vehicle" | "other";
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -2233,6 +2241,20 @@ export type Report = {
 	compact: boolean,
 };
 
+/**
+ *  A folder of saved reports (RPT-020). One level; each report is in
+ *  exactly one folder.
+ */
+export type ReportFolder = {
+	id: ReportFolderId,
+	name: string,
+	/**  "Unfiled": never renamed or deleted. */
+	permanent: boolean,
+};
+
+/**  Row ID of a saved report folder. */
+export type ReportFolderId = number;
+
 /**  The reports Kansha builds. */
 export type ReportKind = 
 /**  Realized gains by lot (RPT-150). */
@@ -2378,6 +2400,7 @@ export type SavedReport = {
 	id: SavedReportId,
 	name: string,
 	settings: ReportSettings,
+	folder: ReportFolderId,
 };
 
 /**  Row ID of a saved report. */

@@ -761,6 +761,121 @@ fn saved_reports_round_trip_with_audit() {
 }
 
 #[test]
+fn saved_report_folders_hold_reports_with_audit() {
+    use kansha_core::reports::ReportFolderId;
+
+    let mut fx = fixture();
+    let s = settings(ReportKind::CapitalGains);
+    let unfiled = repo::folder_list(fx.book.conn()).unwrap();
+    assert_eq!(unfiled.len(), 1);
+    assert_eq!(unfiled[0].name, "Unfiled");
+    assert!(unfiled[0].permanent);
+
+    // New reports go to Unfiled.
+    let saved = fx
+        .book
+        .write(|tx| repo::saved_insert(tx, "Gains", &s))
+        .unwrap();
+    assert_eq!(saved.folder, ReportFolderId::UNFILED);
+
+    let tithe = fx
+        .book
+        .write(|tx| repo::folder_insert(tx, " Titheable "))
+        .unwrap();
+    assert_eq!(tithe.name, "Titheable");
+    assert!(!tithe.permanent);
+    let err = fx
+        .book
+        .write(|tx| repo::folder_insert(tx, "unfiled"))
+        .unwrap_err();
+    assert!(matches!(err, Error::Invalid(_)), "{err}");
+    let last = fx
+        .book
+        .write(|tx| repo::folder_insert(tx, "Archive"))
+        .unwrap();
+    let names: Vec<String> = repo::folder_list(fx.book.conn())
+        .unwrap()
+        .into_iter()
+        .map(|f| f.name)
+        .collect();
+    assert_eq!(names, ["Archive", "Titheable", "Unfiled"]);
+
+    // A move keeps the name and settings; an update keeps the folder.
+    let moved = fx
+        .book
+        .write(|tx| repo::saved_move(tx, saved.id, tithe.id))
+        .unwrap();
+    assert_eq!(moved.folder, tithe.id);
+    assert_eq!((moved.name.as_str(), &moved.settings), ("Gains", &s));
+    let renamed = fx
+        .book
+        .write(|tx| repo::saved_update(tx, saved.id, "Gains 2", &s))
+        .unwrap();
+    assert_eq!(renamed.folder, tithe.id);
+
+    // A folder with reports stays; Unfiled is never renamed or deleted.
+    for err in [
+        fx.book
+            .write(|tx| repo::folder_delete(tx, tithe.id))
+            .unwrap_err(),
+        fx.book
+            .write(|tx| repo::folder_delete(tx, ReportFolderId::UNFILED))
+            .unwrap_err(),
+        fx.book
+            .write(|tx| repo::folder_rename(tx, ReportFolderId::UNFILED, "Misc"))
+            .unwrap_err(),
+    ] {
+        assert!(matches!(err, Error::Invalid(_)), "{err}");
+    }
+    let err = fx
+        .book
+        .write(|tx| repo::saved_move(tx, saved.id, ReportFolderId(999)))
+        .unwrap_err();
+    assert!(matches!(err, Error::NotFound { .. }), "{err}");
+
+    let tithe2 = fx
+        .book
+        .write(|tx| repo::folder_rename(tx, tithe.id, "Tithing"))
+        .unwrap();
+    assert_eq!(tithe2.name, "Tithing");
+    fx.book
+        .write(|tx| repo::saved_move(tx, saved.id, ReportFolderId::UNFILED))
+        .unwrap();
+    fx.book
+        .write(|tx| repo::folder_delete(tx, tithe.id))
+        .unwrap();
+    fx.book
+        .write(|tx| repo::folder_delete(tx, last.id))
+        .unwrap();
+    assert_eq!(repo::folder_list(fx.book.conn()).unwrap(), unfiled);
+
+    let actions = |entity, id| -> Vec<AuditAction> {
+        audit::history(fx.book.conn(), entity, id)
+            .unwrap()
+            .iter()
+            .map(|h| h.action)
+            .collect()
+    };
+    assert_eq!(
+        actions(AuditEntity::ReportFolder, tithe.id.0),
+        [
+            AuditAction::Create,
+            AuditAction::Update,
+            AuditAction::Delete
+        ]
+    );
+    assert_eq!(
+        actions(AuditEntity::SavedReport, saved.id.0),
+        [
+            AuditAction::Create,
+            AuditAction::Update,
+            AuditAction::Update,
+            AuditAction::Update
+        ]
+    );
+}
+
+#[test]
 fn merges_and_deletes_update_saved_report_filters() {
     use kansha_core::persistence::{accounts, payees, securities, tags};
     let mut b = Book::new(date("2026-06-30")).unwrap();
@@ -829,12 +944,14 @@ fn settings_saved_by_an_older_version_still_load() {
 }
 
 #[test]
-fn totals_on_heading_and_compact_for_tax_reports_only() {
+fn totals_on_heading_and_compact_for_tax_and_itemized_reports() {
     let fx = fixture();
     for (kind, on) in [
         (ReportKind::TaxSchedule, true),
         (ReportKind::TaxSummary, true),
-        (ReportKind::ItemizedCategories, false),
+        (ReportKind::ItemizedCategories, true),
+        (ReportKind::ItemizedPayees, true),
+        (ReportKind::IncomeExpense, false),
         (ReportKind::CapitalGains, false),
     ] {
         let r = run(&fx, &settings(kind));

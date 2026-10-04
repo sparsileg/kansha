@@ -298,7 +298,8 @@
   }
   .compact {
     width: min(24rem, 92vw);
-    margin-top: 0;
+    /* About two lines below the theme and font buttons. */
+    margin-top: 2.5rem;
     text-align: center;
   }
   .compact .brand {

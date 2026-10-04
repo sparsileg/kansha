@@ -28,6 +28,7 @@ text_enum! {
         Reconciliation = "reconciliation",
         ImportBatch = "import_batch",
         SavedReport = "saved_report",
+        ReportFolder = "report_folder",
     }
 }
 

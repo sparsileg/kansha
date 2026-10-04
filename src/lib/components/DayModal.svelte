@@ -146,7 +146,7 @@
   }
 </script>
 
-<Modal title="Transactions: {displayDate(day)}" side {onclose}>
+<Modal title="Transactions: {displayDate(day)}" wide modeless {onclose}>
   {#if error}<p class="err" role="alert">{error}</p>{/if}
   {#if loaded && items.length === 0}
     <p>No transactions on this day.</p>

@@ -36,7 +36,7 @@
   import StartScreen from "./views/StartScreen.svelte";
   import { fullWindow } from "./lib/shell/windowsize";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
-  import { MENUS, type Menu } from "./lib/shell/menus";
+  import { MENUS, savedReportItems, type Menu, type MenuItem } from "./lib/shell/menus";
   import { recentItems } from "./lib/shell/books";
   import NewBookModal from "./lib/components/books/NewBookModal.svelte";
   import RenameBookModal from "./lib/components/books/RenameBookModal.svelte";
@@ -75,13 +75,17 @@
   $effect(() => {
     if (bookState.open) void commands.bookRecent().then((r) => (recent = r));
   });
-  const menus = $derived<Menu[]>(
-    MENUS.map((m) =>
-      m.id !== "file"
-        ? m
-        : { ...m, items: m.items.map((i) => (i.id === "file.recent" ? { ...i, items: recentItems(recent) } : i)) },
-    ),
-  );
+  // Reports > Saved Reports lists the folders of saved reports.
+  $effect(() => {
+    if (bookState.open) void reportState.refreshSaved().catch(() => {});
+  });
+  function fill(i: MenuItem): MenuItem {
+    if (i.id === "file.recent") return { ...i, items: recentItems(recent) };
+    if (i.id === "reports.saved_menu" && i.items)
+      return { ...i, items: savedReportItems(reportState.folders, reportState.savedList, i.items[i.items.length - 1]) };
+    return i;
+  }
+  const menus = $derived<Menu[]>(MENUS.map((m) => ({ ...m, items: m.items.map(fill) })));
   $effect(() => {
     const name = bookState.status?.name;
     const title = name ? `${name} — Kansha` : "Kansha";

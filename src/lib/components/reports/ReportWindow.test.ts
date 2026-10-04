@@ -494,6 +494,71 @@ describe("Report windows", () => {
     expect(windowState.wins).toHaveLength(1);
   });
 
+  it("a saved report is headed by its name", async () => {
+    expect(inst.heading).toBe("Capital Gains - Last year");
+    await inst.save("Gains Last Year", false);
+    expect(inst.heading).toBe("Gains Last Year");
+    show();
+    expect(await screen.findByRole("heading", { name: "Gains Last Year" })).toBeTruthy();
+  });
+
+  it("the menu replaces its open copy of the report, asking first if changed", async () => {
+    await inst.apply({ ...inst.settings, subtotal: "year" });
+    inst.expandAll();
+    const again = reportState.open("capital_gains");
+    await waitFor(() => expect(confirmState.choices).toEqual(["Save", "Don't Save"]));
+    confirmState.answer("Don't Save");
+    expect(await again).toBe(inst);
+    expect(windowState.wins).toHaveLength(1);
+    expect(inst.settings.subtotal).toBe("term");
+    expect(inst.dirty).toBe(false);
+    // Unchanged now: no question the next time.
+    expect(await reportState.open("capital_gains")).toBe(inst);
+    expect(confirmState.message).toBeNull();
+  });
+
+  it("Cancel keeps the menu copy's changes", async () => {
+    await inst.apply({ ...inst.settings, subtotal: "year" });
+    const again = reportState.open("capital_gains");
+    await waitFor(() => expect(confirmState.message).not.toBeNull());
+    confirmState.answer(false);
+    expect(await again).toBe(inst);
+    expect(inst.settings.subtotal).toBe("year");
+  });
+
+  it("Save names the changed menu copy, which stays; a fresh copy opens", async () => {
+    show();
+    await inst.apply({ ...inst.settings, subtotal: "year" });
+    const again = reportState.open("capital_gains");
+    await waitFor(() => expect(confirmState.message).not.toBeNull());
+    confirmState.answer("Save");
+    await again;
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    await fireEvent.input(name, { target: { value: "Yearly gains" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(windowState.wins).toHaveLength(2));
+    expect(inst.heading).toBe("Yearly gains");
+    expect(reportState.current!.id).not.toBe(inst.id);
+    expect(reportState.current!.settings.subtotal).toBe("term");
+  });
+
+  it("the menu leaves saved reports alone; a saved report replaces its own copy", async () => {
+    const saved = await inst.save("Mine", false);
+    const menu = await reportState.open("capital_gains");
+    expect(menu).not.toBe(inst);
+    expect(windowState.wins).toHaveLength(2);
+    await inst.apply({ ...inst.settings, subtotal: "year" });
+    const again = reportState.openSaved(saved);
+    await waitFor(() => expect(confirmState.message).not.toBeNull());
+    confirmState.answer("Save");
+    expect(await again).toBe(inst);
+    expect(update).toHaveBeenCalledWith(1, "Mine", expect.objectContaining({ subtotal: "year" }));
+    // Reopened with what was just saved, not the older settings.
+    expect(inst.settings.subtotal).toBe("year");
+    expect(inst.dirty).toBe(false);
+    expect(windowState.wins).toHaveLength(2);
+  });
+
   it("a category figure opens Itemized Categories in a second window", async () => {
     run.mockImplementation(() =>
       ok({
@@ -513,6 +578,9 @@ describe("Report windows", () => {
       range: { preset: "custom", from: "2025-01-01", to: "2025-03-31" },
       categories: [7],
     });
+    // The menu opens its own copy; the drill-down stays.
+    await reportState.open("itemized_categories");
+    expect(windowState.wins).toHaveLength(3);
   });
 });
 

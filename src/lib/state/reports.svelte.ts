@@ -8,6 +8,7 @@ import { presetLabel } from "../reports/meta";
 import { statusState } from "./status.svelte";
 import type {
   PageOrientation,
+  ReportFolder,
   ReportKind,
   ReportSettings,
   Report,
@@ -42,6 +43,13 @@ export class ReportInstance {
   /** Closing asked to save a new report: the window shows the Save
    * dialog, then closes. */
   saveOnClose = $state(false);
+  /** The menu asked for a fresh copy of this new, changed report and
+   * the user chose Save: the window shows the Save dialog, then the
+   * fresh copy opens in a window of its own. */
+  saveThenOpen = $state(false);
+  /** Opened from the Reports menu with the standard settings (not
+   * saved, not a drill-down): the menu replaces it (RPT-020). */
+  fromMenu = false;
   /** Page orientation last chosen in the Save PDF dialog. */
   orientation = $state<PageOrientation>("portrait");
   /** The settings as opened or last saved. */
@@ -59,8 +67,10 @@ export class ReportInstance {
     return this.settings.kind;
   }
 
-  /** "Net Worth - Year to date"; a custom range shows only the title. */
+  /** A saved report's name; else "Net Worth - Year to date", and a
+   * custom range shows only the title. */
   get heading(): string {
+    if (this.saved) return this.saved.name;
     const p = this.settings.range.preset;
     return p === "custom" ? this.settings.title : `${this.settings.title} - ${presetLabel(p)}`;
   }
@@ -92,6 +102,16 @@ export class ReportInstance {
     } finally {
       if (seq === this.#seq) this.loading = false;
     }
+  }
+
+  /** Show other settings in this window, as if newly opened. */
+  async replace(settings: ReportSettings, saved: SavedReport | null): Promise<void> {
+    this.settings = settings;
+    this.saved = saved;
+    this.#baseline = fingerprint(settings);
+    this.collapsed = new Set();
+    this.report = null;
+    await this.run();
   }
 
   isCollapsed(path: string): boolean {
@@ -132,6 +152,7 @@ export class ReportInstance {
         : await call(commands.savedReportCreate(name, settings));
     this.saved = saved;
     this.#baseline = fingerprint(settings);
+    void reportState.refreshSaved().catch(() => {});
     return saved;
   }
 
@@ -147,8 +168,12 @@ export class ReportInstance {
 
 class ReportsState {
   #open = new Map<number, ReportInstance>();
-  /** The Saved Reports dialog is open. */
+  /** The Manage Saved Reports dialog is open. */
   savedOpen = $state(false);
+  /** Saved report folders and saved reports, each by name, for the
+   * Reports > Saved Reports menu and the Manage dialog. */
+  folders = $state<ReportFolder[]>([]);
+  savedList = $state<SavedReport[]>([]);
 
   constructor() {
     windowState.register(REPORT_WINDOW, {
@@ -167,9 +192,15 @@ class ReportsState {
     return id === null ? null : (this.#open.get(id) ?? null);
   }
 
-  /** A report with its standard settings, in a new window. */
+  /** A report with its standard settings (the Reports menu): in place
+   * of the open menu copy of that report, else in a new window. */
   async open(kind: ReportKind): Promise<ReportInstance> {
-    return this.openWith(await commands.reportDefaults(kind));
+    const settings = await commands.reportDefaults(kind);
+    const old = [...this.#open.values()].find((i) => i.fromMenu && i.saved === null && i.kind === kind);
+    if (old) return this.#replace(old, settings, null);
+    const inst = await this.openWith(settings);
+    inst.fromMenu = true;
+    return inst;
   }
 
   /** A report with given settings (e.g. from drilling down). */
@@ -182,8 +213,64 @@ class ReportsState {
     return inst;
   }
 
+  /** Reload the folders and saved reports. */
+  async refreshSaved(): Promise<void> {
+    const [folders, saved] = await Promise.all([call(commands.reportFolderList()), call(commands.savedReportList())]);
+    this.folders = folders;
+    this.savedList = saved;
+    // Open copies follow a rename; a deleted one becomes unnamed.
+    for (const inst of this.#open.values()) {
+      if (inst.saved) inst.saved = saved.find((r) => r.id === inst.saved?.id) ?? null;
+    }
+  }
+
+  /** A saved report by ID (the Reports > Saved Reports menu). */
+  async openSavedId(id: number): Promise<ReportInstance | null> {
+    const saved = this.savedList.find((r) => r.id === id);
+    return saved ? this.openSaved(saved) : null;
+  }
+
+  /** A saved report: in place of its open copy, else in a new window. */
   async openSaved(saved: SavedReport): Promise<ReportInstance> {
-    return this.openWith(structuredClone(saved.settings), saved);
+    // `saved` may be reactive (a proxy), which structuredClone rejects.
+    const settings = structuredClone($state.snapshot(saved.settings));
+    const old = [...this.#open.values()].find((i) => i.saved?.id === saved.id);
+    if (old) return this.#replace(old, settings, saved);
+    return this.openWith(settings, saved);
+  }
+
+  /** Reopen `inst` with `settings`, asking first to save its changes.
+   * Cancel, or Save of a report with no name yet, leaves it as is; the
+   * latter opens the new copy after the Save dialog. */
+  async #replace(inst: ReportInstance, settings: ReportSettings, saved: SavedReport | null): Promise<ReportInstance> {
+    if (inst.dirty) {
+      const choice = await confirmState.choose(`Save changes to "${inst.heading}"?`, ["Save", "Don't Save"]);
+      if (choice === "Save" && inst.saved) {
+        try {
+          const fresh = await inst.save(inst.saved.name, false);
+          // Reopening the same saved report: its new settings, not the
+          // ones it was asked for with.
+          if (saved?.id === fresh.id) {
+            saved = fresh;
+            settings = structuredClone($state.snapshot(fresh.settings));
+          }
+        } catch (e) {
+          inst.error = e instanceof Error ? e.message : String(e);
+          windowState.show(inst.id);
+          return inst;
+        }
+      } else if (choice === "Save") {
+        inst.saveThenOpen = true;
+        windowState.show(inst.id);
+        return inst;
+      } else if (choice !== "Don't Save") {
+        windowState.show(inst.id);
+        return inst;
+      }
+    }
+    windowState.show(inst.id);
+    await inst.replace(settings, saved);
+    return inst;
   }
 
   /** Changed settings: ask to save. A new report is saved by name in its

@@ -27,6 +27,11 @@ toml = "0.9"
 lto = "fat"
 codegen-units = 1
 
+# Dev builds: optimize dependencies (SQLCipher, rusqlite, ...) so the
+# app runs at near-release speed; workspace crates stay quick to rebuild.
+[profile.dev.package."*"]
+opt-level = 2
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

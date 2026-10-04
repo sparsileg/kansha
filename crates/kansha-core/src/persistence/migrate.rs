@@ -99,6 +99,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0012_cash_reinvest.sql"),
         foreign_keys_off: true,
     },
+    Migration {
+        version: 13,
+        description: "saved report folders",
+        sql: include_str!("migrations/0013_report_folders.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

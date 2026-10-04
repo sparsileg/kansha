@@ -47,9 +47,10 @@
 
   onMount(() => void inst.run());
 
-  // Closing asked to save a report that has no name yet.
+  // Closing, or the menu replacing it, asked to save a report that has
+  // no name yet.
   $effect(() => {
-    if (inst.saveOnClose && !saving) startSave("save");
+    if ((inst.saveOnClose || inst.saveThenOpen) && !saving) startSave("save");
   });
 
   const st = $derived(inst.settings);
@@ -116,6 +117,7 @@
   function cancelSave() {
     saving = null;
     inst.saveOnClose = false;
+    inst.saveThenOpen = false;
   }
 
   async function doSave(e: Event) {
@@ -126,6 +128,10 @@
       if (inst.saveOnClose) {
         inst.saveOnClose = false;
         await windowState.close(inst.id);
+      } else if (inst.saveThenOpen) {
+        // Now a saved report, it stays; the menu's copy opens anew.
+        inst.saveThenOpen = false;
+        await reportState.open(inst.kind);
       }
     } catch (err) {
       saveError = err instanceof Error ? err.message : String(err);

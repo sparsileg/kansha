@@ -5,7 +5,7 @@
 
 import { commands } from "../api";
 
-export const COMPACT = { width: 520, height: 860, minWidth: 460, minHeight: 600 };
+export const COMPACT = { width: 520, height: 760, minWidth: 460, minHeight: 600 };
 export const FULL = { width: 1280, height: 800, minWidth: 900, minHeight: 600 };
 
 type Size = typeof COMPACT;

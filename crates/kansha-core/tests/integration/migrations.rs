@@ -26,6 +26,7 @@ const TABLES: &[&str] = &[
     "posting_tag",
     "price",
     "reconciliation",
+    "report_folder",
     "saved_report",
     "schedule",
     "schedule_line",
@@ -849,5 +850,46 @@ fn migration_0010_accepts_roth_conversions_and_orders_forms_as_quicken() {
             [],
         )
         .is_err()
+    );
+}
+
+#[test]
+fn migration_0013_files_saved_reports_in_unfiled_and_keeps_the_audit_log() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 12).unwrap();
+    db.conn()
+        .execute_batch(
+            "INSERT INTO saved_report (name, report_type, settings_json, created_at, updated_at)
+                 VALUES ('Mine', 'capital_gains', '{}', '2026-01-01T00:00:00Z',
+                         '2026-01-02T00:00:00Z');
+             INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+                 VALUES ('2026-01-01T00:00:00Z', 'saved_report', 1, 'create', '{}', 'ui');",
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let row: (i64, String, i64, String) = c
+        .query_row(
+            "SELECT s.id, s.name, s.folder_id, f.name FROM saved_report s
+             JOIN report_folder f ON f.id = s.folder_id",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(row, (1, "Mine".into(), 1, "Unfiled".into()));
+    assert_eq!(count(&db, "audit_log"), 1);
+    c.execute(
+        "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+             VALUES ('2026-01-01T00:00:00Z', 'report_folder', 2, 'create', '{}', 'ui')",
+        [],
+    )
+    .unwrap();
+    // Still append-only.
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+    assert!(c.execute("UPDATE audit_log SET entity_id = 9", []).is_err());
+    // A report must name a folder that exists.
+    assert!(
+        c.execute("UPDATE saved_report SET folder_id = 99", [])
+            .is_err()
     );
 }

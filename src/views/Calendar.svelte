@@ -86,7 +86,7 @@
     v.payee === null ? "(no payee)" : (listsState.payee(v.payee)?.name ?? "");
 </script>
 
-<section class="cal" class:docked={dayOpen !== null}>
+<section class="cal">
   <header>
     <button type="button" aria-label="Previous month" onclick={() => (month = addMonths(month, -1))}>‹</button>
     <strong class="label">{monthLabel(month)}</strong>
@@ -171,10 +171,6 @@
 {/if}
 
 <style>
-  /* The day's panel sits at the right; the month narrows to stay clear of it. */
-  .cal.docked {
-    margin-right: calc(min(40rem, 94vw) + 1rem);
-  }
   .cal {
     display: flex;
     flex-direction: column;

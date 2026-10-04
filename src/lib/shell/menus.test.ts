@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MENUS } from "./menus";
+import { MENUS, savedReportItems } from "./menus";
 
 type Item = (typeof MENUS)[number]["items"][number];
 const all = (xs: Item[]): Item[] => xs.flatMap((i) => [i, ...all(i.items ?? [])]);
@@ -15,8 +15,9 @@ describe("menu definitions", () => {
       "Accounts", "Calendar", "Reminders", "Investments", "Memorized Payees", "Categories", "Tags", "Securities", "Import Prices…", "Reconcile",
     ]);
     expect(MENUS[1].items.map((i) => i.label)).toEqual(["Undo (Ctrl+Z)", "Settings…", "Navigation Bar…", "Renaming…"]);
-    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports…", "Investing", "Net Worth", "Spending", "Tax"]);
+    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports", "Investing", "Net Worth", "Spending", "Tax"]);
     const sub = (label: string) => MENUS[3].items.find((i) => i.label === label)?.items?.map((i) => i.label);
+    expect(sub("Saved Reports")).toEqual(["Manage Saved Reports…"]);
     expect(sub("Investing")).toEqual([
       "Capital Gains",
       "Investment Performance",
@@ -32,6 +33,30 @@ describe("menu definitions", () => {
       "Income/Expense by Payee",
     ]);
     expect(sub("Tax")).toEqual(["Capital Gains", "Tax Schedule", "Tax Summary"]);
+  });
+
+  it("Saved Reports lists each folder's reports by name, then Manage", () => {
+    const manage = { id: "reports.saved", label: "Manage Saved Reports…" };
+    const items = savedReportItems(
+      [
+        { id: 1, name: "Unfiled" },
+        { id: 2, name: "titheable" },
+        { id: 3, name: "Last Year" },
+      ],
+      [
+        { id: 7, name: "Zoo", folder: 2 },
+        { id: 8, name: "apples", folder: 2 },
+        { id: 9, name: "Gains", folder: 1 },
+      ],
+      manage,
+    );
+    expect(items.map((i) => i.label)).toEqual(["Last Year", "titheable", "Unfiled", "Manage Saved Reports…"]);
+    expect(items[0].items).toEqual([{ id: "reports.folder.3.empty", label: "(empty)", disabled: "No saved reports in this folder" }]);
+    expect(items[1].items).toEqual([
+      { id: "saved:8", label: "apples" },
+      { id: "saved:7", label: "Zoo" },
+    ]);
+    expect(items[3]).toEqual({ ...manage, divider: true });
   });
 
   it("ids are unique and every greyed item says why", () => {

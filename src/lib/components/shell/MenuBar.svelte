@@ -7,7 +7,8 @@
    * another switches to it. Keys: Down or Enter opens, Up/Down move among
    * the enabled items, Left/Right switch menus, Esc closes, Tab leaves.
    * An item marked ▸ opens a submenu (hover, click, Enter, or Right);
-   * Left or Esc goes back to it. Greyed items stay visible and say why
+   * Left or Esc goes back to it. A submenu item marked ▸ opens a third
+   * level the same way (Reports > Saved Reports > a folder). Greyed items stay visible and say why
    * they are unavailable.
    */
   let {
@@ -24,6 +25,8 @@
   let open = $state<number | null>(null);
   /** The open submenu: its item's index in the open menu. */
   let sub = $state<number | null>(null);
+  /** The open third-level menu: its item's index in the submenu. */
+  let sub2 = $state<number | null>(null);
   let root: HTMLElement;
   const buttons = $state<HTMLButtonElement[]>([]);
 
@@ -34,27 +37,46 @@
       ),
     );
   const subItems = () =>
-    Array.from(root.querySelectorAll<HTMLElement>(`[data-sub] [role="menuitem"]:not([aria-disabled="true"])`));
+    Array.from(root.querySelectorAll<HTMLElement>(`[data-sub] [role="menuitem"][data-mid]:not([aria-disabled="true"])`));
+  const sub2Items = () =>
+    Array.from(root.querySelectorAll<HTMLElement>(`[data-sub2] [role="menuitem"]:not([aria-disabled="true"])`));
 
   async function openMenu(i: number, focusItem = false) {
     open = i;
     sub = null;
+    sub2 = null;
     if (!focusItem) return;
     await tick();
     enabledItems(i)[0]?.focus();
   }
 
   async function openSub(j: number, focusItem = false) {
+    if (sub !== j) sub2 = null;
     sub = j;
     if (!focusItem) return;
     await tick();
     subItems()[0]?.focus();
   }
 
+  async function openSub2(k: number, focusItem = false) {
+    sub2 = k;
+    if (!focusItem) return;
+    await tick();
+    sub2Items()[0]?.focus();
+  }
+
+  /** Close the third-level menu and go back to its item. */
+  function closeSub2() {
+    const k = sub2;
+    sub2 = null;
+    if (k !== null) root.querySelector<HTMLElement>(`[data-sub] [data-index2="${k}"]`)?.focus();
+  }
+
   /** Close the submenu and go back to its item. */
   function closeSub() {
     const j = sub;
     sub = null;
+    sub2 = null;
     if (open !== null && j !== null) {
       root.querySelector<HTMLElement>(`[data-menu="${open}"] [data-index="${j}"]`)?.focus();
     }
@@ -64,6 +86,7 @@
     const was = open;
     open = null;
     sub = null;
+    sub2 = null;
     if (refocus && was !== null) buttons[was]?.focus();
   }
 
@@ -97,6 +120,7 @@
       e.preventDefault();
       if (items.length === 0) return;
       sub = null;
+      sub2 = null;
       const step = e.key === "ArrowDown" ? 1 : -1;
       items[(at + step + items.length) % items.length].focus();
     } else if (e.key === "Home" || e.key === "End") {
@@ -123,6 +147,38 @@
   function onSubKey(e: KeyboardEvent, i: number) {
     const items = subItems();
     const at = items.indexOf(document.activeElement as HTMLElement);
+    const here = document.activeElement as HTMLElement | null;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (items.length === 0) return;
+      sub2 = null;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      items[(at + step + items.length) % items.length].focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      e.stopPropagation();
+      items[e.key === "Home" ? 0 : items.length - 1]?.focus();
+    } else if (e.key === "ArrowLeft" || e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeSub();
+    } else if (e.key === "ArrowRight" && here?.dataset.index2 !== undefined) {
+      e.preventDefault();
+      e.stopPropagation();
+      void openSub2(Number(here.dataset.index2), true);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = (i + 1) % menus.length;
+      buttons[next]?.focus();
+      void openMenu(next, true);
+    }
+  }
+
+  function onSub2Key(e: KeyboardEvent, i: number) {
+    const items = sub2Items();
+    const at = items.indexOf(document.activeElement as HTMLElement);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       e.stopPropagation();
@@ -136,7 +192,7 @@
     } else if (e.key === "ArrowLeft" || e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      closeSub();
+      closeSub2();
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       e.stopPropagation();
@@ -192,19 +248,59 @@
                 {#if sub === j}
                   <!-- svelte-ignore a11y_interactive_supports_focus -->
                   <div class="list sub" role="menu" aria-label={item.label} data-sub onkeydown={(e) => onSubKey(e, i)}>
-                    {#each item.items as s (s.id)}
+                    {#each item.items as s, k (s.id)}
                       {#if s.divider}<hr />{/if}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class:off={!!s.disabled}
-                        aria-disabled={s.disabled ? "true" : undefined}
-                        title={s.disabled ?? ""}
-                        onclick={() => pick(s)}
-                      >
-                        <span>{s.label}</span>
-                        {#if s.disabled}<span class="hint">{s.disabled}</span>{/if}
-                      </button>
+                      {#if s.items}
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="subwrap" onmouseenter={() => void openSub2(k)}>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            data-mid
+                            data-index2={k}
+                            aria-haspopup="menu"
+                            aria-expanded={sub2 === k}
+                            class:on={sub2 === k}
+                            onclick={() => void openSub2(k, true)}
+                          >
+                            <span>{s.label}</span>
+                            <span class="arrow" aria-hidden="true">▸</span>
+                          </button>
+                          {#if sub2 === k}
+                            <!-- svelte-ignore a11y_interactive_supports_focus -->
+                            <div class="list sub" role="menu" aria-label={s.label} data-sub2 onkeydown={(e) => onSub2Key(e, i)}>
+                              {#each s.items as t (t.id)}
+                                {#if t.divider}<hr />{/if}
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  class:off={!!t.disabled}
+                                  aria-disabled={t.disabled ? "true" : undefined}
+                                  title={t.disabled ?? ""}
+                                  onclick={() => pick(t)}
+                                >
+                                  <span>{t.label}</span>
+                                  {#if t.disabled}<span class="hint">{t.disabled}</span>{/if}
+                                </button>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      {:else}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          data-mid
+                          class:off={!!s.disabled}
+                          aria-disabled={s.disabled ? "true" : undefined}
+                          title={s.disabled ?? ""}
+                          onmouseenter={() => (sub2 = null)}
+                          onclick={() => pick(s)}
+                        >
+                          <span>{s.label}</span>
+                          {#if s.disabled}<span class="hint">{s.disabled}</span>{/if}
+                        </button>
+                      {/if}
                     {/each}
                   </div>
                 {/if}
@@ -261,6 +357,8 @@
     top: 100%;
     left: 0;
     z-index: 40;
+    /* As wide as the longest item: titles never wrap. */
+    width: max-content;
     min-width: 14rem;
     padding: 0.2rem 0;
     background: var(--popup-bg);
@@ -280,6 +378,7 @@
     font: inherit;
     padding: 0.3rem 0.9rem;
     cursor: pointer;
+    white-space: nowrap;
   }
   .list button:hover:not(.off),
   .list button:focus-visible {

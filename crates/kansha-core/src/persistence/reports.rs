@@ -12,7 +12,10 @@ use crate::error::{Error, Result};
 use crate::invest::{ConversionTax, InvAction};
 use crate::ledger::{Cleared, TxnId};
 use crate::money::{Money, Quantity};
-use crate::reports::{FilterList, ReportKind, ReportSettings, SavedReport, SavedReportId};
+use crate::reports::{
+    FilterList, ReportFolder, ReportFolderId, ReportKind, ReportSettings, SavedReport,
+    SavedReportId,
+};
 use crate::securities::SecurityId;
 
 // ---------------------------------------------------------------------------
@@ -174,20 +177,25 @@ pub fn accounts_with_old_uncleared(conn: &Connection, before: Date) -> Result<Ve
 // Saved reports (RPT-020)
 // ---------------------------------------------------------------------------
 
-fn saved_from_row(r: &Row<'_>) -> rusqlite::Result<(SavedReportId, String, ReportKind, String)> {
-    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+type SavedRow = (SavedReportId, String, ReportKind, String, ReportFolderId);
+
+fn saved_from_row(r: &Row<'_>) -> rusqlite::Result<SavedRow> {
+    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
 }
 
-fn decode(
-    (id, name, kind, json): (SavedReportId, String, ReportKind, String),
-) -> Result<SavedReport> {
+fn decode((id, name, kind, json, folder): SavedRow) -> Result<SavedReport> {
     let mut settings: ReportSettings = serde_json::from_str(&json)
         .map_err(|e| Error::Database(format!("saved report {}: {e}", id.0)))?;
     settings.kind = kind;
-    Ok(SavedReport { id, name, settings })
+    Ok(SavedReport {
+        id,
+        name,
+        settings,
+        folder,
+    })
 }
 
-const SAVED_COLUMNS: &str = "id, name, report_type, settings_json";
+const SAVED_COLUMNS: &str = "id, name, report_type, settings_json, folder_id";
 
 /// One saved report by ID.
 pub fn saved_get(conn: &Connection, id: SavedReportId) -> Result<SavedReport> {
@@ -235,7 +243,7 @@ fn name_taken(conn: &Connection, name: &str, except: Option<SavedReportId>) -> R
     Ok(())
 }
 
-/// Save a new named report.
+/// Save a new named report, in the Unfiled folder.
 pub fn saved_insert(tx: &Tx<'_>, name: &str, settings: &ReportSettings) -> Result<SavedReport> {
     let name = clean_name(name)?;
     name_taken(tx.conn(), name, None)?;
@@ -327,6 +335,29 @@ pub(crate) fn saved_replace_id(
     Ok(())
 }
 
+/// Move a saved report to another folder.
+pub fn saved_move(tx: &Tx<'_>, id: SavedReportId, folder: ReportFolderId) -> Result<SavedReport> {
+    let before = saved_get(tx.conn(), id)?;
+    folder_get(tx.conn(), folder)?;
+    if before.folder == folder {
+        return Ok(before);
+    }
+    tx.conn().execute(
+        "UPDATE saved_report SET folder_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, folder, tx.now()],
+    )?;
+    let after = saved_get(tx.conn(), id)?;
+    audit::record(
+        tx,
+        AuditEntity::SavedReport,
+        id.0,
+        AuditAction::Update,
+        Some(&before),
+        Some(&after),
+    )?;
+    Ok(after)
+}
+
 /// Delete a saved report.
 pub fn saved_delete(tx: &Tx<'_>, id: SavedReportId) -> Result<()> {
     let before = saved_get(tx.conn(), id)?;
@@ -335,6 +366,139 @@ pub fn saved_delete(tx: &Tx<'_>, id: SavedReportId) -> Result<()> {
     audit::record::<_, ()>(
         tx,
         AuditEntity::SavedReport,
+        id.0,
+        AuditAction::Delete,
+        Some(&before),
+        None,
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Saved report folders (RPT-020)
+// ---------------------------------------------------------------------------
+
+fn folder_from_row(r: &Row<'_>) -> rusqlite::Result<ReportFolder> {
+    let id: ReportFolderId = r.get(0)?;
+    Ok(ReportFolder {
+        id,
+        name: r.get(1)?,
+        permanent: id == ReportFolderId::UNFILED,
+    })
+}
+
+/// One folder by ID.
+pub fn folder_get(conn: &Connection, id: ReportFolderId) -> Result<ReportFolder> {
+    conn.prepare_cached("SELECT id, name FROM report_folder WHERE id = ?1")?
+        .query_row([id], folder_from_row)
+        .optional()?
+        .ok_or(Error::NotFound {
+            entity: "report folder",
+            id: id.0,
+        })
+}
+
+/// Every folder, by name.
+pub fn folder_list(conn: &Connection) -> Result<Vec<ReportFolder>> {
+    let mut stmt =
+        conn.prepare_cached("SELECT id, name FROM report_folder ORDER BY name COLLATE NOCASE, id")?;
+    let rows = stmt.query_map([], folder_from_row)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn clean_folder_name(
+    conn: &Connection,
+    name: &str,
+    except: Option<ReportFolderId>,
+) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(Error::Invalid("a folder needs a name".into()));
+    }
+    let clash = conn
+        .prepare_cached(
+            "SELECT 1 FROM report_folder WHERE name = ?1 COLLATE NOCASE AND id IS NOT ?2",
+        )?
+        .exists(params![name, except])?;
+    if clash {
+        return Err(Error::Invalid(format!(
+            "a folder named {name:?} already exists"
+        )));
+    }
+    Ok(name.to_string())
+}
+
+fn permanent_refused(folder: &ReportFolder, what: &str) -> Result<()> {
+    if folder.permanent {
+        return Err(Error::Invalid(format!(
+            "the {} folder cannot be {what}",
+            folder.name
+        )));
+    }
+    Ok(())
+}
+
+/// Make a new, empty folder.
+pub fn folder_insert(tx: &Tx<'_>, name: &str) -> Result<ReportFolder> {
+    let name = clean_folder_name(tx.conn(), name, None)?;
+    tx.conn().execute(
+        "INSERT INTO report_folder (name, created_at) VALUES (?1, ?2)",
+        params![name, tx.now()],
+    )?;
+    let folder = folder_get(tx.conn(), ReportFolderId(tx.conn().last_insert_rowid()))?;
+    audit::record::<(), _>(
+        tx,
+        AuditEntity::ReportFolder,
+        folder.id.0,
+        AuditAction::Create,
+        None,
+        Some(&folder),
+    )?;
+    Ok(folder)
+}
+
+/// Rename a folder. Unfiled keeps its name.
+pub fn folder_rename(tx: &Tx<'_>, id: ReportFolderId, name: &str) -> Result<ReportFolder> {
+    let before = folder_get(tx.conn(), id)?;
+    permanent_refused(&before, "renamed")?;
+    let name = clean_folder_name(tx.conn(), name, Some(id))?;
+    tx.conn().execute(
+        "UPDATE report_folder SET name = ?2 WHERE id = ?1",
+        params![id, name],
+    )?;
+    let after = folder_get(tx.conn(), id)?;
+    if after != before {
+        audit::record(
+            tx,
+            AuditEntity::ReportFolder,
+            id.0,
+            AuditAction::Update,
+            Some(&before),
+            Some(&after),
+        )?;
+    }
+    Ok(after)
+}
+
+/// Delete an empty folder. Unfiled stays.
+pub fn folder_delete(tx: &Tx<'_>, id: ReportFolderId) -> Result<()> {
+    let before = folder_get(tx.conn(), id)?;
+    permanent_refused(&before, "deleted")?;
+    let used = tx
+        .conn()
+        .prepare_cached("SELECT 1 FROM saved_report WHERE folder_id = ?1")?
+        .exists([id])?;
+    if used {
+        return Err(Error::Invalid(format!(
+            "the {} folder has saved reports; move or delete them first",
+            before.name
+        )));
+    }
+    tx.conn()
+        .execute("DELETE FROM report_folder WHERE id = ?1", [id])?;
+    audit::record::<_, ()>(
+        tx,
+        AuditEntity::ReportFolder,
         id.0,
         AuditAction::Delete,
         Some(&before),

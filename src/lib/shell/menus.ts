@@ -69,7 +69,8 @@ export const MENUS: Menu[] = [
     id: "reports",
     label: "Reports",
     items: [
-      { id: "reports.saved", label: "Saved Reports…" },
+      // Folders of saved reports are filled in ahead of this (App.svelte).
+      { id: "reports.saved_menu", label: "Saved Reports", items: [{ id: "reports.saved", label: "Manage Saved Reports…" }] },
       {
         id: "reports.investing",
         label: "Investing",
@@ -110,6 +111,29 @@ export const MENUS: Menu[] = [
     items: [{ id: "help.about", label: "About Kansha" }],
   },
 ];
+
+/** Menu item id for a saved report. */
+export const SAVED_PREFIX = "saved:";
+
+/** The Reports > Saved Reports submenu: each folder (by name) a submenu
+ * of its reports (by name), then Manage Saved Reports. */
+export function savedReportItems(
+  folders: { id: number; name: string }[],
+  reports: { id: number; name: string; folder: number }[],
+  manage: MenuItem,
+): MenuItem[] {
+  const byName = <T extends { name: string }>(xs: T[]) =>
+    [...xs].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const items: MenuItem[] = byName(folders).map((f) => {
+    const inside = byName(reports.filter((r) => r.folder === f.id)).map((r) => ({ id: `${SAVED_PREFIX}${r.id}`, label: r.name }));
+    return {
+      id: `reports.folder.${f.id}`,
+      label: f.name,
+      items: inside.length > 0 ? inside : [{ id: `reports.folder.${f.id}.empty`, label: "(empty)", disabled: "No saved reports in this folder" }],
+    };
+  });
+  return [...items, { ...manage, divider: items.length > 0 }];
+}
 
 /** Every item that runs something (submenu items, not the submenus). */
 export function leafItems(items: MenuItem[]): MenuItem[] {

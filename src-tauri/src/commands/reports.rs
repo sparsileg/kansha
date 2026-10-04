@@ -7,8 +7,8 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, Column, Dashboard, DateRange, Report, ReportKind, ReportSettings, ResolvedRange,
-    SavedReport, SavedReportId,
+    self, Column, Dashboard, DateRange, Report, ReportFolder, ReportFolderId, ReportKind,
+    ReportSettings, ResolvedRange, SavedReport, SavedReportId,
 };
 use tauri::{Manager, State};
 
@@ -142,6 +142,47 @@ pub fn saved_report_update(
 #[specta::specta]
 pub fn saved_report_delete(state: State<'_, AppState>, id: SavedReportId) -> CmdResult<()> {
     state.write(|tx| repo::saved_delete(tx, id))
+}
+
+/// Move a saved report to another folder (RPT-020).
+#[tauri::command]
+#[specta::specta]
+pub fn saved_report_move(
+    state: State<'_, AppState>,
+    id: SavedReportId,
+    folder: ReportFolderId,
+) -> CmdResult<SavedReport> {
+    state.write(|tx| repo::saved_move(tx, id, folder))
+}
+
+/// Saved report folders, by name (RPT-020).
+#[tauri::command]
+#[specta::specta]
+pub fn report_folder_list(state: State<'_, AppState>) -> CmdResult<Vec<ReportFolder>> {
+    state.read(|db, _| repo::folder_list(db.conn()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn report_folder_create(state: State<'_, AppState>, name: String) -> CmdResult<ReportFolder> {
+    state.write(|tx| repo::folder_insert(tx, &name))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn report_folder_rename(
+    state: State<'_, AppState>,
+    id: ReportFolderId,
+    name: String,
+) -> CmdResult<ReportFolder> {
+    state.write(|tx| repo::folder_rename(tx, id, &name))
+}
+
+/// Delete an empty folder; Unfiled stays.
+#[tauri::command]
+#[specta::specta]
+pub fn report_folder_delete(state: State<'_, AppState>, id: ReportFolderId) -> CmdResult<()> {
+    state.write(|tx| repo::folder_delete(tx, id))
 }
 
 /// Every tax line, in form and line order (CAT-050).

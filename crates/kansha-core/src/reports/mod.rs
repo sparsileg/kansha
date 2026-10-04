@@ -50,6 +50,17 @@ use crate::text_enum::text_enum;
 #[serde(transparent)]
 pub struct SavedReportId(pub i64);
 
+/// Row ID of a saved report folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(transparent)]
+pub struct ReportFolderId(pub i64);
+
+impl ReportFolderId {
+    /// The permanent "Unfiled" folder, where new saved reports go.
+    pub const UNFILED: Self = Self(1);
+}
+
 text_enum! {
     /// The reports Kansha builds.
     pub enum ReportKind {
@@ -78,6 +89,17 @@ text_enum! {
         TaxSchedule = "tax_schedule",
         /// Tax-related categories and their transactions (RPT-140).
         TaxSummary = "tax_summary",
+    }
+}
+
+impl ReportKind {
+    /// Shown in the compact layout (RPT-145, RPT-205), with totals on
+    /// the group headings by default (RPT-020).
+    pub fn compact(self) -> bool {
+        matches!(
+            self,
+            Self::TaxSchedule | Self::TaxSummary | Self::ItemizedCategories | Self::ItemizedPayees
+        )
     }
 }
 
@@ -287,12 +309,9 @@ impl ReportSettings {
     }
 
     /// Whether a group's totals go on its heading line: as set, else on
-    /// for the tax reports only (RPT-020).
+    /// for the compact reports (RPT-020).
     pub fn totals_on_heading(&self) -> bool {
-        self.totals_on_heading.unwrap_or(matches!(
-            self.kind,
-            ReportKind::TaxSchedule | ReportKind::TaxSummary
-        ))
+        self.totals_on_heading.unwrap_or(self.kind.compact())
     }
 
     fn includes<T: PartialEq>(filter: &Option<Vec<T>>, value: &T) -> bool {
@@ -361,6 +380,18 @@ pub struct SavedReport {
     pub id: SavedReportId,
     pub name: String,
     pub settings: ReportSettings,
+    pub folder: ReportFolderId,
+}
+
+/// A folder of saved reports (RPT-020). One level; each report is in
+/// exactly one folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct ReportFolder {
+    pub id: ReportFolderId,
+    pub name: String,
+    /// "Unfiled": never renamed or deleted.
+    pub permanent: bool,
 }
 
 text_enum! {
@@ -487,10 +518,7 @@ pub fn run(conn: &Connection, settings: &ReportSettings, today: Date) -> Result<
     };
     tree::hide_columns(&mut report, &settings.hidden_columns);
     report.totals_on_heading = settings.totals_on_heading();
-    report.compact = matches!(
-        settings.kind,
-        ReportKind::TaxSchedule | ReportKind::TaxSummary
-    );
+    report.compact = settings.kind.compact();
     if !settings.cents {
         tree::round_to_dollars(&mut report)?;
     }

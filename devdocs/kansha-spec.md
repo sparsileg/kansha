@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.10 (draft) |
+| **Document version** | 0.7.12 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-03 |
 | **Owner** | Stan |
@@ -911,10 +911,24 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   deleted one is dropped, and a filter left empty becomes no filter
   (0.4.1). Display option **Totals on group heading**: a group's
   totals sit on its heading line and no closing "Total …" line
-  follows; CSV export does the same. On by default for Tax Schedule
-  and Tax Summary, off for the rest; a saved report without the
-  setting takes the default. A closing label never reads "Total
-  Total …" (0.7.5).
+  follows; CSV export does the same. On by default for Tax Schedule,
+  Tax Summary, Itemized Categories, and Itemized Payees (0.7.11), off
+  for the rest; a saved report without the setting takes the default.
+  A closing label never reads "Total Total …" (0.7.5). A saved report
+  is headed by its name, not its title and date range. A report chosen
+  from the Reports menu replaces the menu's open copy of that report
+  (asking first to save its changes; Save of a report with no name
+  keeps it as a saved report and opens the new copy beside it); saved
+  reports and drill-down reports stay. A saved report opened again
+  replaces its open copy the same way (0.7.11). Saved reports sit in
+  folders, one level, each report in one folder (0.7.12). "Unfiled"
+  is permanent (never renamed or deleted); a newly saved report goes
+  there. Reports > Saved Reports lists each folder by name as a
+  submenu of its reports by name, then Manage Saved Reports…, a
+  dialog with the folders as toggles over their reports and buttons
+  Open, Create folder, Move to folder (a menu of the folders), Rename
+  (the selected report or folder), and Delete (the selected report,
+  after asking, or a folder with no reports).
 - **RPT-030** [1.0][S] Every number in a report can be drilled into to
   show the contributing transactions (traceability principle).
 - **RPT-040** [1.0][R] Date range presets: this month, last month,
@@ -999,7 +1013,10 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   — transactions grouped under INCOME, EXPENSES, and TRANSFERS by
   category (with subcategories) or by payee, with totals. Transactions
   sort by date then account, account then date, amount, or check
-  number, ascending or descending.
+  number, ascending or descending. Compact layout, as RPT-145
+  (0.7.11): INCOME, EXPENSES, and TRANSFERS are the shaded rows;
+  categories, subcategories, payees, and accounts carry their totals
+  on their heading lines; the overall total stays at the end.
 - **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
 - **RPT-310** [1.0][R] Performance reports (TWR/IRR): Investment
   Performance (POS-030).
@@ -1198,6 +1215,7 @@ platform has one.
   in a small window with the 感謝 mark and what *kansha* means; the
   window grows to its working size when the book opens, or at once
   for setup, restore, or a new book. A maximized window is left alone.
+  The small window is 520×760 (0.7.12).
 - **SECU-030** [1.0][R] Clear warning at setup: a lost passphrase
   makes the database and all backups unrecoverable. The user is
   prompted to record it durably (e.g., password manager).
@@ -2312,6 +2330,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.12 | 2026-10-03 | RPT-020: saved report folders: one level, one folder per report, a permanent "Unfiled" folder where new saved reports go; Reports > Saved Reports lists folders as submenus of their reports, then Manage Saved Reports… (folder toggles; Open, Create folder, Move to folder, Rename, Delete). SECU-020: the passphrase window is 520×760, with more space above the mark. **Schema change:** migration 0013 (new table `report_folder` with "Unfiled" as ID 1; `saved_report.folder_id`, table rebuilt; `audit_log` rebuilt to accept entity `report_folder`). **API change:** new commands `saved_report_move`, `report_folder_list`, `report_folder_create`, `report_folder_rename`, `report_folder_delete`; new types `ReportFolder`, `ReportFolderId`; `SavedReport` gains `folder`; `AuditEntity` gains `report_folder`. |
+| 0.7.11 | 2026-10-03 | RPT-205: Itemized Categories and Itemized Payees use the compact layout (RPT-145): INCOME, EXPENSES, and TRANSFERS shaded, group totals on the heading lines (no closing "Total" lines), overall total kept. RPT-020: Totals on group heading on by default for them too; a saved report is headed by its name; a report from the Reports menu replaces the menu's open copy of it (asking to save changes first), and a saved report opened again replaces its open copy. No schema change. No API change. |
 | 0.7.10 | 2026-10-03 | INV-010: a reinvested dividend may name no security; it is reinvested in the cash (no shares or lot; cash in, Dividends out). Reinvested capital gains still need one. INV-030: the investment form writes a date typed without its year out in full when the field is left; the register's Amount shows what a reinvestment reinvested (the cash balance is unchanged); the entry form's buttons are Enter/Next, Enter/Done, Cancel, Reset (Enter in a field no longer saves), and the register scrolls to its bottom after a new transaction. Menus (`UI-conventions.md`): Tools > Investments opens the Investments view (until now only a nav bar button). **Schema change:** migration 0012 (`investment_txn` rebuilt: `reinvest_dividend` may have no security, and then no shares). No API change. |
 | 0.7.9 | 2026-10-03 | INV-010: a dividend may name no security, when the account's cash (a settlement fund) paid it; it goes to Dividends and the income report's no-security row. MIG-020: Quicken's `Div` with no security imports as such a dividend, not misc income. SECU-020: the start screen drops the 感謝 *kansha* before the meaning; the mark is nearly twice its old size, and the passphrase window is 520×860. **Schema change:** migration 0011 (`investment_txn` rebuilt: `dividend` may have no security). No API change. |
 | 0.7.8 | 2026-10-03 | CAT-050: Tools > Categories > Set tax lines from QIF… is removed; it was a one-time tool for categories made before the import set tax lines (0.7.4), and has been run on the production book. No schema change. **API change:** commands `tax_lines_from_qif_preview` and `tax_lines_from_qif_apply` and types `TaxLinePlan`, `TaxLinePlanItem`, `TaxLinePlanStatus` removed. |
