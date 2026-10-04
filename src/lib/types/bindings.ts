@@ -502,6 +502,12 @@ export const commands = {
 	 *  `upcoming_days` (CARD-020).
 	 */
 	cardData: (upcomingDays: number) => typedError<CardData, IpcError>(__TAURI_INVOKE("card_data", { upcomingDays })),
+	/**
+	 *  The Net worth over time card's graph: month-end net worth over the
+	 *  last `years` years (1 to 5); `fitted` sizes the money axis to the
+	 *  data (CARD-050).
+	 */
+	netWorthTrend: (years: number, fitted: boolean) => typedError<Chart, IpcError>(__TAURI_INVOKE("net_worth_trend", { years, fitted })),
 	/**  Every insight, in tab order. */
 	insightList: () => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_list")),
 	/**  A new insight, after the others. */
@@ -871,8 +877,6 @@ export type CardData = {
 	expenses: string,
 	/**  Income minus spending. */
 	net: string,
-	/**  Net worth at each of the last twelve month ends, today last. */
-	trend: Chart,
 	/**  Overdue and upcoming scheduled transactions (CARD-020). */
 	upcoming: OccurrenceView[],
 	upcoming_days: number,
@@ -2743,6 +2747,10 @@ export type Settings = {
 	price_download: boolean,
 	/**  Days ahead the Due soon card lists scheduled items (CARD-020). */
 	upcoming_days: number,
+	/**  Years the Net worth over time card shows (CARD-050). */
+	trend_years: number,
+	/**  That card's money axis fits the data instead of reaching zero. */
+	trend_fitted: boolean,
 	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */
 	backup_folder: string | null,
 	/**  Retention (BAK-040): newest automatic backups kept … */

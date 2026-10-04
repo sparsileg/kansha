@@ -397,6 +397,86 @@ pub fn account_value(conn: &Connection, account: AccountId, as_of: Date) -> Resu
     Ok(total)
 }
 
+/// What an investment account is worth on each of `dates` (any order),
+/// as [`account_value`] gives it for one, from one read of its cash,
+/// lots, and prices (NFR-040).
+pub fn account_values(conn: &Connection, account: AccountId, dates: &[Date]) -> Result<Vec<Money>> {
+    let mut out = crate::ledger::running_totals(&repo::cash_by_day(conn, account)?, dates)?;
+    let changes = repo::lot_changes(conn, account)?;
+    let secs = labels(conn)?;
+    // Each held security's prices, oldest first.
+    let mut prices: BTreeMap<SecurityId, Vec<(Date, Price)>> = BTreeMap::new();
+    for c in &changes {
+        if let std::collections::btree_map::Entry::Vacant(e) = prices.entry(c.security) {
+            let mut points: Vec<(Date, Price)> = securities::prices(conn, c.security)?
+                .into_iter()
+                .map(|p| (p.date, p.price))
+                .collect();
+            points.reverse();
+            e.insert(points);
+        }
+    }
+    let mut order: Vec<usize> = (0..dates.len()).collect();
+    order.sort_by_key(|&i| dates[i]);
+    // Each lot: its security, whether it has opened, open shares, open basis.
+    let mut lots: BTreeMap<LotId, (SecurityId, bool, Quantity, Money)> = BTreeMap::new();
+    let mut next = changes.iter().peekable();
+    for i in order {
+        let as_of = dates[i];
+        while let Some(c) = next.next_if(|c| c.date <= as_of) {
+            let e = lots
+                .entry(c.lot)
+                .or_insert((c.security, false, Quantity::ZERO, Money::ZERO));
+            e.1 |= c.opens;
+            e.2 =
+                e.2.checked_add(c.quantity)
+                    .ok_or(Error::Overflow("position shares"))?;
+            e.3 =
+                e.3.checked_add(c.basis)
+                    .ok_or(Error::Overflow("position basis"))?;
+        }
+        // Positions as `positions` groups them: open lots with shares.
+        let mut held: BTreeMap<SecurityId, (Quantity, Money)> = BTreeMap::new();
+        for (sec, opened, shares, basis) in lots.values() {
+            if !opened || shares.raw() <= 0 {
+                continue;
+            }
+            let e = held.entry(*sec).or_insert((Quantity::ZERO, Money::ZERO));
+            e.0 =
+                e.0.checked_add(*shares)
+                    .ok_or(Error::Overflow("position shares"))?;
+            e.1 =
+                e.1.checked_add(*basis)
+                    .ok_or(Error::Overflow("position basis"))?;
+        }
+        for (sec, (shares, basis)) in held {
+            let s = secs.get(&sec).ok_or(Error::NotFound {
+                entity: "security",
+                id: sec.0,
+            })?;
+            let points = prices.get(&sec).map_or(&[][..], Vec::as_slice);
+            let latest = points.partition_point(|(d, _)| *d <= as_of);
+            // As `valuation`: the latest price, else $1.00 for a money
+            // market fund, else counted at cost.
+            let price = match latest.checked_sub(1) {
+                Some(k) => Some(points[k].1),
+                None if s.fields.security_type == SecurityType::MoneyMarket => {
+                    Some(MONEY_MARKET_PRICE)
+                }
+                None => None,
+            };
+            let value = match price {
+                Some(p) => extended_value(shares, p)?,
+                None => basis,
+            };
+            out[i] = out[i]
+                .checked_add(value)
+                .ok_or(Error::Overflow("account value"))?;
+        }
+    }
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Lots (LOT-150)
 // ---------------------------------------------------------------------------

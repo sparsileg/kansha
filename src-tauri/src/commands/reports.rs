@@ -7,7 +7,7 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, CardData, Column, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
+    self, CardData, Chart, Column, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
     ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
 };
 use tauri::{Manager, State};
@@ -208,6 +208,15 @@ pub fn tax_line_list(state: State<'_, AppState>) -> CmdResult<Vec<TaxLine>> {
 #[specta::specta]
 pub fn card_data(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<CardData> {
     state.read(|db, today| reports::card_data(db.conn(), today, upcoming_days))
+}
+
+/// The Net worth over time card's graph: month-end net worth over the
+/// last `years` years (1 to 5); `fitted` sizes the money axis to the
+/// data (CARD-050).
+#[tauri::command]
+#[specta::specta]
+pub fn net_worth_trend(state: State<'_, AppState>, years: i64, fitted: bool) -> CmdResult<Chart> {
+    state.read(|db, today| reports::net_worth_trend(db.conn(), today, years, fitted))
 }
 
 /// Net worth today, for the foot of the account list (ACCT-240).

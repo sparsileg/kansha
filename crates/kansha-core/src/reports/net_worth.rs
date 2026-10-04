@@ -36,19 +36,23 @@ pub(super) fn dates(range: ResolvedRange, interval: Interval) -> Result<Vec<Date
     Ok(out)
 }
 
-/// An account's balance on `date` as the report shows it: assets as
-/// they stand, liabilities as the amount owed (positive).
-pub(super) fn shown_balance(conn: &Connection, a: &Account, date: Date) -> Result<Money> {
+/// An account's balance on each of `dates` as the report shows it:
+/// assets as they stand, liabilities as the amount owed (positive). One
+/// read per account, however many dates (NFR-040).
+pub(super) fn shown_balances(conn: &Connection, a: &Account, dates: &[Date]) -> Result<Vec<Money>> {
     let t = a.fields.account_type;
-    let balance = if t.is_investment() {
-        invest::account_value(conn, a.id, date)?
+    let balances = if t.is_investment() {
+        invest::account_values(conn, a.id, dates)?
     } else {
-        ledger::balance(conn, a.id, Some(date))?
+        ledger::balances(conn, a.id, dates)?
     };
     if t.is_liability() {
-        balance.checked_neg().ok_or(Error::Overflow("net worth"))
+        balances
+            .into_iter()
+            .map(|b| b.checked_neg().ok_or(Error::Overflow("net worth")))
+            .collect()
     } else {
-        Ok(balance)
+        Ok(balances)
     }
 }
 
@@ -91,10 +95,7 @@ pub(super) fn build(conn: &Connection, s: &ReportSettings, range: ResolvedRange)
                 {
                     continue;
                 }
-                let cells = dates
-                    .iter()
-                    .map(|d| shown_balance(conn, a, *d))
-                    .collect::<Result<Vec<Money>>>()?;
+                let cells = shown_balances(conn, a, &dates)?;
                 if !s.show_zero && cells.iter().all(|m| m.is_zero()) {
                     continue;
                 }

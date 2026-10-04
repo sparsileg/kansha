@@ -1,4 +1,4 @@
-// The cards an insight can show (INS-020, CARD-010 … CARD-030). Each has a
+// The cards an insight can show (INS-020, CARD-010 … CARD-050). Each has a
 // stable ID; an insight stores the IDs of its cards, in order, in the
 // book (`insight` table). One card can be on several insights.
 //
@@ -21,7 +21,7 @@ export interface CardDef {
 export const CARDS: readonly CardDef[] = [
   { id: "net_worth", label: "Net worth" },
   { id: "this_month", label: "This month" },
-  { id: "net_worth_trend", label: "Net worth, last 12 months", wide: true },
+  { id: "net_worth_trend", label: "Net worth over time", wide: true },
   { id: "upcoming", label: "Due soon", double: true },
   { id: "attention", label: "Needs attention" },
 ];

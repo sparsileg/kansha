@@ -1267,6 +1267,67 @@ fn csv_export_expands_every_group() {
     );
 }
 
+/// The Net worth over time card (CARD-050): month ends over 1 to 5
+/// years plus the opening point, today last; fitted or from zero.
+#[test]
+fn net_worth_trend_covers_the_years_asked_for() {
+    let fx = fixture();
+    let today = date("2026-06-30");
+    let trend =
+        |years, fitted| reports::net_worth_trend(fx.book.conn(), today, years, fitted).unwrap();
+    for (years, points, first) in [
+        (1, 13, "2025-06-30"),
+        (2, 25, "2024-06-30"),
+        (5, 61, "2021-06-30"),
+        // Out of range: the nearest end.
+        (0, 13, "2025-06-30"),
+        (9, 61, "2021-06-30"),
+    ] {
+        let c = trend(years, false);
+        assert_eq!(c.dates.len(), points, "{years} years");
+        assert_eq!(c.dates[0], date(first), "{years} years");
+        assert_eq!(c.dates.last(), Some(&today));
+        assert_eq!(c.series[0].values.last(), Some(&m("63290.00")));
+    }
+    // Fitted: same figures, an axis sized to them. A year that starts
+    // after the book does, so the axis need not reach zero.
+    let later =
+        |fitted| reports::net_worth_trend(fx.book.conn(), date("2027-01-31"), 1, fitted).unwrap();
+    let (plain, fitted) = (later(false), later(true));
+    assert_eq!(plain.series[0].values, fitted.series[0].values);
+    assert_eq!(plain.ticks[0].label, "0");
+    assert_ne!(fitted.ticks[0].label, "0");
+}
+
+/// The card's years and fit are book settings; years out of 1 to 5 are
+/// refused (CARD-050).
+#[test]
+fn net_worth_trend_settings_are_kept_in_the_book() {
+    use kansha_core::settings;
+    let mut fx = fixture();
+    let s = settings::load(fx.book.conn()).unwrap();
+    assert_eq!((s.trend_years, s.trend_fitted), (1, false));
+    fx.book
+        .write(|tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.trend_years = 5;
+            s.trend_fitted = true;
+            settings::save(tx, &s)
+        })
+        .unwrap();
+    let s = settings::load(fx.book.conn()).unwrap();
+    assert_eq!((s.trend_years, s.trend_fitted), (5, true));
+    let err = fx
+        .book
+        .write(|tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.trend_years = 6;
+            settings::save(tx, &s)
+        })
+        .unwrap_err();
+    assert!(matches!(err, Error::Invalid(_)), "{err}");
+}
+
 #[test]
 fn cards_sum_net_worth_month_and_due_items() {
     let fx = fixture();
@@ -1279,8 +1340,6 @@ fn cards_sum_net_worth_month_and_due_items() {
     // June: nothing but a price.
     assert_eq!(d.income, Money::ZERO);
     assert_eq!(d.expenses, Money::ZERO);
-    assert_eq!(d.trend.dates.len(), 13);
-    assert_eq!(*d.trend.series[0].values.last().unwrap(), m("63290.00"));
     // Checking has uncleared entries from January.
     assert!(
         d.warnings

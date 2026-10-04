@@ -77,6 +77,10 @@ pub struct Settings {
     pub price_download: bool,
     /// Days ahead the Due soon card lists scheduled items (CARD-020).
     pub upcoming_days: i64,
+    /// Years the Net worth over time card shows (CARD-050).
+    pub trend_years: i64,
+    /// That card's money axis fits the data instead of reaching zero.
+    pub trend_fitted: bool,
     /// Backup folder (SET-050, BAK-030); `None` = the Downloads folder.
     pub backup_folder: Option<String>,
     /// Retention (BAK-040): newest automatic backups kept …
@@ -122,6 +126,8 @@ impl Default for Settings {
             default_lot_method: LotMethod::Fifo,
             price_download: false,
             upcoming_days: 14,
+            trend_years: 1,
+            trend_fitted: false,
             backup_folder: None,
             backup_keep_last: 10,
             backup_keep_months: 12,
@@ -140,6 +146,7 @@ impl Default for Settings {
 
 pub const STALE_PRICE_DAYS: std::ops::RangeInclusive<i64> = 1..=365;
 pub const UPCOMING_DAYS: std::ops::RangeInclusive<i64> = 1..=366;
+pub const TREND_YEARS: std::ops::RangeInclusive<i64> = 1..=5;
 pub const KEEP_LAST: std::ops::RangeInclusive<i64> = 1..=1000;
 pub const KEEP_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 pub const TIMEOUT_MINUTES: std::ops::RangeInclusive<i64> = 0..=1440;
@@ -192,6 +199,8 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         default_lot_method: get(conn, "default_lot_method", d.default_lot_method)?,
         price_download: get(conn, "price_download", d.price_download)?,
         upcoming_days: get_in(conn, "upcoming_days", UPCOMING_DAYS, d.upcoming_days)?,
+        trend_years: get_in(conn, "trend_years", TREND_YEARS, d.trend_years)?,
+        trend_fitted: get(conn, "trend_fitted", d.trend_fitted)?,
         backup_folder: get_text(conn, "backup_folder")?,
         backup_keep_last: get_in(conn, "backup_keep_last", KEEP_LAST, d.backup_keep_last)?,
         backup_keep_months: get_in(
@@ -245,6 +254,7 @@ fn put_text(tx: &Tx<'_>, key: &str, v: Option<&str>) -> Result<()> {
 pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     check_range("Stale price days", s.stale_price_days, STALE_PRICE_DAYS)?;
     check_range("Upcoming days", s.upcoming_days, UPCOMING_DAYS)?;
+    check_range("Net worth years", s.trend_years, TREND_YEARS)?;
     check_range("Backups to keep", s.backup_keep_last, KEEP_LAST)?;
     check_range("Months to keep", s.backup_keep_months, KEEP_MONTHS)?;
     check_range(
@@ -284,6 +294,7 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     repo::set(tx, "default_lot_method", s.default_lot_method.as_str())?;
     repo::set(tx, "price_download", &s.price_download.to_string())?;
     repo::set(tx, "upcoming_days", &s.upcoming_days.to_string())?;
+    repo::set(tx, "trend_years", &s.trend_years.to_string())?;
     put_text(tx, "backup_folder", s.backup_folder.as_deref())?;
     repo::set(tx, "backup_keep_last", &s.backup_keep_last.to_string())?;
     repo::set(tx, "backup_keep_months", &s.backup_keep_months.to_string())?;
@@ -300,6 +311,7 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         ("warn_out_of_date", s.warn_out_of_date),
         ("warn_check_reuse", s.warn_check_reuse),
         ("confirm_save_change", s.confirm_save_change),
+        ("trend_fitted", s.trend_fitted),
     ] {
         repo::set(tx, key, &v.to_string())?;
     }

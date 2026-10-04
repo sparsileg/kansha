@@ -44,8 +44,8 @@ pub use portfolio::{
 };
 pub use reads::{
     Allocation, AllocationRow, Holdings, IncomeReport, IncomeRow, InvRegister, InvRegisterRow,
-    LotView, PerfRow, Performance, Position, RealizedGain, account_value, allocation, holdings,
-    income, open_lots, percent_of, performance, realized_gains, register,
+    LotView, PerfRow, Performance, Position, RealizedGain, account_value, account_values,
+    allocation, holdings, income, open_lots, percent_of, performance, realized_gains, register,
 };
 pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};

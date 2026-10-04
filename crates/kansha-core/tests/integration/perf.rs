@@ -140,6 +140,10 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     reports::card_data(db.conn(), today, 14).unwrap();
     check("insight cards", t.elapsed(), 2000, &mut failures);
 
+    let t = Instant::now();
+    reports::net_worth_trend(db.conn(), today, 5, false).unwrap();
+    check("net worth card, 5 years", t.elapsed(), 2000, &mut failures);
+
     // Integrity check (INT): timed, no limit.
     let t = Instant::now();
     let report = integrity::check(db.conn()).unwrap();

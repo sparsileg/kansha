@@ -201,6 +201,18 @@ pub fn account_balance(
         )?)
 }
 
+/// `account`'s postings summed by day, oldest first: what
+/// [`account_balance`] sums for one date, for summing over many.
+pub fn account_by_day(conn: &Connection, account: AccountId) -> Result<Vec<(Date, Money)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.txn_date, sum(p.amount) FROM posting p JOIN txn t ON t.id = p.txn_id
+         WHERE p.account_id = ?1
+         GROUP BY t.txn_date ORDER BY t.txn_date",
+    )?;
+    let rows = stmt.query_map([account], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// Σ postings to `category` dated on or before `as_of`.
 pub fn category_total(
     conn: &Connection,

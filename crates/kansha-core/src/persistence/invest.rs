@@ -271,6 +271,60 @@ pub fn open_lots(
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// One change to a lot of an account, dated by its transaction: the lot
+/// itself (`opens`), an adjustment, or a disposal (negative).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LotChange {
+    pub date: Date,
+    pub lot: LotId,
+    pub security: SecurityId,
+    pub opens: bool,
+    pub quantity: Quantity,
+    pub basis: Money,
+}
+
+/// Every change to `account`'s lots, oldest first: what [`open_lots`]
+/// sums for one date, for summing over many.
+pub fn lot_changes(conn: &Connection, account: AccountId) -> Result<Vec<LotChange>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.txn_date, l.id, l.security_id, 1, l.quantity, l.cost_basis
+         FROM lot l JOIN txn t ON t.id = l.origin_txn_id
+         WHERE l.account_id = :account
+         UNION ALL
+         SELECT t.txn_date, l.id, l.security_id, 0, a.quantity_delta, a.basis_delta
+         FROM lot_adjustment a JOIN lot l ON l.id = a.lot_id JOIN txn t ON t.id = a.txn_id
+         WHERE l.account_id = :account
+         UNION ALL
+         SELECT t.txn_date, l.id, l.security_id, 0, -x.quantity, -x.basis
+         FROM lot_disposal x JOIN lot l ON l.id = x.lot_id JOIN txn t ON t.id = x.txn_id
+         WHERE l.account_id = :account
+         ORDER BY 1",
+    )?;
+    let rows = stmt.query_map(named_params! {":account": account}, |r| {
+        Ok(LotChange {
+            date: r.get(0)?,
+            lot: r.get(1)?,
+            security: r.get(2)?,
+            opens: r.get(3)?,
+            quantity: r.get(4)?,
+            basis: r.get(5)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// `account`'s cash postings summed by day, oldest first: what
+/// [`cash_balance`] sums for one date, for summing over many.
+pub fn cash_by_day(conn: &Connection, account: AccountId) -> Result<Vec<(Date, Money)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.txn_date, sum(p.amount) FROM posting p JOIN txn t ON t.id = p.txn_id
+         WHERE p.account_id = ?1 AND p.security_id IS NULL
+         GROUP BY t.txn_date ORDER BY t.txn_date",
+    )?;
+    let rows = stmt.query_map([account], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// The latest (date, transaction) that sold, transferred, removed,
 /// split, or adjusted shares of `security` in `account`, leaving out
 /// `except`'s own records.

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.22 (draft) |
+| **Document version** | 0.7.23 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
@@ -1061,10 +1061,17 @@ entries in Appendix A and migration 0014 use those IDs.
   integrity check results, last backup age, date of the last full
   backup verification (BAK-080), backup folder missing (BAK-030).
 - **CARD-040** [1.0][R] Each card has a stable ID and name: Net
-  worth, This month, Net worth, last 12 months, Due soon, Needs
-  attention. Insights choose and order them (INS-030). Migration 0014
-  turned the old fixed dashboard's card choice (`dashboard_cards`)
-  into the first insight; migration 0015 names it "Status".
+  worth, This month, Net worth over time, Due soon, Needs attention.
+  Insights choose and order them (INS-030). Migration 0014 turned the
+  old fixed dashboard's card choice (`dashboard_cards`) into the first
+  insight; migration 0015 names it "Status".
+- **CARD-050** [1.0][R] The Net worth over time card graphs net worth
+  at each month end over the last 1, 2, or 5 years, chosen on the
+  card, with a "Fit graph to data" checkbox that sizes the money axis
+  to the figures instead of reaching zero. Both choices are book
+  settings; a new book shows 1 year from zero. The heading names the
+  span: "Net worth, last 12 months", "…, last 2 years", "…, last 5
+  years".
 
 #### 12.4 Insights
 
@@ -1075,7 +1082,7 @@ entries in Appendix A and migration 0014 use those IDs.
   its shaded title band holds the title "Insights", one tab per insight
   in the user's order, and a gear. Opening Insights shows the first
   tab. A book always has at least one insight; a new book's first is
-  named "Status" and holds every card (CARD-010 … CARD-040).
+  named "Status" and holds every card (CARD-010 … CARD-050).
 - **INS-020** [1.0][R] An insight is a name (unique, any case) and an
   ordered list of card IDs, kept in the book (`insight` table). The
   same card can be on several insights, at most once on each. The card
@@ -1499,7 +1506,9 @@ is unchanged. Open points are D-150 … D-180 (Part V).
 - **NFR-040** [1.0][R] Performance: register with 10,000 transactions
   opens in under 1 second; typical reports render in under 2 seconds
   on Stan's hardware. A book keeps up to 50 MiB of database pages in
-  memory, so it is read and decrypted once (0.7.1).
+  memory, so it is read and decrypted once (0.7.1). Balances on many
+  dates (Net Worth, the Net worth over time card) are read in one pass
+  per account (0.7.23).
 - **NFR-050** [1.0][R] Data volume: comfortably supports 20+ years of
   data (hundreds of thousands of transactions).
 - **NFR-060** [1.0][R] Durability: SQLite WAL mode with
@@ -2439,6 +2448,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.23 | 2026-10-04 | New CARD-050: the Net worth over time card (was "Net worth, last 12 months", CARD-040) shows 1, 2, or 5 years and can fit its axis to the data; both are book settings (`trend_years`, `trend_fitted`). NFR-040: balances on many dates are read in one pass per account; on the large book (100,000 transactions, 20 years) Net Worth by month went from 10.2 s to 0.11 s, the cards from 2.6 s to under 2 s. No schema change. **API change:** new command `net_worth_trend(years, fitted)`; `CardData.trend` removed; `Settings` gains `trend_years`, `trend_fitted`. |
 | 0.7.22 | 2026-10-04 | **INS-040 withdrawn**: a single insight can no longer be a navigation bar button; only Insights (`tools.insights`) can. UI-020 updated. A saved bar that still holds an insight (`insight:N`) drops it. No schema or API change. |
 | 0.7.21 | 2026-10-04 | No more "home" or "dashboard" names. §12.3: **DSH-010 … DSH-040 renumbered CARD-010 … CARD-040** (DSH-010 → CARD-010, DSH-020 → CARD-020, DSH-030 → CARD-030, DSH-040 → CARD-040); older entries here and migration 0014 keep the old IDs. CARD-040, INS-010: a new book's first insight is named "Status". INS-010: Insights is in Tools > Insights and can be put on the navigation bar; the nav bar item's stored ID is `tools.insights` (was `home`; a saved bar that still holds `home` drops it). **Schema change:** migration 0015 renames the insight 0014 made from "Dashboard" to "Status", unless renamed already or another insight is named "Status". No API change. |
 | 0.7.20 | 2026-10-04 | Names follow Insights, not the old fixed dashboard. §12 is "Reports and Insights"; §12.3 is "Household cards (was Dashboard)"; the DSH IDs stay. Text that said the dashboard warns now names the Needs attention card; the Settings look-ahead is "Due soon". Code: `reports/dashboard.rs` → `reports/cards.rs` (`card_data`, `CardData`); the view ID `dashboard` → `insights`; `src/lib/dashboard/` → `src/lib/insights/`. A new book starts on `insights`; a book still set to `dashboard` opens Insights as before (unknown startup values fall back to it). Nav bar items keep their stored ID `home`. No schema change. **API change:** command `dashboard` → `card_data`, type `Dashboard` → `CardData`. |

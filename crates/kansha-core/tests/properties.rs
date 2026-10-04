@@ -8,6 +8,8 @@
 //! - Reconciliation (Phase 5): chained statements.
 //! - Investments (Phase 6): random trades, transfers, splits, returns of
 //!   capital, and deletes conserve shares and basis (POS-050, INT-030).
+//! - Account values over many dates in one pass equal one date at a time
+//!   (NFR-040).
 
 // Test helpers outside #[test] fns panic on setup failure by design.
 #![allow(clippy::unwrap_used)]
@@ -857,6 +859,50 @@ proptest! {
         for (gap, op) in &ops {
             world.apply(*gap, op)?;
             world.check()?;
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    /// After a random history, each account's value on every day, read
+    /// in one pass (`account_values`, `ledger::balances`), equals what
+    /// one date at a time gives (`account_value`, `ledger::balance`).
+    /// The first security has prices on some days; the second has none,
+    /// so it counts at cost (NFR-040, RPT-110).
+    #[test]
+    fn values_over_many_dates_equal_one_date_at_a_time(
+        ops in prop::collection::vec(inv_op(), 1..30),
+        priced in prop::collection::vec((0..60i64, 1..500_000_000i64), 0..6),
+    ) {
+        use kansha_core::invest;
+        let mut world = InvWorld::new();
+        for (gap, op) in &ops {
+            world.apply(*gap, op)?;
+        }
+        let start: Date = "2025-12-30".parse().unwrap();
+        for (day, raw) in &priced {
+            let d = kansha_core::schedule::add_days(start, day * 3).unwrap();
+            world
+                .book
+                .price(world.securities[0], d, kansha_core::Price::from_raw(*raw))
+                .unwrap();
+        }
+        let span = (world.day.naive() - start.naive()).num_days() + 2;
+        // Every day, newest first, so the order given is kept.
+        let dates: Vec<Date> = (0..=span)
+            .rev()
+            .map(|n| kansha_core::schedule::add_days(start, n).unwrap())
+            .collect();
+        let conn = world.book.conn();
+        for a in &world.accounts {
+            let values = invest::account_values(conn, *a, &dates).unwrap();
+            let balances = ledger::balances(conn, *a, &dates).unwrap();
+            for (i, d) in dates.iter().enumerate() {
+                prop_assert_eq!(values[i], invest::account_value(conn, *a, *d).unwrap(), "{}", d);
+                prop_assert_eq!(balances[i], ledger::balance(conn, *a, Some(*d)).unwrap(), "{}", d);
+            }
         }
     }
 }

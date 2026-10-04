@@ -1,5 +1,5 @@
-//! What the Insights cards show (CARD-010 … CARD-030): net worth and its
-//! parts, this month's income and spending, a year of net worth, what is
+//! What the Insights cards show (CARD-010 … CARD-050): net worth and its
+//! parts, this month's income and spending, net worth over time, what is
 //! due, and what needs attention.
 
 use std::collections::BTreeMap;
@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use super::chart::{self, Chart, SeriesStyle};
 use super::facts::{self, Lookups, Section, Want};
-use super::net_worth::shown_balance;
+use super::net_worth::shown_balances;
 use super::range::{day_before, periods};
 use super::{DatePreset, DateRange, ReportKind, ReportSettings, ResolvedRange};
 use crate::accounts::{AccountId, AccountStatus, AccountType};
@@ -70,8 +70,6 @@ pub struct CardData {
     pub expenses: Money,
     /// Income minus spending.
     pub net: Money,
-    /// Net worth at each of the last twelve month ends, today last.
-    pub trend: Chart,
     /// Overdue and upcoming scheduled transactions (CARD-020).
     pub upcoming: Vec<OccurrenceView>,
     pub upcoming_days: i64,
@@ -102,7 +100,7 @@ impl Parts {
             liabilities: Money::ZERO,
         };
         for a in &accounts::list(conn)? {
-            let v = shown_balance(conn, a, today)?;
+            let v = shown_balances(conn, a, &[today])?[0];
             let t = a.fields.account_type;
             let slot = if t.is_liability() {
                 &mut p.liabilities
@@ -170,37 +168,6 @@ pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<C
         .ok_or(Error::Overflow("insight cards"))?;
     let net = add(income, spent)?;
 
-    // Net worth at each month end for a year.
-    let year_ago = Date::from_naive(
-        month_from
-            .naive()
-            .checked_sub_months(chrono::Months::new(11))
-            .ok_or(Error::Overflow("date"))?,
-    );
-    let mut dates = vec![day_before(year_ago)?];
-    dates.extend(
-        periods(year_ago, today, super::Interval::Month)?
-            .into_iter()
-            .map(|(_, end)| end),
-    );
-    let all = accounts::list(conn)?;
-    let mut values = Vec::with_capacity(dates.len());
-    for d in &dates {
-        let mut total = Money::ZERO;
-        for a in &all {
-            let v = shown_balance(conn, a, *d)?;
-            total = if a.fields.account_type.is_liability() {
-                total
-                    .checked_sub(v)
-                    .ok_or(Error::Overflow("insight cards"))?
-            } else {
-                add(total, v)?
-            };
-        }
-        values.push(total);
-    }
-    let trend = chart::build(dates, vec![("Net Worth".into(), SeriesStyle::Line, values)])?;
-
     // Due: overdue ones and the next `upcoming_days`.
     let days = upcoming_days.clamp(1, 366);
     let until = schedule::add_days(today, days).unwrap_or(today);
@@ -225,12 +192,51 @@ pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<C
         income,
         expenses,
         net,
-        trend,
         upcoming,
         upcoming_days: days,
         warnings: warnings(conn, today, &lk)?,
         backup: settings::backup_status(conn)?,
     })
+}
+
+/// Net worth at each month end over the last `years` years (1 to 5),
+/// today last, for the Net worth over time card (CARD-050). `fitted`
+/// sizes the money axis to the data instead of reaching zero.
+pub fn net_worth_trend(conn: &Connection, today: Date, years: i64, fitted: bool) -> Result<Chart> {
+    let years = years.clamp(*settings::TREND_YEARS.start(), *settings::TREND_YEARS.end());
+    let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
+    let months = u32::try_from(years * 12 - 1).map_err(|_| Error::Overflow("date"))?;
+    let first = Date::from_naive(
+        month_from
+            .naive()
+            .checked_sub_months(chrono::Months::new(months))
+            .ok_or(Error::Overflow("date"))?,
+    );
+    let mut dates = vec![day_before(first)?];
+    dates.extend(
+        periods(first, today, super::Interval::Month)?
+            .into_iter()
+            .map(|(_, end)| end),
+    );
+    let mut values = vec![Money::ZERO; dates.len()];
+    for a in &accounts::list(conn)? {
+        let liability = a.fields.account_type.is_liability();
+        for (total, v) in values.iter_mut().zip(shown_balances(conn, a, &dates)?) {
+            *total = if liability {
+                total
+                    .checked_sub(v)
+                    .ok_or(Error::Overflow("insight cards"))?
+            } else {
+                add(*total, v)?
+            };
+        }
+    }
+    let series = vec![("Net Worth".into(), SeriesStyle::Line, values)];
+    if fitted {
+        chart::build_fitted(dates, series)
+    } else {
+        chart::build(dates, series)
+    }
 }
 
 fn warnings(conn: &Connection, today: Date, lk: &Lookups) -> Result<Vec<Warning>> {

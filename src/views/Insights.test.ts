@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const openAcct = vi.hoisted(() => vi.fn());
+const trendCall = vi.hoisted(() => vi.fn());
 const ins = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
@@ -22,6 +23,11 @@ vi.mock("../lib/api", async (orig) => {
       insightUpdate: (id: number, name: string, cards: string[]) => ins.update(id, name, cards),
       insightMove: (id: number, delta: number) => ins.move(id, delta),
       insightDelete: (id: number) => ins.remove(id),
+      netWorthTrend: (years: number, fitted: boolean) => {
+        trendCall(years, fitted);
+        return ok({ dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0, x_unit: "month" });
+      },
+      settingsSet: (s: unknown) => ok(s),
       cardData: () =>
         ok({
           today: "2026-09-27",
@@ -34,7 +40,6 @@ vi.mock("../lib/api", async (orig) => {
           income: "5000.00",
           expenses: "1234.56",
           net: "3765.44",
-          trend: { dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0, x_unit: "month" },
           upcoming: [{ schedule: 1, nominal: "2026-09-20", date: "2026-09-20", amount: "-50.00", status: "pending", account: 1, payee: null, estimated: false, mode: "remind", overridden: false, txn: null, needs_review: false, overdue: true, actionable: true }],
           upcoming_days: 14,
           warnings: [
@@ -82,7 +87,7 @@ async function gear(item: string) {
   await fireEvent.click(screen.getByRole("menuitem", { name: item }));
 }
 
-describe("Insights: the Status insight (CARD-010 … CARD-030)", () => {
+describe("Insights: the Status insight (CARD-010 … CARD-040)", () => {
   it("shows net worth, its parts, this month, what is due, and warnings", async () => {
     render(Insights);
     expect(await screen.findByText("10,019,506.27")).toBeTruthy();
@@ -256,5 +261,32 @@ describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {
     await waitFor(() => expect(ins.remove).toHaveBeenCalledWith(2));
     await waitFor(() => expect(tabs()).toEqual([["Status", "true"]]));
     expect(viewState.params.insight).toBeUndefined();
+  });
+});
+
+describe("Insights: Net worth over time (CARD-050)", () => {
+  it("shows a year from zero until the card's controls change it, and keeps the choice", async () => {
+    render(Insights);
+    const card = await screen.findByRole("article", { name: "Net worth, last 12 months" });
+    await waitFor(() => expect(trendCall).toHaveBeenLastCalledWith(1, false));
+    expect(within(card).getByRole("img", { name: /Net Worth/ })).toBeTruthy();
+    const years = within(card).getByRole("combobox", { name: "Years" }) as HTMLSelectElement;
+    expect([...years.options].map((o) => o.text)).toEqual(["1 year", "2 years", "5 years"]);
+
+    await fireEvent.change(years, { target: { value: "5" } });
+    await waitFor(() => expect(trendCall).toHaveBeenLastCalledWith(5, false));
+    expect(bookSettings.value.trend_years).toBe(5);
+    expect(screen.getByRole("article", { name: "Net worth, last 5 years" })).toBeTruthy();
+
+    await fireEvent.click(within(card).getByRole("checkbox", { name: "Fit graph to data" }));
+    await waitFor(() => expect(trendCall).toHaveBeenLastCalledWith(5, true));
+    expect(bookSettings.value.trend_fitted).toBe(true);
+  });
+
+  it("is not loaded for an insight without the card", async () => {
+    listsState.insights = [spending];
+    render(Insights);
+    await screen.findByText("10,019,506.27");
+    expect(trendCall).not.toHaveBeenCalled();
   });
 });

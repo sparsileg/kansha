@@ -468,11 +468,12 @@
     padding-top: 0.3em;
   }
   /* Paper's widths on screen, to measure the rows (with paper's text
-     size, set inline). */
-  .compact.paper {
+     size, set inline). `paper` is added by script while measuring, so
+     Svelte cannot see it. */
+  .compact:global(.paper) {
     width: var(--twp);
   }
-  .compact.paper col {
+  .compact:global(.paper) col {
     width: var(--wp);
   }
   @media print {

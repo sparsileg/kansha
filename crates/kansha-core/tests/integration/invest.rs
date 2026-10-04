@@ -1276,6 +1276,61 @@ fn a_money_market_price_is_never_stale() {
     assert!(!stale(mm));
 }
 
+/// An account's value on many dates, read in one pass, equals one date
+/// at a time (NFR-040): a money market fund with no price at $1.00, a
+/// security never priced at cost, a priced one at its latest price,
+/// through a sale and a return of capital.
+#[test]
+fn account_values_over_many_dates_match_one_date_at_a_time() {
+    let mut b = book();
+    let mut f = kansha_core::accounts::AccountFields::new("Vanguard", AccountType::Brokerage);
+    if let Some(inv) = f.investment.as_mut() {
+        inv.mmf_mode = kansha_core::accounts::MmfMode::Security;
+    }
+    let brk = b.account_with(&f).unwrap();
+    let opening = b.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    cash.amount = Some(m("10000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    b.invest(&cash).unwrap();
+    let vti = b
+        .security("Total Stock Market", "VTI", SecurityType::Etf)
+        .unwrap();
+    let mm = b
+        .security("Money Market", "VMFXX", SecurityType::MoneyMarket)
+        .unwrap();
+    let abc = b.security("Unpriced", "ABC", SecurityType::Stock).unwrap();
+    b.invest(&buy(brk, vti, "2026-01-05", "10", "1000.00"))
+        .unwrap();
+    b.invest(&buy(brk, mm, "2026-01-05", "500", "500.00"))
+        .unwrap();
+    b.invest(&buy(brk, abc, "2026-02-01", "5", "250.00"))
+        .unwrap();
+    b.price(vti, date("2026-01-10"), p("100")).unwrap();
+    b.price(vti, date("2026-03-01"), p("120")).unwrap();
+    let mut sell = InvInput::new(brk, InvAction::Sell, date("2026-04-01"));
+    sell.security = Some(vti);
+    sell.quantity = Some(q("4"));
+    sell.amount = Some(m("480.00"));
+    b.invest(&sell).unwrap();
+    let mut roc = InvInput::new(brk, InvAction::ReturnOfCapital, date("2026-05-01"));
+    roc.security = Some(abc);
+    roc.amount = Some(m("50.00"));
+    b.invest(&roc).unwrap();
+
+    let dates: Vec<_> = (0..=181)
+        .map(|n| kansha_core::schedule::add_days(date("2026-01-01"), n).unwrap())
+        .collect();
+    let values = invest::account_values(b.conn(), brk, &dates).unwrap();
+    for (d, v) in dates.iter().zip(&values) {
+        assert_eq!(*v, invest::account_value(b.conn(), brk, *d).unwrap(), "{d}");
+    }
+    // Cash 8,780.00; VTI 6 × 120.00; the fund 500.00; ABC at cost less
+    // the return of capital, 200.00.
+    assert_eq!(values.last(), Some(&m("10200.00")));
+    assert_eq!(values[0], Money::ZERO);
+}
+
 /// Cash below zero is allowed but flagged (INV-310).
 #[test]
 fn negative_cash_is_allowed_and_flagged() {

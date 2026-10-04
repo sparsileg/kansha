@@ -1,8 +1,9 @@
 <script lang="ts">
   // Insights (INS-010 … INS-030): named tabs of cards, in the sheet's
-  // title band. The cards (CARD-010 … CARD-040, `lib/insights/cards.ts`)
-  // show net worth and its parts, this month's income and spending, a
-  // year of net worth, what is due, and what needs attention. The gear acts on the tab shown:
+  // title band. The cards (CARD-010 … CARD-050, `lib/insights/cards.ts`)
+  // show net worth and its parts, this month's income and spending, net
+  // worth over 1, 2, or 5 years, what is due, and what needs attention.
+  // The gear acts on the tab shown:
   // Customize…, Create new insight…, Move left/right, Delete insight….
   // Every figure comes from Rust.
   import { onMount, type Snippet } from "svelte";
@@ -21,7 +22,7 @@
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { CardData, Insight } from "../lib/types/bindings";
+  import type { CardData, Chart, Insight } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -37,6 +38,37 @@
   const at = $derived(selected === null ? -1 : insights.indexOf(selected));
   const creating = $derived(editing === "new");
   const cards = $derived(creating || selected === null ? [] : cardsOf(selected.cards));
+
+  // The Net worth over time card's graph, loaded only while it is shown;
+  // its years and fit are book settings (CARD-050).
+  let trend = $state<Chart | null>(null);
+  let trendError = $state<string | null>(null);
+  let trendSeq = 0;
+  const showsTrend = $derived(cards.some((c) => c.id === "net_worth_trend"));
+  const trendYears = $derived(bookSettings.value.trend_years);
+  const YEARS = [1, 2, 5];
+
+  $effect(() => {
+    if (!showsTrend) return;
+    const [years, fit] = [trendYears, bookSettings.value.trend_fitted];
+    const mine = ++trendSeq;
+    call(commands.netWorthTrend(years, fit))
+      .then((c) => {
+        if (mine !== trendSeq) return;
+        trend = c;
+        trendError = null;
+      })
+      .catch((e) => {
+        if (mine === trendSeq) trendError = e instanceof Error ? e.message : String(e);
+      });
+  });
+
+  const heading = (id: CardId, label: string, d: CardData) =>
+    id === "upcoming"
+      ? `Due in the next ${d.upcoming_days} days`
+      : id === "net_worth_trend"
+        ? `Net worth, last ${trendYears === 1 ? "12 months" : `${trendYears} years`}`
+        : label;
 
   function openMenu(e: MouseEvent) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -106,7 +138,7 @@
   const bodies: Record<CardId, Snippet<[CardData]>> = {
     net_worth: netWorth,
     this_month: thisMonth,
-    net_worth_trend: trend,
+    net_worth_trend: trendChart,
     upcoming,
     attention,
   };
@@ -143,7 +175,10 @@
       <div class="cards">
         {#each cards as c (c.id)}
           <article class="card sheet" class:wide={c.wide} class:double={c.double} data-card={c.id} aria-labelledby={`card-${c.id}`}>
-            <header><h2 id={`card-${c.id}`}>{c.id === "upcoming" ? `Due in the next ${d.upcoming_days} days` : c.label}</h2></header>
+            <header>
+              <h2 id={`card-${c.id}`}>{heading(c.id, c.label, d)}</h2>
+              {#if c.id === "net_worth_trend"}{@render trendControls()}{/if}
+            </header>
             <div class="body">{@render bodies[c.id](d)}</div>
           </article>
         {/each}
@@ -180,8 +215,31 @@
   <button type="button" class="link" onclick={() => openReport("income_expense")}>Income/Expense report</button>
 {/snippet}
 
-{#snippet trend(d: CardData)}
-  <ReportChart chart={d.trend} height={200} />
+{#snippet trendControls()}
+  <select
+    aria-label="Years"
+    value={trendYears}
+    onchange={(e) => void bookSettings.update({ trend_years: Number(e.currentTarget.value) })}
+  >
+    {#each YEARS as y (y)}<option value={y}>{y === 1 ? "1 year" : `${y} years`}</option>{/each}
+  </select>
+  <label class="fit">
+    <input
+      type="checkbox"
+      checked={bookSettings.value.trend_fitted}
+      onchange={(e) => void bookSettings.update({ trend_fitted: e.currentTarget.checked })}
+    /> Fit graph to data
+  </label>
+{/snippet}
+
+{#snippet trendChart(_: CardData)}
+  {#if trendError}
+    <p class="err" role="alert">{trendError}</p>
+  {:else if trend}
+    <ReportChart chart={trend} height={200} />
+  {:else}
+    <p class="sub">Loading…</p>
+  {/if}
 {/snippet}
 
 {#snippet upcoming(d: CardData)}
@@ -275,6 +333,12 @@
     .card.double {
       grid-column: span 2;
     }
+  }
+  .fit {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    white-space: nowrap;
   }
   .big {
     font-size: var(--fs-title);

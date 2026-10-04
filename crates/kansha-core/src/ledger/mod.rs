@@ -397,6 +397,31 @@ pub fn balance(conn: &Connection, account: AccountId, as_of: Option<Date>) -> Re
     repo::account_balance(conn, account, as_of, false)
 }
 
+/// An account's balance on each of `dates` (any order), as [`balance`]
+/// gives it for one, from one read of its postings (NFR-040).
+pub fn balances(conn: &Connection, account: AccountId, dates: &[Date]) -> Result<Vec<Money>> {
+    running_totals(&repo::account_by_day(conn, account)?, dates)
+}
+
+/// The running total of `by_day` (oldest first) on each of `dates`, in
+/// the order given.
+pub(crate) fn running_totals(by_day: &[(Date, Money)], dates: &[Date]) -> Result<Vec<Money>> {
+    let mut order: Vec<usize> = (0..dates.len()).collect();
+    order.sort_by_key(|&i| dates[i]);
+    let mut out = vec![Money::ZERO; dates.len()];
+    let mut total = Money::ZERO;
+    let mut next = by_day.iter().peekable();
+    for i in order {
+        while let Some((_, amount)) = next.next_if(|(d, _)| *d <= dates[i]) {
+            total = total
+                .checked_add(*amount)
+                .ok_or(Error::Overflow("balance"))?;
+        }
+        out[i] = total;
+    }
+    Ok(out)
+}
+
 /// Balance of cleared and reconciled postings only (REG-060, RCN-020).
 pub fn cleared_balance(
     conn: &Connection,
