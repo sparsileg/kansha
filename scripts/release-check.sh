@@ -122,7 +122,7 @@ fi
 
 # 9. Builds on the minimum supported Rust version.
 step "MSRV"
-if rustup toolchain list | grep -q '^1\.85'; then
+if rustup toolchain list | grep -q '^1\.93'; then
     if cargo +1.93 check --workspace >"$log/msrv.txt" 2>&1; then
         pass "builds with Rust 1.93"
     else
