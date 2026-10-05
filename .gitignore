@@ -38,3 +38,4 @@ node_modules/
 
 # samples
 /ignored/
+.claude/settings.local.json
