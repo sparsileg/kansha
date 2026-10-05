@@ -11,6 +11,7 @@ mod backup;
 mod encryption;
 mod fixture;
 mod import;
+mod input_checks;
 mod insights;
 mod integrity;
 mod invest;

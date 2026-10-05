@@ -1158,3 +1158,374 @@ fn day_first_files_and_bad_dates() {
         .unwrap();
     assert_eq!(r.transactions, 2);
 }
+
+/// Mapping choices that cannot be used are errors in the preview, named
+/// by what they map (TEST-150 coverage group 2).
+#[test]
+fn mapping_choices_that_cannot_be_used_are_errors() {
+    use kansha_core::categories::{CategoryId, CategoryKind};
+    use kansha_core::import::SecurityChoice;
+    use kansha_core::securities::{SecurityId, SecurityType};
+
+    let mut book = kansha_core::testkit::Book::new(date("2026-06-30")).unwrap();
+    book.category("Spending", CategoryKind::Expense).unwrap();
+    book.security("Held", "VTI", SecurityType::Etf).unwrap();
+    let mut o = skipping();
+    o.accounts.insert(
+        "Checking".into(),
+        AccountChoice::Existing { id: AccountId(999) },
+    );
+    o.accounts.insert(
+        "IRA".into(),
+        AccountChoice::Create {
+            name: " ".into(),
+            account_type: AccountType::TraditionalIra,
+        },
+    );
+    o.accounts.insert(
+        "Visa".into(),
+        AccountChoice::Create {
+            name: "Card".into(),
+            account_type: AccountType::Brokerage,
+        },
+    );
+    let cat = |path: &str, kind| CategoryChoice::Create {
+        path: path.into(),
+        category_kind: kind,
+    };
+    o.categories.insert(
+        "Interest Inc".into(),
+        CategoryChoice::Existing {
+            id: CategoryId(999_999),
+        },
+    );
+    o.categories.insert(
+        "Food:Groceries".into(),
+        cat("Food::Groceries", CategoryKind::Expense),
+    );
+    o.categories
+        .insert("Salary".into(), cat("Spending:Pay", CategoryKind::Income));
+    o.categories
+        .insert("Utilities".into(), cat("Owner", CategoryKind::Equity));
+    let new = |name: &str, ticker: &str| SecurityChoice::Create {
+        name: name.into(),
+        ticker: Some(ticker.into()),
+        security_type: SecurityType::Stock,
+    };
+    o.securities
+        .insert("Vanguard Total".into(), new("Total", "DUP"));
+    o.securities.insert("Apple".into(), new("Apple", "DUP"));
+    o.keep_securities.push("Apple".into());
+    let p = staged().preview(book.conn(), &o).unwrap();
+    let has = |who: &str, text: &str| {
+        assert!(
+            p.errors
+                .iter()
+                .any(|e| e.account == who && e.message.contains(text)),
+            "{who}: {text:?} not in {:#?}",
+            p.errors
+        );
+    };
+    has("Checking", "account 999 is not in the book");
+    has("IRA", "a new account needs a name");
+    has("Visa", "has banking transactions");
+    has(
+        "Category Interest Inc",
+        "category 999999 is not in the book",
+    );
+    has("Category Food:Groceries", "is not a category path");
+    has(
+        "Category Salary",
+        "would put a income category under a expense one",
+    );
+    has("Category Utilities", "equity categories are built in");
+    has("Security Apple", "two new securities would have ticker DUP");
+
+    let mut o = skipping();
+    o.securities
+        .insert("Vanguard Total".into(), new(" ", "VTI"));
+    let p = staged().preview(book.conn(), &o).unwrap();
+    let msgs: Vec<_> = p
+        .errors
+        .iter()
+        .filter(|e| e.account == "Security Vanguard Total")
+        .map(|e| e.message.as_str())
+        .collect();
+    assert!(msgs.contains(&"a new security needs a name"), "{msgs:?}");
+    assert!(
+        msgs.contains(&"the book already has a security with ticker VTI"),
+        "{msgs:?}"
+    );
+    o.securities.insert(
+        "Vanguard Total".into(),
+        SecurityChoice::Existing {
+            id: SecurityId(999),
+        },
+    );
+    let p = staged().preview(book.conn(), &o).unwrap();
+    assert!(
+        p.errors
+            .iter()
+            .any(|e| e.message == "security 999 is not in the book"),
+        "{:?}",
+        p.errors
+    );
+}
+
+/// Rare account types and investment actions (TEST-150 coverage group
+/// 3): each is read, imported, or skipped with a note.
+#[test]
+fn rare_account_types_and_investment_actions() {
+    const QIF: &str = "\
+!Account
+NWallet
+TCash
+^
+NHouse
+TOth A
+^
+NMortgage
+TOth L
+^
+NWork plan
+T401(k)/403(b)
+^
+NCash fund
+TInvst
+^
+!Account
+NWallet
+TCash
+^
+!Type:Cash
+D1/2'26
+T-5.00
+LFood
+^
+!Account
+NWork plan
+T401(k)/403(b)
+^
+!Type:Invst
+D1/2'26
+NCash
+^
+D1/2'26
+NContribX
+T1000.00
+L[Wallet]
+$1000.00
+^
+D1/3'26
+NIntInc
+T2.00
+^
+D1/4'26
+NShrsIn
+YFund
+Q10
+^
+D1/5'26
+NReinvSh
+YFund
+I1
+Q3
+T3.00
+^
+D1/6'26
+NReinvLg
+YFund
+I1
+Q4
+T4.00
+^
+D1/7'26
+NStkSplit
+YFund
+Q10
+^
+D1/8'26
+NStkSplit
+YFund
+Q0
+^
+D1/9'26
+NMiscExp
+T1.50
+LFees
+^
+D1/10'26
+NBuyX
+YFund
+I1
+Q5
+T5.00
+^
+D1/11'26
+NReminder
+^
+";
+    let mut db = db();
+    let s = Staged::new("rare.qif", QIF.as_bytes().to_vec());
+    let o = ImportOptions {
+        skip_errors: true,
+        ..ImportOptions::default()
+    };
+    let p = s.preview(db.conn(), &o).unwrap();
+    let ty = |n: &str| {
+        p.accounts
+            .iter()
+            .find(|a| a.name == n)
+            .unwrap()
+            .default_type
+    };
+    assert_eq!(ty("Wallet"), AccountType::Cash);
+    assert_eq!(ty("House"), AccountType::OtherAsset);
+    assert_eq!(ty("Mortgage"), AccountType::OtherLiability);
+    assert_eq!(ty("Work plan"), AccountType::Retirement401k);
+    assert_eq!(ty("Cash fund"), AccountType::Brokerage);
+
+    let noted = |text: &str| {
+        assert!(
+            p.warnings.iter().any(|w| w.message.contains(text)),
+            "{text:?} not in {:#?}",
+            p.warnings
+        );
+    };
+    noted("Cash has no amount; skipped");
+    noted("ShrsIn has no cost basis; the shares come in at zero cost");
+    noted("a 1:1 split changes nothing; skipped");
+    noted("BuyX names no transfer account; only the Buy is imported");
+    noted("a reminder, not a transaction; skipped");
+    assert!(
+        p.errors
+            .iter()
+            .any(|e| e.message.contains("a split needs its ratio")),
+        "{:#?}",
+        p.errors
+    );
+
+    let r = s.run(&mut db, &clock(), &o, false, None).unwrap();
+    assert!(r.committed, "{:?}", r.errors);
+    let plan = account(&db, "Work plan");
+    let actions: Vec<String> = db
+        .conn()
+        .prepare("SELECT action FROM investment_txn WHERE account_id = ?1 ORDER BY txn_id")
+        .unwrap()
+        .query_map([plan.0], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        actions,
+        [
+            "cash_in",
+            "interest",
+            "shares_added",
+            "reinvest_cg_short",
+            "reinvest_cg_long",
+            "misc_expense",
+            "buy"
+        ]
+    );
+}
+
+#[test]
+fn a_file_is_read_from_disk_by_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("Checking.qif");
+    std::fs::write(&path, WHOLE).unwrap();
+    let s = Staged::read(&path).unwrap();
+    assert_eq!(s.bytes, WHOLE);
+    let err = Staged::read(&dir.path().join("missing.qif")).unwrap_err();
+    assert!(err.to_string().contains("cannot read"), "{err}");
+}
+
+/// Transfers seen from one side, or as a split on one side and one
+/// record on the other (TEST-150 coverage group 3).
+#[test]
+fn odd_transfers_match_or_are_noted() {
+    const QIF: &str = "\
+!Account
+NChecking
+TBank
+^
+!Type:Bank
+D2/1'26
+T-300.00
+PMove
+S[Brokerage]
+$-100.00
+S[Brokerage]
+$-200.00
+^
+D2/2'26
+T-50.00
+L[Savings]
+^
+!Account
+NSavings
+TBank
+^
+!Type:Bank
+D2/3'26
+T10.00
+LFood
+^
+!Account
+NBrokerage
+TInvst
+^
+!Type:Invst
+D2/1'26
+NXIn
+T300.00
+L[Checking]
+$300.00
+^
+D2/4'26
+NXOut
+T20.00
+L[IRA]
+$20.00
+^
+D2/5'26
+NXOut
+T7.00
+L[IRA]
+$7.00
+^
+!Account
+NIRA
+TInvst
+^
+!Type:Invst
+D2/4'26
+NXIn
+T20.00
+L[Brokerage]
+$20.00
+^
+";
+    let mut db = db();
+    let s = Staged::new("odd.qif", QIF.as_bytes().to_vec());
+    let o = ImportOptions::default();
+    let p = s.preview(db.conn(), &o).unwrap();
+    let noted = |text: &str| {
+        assert!(
+            p.warnings.iter().any(|w| w.message.contains(text)),
+            "{text:?} not in {:#?}",
+            p.warnings
+        );
+    };
+    noted("cash moved between investment accounts \"Brokerage\" and \"IRA\" on 2026-02-04");
+    noted("cash moved to or from investment account \"IRA\" on 2026-02-05");
+    noted("has no matching entry in \"Savings\"");
+    let r = s.run(&mut db, &clock(), &o, false, None).unwrap();
+    assert!(r.committed, "{:#?}", r.errors);
+    let bal = |n: &str| ledger::balance(db.conn(), account(&db, n), None).unwrap();
+    assert_eq!(bal("Checking"), m("-350.00"));
+    assert_eq!(bal("Savings"), m("60.00"));
+    assert_eq!(bal("Brokerage"), m("273.00"));
+    assert_eq!(bal("IRA"), m("20.00"));
+}

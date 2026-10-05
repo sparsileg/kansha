@@ -563,7 +563,7 @@ impl Parser {
                 _ => {}
             }
         }
-        if let Some(v) = t.or(u).filter(|v| !v.is_empty()) {
+        if let Some(v) = amount_field(t, u) {
             match money(v) {
                 Ok(m) => r.amount = Some(m),
                 Err(e) => r.problems.push(format!("amount {v:?}: {e}")),
@@ -631,7 +631,7 @@ impl Parser {
                 _ => {}
             }
         }
-        if let Some(v) = t.or(u).filter(|v| !v.is_empty()) {
+        if let Some(v) = amount_field(t, u) {
             match money(v) {
                 Ok(m) => r.amount = Some(m),
                 Err(e) => r.problems.push(format!("amount {v:?}: {e}")),
@@ -899,6 +899,13 @@ pub fn split_target(s: &str) -> (Target, Vec<String>) {
     (head, tags)
 }
 
+/// The amount field: `T`, or `U` when `T` is missing or empty. `None`
+/// when neither has a value.
+fn amount_field<'a>(t: Option<&'a str>, u: Option<&'a str>) -> Option<&'a str> {
+    let filled = |v: &&str| !v.trim().is_empty();
+    t.filter(filled).or(u.filter(filled))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1120,6 +1127,87 @@ X1
         let f = parse("!Type:Bank\nD3/4'26\nT1\n^\n", "a", Some(DateOrder::Dmy));
         assert!(!f.date_ambiguous);
         assert_eq!(f.bank[0].date, Some(d("2026-04-03")));
+    }
+
+    /// Odd and broken records (TEST-150 coverage group 3): noted or
+    /// skipped, never a failure of the whole file.
+    #[test]
+    fn odd_records_are_noted_or_skipped() {
+        let text = "D1/1'26\n^\n\
+            !Account\nTBank\n^\n\
+            !Type:Cat\nDno name\n^\n\
+            !Type:Security\nSNONAME\n^\n\
+            !Type:Prices\n,12.5,\"1/2'26\"\n\
+            !Bogus\nNskipped\n^\n\
+            !Type:Bank\nD1/5'26\nT-10.00\n$-4.00\nE first\nSFood\n$abc\nCQ\n^\n\
+            D1/6'26\nU-3.00\nL[Savings\n^\n";
+        let f = parse(text, "", None);
+        let noted = |t: &str| f.notes.iter().any(|n| n.message.contains(t));
+        assert!(noted("data before any header"), "{:?}", f.notes);
+        assert!(noted("an account without a name"), "{:?}", f.notes);
+        assert!(noted("unknown header \"!Bogus\""), "{:?}", f.notes);
+        assert!(f.categories.is_empty() && f.securities.is_empty() && f.prices.is_empty());
+
+        // No `!Account` with a name and no file name: a made-up account.
+        assert_eq!(f.accounts.len(), 1);
+        assert_eq!(f.accounts[0].name, "Imported account");
+
+        // A split amount before any `S` starts a split of its own.
+        let r = &f.bank[0];
+        assert_eq!(r.splits.len(), 2);
+        assert_eq!(r.splits[0].category, "");
+        assert_eq!(r.splits[0].memo, "first");
+        assert_eq!(r.splits[0].amount, Some(Money::from_cents(-400)));
+        assert_eq!(r.splits[1].amount, None);
+        assert_eq!(r.problems, vec!["split amount \"abc\": not a number"]);
+        assert_eq!(r.cleared, Cleared::Unmarked);
+        // `U` alone is the amount; an unclosed `[` is a category.
+        let r = &f.bank[1];
+        assert_eq!(r.amount, Some(Money::from_cents(-300)));
+        assert_eq!(
+            split_target(&r.category).0,
+            Target::Category("[Savings".into())
+        );
+    }
+
+    #[test]
+    fn an_empty_t_falls_back_to_u() {
+        let f = parse(
+            "!Type:Bank\nD1/5'26\nT\nU12.34\n^\n\
+             !Type:Invst\nD1/5'26\nNCash\nT \nU12.34\n^\n",
+            "a",
+            None,
+        );
+        assert_eq!(f.bank[0].amount, Some(Money::from_cents(1234)));
+        assert_eq!(f.invest[0].amount, Some(Money::from_cents(1234)));
+        assert!(f.bank[0].problems.is_empty() && f.invest[0].problems.is_empty());
+    }
+
+    #[test]
+    fn bad_investment_fields_stay_on_their_record() {
+        let f = parse(
+            "!Type:Invst\nD1/5'26\nNBuy\nYFund\nIx\nQ1\nO2\n$\nTabc\n^\n",
+            "a",
+            None,
+        );
+        let r = &f.invest[0];
+        assert_eq!(r.price, None);
+        assert_eq!(r.quantity, Some(Quantity::from_raw(1_000_000)));
+        assert_eq!(r.commission, Some(Money::from_cents(200)));
+        assert_eq!(r.transfer_amount, None, "an empty field is no amount");
+        assert_eq!(
+            r.problems,
+            vec!["price \"x\": not a number", "amount \"abc\": not a number"]
+        );
+        assert_eq!(money(" $ ").unwrap_err(), "no number");
+    }
+
+    #[test]
+    fn malformed_dates_are_not_read() {
+        for s in ["/5/26", "1/5/", "1/5/202", "1/5/26/7", "1a/5/26"] {
+            assert_eq!(raw_date(s), None, "{s}");
+            assert!(read_date(s, DateOrder::Mdy).is_err(), "{s}");
+        }
     }
 
     #[test]

@@ -1568,3 +1568,104 @@ fn series_edit_with_nothing_left_ends_the_schedule() {
     assert_eq!(s.status, ScheduleStatus::Ended);
     assert_eq!(s.next_due, None);
 }
+
+/// Input checks (TEST-150 coverage group 2).
+#[test]
+fn schedule_input_checks() {
+    let mut fx = fx();
+    let ok = rent_fields(&fx, "2026-07-01");
+    let mut f = ok.clone();
+    f.remind_days = 366;
+    let e = fx.book.write(|tx| schedule::create(tx, &f)).unwrap_err();
+    assert!(e.to_string().contains("between 0 and 365"), "{e}");
+
+    // One-time edits: only for an active schedule, and the amount only
+    // on a single line.
+    let mut f = ok.clone();
+    f.recurrence = Recurrence::new(Frequency::Once, date("2026-07-01"));
+    let once = create(&mut fx, &f);
+    enter(&mut fx, once, "2026-07-01").unwrap();
+    let e = fx
+        .book
+        .write(|tx| schedule::set_override(tx, once, date("2026-07-01"), None, None))
+        .unwrap_err();
+    assert!(e.to_string().contains("no more occurrences"), "{e}");
+    let mut f = ok.clone();
+    f.lines = vec![
+        ScheduleLine {
+            target: Target::Category(fx.rent),
+            amount: m("-600.00"),
+            memo: String::new(),
+            tag: None,
+        },
+        ScheduleLine {
+            target: Target::Account(fx.sav),
+            amount: m("-400.00"),
+            memo: String::new(),
+            tag: None,
+        },
+    ];
+    let split = create(&mut fx, &f);
+    let e = fx
+        .book
+        .write(|tx| schedule::set_override(tx, split, date("2026-07-01"), None, Some(m("-1.00"))))
+        .unwrap_err();
+    assert!(e.to_string().contains("split can't be changed"), "{e}");
+
+    // Projection: a forward window of at most ten years, not for an
+    // investment account.
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let today = date("2026-06-30");
+    let project = |a, from: &str, to: &str| {
+        schedule::projected_balances(fx.book.conn(), a, date(from), date(to), today)
+            .unwrap_err()
+            .to_string()
+    };
+    assert!(project(fx.chk, "2026-07-01", "2026-06-01").contains("before the start"));
+    assert!(project(brk, "2026-07-01", "2026-08-01").contains("not projected"));
+    assert!(project(fx.chk, "2026-07-01", "2036-07-10").contains("ten years"));
+}
+
+/// A cash schedule on an investment account is entered as scheduled; its
+/// payee becomes the memo (REC-115).
+#[test]
+fn an_investment_cash_schedule_is_entered_as_scheduled() {
+    let mut fx = fx();
+    let sav = fx.sav;
+    let brk = fx
+        .book
+        .account("Brokerage", AccountType::Brokerage)
+        .unwrap();
+    let mut f = one_line(brk, Target::Account(sav), "-500.00");
+    f.memo = String::new();
+    f.payee = Some(fx.book.payee("Vanguard").unwrap());
+    let id = create(&mut fx, &f);
+
+    let edited = schedule::prefill_entry(fx.book.conn(), id, date("2026-07-01")).unwrap();
+    let edits = EnterEdits {
+        entry: Some(edited),
+        ..EnterEdits::default()
+    };
+    let e = fx
+        .book
+        .write(|tx| schedule::enter(tx, id, date("2026-07-01"), &edits, false))
+        .unwrap_err();
+    assert!(e.to_string().contains("entered as scheduled"), "{e}");
+
+    let zero = EnterEdits {
+        amount: Some(Money::ZERO),
+        ..EnterEdits::default()
+    };
+    let e = fx
+        .book
+        .write(|tx| schedule::enter(tx, id, date("2026-07-01"), &zero, false))
+        .unwrap_err();
+    assert!(e.to_string().contains("needs an amount"), "{e}");
+
+    let entered = enter(&mut fx, id, "2026-07-01").unwrap();
+    let txn = ledger::get(fx.book.conn(), entered.txn).unwrap();
+    assert_eq!(txn.memo, "Vanguard");
+}
