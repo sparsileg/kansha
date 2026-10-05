@@ -1,4 +1,4 @@
-# Release checks (devdocs/release-checklist.md §3, §4). Runs every
+# Release checks (devdocs/release-checklist.md sections 3, 4). Runs every
 # check, then prints one line per check: PASS, FAIL, or NOTE (look at
 # it; not a failure by itself). Exit status is 1 if any check failed.
 # Windows PowerShell 5.1 or later; the same as release-check.sh.
@@ -9,6 +9,8 @@
 param([string]$Base = '')
 # Not 'Stop': Windows PowerShell 5.1 would stop on any line a program
 # writes to stderr. Each check looks at exit codes instead.
+# Keep this file ASCII: Windows PowerShell 5.1 reads a file with no
+# byte order mark as ANSI, so a non-ASCII character comes out garbled.
 $ErrorActionPreference = 'Continue'
 Set-Location (Join-Path $PSScriptRoot '..')
 
@@ -21,14 +23,18 @@ function Fail([string]$m) { $results.Add("FAIL  $m"); $script:failed = 1 }
 function Note([string]$m) { $results.Add("NOTE  $m") }
 function Step([string]$m) { Write-Output ''; Write-Output "=== $m" }
 
-# Runs a program, its output (stdout and stderr) to the file `$To` and,
-# with -Show, to the screen too as it comes. Returns true when it
-# exits 0.
+# Runs a program, its output (stdout and stderr) to the file `$To`
+# (UTF-8) and, with -Show, to the screen too as it comes. Returns true
+# when it exits 0. cmd joins stderr to stdout, so PowerShell sees only
+# plain lines, not error records (a blank stderr line would print as
+# "System.Management.Automation.RemoteException").
 function Run([string]$To, [switch]$Show, [string]$Exe) {
     if ($Show) {
-        & $Exe @args 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $To | Out-Host
+        & cmd /c $Exe @args '2>&1' |
+            ForEach-Object { Out-Host -InputObject $_; $_ } |
+            Set-Content -Encoding UTF8 -Path $To
     } else {
-        & $Exe @args 2>&1 | ForEach-Object { "$_" } | Set-Content -Encoding UTF8 -Path $To
+        & cmd /c $Exe @args '2>&1' | Set-Content -Encoding UTF8 -Path $To
     }
     return $LASTEXITCODE -eq 0
 }
@@ -122,7 +128,8 @@ if ($Base) {
     Note "migrations not compared: no base (pass the last release's commit)"
 }
 
-# 6. Traceability: the only uncited IDs are those spec §23 says are not built.
+# 6. Traceability: the only uncited IDs are those spec section 23
+# says are not built.
 Step 'just trace'
 Run "$log/trace.txt" just trace | Out-Null
 $trace = Get-Content "$log/trace.txt"
@@ -137,9 +144,9 @@ $summary = $trace | Select-String 'engine requirements cited' | Select-Object -F
 if (-not $summary) {
     Fail "just trace did not run (see $log/trace.txt)"
 } elseif ($unexpected) {
-    Fail "requirements not cited by a test and not listed in spec §23: $unexpected"
+    Fail "requirements not cited by a test and not listed in spec section 23: $unexpected"
 } else {
-    Pass "trace: $($summary.Line.Trim()); uncited are all in §23: $($uncited -join ' ')"
+    Pass "trace: $($summary.Line.Trim()); uncited are all in section 23: $($uncited -join ' ')"
 }
 
 # 7. Coverage: record it beside the last release's.
@@ -162,14 +169,14 @@ if (Run "$log/perf.txt" -Show just perf) {
 
 # 9. Builds on the minimum supported Rust version.
 Step 'MSRV'
-if (Lines rustup toolchain list | Where-Object { $_ -match '^1\.85' }) {
-    if (Run "$log/msrv.txt" cargo +1.85 check --workspace) {
-        Pass 'builds with Rust 1.85'
+if (Lines rustup toolchain list | Where-Object { $_ -match '^1\.88' }) {
+    if (Run "$log/msrv.txt" cargo +1.93 check --workspace) {
+        Pass 'builds with Rust 1.93'
     } else {
-        Fail "cargo +1.85 check (see $log/msrv.txt)"
+        Fail "cargo +1.93 check (see $log/msrv.txt)"
     }
 } else {
-    Note 'MSRV not checked: run once: rustup toolchain install 1.85'
+    Note 'MSRV not checked: run once: rustup toolchain install 1.93'
 }
 
 # 10. Everything is committed.

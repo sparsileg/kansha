@@ -1054,20 +1054,20 @@ impl Builder<'_> {
             match item {
                 Item::Bank(b) => {
                     for l in &mut b.lines {
-                        if let LineTarget::Account(t) = l.target {
-                            if t == b.account || skip[t] {
-                                to_skipped += usize::from(t != b.account);
-                                l.target = LineTarget::Equity;
-                            }
+                        if let LineTarget::Account(t) = l.target
+                            && (t == b.account || skip[t])
+                        {
+                            to_skipped += usize::from(t != b.account);
+                            l.target = LineTarget::Equity;
                         }
                     }
                 }
                 Item::Inv(i) => {
-                    if let Some(Counter::Account(t)) = i.counterpart {
-                        if t == i.account || skip[t] {
-                            to_skipped += usize::from(t != i.account);
-                            i.counterpart = Some(Counter::Equity);
-                        }
+                    if let Some(Counter::Account(t)) = i.counterpart
+                        && (t == i.account || skip[t])
+                    {
+                        to_skipped += usize::from(t != i.account);
+                        i.counterpart = Some(Counter::Equity);
                     }
                 }
             }
@@ -1517,14 +1517,14 @@ impl Builder<'_> {
                             prefix.push(':');
                         }
                         prefix.push_str(&p.to_lowercase());
-                        if let Some((_, k)) = by_path.get(&prefix) {
-                            if k != kind {
-                                problems.push((
-                                    shown.clone(),
-                                    format!("{path:?} would put a {kind} category under a {k} one"),
-                                ));
-                                break;
-                            }
+                        if let Some((_, k)) = by_path.get(&prefix)
+                            && k != kind
+                        {
+                            problems.push((
+                                shown.clone(),
+                                format!("{path:?} would put a {kind} category under a {k} one"),
+                            ));
+                            break;
                         }
                     }
                 }
@@ -1683,13 +1683,12 @@ impl Builder<'_> {
         let mut seen: HashSet<String> = HashSet::new();
         let mut new = 0;
         for item in &self.items {
-            if let Item::Bank(b) = item {
-                if !b.payee.is_empty()
-                    && seen.insert(b.payee.to_lowercase())
-                    && payees::find_by_name(self.conn, &b.payee)?.is_none()
-                {
-                    new += 1;
-                }
+            if let Item::Bank(b) = item
+                && !b.payee.is_empty()
+                && seen.insert(b.payee.to_lowercase())
+                && payees::find_by_name(self.conn, &b.payee)?.is_none()
+            {
+                new += 1;
             }
         }
         Ok(new)

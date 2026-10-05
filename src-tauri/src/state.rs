@@ -299,10 +299,10 @@ impl AppState {
 
     /// The check of the last backup at startup has finished.
     pub fn end_verifying(&self) {
-        if let Ok(mut slot) = self.session.lock() {
-            if let Some(s) = slot.as_mut() {
-                s.verifying = false;
-            }
+        if let Ok(mut slot) = self.session.lock()
+            && let Some(s) = slot.as_mut()
+        {
+            s.verifying = false;
         }
     }
 
@@ -404,8 +404,8 @@ impl AppState {
         let Ok(mut guard) = self.book.lock() else {
             return;
         };
-        if let Some(b) = guard.as_mut() {
-            if let Err(e) = backup::back_up(
+        if let Some(b) = guard.as_mut()
+            && let Err(e) = backup::back_up(
                 &mut b.db,
                 &b.key_file,
                 &name,
@@ -413,9 +413,9 @@ impl AppState {
                 BackupKind::Close,
                 &self.app_version,
                 &self.clock,
-            ) {
-                eprintln!("backup on close failed: {e}");
-            }
+            )
+        {
+            eprintln!("backup on close failed: {e}");
         }
         *guard = None;
         drop(guard);

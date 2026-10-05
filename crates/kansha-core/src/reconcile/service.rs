@@ -43,13 +43,13 @@ pub fn start(tx: &Tx<'_>, input: &StartInput) -> Result<Reconciliation> {
             "this account already has a reconciliation in progress; resume or abandon it".into(),
         ));
     }
-    if let Some(last) = repo::last_finished(conn, input.account)? {
-        if input.statement_date < last.statement_date {
-            return Err(Error::Invalid(format!(
-                "statement date {} is before the last reconciled statement, {}",
-                input.statement_date, last.statement_date
-            )));
-        }
+    if let Some(last) = repo::last_finished(conn, input.account)?
+        && input.statement_date < last.statement_date
+    {
+        return Err(Error::Invalid(format!(
+            "statement date {} is before the last reconciled statement, {}",
+            input.statement_date, last.statement_date
+        )));
     }
     let liability = accounts::get(conn, input.account)?
         .fields
@@ -175,13 +175,13 @@ pub fn update_statement(
     statement_balance: Money,
 ) -> Result<Reconciliation> {
     let rec = in_progress(tx, id)?;
-    if let Some(last) = repo::last_finished(tx.conn(), rec.account)? {
-        if statement_date < last.statement_date {
-            return Err(Error::Invalid(format!(
-                "statement date {statement_date} is before the last reconciled statement, {}",
-                last.statement_date
-            )));
-        }
+    if let Some(last) = repo::last_finished(tx.conn(), rec.account)?
+        && statement_date < last.statement_date
+    {
+        return Err(Error::Invalid(format!(
+            "statement date {statement_date} is before the last reconciled statement, {}",
+            last.statement_date
+        )));
     }
     let sign = Sign::of(tx.conn(), rec.account)?;
     let rec = repo::update_statement(tx, id, statement_date, sign.apply(statement_balance)?)?;

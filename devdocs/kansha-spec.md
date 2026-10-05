@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.26 (draft) |
+| **Document version** | 0.7.27 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
@@ -1737,10 +1737,10 @@ compiles against Tauri v2 and generates a matching
 - Encryption of backups and the key file: `age` crate (X25519
   recipients, scrypt-locked private key). Backup files: `zip` crate.
   No OS keyring (SECU-010). Both pinned (`=0.12.1`, `=7.2.0`, the
-  newest for MSRV 1.85). The database key comes from `getrandom`;
-  the snapshot is gzipped with `flate2` (both already under `age` and
-  `zip`). Import files are hashed with `sha2` (`=0.10.9`, already
-  under `age`; MIG-170).
+  newest for MSRV 1.85 when chosen). The database key comes from
+  `getrandom`; the snapshot is gzipped with `flate2` (both already
+  under `age` and `zip`). Import files are hashed with `sha2`
+  (`=0.10.9`, already under `age`; MIG-170).
 - Folder and file pickers (backup folder, restore, import):
   `tauri-plugin-dialog`, called from Rust only, so the webview gets
   no dialog permission.
@@ -2488,6 +2488,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.27 | 2026-10-05 | MSRV raised from 1.85 to 1.93: the pinned `specta` and `tauri-specta` `2.0.0-rc.25` (D-120) no longer build on 1.85; `specta` uses `fmt::from_fn` (stable in Rust 1.93) and `tauri-specta-macros` resolves `darling` 0.23 (Rust 1.88). Checked with `cargo +1.93 check --workspace`. The release checklist's MSRV check uses 1.93. Let-chains are now allowed; clippy (`collapsible_if`) rewrote 27 nested `if let` blocks as let-chains, with no change in behavior. Pins chosen under 1.85 (`age`, `zip`, `ureq`) stay. No schema change. No API change. |
 | 0.7.26 | 2026-10-04 | CARD-030: the Needs attention card's first line starts "As of 2:32 PM:", the local time the checks ran. Accounts reconciled: an account is named only if it has a transaction dated after its last reconcile (any, if never), replacing "used in the last year". No schema change. **API change:** `Attention` gains `as_of`. |
 | 0.7.25 | 2026-10-04 | CARD-030: the Needs attention card shows only problems, each with what to do, or "No problems found. 10 checks passed."; "Show checks" lists every check. New checks: changes from before Kansha was started with no backup after them (replaces the last backup's date), the last backup not checked at startup or failed (Verify backup… no longer counts), overdue reminders, accounts not reconciled in 60 days, transactions in Uncategorized, investment cash below zero. A backup folder not chosen is now a notice. BAK-080: the check at startup is recorded apart from Verify backup…. No schema change. **API change:** `attention` returns `Attention` (`checks`, `notices`; new types `AttentionCheck`, `Notice`; `CheckLine` removed; `CheckKind` values changed); `BackupStatus` loses `verified_path`, `verify_error`, gains `startup_checked_at`, `startup_path`, `startup_error`. |
 | 0.7.24 | 2026-10-04 | CARD-030: the Needs attention card lists every check on its own line with its result (Security prices, Old uncleared transactions, Backup folder, Last backup, Backup verification, Database integrity), ⚠ and words for a problem, "All clear." gone. The card loads only on an insight that shows it, and the integrity check runs once per opened book, then its result is kept and replaced by each backup's snapshot check and File > Integrity Check (the cards no longer wait about 1.8 s for it on the large book). BAK-080: right after unlocking, the book's last backup is fully checked in the background with the passphrase just typed; the result is recorded in the book. No schema change. **API change:** new commands `attention`, `backup_verify_latest(passphrase)`; `CardData.warnings` and `CardData.backup` removed (`Warning`, `WarningKind` replaced by `CheckLine`, `CheckKind`, `Finding`); `BackupStatus` gains `verified_path`, `verify_error`. |

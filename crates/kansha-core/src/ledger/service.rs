@@ -140,13 +140,13 @@ pub fn close_account(
             acct.fields.name
         )));
     }
-    if let Some(last) = repo::last_posting_date(tx.conn(), account)? {
-        if last > date {
-            return Err(Error::Invalid(format!(
-                "account {:?} has transactions after {date} (latest {last})",
-                acct.fields.name
-            )));
-        }
+    if let Some(last) = repo::last_posting_date(tx.conn(), account)?
+        && last > date
+    {
+        return Err(Error::Invalid(format!(
+            "account {:?} has transactions after {date} (latest {last})",
+            acct.fields.name
+        )));
     }
     if crate::persistence::reconcile::find_open(tx.conn(), account)?.is_some() {
         return Err(Error::Invalid(format!(
@@ -318,10 +318,10 @@ pub fn memorize_payee(tx: &Tx<'_>, entry: &Entry) -> Result<bool> {
         return Ok(false);
     }
     let mut fields = f.clone();
-    if let [line] = entry.lines.as_slice() {
-        if let Target::Category(c) = line.target {
-            fields.default_category = Some(c);
-        }
+    if let [line] = entry.lines.as_slice()
+        && let Target::Category(c) = line.target
+    {
+        fields.default_category = Some(c);
     }
     fields.default_tag = entry.tags.first().copied();
     fields.default_memo = entry.memo.clone();

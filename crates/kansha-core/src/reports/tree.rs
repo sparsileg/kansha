@@ -132,14 +132,14 @@ pub(super) fn round_to_dollars(report: &mut Report) -> Result<()> {
     fn walk(rows: &mut [Row], money: &[usize]) -> Result<()> {
         for row in rows {
             for &i in money {
-                if let Some(cell) = row.cells.get_mut(i) {
-                    if !cell.is_empty() {
-                        let m: Money = cell.parse()?;
-                        let dollars = m
-                            .to_decimal()
-                            .round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
-                        *cell = Money::from_decimal(dollars)?.to_string();
-                    }
+                if let Some(cell) = row.cells.get_mut(i)
+                    && !cell.is_empty()
+                {
+                    let m: Money = cell.parse()?;
+                    let dollars = m
+                        .to_decimal()
+                        .round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
+                    *cell = Money::from_decimal(dollars)?.to_string();
                 }
             }
             walk(&mut row.children, money)?;

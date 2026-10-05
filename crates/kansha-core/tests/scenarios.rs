@@ -1375,13 +1375,13 @@ impl Ctx<'_> {
             Action::AutoEnter { expect_entered, .. } => {
                 let clock = *self.book.clock();
                 let report = schedule::auto_enter_due(self.book.db_mut(), &clock)?;
-                if let Some(n) = expect_entered {
-                    if report.entered.len() != *n {
-                        return Err(ActErr::Harness(format!(
-                            "auto_enter entered {}, expected {n}",
-                            report.entered.len()
-                        )));
-                    }
+                if let Some(n) = expect_entered
+                    && report.entered.len() != *n
+                {
+                    return Err(ActErr::Harness(format!(
+                        "auto_enter entered {}, expected {n}",
+                        report.entered.len()
+                    )));
                 }
                 if let Some(f) = report.failed.first() {
                     return Err(ActErr::Harness(format!("auto_enter failed: {}", f.reason)));
@@ -1500,12 +1500,12 @@ impl Ctx<'_> {
                 let n = self
                     .book
                     .write(|tx| kansha_core::securities::commit_prices(tx, csv, date))?;
-                if let Some(want) = expect_count {
-                    if n != *want {
-                        return Err(ActErr::Harness(format!(
-                            "import_prices wrote {n}, expected {want}"
-                        )));
-                    }
+                if let Some(want) = expect_count
+                    && n != *want
+                {
+                    return Err(ActErr::Harness(format!(
+                        "import_prices wrote {n}, expected {want}"
+                    )));
                 }
             }
             Action::SeedLots { date, csv, .. } => {

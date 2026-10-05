@@ -61,7 +61,7 @@ picks the right one.
    | snapshots | No pending report snapshots (TEST-090) | `just snap-review` |
    | migrations | No released migration was edited | Undo the edit; add a new migration instead |
    | trace | Every uncited requirement is one §23 lists as not built (TEST-070) | Add a test, or list it in §23 |
-   | MSRV | The workspace builds with Rust 1.85 | Replace the newer language feature |
+   | MSRV | The workspace builds with Rust 1.93 | Replace the newer language feature |
    | perf | The large-book timings are within limits (NFR-040, NFR-050) | Known issue in the release notes, or fix |
 
 3. [ ] Act on each NOTE:
@@ -78,7 +78,7 @@ picks the right one.
    - **MSRV not checked**: install the toolchain once, then rerun:
 
      ```sh
-     rustup toolchain install 1.85
+     rustup toolchain install 1.93
      ```
 
    - **uncommitted changes**: expected before the release commit.

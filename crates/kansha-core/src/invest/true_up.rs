@@ -143,10 +143,10 @@ pub fn parse_true_up(text: &str, ticker: Option<&str>) -> Result<Vec<TrueUpLot>>
     let mut lots = Vec::with_capacity(table.rows.len());
     let mut problems = Vec::new();
     for rec in &table.rows {
-        if let (Some(col), Some(want)) = (symbol, ticker) {
-            if !rec.get(col).eq_ignore_ascii_case(want) {
-                continue;
-            }
+        if let (Some(col), Some(want)) = (symbol, ticker)
+            && !rec.get(col).eq_ignore_ascii_case(want)
+        {
+            continue;
         }
         let parsed = (|| -> Result<TrueUpLot> {
             let lot = TrueUpLot {

@@ -3,7 +3,7 @@
 Kansha: local, single-user, cross-platform personal finance app replacing
 Quicken 2013. Kubuntu primary; Windows later; macOS not precluded.
 Tauri v2 + Rust core + Svelte 5 (Vite, not SvelteKit). SQLite via rusqlite
-(`bundled-sqlcipher-vendored-openssl`). MSRV 1.85.
+(`bundled-sqlcipher-vendored-openssl`). MSRV 1.93.
 
 ## Read first
 
@@ -59,7 +59,7 @@ Tauri v2 + Rust core + Svelte 5 (Vite, not SvelteKit). SQLite via rusqlite
   same transaction.
 - Never edit a released migration; add a new one. Tables STRICT.
 - No `unsafe`; no `unwrap`/`expect` outside tests except documented
-  invariants. No let-chains (MSRV 1.85).
+  invariants. Let-chains allowed (MSRV 1.93).
 - Scenario TOML: amounts as strings; inline tables on one line only.
 - Every engine bug fix adds a test that fails first.
 - Do not bump specta or other pinned deps without asking.

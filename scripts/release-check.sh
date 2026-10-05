@@ -123,13 +123,13 @@ fi
 # 9. Builds on the minimum supported Rust version.
 step "MSRV"
 if rustup toolchain list | grep -q '^1\.85'; then
-    if cargo +1.85 check --workspace >"$log/msrv.txt" 2>&1; then
-        pass "builds with Rust 1.85"
+    if cargo +1.93 check --workspace >"$log/msrv.txt" 2>&1; then
+        pass "builds with Rust 1.93"
     else
-        fail "cargo +1.85 check (see $log/msrv.txt)"
+        fail "cargo +1.93 check (see $log/msrv.txt)"
     fi
 else
-    note "MSRV not checked: run once: rustup toolchain install 1.85"
+    note "MSRV not checked: run once: rustup toolchain install 1.93"
 fi
 
 # 10. Everything is committed.

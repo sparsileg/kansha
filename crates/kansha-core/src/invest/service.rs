@@ -526,18 +526,17 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
         .security
         .map(|id| securities::get(conn, id))
         .transpose()?;
-    if let Some(s) = &security {
-        if s.fields.security_type == SecurityType::MoneyMarket
-            && settings.mmf_mode == MmfMode::Cash
-            && action.takes_quantity()
-        {
-            return Err(Error::Invalid(format!(
-                "{:?} keeps money market funds as cash; record {} as cash, or change the \
+    if let Some(s) = &security
+        && s.fields.security_type == SecurityType::MoneyMarket
+        && settings.mmf_mode == MmfMode::Cash
+        && action.takes_quantity()
+    {
+        return Err(Error::Invalid(format!(
+            "{:?} keeps money market funds as cash; record {} as cash, or change the \
                  account to hold money market funds as securities",
-                acct.fields.name,
-                s.label()
-            )));
-        }
+            acct.fields.name,
+            s.label()
+        )));
     }
 
     // Where cash goes (INV-300).
@@ -598,15 +597,14 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
                 )));
             }
             let dest_mmf = dest.fields.investment.as_ref().map(|i| i.mmf_mode);
-            if let Some(s) = &security {
-                if s.fields.security_type == SecurityType::MoneyMarket
-                    && dest_mmf == Some(MmfMode::Cash)
-                {
-                    return Err(Error::Invalid(format!(
-                        "{:?} keeps money market funds as cash",
-                        dest.fields.name
-                    )));
-                }
+            if let Some(s) = &security
+                && s.fields.security_type == SecurityType::MoneyMarket
+                && dest_mmf == Some(MmfMode::Cash)
+            {
+                return Err(Error::Invalid(format!(
+                    "{:?} keeps money market funds as cash",
+                    dest.fields.name
+                )));
             }
             Some(to)
         }
@@ -614,14 +612,14 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
     };
 
     let this = editing.map(|t| t.txn.id);
-    if action.affects_lots() {
-        if let Some(s) = &security {
-            let mut held = vec![(a, s.id)];
-            if let Some(to) = to {
-                held.push((to, s.id));
-            }
-            check_order(conn, &held, input.date, this)?;
+    if action.affects_lots()
+        && let Some(s) = &security
+    {
+        let mut held = vec![(a, s.id)];
+        if let Some(to) = to {
+            held.push((to, s.id));
         }
+        check_order(conn, &held, input.date, this)?;
     }
 
     // Lots of this holding open on the trade date. Same-day entries come

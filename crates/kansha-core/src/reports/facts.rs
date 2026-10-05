@@ -446,15 +446,14 @@ pub(super) fn lines(
         if !t.payee_ok(s) {
             continue;
         }
-        if want != Want::All {
-            if let Some(inv) = t
+        if want != Want::All
+            && let Some(inv) = t
                 .inv
                 .as_ref()
                 .filter(|i| i.action == InvAction::RothConversion)
-            {
-                out.extend(conversion_lines(t, inv, s, lk)?);
-                continue;
-            }
+        {
+            out.extend(conversion_lines(t, inv, s, lk)?);
+            continue;
         }
         let description = t.description(lk);
         let num = t.num();

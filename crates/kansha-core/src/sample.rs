@@ -1179,68 +1179,70 @@ fn investments(tx: &Tx<'_>, spec: &SampleSpec) -> Result<usize> {
             g.buy(brokerage, d, VTI, shares, 0)?;
         }
         // Quarterly income on the 20th.
-        if month.month() % 3 == 0 {
-            if let Some(d) = on(20).filter(|d| *d <= last) {
-                for sec in [VTI, VXUS, BND, AAPL] {
-                    g.dividend(brokerage, d, sec)?;
-                }
-                g.dividend(roth, d, VTI)?;
-                g.reinvest(
-                    roth,
-                    d,
-                    VWELX,
-                    InvAction::ReinvestDividend,
-                    SECURITIES[VWELX].dividend / 4,
-                )?;
+        if month.month() % 3 == 0
+            && let Some(d) = on(20).filter(|d| *d <= last)
+        {
+            for sec in [VTI, VXUS, BND, AAPL] {
+                g.dividend(brokerage, d, sec)?;
             }
+            g.dividend(roth, d, VTI)?;
+            g.reinvest(
+                roth,
+                d,
+                VWELX,
+                InvAction::ReinvestDividend,
+                SECURITIES[VWELX].dividend / 4,
+            )?;
         }
         // Year-end capital gain distribution, reinvested.
-        if month.month() == 12 {
-            if let Some(d) = on(18).filter(|d| *d <= last) {
-                g.reinvest(roth, d, VWELX, InvAction::ReinvestCgLong, 120)?;
-            }
+        if month.month() == 12
+            && let Some(d) = on(18).filter(|d| *d <= last)
+        {
+            g.reinvest(roth, d, VWELX, InvAction::ReinvestCgLong, 120)?;
         }
         // Each January after the first year, sell a fifth of the Apple
         // shares (FIFO), and some international shares by specific lot.
-        if month.month() == 1 && month.year() > spec.start.year() {
-            if let Some(d) = on(15).filter(|d| *d <= last) {
-                let held = g.held(brokerage, AAPL, d)?;
-                let fifth = Quantity::from_raw(held.raw() / 5 - (held.raw() / 5) % 1_000_000);
-                if fifth.raw() > 0 {
-                    let mut i = g.input(brokerage, InvAction::Sell, d, AAPL);
-                    i.quantity = Some(fifth);
-                    i.price = Some(g.prices[AAPL]);
-                    i.commission = Money::from_cents(495);
-                    g.post(&i)?;
-                }
-                let lots = persistence::invest::open_lots(
-                    tx.conn(),
-                    Some(brokerage),
-                    Some(g.securities[VXUS]),
-                    d,
-                )?;
-                if let Some(lot) = lots.first() {
-                    let take = Quantity::from_raw(lot.open_quantity.raw().min(25_000_000));
-                    let mut i = g.input(brokerage, InvAction::Sell, d, VXUS);
-                    i.quantity = Some(take);
-                    i.price = Some(g.prices[VXUS]);
-                    i.lots = vec![invest::LotPick {
-                        lot: lot.lot.id,
-                        quantity: take,
-                    }];
-                    g.post(&i)?;
-                }
+        if month.month() == 1
+            && month.year() > spec.start.year()
+            && let Some(d) = on(15).filter(|d| *d <= last)
+        {
+            let held = g.held(brokerage, AAPL, d)?;
+            let fifth = Quantity::from_raw(held.raw() / 5 - (held.raw() / 5) % 1_000_000);
+            if fifth.raw() > 0 {
+                let mut i = g.input(brokerage, InvAction::Sell, d, AAPL);
+                i.quantity = Some(fifth);
+                i.price = Some(g.prices[AAPL]);
+                i.commission = Money::from_cents(495);
+                g.post(&i)?;
+            }
+            let lots = persistence::invest::open_lots(
+                tx.conn(),
+                Some(brokerage),
+                Some(g.securities[VXUS]),
+                d,
+            )?;
+            if let Some(lot) = lots.first() {
+                let take = Quantity::from_raw(lot.open_quantity.raw().min(25_000_000));
+                let mut i = g.input(brokerage, InvAction::Sell, d, VXUS);
+                i.quantity = Some(take);
+                i.price = Some(g.prices[VXUS]);
+                i.lots = vec![invest::LotPick {
+                    lot: lot.lot.id,
+                    quantity: take,
+                }];
+                g.post(&i)?;
             }
         }
         // Apple splits 4-for-1 the first August.
-        if month.month() == 8 && !split_done {
-            if let Some(d) = on(28).filter(|d| *d <= last) {
-                let mut i = g.input(brokerage, InvAction::Split, d, AAPL);
-                i.split = Some(SplitRatio { new: 4, old: 1 });
-                g.post(&i)?;
-                g.prices[AAPL] = Price::from_raw(g.prices[AAPL].raw() / 4);
-                split_done = true;
-            }
+        if month.month() == 8
+            && !split_done
+            && let Some(d) = on(28).filter(|d| *d <= last)
+        {
+            let mut i = g.input(brokerage, InvAction::Split, d, AAPL);
+            i.split = Some(SplitRatio { new: 4, old: 1 });
+            g.post(&i)?;
+            g.prices[AAPL] = Price::from_raw(g.prices[AAPL].raw() / 4);
+            split_done = true;
         }
         // Month-end: interest on cash, then new prices.
         let end = month

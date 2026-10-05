@@ -24,7 +24,7 @@ function Edit-File([string]$Path, [scriptblock]$Change) {
     [IO.File]::WriteAllText($full, (& $Change $text), (New-Object Text.UTF8Encoding $false))
 }
 
-# The first `version = "…"` only: the workspace package's.
+# The first `version = "..."` only: the workspace package's.
 Edit-File 'Cargo.toml' {
     param($t)
     ([regex]'(?m)^version = ".*"').Replace($t, "version = `"$V`"", 1)

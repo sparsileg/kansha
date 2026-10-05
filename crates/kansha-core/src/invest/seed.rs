@@ -122,12 +122,11 @@ pub fn preview_seed(conn: &Connection, text: &str, date: Date) -> Result<SeedPre
             Ok(m) => row.basis = Some(m),
             Err(e) => problems.push(e.to_string()),
         }
-        if problems.is_empty() {
-            if let Some(input) = input_for(&row, date) {
-                if let Err(e) = plan(conn, &input, None) {
-                    problems.push(e.to_string());
-                }
-            }
+        if problems.is_empty()
+            && let Some(input) = input_for(&row, date)
+            && let Err(e) = plan(conn, &input, None)
+        {
+            problems.push(e.to_string());
         }
         if problems.is_empty() {
             if let (Some(a), Some(s), Some(q), Some(b)) =

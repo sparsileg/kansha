@@ -3,7 +3,7 @@ Personal finance app
 
 ## Build setup
 
-Needs Rust (MSRV 1.85), Node 22, and [`just`](https://just.systems).
+Needs Rust (MSRV 1.93), Node 22, and [`just`](https://just.systems).
 The SQLCipher build compiles OpenSSL from source, so it also needs Perl
 and a C toolchain.
 

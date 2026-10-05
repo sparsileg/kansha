@@ -216,14 +216,14 @@ fn cash_leg(conn: &Connection, f: &ScheduleFields) -> Result<Option<CashLeg>> {
             flip: false,
         }));
     }
-    if let Target::Account(b) = line.target {
-        if accounts::get(conn, b)?.fields.account_type.is_investment() {
-            return Ok(Some(CashLeg {
-                account: b,
-                other: Target::Account(f.account),
-                flip: true,
-            }));
-        }
+    if let Target::Account(b) = line.target
+        && accounts::get(conn, b)?.fields.account_type.is_investment()
+    {
+        return Ok(Some(CashLeg {
+            account: b,
+            other: Target::Account(f.account),
+            flip: true,
+        }));
     }
     Ok(None)
 }
@@ -294,10 +294,10 @@ pub fn update(tx: &Tx<'_>, id: ScheduleId, fields: &ScheduleFields) -> Result<Sc
     }
     validate_fields(tx.conn(), fields, false)?;
     let mut floor = fields.recurrence.start_date;
-    if let Some(last) = repo::last_acted(tx.conn(), id)? {
-        if let Some(after_last) = add_days(last, 1) {
-            floor = floor.max(after_last);
-        }
+    if let Some(last) = repo::last_acted(tx.conn(), id)?
+        && let Some(after_last) = add_days(last, 1)
+    {
+        floor = floor.max(after_last);
     }
     let next = first_from(fields, floor);
     let status = if next.is_some() {

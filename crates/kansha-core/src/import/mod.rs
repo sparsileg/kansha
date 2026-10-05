@@ -309,10 +309,10 @@ impl Staged {
         };
         let result = commit::run(db, clock, &plan, options, &new, dry_run);
         let keep = matches!(&result, Ok(r) if r.committed);
-        if let Some(p) = &stored {
-            if !keep {
-                let _ = std::fs::remove_file(p);
-            }
+        if let Some(p) = &stored
+            && !keep
+        {
+            let _ = std::fs::remove_file(p);
         }
         result
     }
