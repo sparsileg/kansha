@@ -43,10 +43,18 @@ report:
 release-check BASE="":
     scripts/release-check.sh {{BASE}}
 
+[windows]
+release-check BASE="":
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-check.ps1 {{BASE}}
+
 # Set the app version in all the places it is written, e.g. `just version 0.9.1`
 [unix]
 version V:
     scripts/set-version.sh {{V}}
+
+[windows]
+version V:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set-version.ps1 {{V}}
 
 # Formatting, lints, type-checking, and tests: what CI runs
 check: fmt-check clippy typecheck test

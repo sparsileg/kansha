@@ -38,7 +38,7 @@ describe("start screen", () => {
     status("locked");
     render(StartScreen);
     expect(screen.getByRole("img", { name: /kansha/ })).toBeTruthy();
-    expect(screen.getByText(/gratitude/)).toBeTruthy();
+    expect(screen.getByText("Gratitude")).toBeTruthy();
   });
 
   it("asks for the passphrase in a compact window", async () => {

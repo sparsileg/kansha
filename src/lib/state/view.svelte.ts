@@ -101,6 +101,17 @@ class ViewState {
   back() {
     if (this.canBack) this.index -= 1;
   }
+  /** Leave the Search view for the view the search was made from: the
+   * nearest earlier entry that is not a search, as Back to it would. */
+  leaveSearch() {
+    for (let i = this.index - 1; i >= 0; i--) {
+      if (this.entries[i].view !== "search") {
+        this.index = i;
+        return;
+      }
+    }
+    this.navigate("insights");
+  }
   forward() {
     if (this.canForward) this.index += 1;
   }

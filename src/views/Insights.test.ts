@@ -4,6 +4,36 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const openAcct = vi.hoisted(() => vi.fn());
 const trendCall = vi.hoisted(() => vi.fn());
+const attentionCall = vi.hoisted(() => vi.fn());
+const CHECKS = (bad: string[]) =>
+  [
+    ["integrity", "Database integrity"],
+    ["backup", "Changes backed up"],
+    ["verification", "Last backup verified"],
+    ["backup_folder", "Backup folder"],
+    ["prices", "Security prices"],
+    ["overdue", "Overdue reminders"],
+    ["uncleared", "Old uncleared transactions"],
+    ["reconcile", "Accounts reconciled"],
+    ["uncategorized", "Uncategorized transactions"],
+    ["investment_cash", "Investment cash"],
+  ].map(([kind, label]) => ({ kind, label, ok: !bad.includes(kind), detail: kind === "backup" ? "last backup 2 hours ago" : null }));
+const notice = (kind: string, message: string, remedy: string, items: { message: string; account: number | null }[] = [], more = 0) => ({ kind, message, items, more, remedy });
+const PROBLEMS = {
+  checked_at: "2026-09-27T08:00:00Z",
+  as_of: "4:00 AM",
+  checks: CHECKS(["integrity", "backup_folder", "uncleared"]),
+  notices: [
+    notice("integrity", "The database has 2 integrity problems", "Show the details and fix each one."),
+    notice("backup_folder", "The backup folder /usb is not there, so backups go to Downloads", "Choose a folder in Edit > Settings."),
+    notice("uncleared", "6 accounts have uncleared transactions more than 60 days old", "Open each account and clear or reconcile them.", [
+      { message: "Checking", account: 1 },
+      { message: "Visa", account: 2 },
+    ], 4),
+  ],
+};
+const CLEAR = { checked_at: "2026-09-27T08:00:00Z", as_of: "4:00 AM", checks: CHECKS([]), notices: [] };
+const attn = vi.hoisted(() => ({ value: null as unknown }));
 const ins = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
@@ -28,6 +58,10 @@ vi.mock("../lib/api", async (orig) => {
         return ok({ dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0, x_unit: "month" });
       },
       settingsSet: (s: unknown) => ok(s),
+      attention: () => {
+        attentionCall();
+        return ok(attn.value ?? PROBLEMS);
+      },
       cardData: () =>
         ok({
           today: "2026-09-27",
@@ -42,11 +76,6 @@ vi.mock("../lib/api", async (orig) => {
           net: "3765.44",
           upcoming: [{ schedule: 1, nominal: "2026-09-20", date: "2026-09-20", amount: "-50.00", status: "pending", account: 1, payee: null, estimated: false, mode: "remind", overridden: false, txn: null, needs_review: false, overdue: true, actionable: true }],
           upcoming_days: 14,
-          warnings: [
-            { kind: "unreconciled", message: "Checking has uncleared transactions more than 60 days old.", account: 1 },
-            { kind: "backup", message: "The backup folder is missing, so backups go to Downloads. Choose a folder in Settings.", account: null },
-          ],
-          backup: { last_at: "2026-09-26T22:00:00Z", last_path: "/x.zip", last_issues: 0, last_verified_at: null, folder_missing: true },
         }),
     },
   };
@@ -59,7 +88,9 @@ vi.mock("../lib/shell/nav", async (orig) => {
 import Insights from "./Insights.svelte";
 import { CARDS } from "../lib/insights/cards";
 import { bookSettings } from "../lib/state/booksettings.svelte";
+import { attentionState } from "../lib/state/attention.svelte";
 import { confirmState } from "../lib/state/confirm.svelte";
+import { dialogState } from "../lib/state/dialogs.svelte";
 import { listsState } from "../lib/state/lists.svelte";
 import { viewState } from "../lib/state/view.svelte";
 import type { Insight } from "../lib/types/bindings";
@@ -74,6 +105,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   listsState.accounts = [{ id: 1, name: "Checking" }] as never;
   listsState.insights = [status];
+  attn.value = null;
   bookSettings.reset();
   viewState.reset();
 });
@@ -88,7 +120,7 @@ async function gear(item: string) {
 }
 
 describe("Insights: the Status insight (CARD-010 … CARD-040)", () => {
-  it("shows net worth, its parts, this month, what is due, and warnings", async () => {
+  it("shows net worth, its parts, this month, what is due, and what needs attention", async () => {
     render(Insights);
     expect(await screen.findByText("10,019,506.27")).toBeTruthy();
     for (const t of ["121,251.89", "9,176,614.40", "725,100.00", "−3,460.02", "5,000.00", "1,234.56", "3,765.44"]) {
@@ -96,11 +128,7 @@ describe("Insights: the Status insight (CARD-010 … CARD-040)", () => {
     }
     expect(screen.getByText("Overdue")).toBeTruthy();
     expect(screen.getByRole("img", { name: /Net Worth/ })).toBeTruthy();
-    // Backup status and the missing-folder warning (CARD-030).
-    expect(screen.getByText(/backup folder is missing/)).toBeTruthy();
-    expect(screen.getByText(/Last backup: 2026-09-26T22:00:00Z\. Last full verification:\s+never\./)).toBeTruthy();
-    await fireEvent.click(screen.getByRole("button", { name: /uncleared/ }));
-    expect(openAcct).toHaveBeenCalledWith(1);
+    expect(await screen.findByText(/uncleared transactions more than 60 days old/)).toBeTruthy();
   });
 
   it("shows each card, in order, named by its ID and heading", async () => {
@@ -123,6 +151,74 @@ describe("Insights: the Status insight (CARD-010 … CARD-040)", () => {
     expect(body.querySelectorAll("[data-card]").length).toBe(CARDS.length);
   });
 
+});
+
+describe("Needs attention: problems only, each with what to do (CARD-030)", () => {
+  const card = async () => {
+    render(Insights);
+    await screen.findByText(/found/);
+    return screen.getByRole("article", { name: "Needs attention" });
+  };
+  const item = (kind: string) => document.querySelector(`[data-notice="${kind}"]`) as HTMLElement;
+  const text = (e: Element) => e.textContent?.replace(/\s+/g, " ").trim();
+
+  it("lists each problem with its items and remedy, marked by symbol and words", async () => {
+    const c = await card();
+    expect(text(c.querySelector(".verdict")!)).toBe("⚠ As of 4:00 AM: 3 problems found");
+    expect([...c.querySelectorAll("[data-notice]")].map(text)).toEqual([
+      "The database has 2 integrity problems. Show the details and fix each one. Show details",
+      "The backup folder /usb is not there, so backups go to Downloads. Choose a folder in Edit > Settings. Settings",
+      "6 accounts have uncleared transactions more than 60 days old: Checking, Visa, and 4 more. Open each account and clear or reconcile them.",
+    ]);
+    expect(c.querySelector("[data-check]")).toBeNull();
+  });
+
+  it("links each item to where it is fixed", async () => {
+    await card();
+    await fireEvent.click(within(item("uncleared")).getByRole("button", { name: "Visa" }));
+    expect(openAcct).toHaveBeenCalledWith(2);
+    await fireEvent.click(within(item("integrity")).getByRole("button", { name: "Show details" }));
+    expect(dialogState.integrity).toBe(true);
+    expect(dialogState.integrityReport).toBe(null);
+    await fireEvent.click(within(item("backup_folder")).getByRole("button", { name: "Settings" }));
+    expect(dialogState.settings).toBe(true);
+  });
+
+  it("says no problems were found when every check passes; Show checks lists them", async () => {
+    attn.value = CLEAR;
+    render(Insights);
+    await screen.findByText(/No problems found/);
+    const c = screen.getByRole("article", { name: "Needs attention" });
+    expect(text(c.querySelector(".verdict")!)).toBe("✓ As of 4:00 AM: No problems found. 10 checks passed.");
+    expect(c.querySelector("[data-notice]")).toBeNull();
+    await fireEvent.click(within(c).getByRole("button", { name: "Show checks" }));
+    const checks = [...c.querySelectorAll("[data-check]")].map(text);
+    expect(checks).toHaveLength(10);
+    expect(checks[0]).toBe("✓ Database integrity: OK");
+    expect(checks[1]).toBe("✓ Changes backed up: OK (last backup 2 hours ago)");
+    await fireEvent.click(within(c).getByRole("button", { name: "Hide checks" }));
+    expect(c.querySelector("[data-check]")).toBeNull();
+  });
+
+  it("marks failed checks in the list by symbol and words", async () => {
+    const c = await card();
+    await fireEvent.click(within(c).getByRole("button", { name: "Show checks" }));
+    expect(text(c.querySelector('[data-check="integrity"]')!)).toBe("⚠ Database integrity: Problem");
+    expect(text(c.querySelector('[data-check="prices"]')!)).toBe("✓ Security prices: OK");
+  });
+
+  it("loads only while shown, and again after a backup or a check", async () => {
+    listsState.insights = [{ id: 3, name: "Money", cards: ["net_worth"] }];
+    render(Insights);
+    await screen.findByText("10,019,506.27");
+    expect(attentionCall).not.toHaveBeenCalled();
+    cleanup();
+    listsState.insights = [status];
+    await card();
+    expect(attentionCall).toHaveBeenCalledTimes(1);
+    attentionState.changed();
+    await waitFor(() => expect(attentionCall).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {

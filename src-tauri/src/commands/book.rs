@@ -127,7 +127,8 @@ pub fn book_setup(
     };
     set_backup_folder(&state, &mut open, backups)?;
     *guard = Some(open);
-    state.forget_undo();
+    state.forget_session();
+    state.start_session(false);
     drop(guard);
     remember_book(&state);
     Ok(())
@@ -157,7 +158,8 @@ pub fn book_unlock(state: State<'_, AppState>, passphrase: String) -> CmdResult<
         open.db.migrate(state.clock())?;
     }
     *guard = Some(open);
-    state.forget_undo();
+    state.forget_session();
+    state.start_session(true);
     drop(guard);
     remember_book(&state);
     Ok(())
@@ -272,6 +274,64 @@ pub async fn backup_verify(
     })
 }
 
+/// The check of the last backup at startup (BAK-080).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct LatestCheck {
+    pub path: String,
+    /// Why it failed; `None` when it passed.
+    pub error: Option<String>,
+}
+
+/// Right after the book is unlocked, while the start screen still has
+/// the passphrase: fully check the book's last backup (decrypt, run the
+/// integrity check) and record the result in the book (BAK-080). The
+/// book stays usable meanwhile; it is locked only to find the file and
+/// to record. `None` when there is no backup to check.
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_verify_latest(
+    state: State<'_, AppState>,
+    passphrase: String,
+) -> CmdResult<Option<LatestCheck>> {
+    let files = state.files();
+    // However it ends, the check is no longer running.
+    let _done = EndVerifying(&state, files.db.clone());
+    let downloads = state.downloads.clone();
+    let Some(path) =
+        state.read(|db, _| backup::latest(db.conn(), &files.name(), downloads.as_deref()))?
+    else {
+        return Ok(None);
+    };
+    let v = backup::verify(&path, &Passphrase::new(passphrase), state.clock());
+    let shown = v.path.display().to_string();
+    // Recorded only in the book it was checked for. Not a change the
+    // timed backup waits for.
+    if state.files().db == files.db {
+        let clock = state.clock();
+        state.with_book(|b| {
+            b.db.write(clock, Origin::System, |tx| {
+                settings::record_startup_check(tx, v.at, &shown, v.error.as_deref())
+            })
+        })?;
+    }
+    Ok(Some(LatestCheck {
+        path: shown,
+        error: v.error,
+    }))
+}
+
+/// Marks the startup check finished when dropped, if the same book is
+/// still open.
+struct EndVerifying<'a>(&'a AppState, PathBuf);
+
+impl Drop for EndVerifying<'_> {
+    fn drop(&mut self) {
+        if self.0.files().db == self.1 {
+            self.0.end_verifying();
+        }
+    }
+}
+
 /// Restore, step 1 (BAK-070, BAK-075): open the backup with its
 /// passphrase and compare it with the current book. Nothing changes until
 /// [`restore_apply`].
@@ -341,7 +401,8 @@ pub fn restore_apply(state: State<'_, AppState>) -> CmdResult<()> {
     *guard = None;
     let restored = book::install_restore(&files, &opened)?;
     *guard = Some(restored);
-    state.forget_undo();
+    state.forget_session();
+    state.start_session(false);
     drop(guard);
     remember_book(&state);
     Ok(())
@@ -465,6 +526,7 @@ pub async fn book_new(
     state.close_book();
     state.set_files(files);
     *state.book()? = Some(open);
+    state.start_session(false);
     remember_book(&state);
     Ok(())
 }
@@ -537,7 +599,7 @@ pub async fn book_rename(
             }
         }
     }
-    state.forget_undo();
+    state.forget_session();
     status(&state)
 }
 

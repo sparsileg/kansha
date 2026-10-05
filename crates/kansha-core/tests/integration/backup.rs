@@ -729,3 +729,77 @@ fn recover_finishes_an_interrupted_rename() {
     assert_eq!(book::recover(&new).unwrap(), book::Recovery::Finished);
     book::unlock(&new, &pass("p")).unwrap();
 }
+
+/// BAK-080: the check at startup finds the last backup (the one the book
+/// recorded, else the newest of this book's in the backup folder) and
+/// fully checks it with the passphrase.
+#[test]
+fn the_last_backup_is_found_and_fully_checked() {
+    use kansha_core::settings;
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    let latest = |db: &Db| backup::latest(db.conn(), "kansha", Some(downloads.path())).unwrap();
+    assert_eq!(latest(&open.db), None);
+
+    open.db
+        .write(&clock(), Origin::Ui, |tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.backup_folder = Some(folder.path().display().to_string());
+            settings::save(tx, &s)
+        })
+        .unwrap();
+    let back_up = |open: &mut book::OpenBook, kind| {
+        backup::back_up(
+            &mut open.db,
+            &open.key_file,
+            "kansha",
+            Some(downloads.path()),
+            kind,
+            "0.1.0",
+            &clock(),
+        )
+        .unwrap()
+        .written
+        .path
+    };
+    let first = back_up(&mut open, BackupKind::Manual);
+    let second = back_up(&mut open, BackupKind::Close);
+    assert_eq!(latest(&open.db), Some(second.clone()));
+
+    // The recorded file is gone: the newest of this book's left in the
+    // folder; other books' backups and other files are not candidates.
+    std::fs::remove_file(&second).unwrap();
+    std::fs::write(folder.path().join("other-20990101-000000Z-close.zip"), b"x").unwrap();
+    std::fs::write(folder.path().join("notes.txt"), b"x").unwrap();
+    assert_eq!(latest(&open.db), Some(first.clone()));
+
+    let v = backup::verify(&first, &pass("secret"), &clock());
+    assert_eq!(v.error, None);
+    assert_eq!(v.at, clock_now());
+    assert_eq!(v.path, first);
+
+    let v = backup::verify(&first, &pass("wrong"), &clock());
+    assert!(v.error.unwrap().contains("passphrase does not open it"));
+
+    // A backup of a damaged book opens but fails the check.
+    open.db
+        .conn()
+        .execute(
+            "UPDATE posting SET amount = amount + 1 WHERE id = (SELECT min(id) FROM posting)",
+            [],
+        )
+        .unwrap();
+    let damaged = back_up(&mut open, BackupKind::Manual);
+    let v = backup::verify(&damaged, &pass("secret"), &clock());
+    assert!(v.error.unwrap().contains("integrity problem"));
+
+    // A file that is not a backup fails.
+    std::fs::write(&first, b"not a zip").unwrap();
+    assert!(
+        backup::verify(&first, &pass("secret"), &clock())
+            .error
+            .is_some()
+    );
+}

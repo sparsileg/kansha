@@ -6,7 +6,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeDelta, Timelike};
 
 use crate::error::{Error, Result};
 
@@ -97,6 +97,13 @@ impl Timestamp {
         self.0.signed_duration_since(earlier.0).num_seconds()
     }
 
+    /// The local clock time of this instant, `offset` seconds east of
+    /// UTC: "2:32 PM". For display only.
+    pub fn time_of_day(self, offset: i32) -> String {
+        let local = self.0 + TimeDelta::seconds(i64::from(offset));
+        local.format("%-I:%M %p").to_string()
+    }
+
     pub fn from_ymd_hms(
         year: i32,
         month: u32,
@@ -147,6 +154,10 @@ pub trait Clock: Send + Sync {
 
     /// The current UTC instant, for record-keeping only.
     fn now(&self) -> Timestamp;
+
+    /// Seconds east of UTC of local time now, to show an instant as a
+    /// local clock time.
+    fn utc_offset(&self) -> i32;
 }
 
 /// A clock that always returns the same date and instant. Used by tests
@@ -155,19 +166,27 @@ pub trait Clock: Send + Sync {
 pub struct FixedClock {
     today: Date,
     now: Timestamp,
+    offset: i32,
 }
 
 impl FixedClock {
     /// `now` is midnight UTC at the start of `today`.
     pub fn new(today: Date) -> Self {
+        FixedClock::with_now(today, Timestamp::start_of(today))
+    }
+
+    /// Local time is UTC.
+    pub fn with_now(today: Date, now: Timestamp) -> Self {
         FixedClock {
             today,
-            now: Timestamp::start_of(today),
+            now,
+            offset: 0,
         }
     }
 
-    pub fn with_now(today: Date, now: Timestamp) -> Self {
-        FixedClock { today, now }
+    /// Local time is `offset` seconds east of UTC.
+    pub fn with_offset(self, offset: i32) -> Self {
+        FixedClock { offset, ..self }
     }
 }
 
@@ -178,6 +197,10 @@ impl Clock for FixedClock {
 
     fn now(&self) -> Timestamp {
         self.now
+    }
+
+    fn utc_offset(&self) -> i32 {
+        self.offset
     }
 }
 
@@ -196,11 +219,27 @@ impl Clock for SystemClock {
         let now = chrono::Utc::now().naive_utc();
         Timestamp(now.with_nanosecond(0).unwrap_or(now))
     }
+
+    fn utc_offset(&self) -> i32 {
+        chrono::Local::now().offset().fix().local_minus_utc()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_of_day_is_local_twelve_hour() {
+        let t = Timestamp::from_ymd_hms(2026, 10, 4, 18, 32, 9).unwrap();
+        assert_eq!(t.time_of_day(0), "6:32 PM");
+        assert_eq!(t.time_of_day(-4 * 3600), "2:32 PM");
+        assert_eq!(t.time_of_day(-18 * 3600 - 32 * 60), "12:00 AM");
+        assert_eq!(t.time_of_day(-6 * 3600 - 32 * 60), "12:00 PM");
+        assert_eq!(t.time_of_day(5 * 3600 + 30 * 60), "12:02 AM");
+        let early = Timestamp::from_ymd_hms(2026, 10, 4, 9, 5, 0).unwrap();
+        assert_eq!(early.time_of_day(0), "9:05 AM");
+    }
 
     #[test]
     fn parses_and_displays_iso() {

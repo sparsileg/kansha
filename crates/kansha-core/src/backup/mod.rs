@@ -337,6 +337,75 @@ pub fn open(path: &Path, passphrase: &Passphrase, clock: &dyn Clock) -> Result<O
     })
 }
 
+/// The backup checked at startup (BAK-080): the one the book recorded
+/// last, while its file is there; otherwise the newest of `book`'s
+/// backups in the backup folder (BAK-030). `None` when there is none.
+pub fn latest(
+    conn: &rusqlite::Connection,
+    book: &str,
+    downloads: Option<&Path>,
+) -> Result<Option<PathBuf>> {
+    let recorded = settings::backup_status(conn)?.last_path.map(PathBuf::from);
+    if let Some(p) = recorded.filter(|p| p.is_file()) {
+        return Ok(Some(p));
+    }
+    let chosen = settings::load(conn)?.backup_folder;
+    let Ok((folder, _)) = target_folder(chosen.as_deref().map(Path::new), downloads) else {
+        return Ok(None);
+    };
+    let mut newest: Option<((Timestamp, u32), PathBuf)> = None;
+    for e in std::fs::read_dir(&folder)? {
+        let e = e?;
+        if !e.file_type()?.is_file() {
+            continue;
+        }
+        let Some(name) = e.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let Some((at, _, seq)) = parse_parts(book, &name) else {
+            continue;
+        };
+        if newest.as_ref().is_none_or(|(k, _)| (at, seq) > *k) {
+            newest = Some(((at, seq), e.path()));
+        }
+    }
+    Ok(newest.map(|(_, p)| p))
+}
+
+/// A full check of one backup file (BAK-080).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Verification {
+    pub path: PathBuf,
+    pub at: Timestamp,
+    /// Why it failed; `None` when it passed.
+    pub error: Option<String>,
+}
+
+/// Decrypt `path` with the passphrase, load its database, and run the
+/// integrity check (BAK-080). It passes only when it opens and the check
+/// finds nothing.
+pub fn verify(path: &Path, passphrase: &Passphrase, clock: &dyn Clock) -> Verification {
+    let error = match open(path, passphrase, clock) {
+        Ok(o) if o.integrity.is_clean() => None,
+        Ok(o) => {
+            let n = o.integrity.issues.len();
+            Some(format!(
+                "its database has {n} integrity problem{}",
+                if n == 1 { "" } else { "s" }
+            ))
+        }
+        Err(Error::WrongPassphrase) => Some(
+            "the passphrase does not open it (was it made before the passphrase changed?)".into(),
+        ),
+        Err(e) => Some(e.to_string()),
+    };
+    Verification {
+        path: path.to_path_buf(),
+        at: clock.now(),
+        error,
+    }
+}
+
 fn damaged(why: &str) -> Error {
     Error::Invalid(format!("not a usable Kansha backup: {why}"))
 }

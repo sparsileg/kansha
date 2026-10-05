@@ -3,6 +3,7 @@
 // in the status bar before the backup starts, and again when it is done.
 
 import { call, commands } from "../api";
+import { attentionState } from "../state/attention.svelte";
 import { statusState } from "../state/status.svelte";
 import { backupMessage } from "./actions";
 
@@ -28,6 +29,7 @@ export async function timedBackupCheck(): Promise<void> {
     statusState.show("Timed backup starting…");
     const m = backupMessage(await call(commands.backupTimedRun()), "Timed backup finished: ");
     statusState.show(m.text, m.kind);
+    attentionState.changed();
   } catch (e) {
     skip = RETRY_AFTER_CHECKS;
     statusState.show(`The timed backup failed: ${e instanceof Error ? e.message : String(e)}`, "alert");

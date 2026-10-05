@@ -7,8 +7,8 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, CardData, Chart, Column, DateRange, PeriodChoice, Report, ReportFolder, ReportFolderId,
-    ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
+    self, Attention, CardData, Chart, Column, DateRange, PeriodChoice, Report, ReportFolder,
+    ReportFolderId, ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
 };
 use tauri::{Manager, State};
 
@@ -203,11 +203,23 @@ pub fn tax_line_list(state: State<'_, AppState>) -> CmdResult<Vec<TaxLine>> {
 }
 
 /// What the Insights cards show; scheduled items due within
-/// `upcoming_days` (CARD-020).
+/// `upcoming_days` (CARD-020). Async, so it runs off the main thread
+/// and a slow read does not freeze the window.
 #[tauri::command]
 #[specta::specta]
-pub fn card_data(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<CardData> {
+pub async fn card_data(state: State<'_, AppState>, upcoming_days: i64) -> CmdResult<CardData> {
     state.read(|db, today| reports::card_data(db.conn(), today, upcoming_days))
+}
+
+/// The Needs attention card (CARD-030). The integrity check runs only
+/// when no result is kept for the open book. Async, as `card_data`.
+#[tauri::command]
+#[specta::specta]
+pub async fn attention(state: State<'_, AppState>) -> CmdResult<Attention> {
+    let integrity = state.integrity()?;
+    let session = state.session();
+    let clock = state.clock();
+    state.read(|db, _| reports::attention(db.conn(), clock, session, integrity))
 }
 
 /// The Net worth over time card's graph: month-end net worth over the

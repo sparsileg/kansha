@@ -6,6 +6,7 @@
 // Test helpers outside #[test] fns panic on setup failure by design.
 #![allow(clippy::unwrap_used)]
 
+mod attention;
 mod backup;
 mod encryption;
 mod fixture;

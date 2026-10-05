@@ -2,7 +2,7 @@
 
 use kansha_core::accounts::AccountId;
 use kansha_core::audit::{self, AuditEntity, AuditEntry};
-use kansha_core::integrity::{self, IntegrityReport};
+use kansha_core::integrity::{self, IntegrityReport, IntegrityStatus};
 use kansha_core::ledger::{
     self, Cleared, Entry, EntryWarning, RegisterPage, RegisterQuery, RegisterSummary, SearchPage,
     SearchQuery, TxnId,
@@ -192,7 +192,13 @@ pub fn audit_history(
 #[tauri::command]
 #[specta::specta]
 pub fn integrity_check(state: State<'_, AppState>) -> CmdResult<IntegrityReport> {
-    state.read(|db, _| integrity::check(db.conn()))
+    let report = state.read(|db, _| integrity::check(db.conn()))?;
+    // The Needs attention card shows this result (CARD-030).
+    state.keep_integrity(Some(IntegrityStatus {
+        checked_at: state.clock().now(),
+        issues: report.issues.len(),
+    }));
+    Ok(report)
 }
 
 /// What Edit > Undo would undo ("Edit", "Delete", …), or `None` when the

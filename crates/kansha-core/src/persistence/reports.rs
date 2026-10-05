@@ -173,6 +173,51 @@ pub fn accounts_with_old_uncleared(conn: &Connection, before: Date) -> Result<Ve
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// Accounts with a transaction dated after the last date they were
+/// reconciled to (any, if never), each with that date: the latest
+/// finished statement, or the latest reconciled transaction (imported
+/// ones have no reconciliation row, MIG-090). `None` when never.
+pub fn last_reconciled(conn: &Connection) -> Result<Vec<(AccountId, Option<Date>)>> {
+    // Both dates per account, then compared: each account is read once.
+    // A subquery's date compared inside EXISTS was worked out again for
+    // every transaction (NFR-040).
+    let mut stmt = conn.prepare_cached(
+        "WITH l AS MATERIALIZED (
+           SELECT a.id,
+             nullif(max(
+               coalesce((SELECT max(r.statement_date) FROM reconciliation r
+                         WHERE r.account_id = a.id AND r.status = 'finished'), ''),
+               coalesce((SELECT max(t.txn_date) FROM posting p JOIN txn t ON t.id = p.txn_id
+                         WHERE p.account_id = a.id AND p.cleared = 'reconciled'), '')), '') AS last,
+             (SELECT max(t.txn_date) FROM posting p JOIN txn t ON t.id = p.txn_id
+              WHERE p.account_id = a.id AND t.status = 'normal') AS latest
+           FROM account a)
+         SELECT id, last FROM l
+         WHERE latest > coalesce(last, '')
+         ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Transactions with a line in the top-level `Uncategorized` category
+/// (where the import puts lines with none, MIG-020), counted by each
+/// account they touch.
+pub fn uncategorized_by_account(conn: &Connection) -> Result<Vec<(AccountId, i64)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT pa.account_id, count(DISTINCT t.id)
+         FROM category c
+         JOIN posting pc ON pc.category_id = c.id
+         JOIN txn t ON t.id = pc.txn_id
+         JOIN posting pa ON pa.txn_id = t.id AND pa.account_id IS NOT NULL
+         WHERE c.name = 'Uncategorized' AND c.parent_id IS NULL
+           AND t.status = 'normal'
+         GROUP BY pa.account_id ORDER BY pa.account_id",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 // ---------------------------------------------------------------------------
 // Saved reports (RPT-020)
 // ---------------------------------------------------------------------------

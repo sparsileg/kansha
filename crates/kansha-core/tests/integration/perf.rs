@@ -140,6 +140,21 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     reports::card_data(db.conn(), today, 14).unwrap();
     check("insight cards", t.elapsed(), 2000, &mut failures);
 
+    // With the integrity result kept, as the app does after the first.
+    let t = Instant::now();
+    let kept = kansha_core::integrity::IntegrityStatus {
+        checked_at: kansha_core::Timestamp::start_of(today),
+        issues: 0,
+    };
+    let now = kansha_core::Timestamp::start_of(today);
+    let session = reports::Session {
+        started: now,
+        verifying: false,
+    };
+    let clock = kansha_core::FixedClock::with_now(today, now);
+    reports::attention(db.conn(), &clock, session, kept).unwrap();
+    check("needs attention card", t.elapsed(), 2000, &mut failures);
+
     let t = Instant::now();
     reports::net_worth_trend(db.conn(), today, 5, false).unwrap();
     check("net worth card, 5 years", t.elapsed(), 2000, &mut failures);

@@ -9,9 +9,10 @@ Release: X.Y.Z · last release: A.B.C · date: ______
 No release is tagged yet. Until one is, use the commit of the build
 installed on the book as the last release (BASE below).
 
-Commands run on Kubuntu from the repository folder. `release-check`
-and `version` are bash scripts; on Windows, run the commands they
-contain by hand.
+Commands run from the repository folder. `release-check` and
+`version` are bash scripts on Kubuntu and PowerShell scripts
+(`scripts/*.ps1`, Windows PowerShell 5.1 or later) on Windows; `just`
+picks the right one.
 
 ## 1. Scope
 

@@ -12,6 +12,7 @@
 use rusqlite::Connection;
 use serde::Serialize;
 
+use crate::date::Timestamp;
 use crate::error::Result;
 use crate::persistence::integrity as repo;
 
@@ -80,6 +81,14 @@ impl IntegrityReport {
     pub fn is_clean(&self) -> bool {
         self.issues.is_empty()
     }
+}
+
+/// When the integrity check last ran on the open book and how many
+/// problems it found: what the Needs attention card shows (CARD-030).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IntegrityStatus {
+    pub checked_at: Timestamp,
+    pub issues: usize,
 }
 
 /// Run every check.

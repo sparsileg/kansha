@@ -116,3 +116,12 @@ pub fn history(conn: &Connection, entity: AuditEntity, entity_id: i64) -> Result
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
+
+/// The time of the last change before `before` that the user (or an
+/// import or the scheduler) made; the app's own entries (`system`) are
+/// left out.
+pub fn last_change_before(conn: &Connection, before: Timestamp) -> Result<Option<Timestamp>> {
+    Ok(conn
+        .prepare_cached("SELECT max(at) FROM audit_log WHERE origin <> 'system' AND at < ?1")?
+        .query_row([before], |r| r.get(0))?)
+}

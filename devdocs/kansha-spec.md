@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.23 (draft) |
+| **Document version** | 0.7.26 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
@@ -1054,12 +1054,45 @@ entries in Appendix A and migration 0014 use those IDs.
   month's income, expenses, and net.
 - **CARD-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
-- **CARD-030** [1.0][R] Warnings panel: missing and stale prices,
-  checking, savings, and credit card accounts with uncleared
-  transactions more than 60 days old (each by name; no other type is
-  checked),
-  integrity check results, last backup age, date of the last full
-  backup verification (BAK-080), backup folder missing (BAK-030).
+- **CARD-030** [1.0][R] Needs attention card: only problems are
+  shown (0.7.25). With none: "✓ As of 2:32 PM: No problems found.
+  10 checks passed." Otherwise "⚠ As of 2:32 PM: N problems found"
+  and one notice per problem: what is wrong, the accounts or securities it is about (at
+  most five, then "and N more", each linked to where it is fixed),
+  and what the user can do. "Show checks" lists every check with ✓
+  or ⚠ and words, not color alone. The checks, in order:
+  - Database integrity: the number of problems, with a link to the
+    details (File > Integrity Check). The check runs when the card
+    is first shown after the book opens; after that the card uses
+    the last result, which each backup's snapshot check (BAK-080)
+    and File > Integrity Check replace.
+  - Changes backed up: a change (any audit entry not made by the app
+    itself) from before Kansha was started must have a backup made
+    after it; changes made since it started are not counted yet. The
+    notice gives the last backup's age ("12 hours", "3 days", "2
+    weeks"). A last backup made with integrity problems is a notice
+    too.
+  - Last backup verified: the check at startup (BAK-080) failed, with
+    the file and the reason; or the backup that was last when Kansha
+    started has not been checked at startup. Verify backup… does not
+    count. Nothing is said while the check runs.
+  - Backup folder: none chosen, or the chosen one missing (BAK-030);
+    backups go to Downloads. Links to Settings.
+  - Security prices: out of date or missing, once per security held
+    in an open investment account.
+  - Overdue reminders (REC-130), with a link to Reminders.
+  - Old uncleared transactions: checking, savings, and credit card
+    accounts with uncleared transactions more than 60 days old.
+  - Accounts reconciled: the same account types, not reconciled in
+    60 days (the last finished statement, or the last reconciled
+    transaction for imported ones) and with a transaction dated after
+    that (any, if never reconciled), so an idle account is not named
+    (0.7.26).
+  - Uncategorized transactions: transactions with a line in the
+    top-level Uncategorized category (MIG-020), by account.
+  - Investment cash: open investment accounts with cash below zero.
+  "As of" is the local time the checks ran (0.7.26). The card
+  itself loads only on an insight that shows it.
 - **CARD-040** [1.0][R] Each card has a stable ID and name: Net
   worth, This month, Net worth over time, Due soon, Needs attention.
   Insights choose and order them (INS-030). Migration 0014 turned the
@@ -1245,13 +1278,20 @@ platform has one.
 - **BAK-080** [1.0][R] Each backup is checked: the snapshot passes the
   integrity check before it is encrypted; after writing, the zip is
   read back and its manifest, structure, and checksum checked. A full
-  decrypt-and-check needs the passphrase: "Verify backup…" and the
-  restore drill (§20.3). The Needs attention card shows the last
-  backup's age and the date of the last full verification
-  (CARD-030). A snapshot with integrity problems is still backed up
-  (a backup of a damaged book beats none); the problems are counted
-  and the Needs attention card warns (INT-040). A backup before a
-  merge or import that fails stops the merge or import.
+  decrypt-and-check needs the passphrase: "Verify backup…", the
+  restore drill (§20.3), and the check at startup: right after the
+  passphrase unlocks the book (SECU-020), the book's last backup (the
+  one recorded, else the newest of the book's backups in the backup
+  folder) is fully checked in the background with that passphrase,
+  which is then dropped. The result, passed or failed with the
+  reason, is recorded in the book; a failure flashes in the status
+  bar (UI-045). Not after setup or a restore (0.7.24). The Needs
+  attention card warns when the check failed or did not run; only
+  the check at startup counts there (CARD-030, 0.7.25). A snapshot
+  with integrity problems is still backed up (a backup of a damaged
+  book beats none); the problems are counted and the Needs attention
+  card warns (INT-040). A backup before a merge or import that fails
+  stops the merge or import.
 
 #### 13.4 Security
 
@@ -2448,6 +2488,9 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.26 | 2026-10-04 | CARD-030: the Needs attention card's first line starts "As of 2:32 PM:", the local time the checks ran. Accounts reconciled: an account is named only if it has a transaction dated after its last reconcile (any, if never), replacing "used in the last year". No schema change. **API change:** `Attention` gains `as_of`. |
+| 0.7.25 | 2026-10-04 | CARD-030: the Needs attention card shows only problems, each with what to do, or "No problems found. 10 checks passed."; "Show checks" lists every check. New checks: changes from before Kansha was started with no backup after them (replaces the last backup's date), the last backup not checked at startup or failed (Verify backup… no longer counts), overdue reminders, accounts not reconciled in 60 days, transactions in Uncategorized, investment cash below zero. A backup folder not chosen is now a notice. BAK-080: the check at startup is recorded apart from Verify backup…. No schema change. **API change:** `attention` returns `Attention` (`checks`, `notices`; new types `AttentionCheck`, `Notice`; `CheckLine` removed; `CheckKind` values changed); `BackupStatus` loses `verified_path`, `verify_error`, gains `startup_checked_at`, `startup_path`, `startup_error`. |
+| 0.7.24 | 2026-10-04 | CARD-030: the Needs attention card lists every check on its own line with its result (Security prices, Old uncleared transactions, Backup folder, Last backup, Backup verification, Database integrity), ⚠ and words for a problem, "All clear." gone. The card loads only on an insight that shows it, and the integrity check runs once per opened book, then its result is kept and replaced by each backup's snapshot check and File > Integrity Check (the cards no longer wait about 1.8 s for it on the large book). BAK-080: right after unlocking, the book's last backup is fully checked in the background with the passphrase just typed; the result is recorded in the book. No schema change. **API change:** new commands `attention`, `backup_verify_latest(passphrase)`; `CardData.warnings` and `CardData.backup` removed (`Warning`, `WarningKind` replaced by `CheckLine`, `CheckKind`, `Finding`); `BackupStatus` gains `verified_path`, `verify_error`. |
 | 0.7.23 | 2026-10-04 | New CARD-050: the Net worth over time card (was "Net worth, last 12 months", CARD-040) shows 1, 2, or 5 years and can fit its axis to the data; both are book settings (`trend_years`, `trend_fitted`). NFR-040: balances on many dates are read in one pass per account; on the large book (100,000 transactions, 20 years) Net Worth by month went from 10.2 s to 0.11 s, the cards from 2.6 s to under 2 s. No schema change. **API change:** new command `net_worth_trend(years, fitted)`; `CardData.trend` removed; `Settings` gains `trend_years`, `trend_fitted`. |
 | 0.7.22 | 2026-10-04 | **INS-040 withdrawn**: a single insight can no longer be a navigation bar button; only Insights (`tools.insights`) can. UI-020 updated. A saved bar that still holds an insight (`insight:N`) drops it. No schema or API change. |
 | 0.7.21 | 2026-10-04 | No more "home" or "dashboard" names. §12.3: **DSH-010 … DSH-040 renumbered CARD-010 … CARD-040** (DSH-010 → CARD-010, DSH-020 → CARD-020, DSH-030 → CARD-030, DSH-040 → CARD-040); older entries here and migration 0014 keep the old IDs. CARD-040, INS-010: a new book's first insight is named "Status". INS-010: Insights is in Tools > Insights and can be put on the navigation bar; the nav bar item's stored ID is `tools.insights` (was `home`; a saved bar that still holds `home` drops it). **Schema change:** migration 0015 renames the insight 0014 made from "Dashboard" to "Status", unless renamed already or another insight is named "Status". No API change. |

@@ -9,8 +9,8 @@ use kansha_core::ledger::{Cleared, Target};
 use kansha_core::persistence::audit::{self, AuditAction, AuditEntity};
 use kansha_core::persistence::{categories, reports as repo};
 use kansha_core::reports::{
-    self, DatePreset, DateRange, DetailSort, Drill, Interval, Report, ReportKind, ReportSettings,
-    Row, RowKind, Subtotal, TaxGroup, WarningKind,
+    self, CheckKind, DatePreset, DateRange, DetailSort, Drill, Interval, Report, ReportKind,
+    ReportSettings, Row, RowKind, Subtotal, TaxGroup,
 };
 use kansha_core::securities::SecurityType;
 use kansha_core::testkit::Book;
@@ -1340,30 +1340,18 @@ fn cards_sum_net_worth_month_and_due_items() {
     // June: nothing but a price.
     assert_eq!(d.income, Money::ZERO);
     assert_eq!(d.expenses, Money::ZERO);
-    // Checking has uncleared entries from January.
+    // Checking has uncleared entries from January. Only checking,
+    // savings, and credit card accounts are checked for old uncleared
+    // transactions (CARD-030): none for investment accounts.
+    let a = crate::attention::run(fx.book.conn(), date("2026-06-30"));
+    let old = crate::attention::notice(&a, CheckKind::Uncleared);
+    let accounts: Vec<_> = old.items.iter().map(|f| f.account).collect();
+    assert!(accounts.contains(&Some(fx.checking)), "{old:?}");
     assert!(
-        d.warnings
+        accounts.iter().all(|a| [fx.checking, fx.savings, fx.visa]
             .iter()
-            .any(|w| w.account == Some(fx.checking) && w.message.contains("uncleared")),
-        "{:?}",
-        d.warnings
-    );
-    // Only checking, savings, and credit card accounts are checked for old
-    // uncleared transactions (CARD-030): no line for investment accounts.
-    assert!(
-        d.warnings
-            .iter()
-            .filter(|w| w.message.contains("uncleared"))
-            .all(|w| [fx.checking, fx.savings, fx.visa]
-                .iter()
-                .any(|a| w.account == Some(*a))),
-        "{:?}",
-        d.warnings
-    );
-    assert!(
-        !d.warnings
-            .iter()
-            .any(|w| w.account == Some(fx.brokerage) || w.account == Some(fx.ira))
+            .any(|x| *a == Some(*x))),
+        "{old:?}"
     );
 }
 
@@ -1391,106 +1379,6 @@ fn cards_sum_this_months_income_and_spending_and_other_assets() {
     assert_eq!(
         d.net_worth,
         d.cash + d.investments + d.other_assets - d.liabilities
-    );
-}
-
-/// CARD-030: missing and stale prices (once per security, none for a
-/// security sold out), integrity problems, and backup problems.
-#[test]
-fn cards_warn_about_prices_integrity_and_backups() {
-    use kansha_core::{Timestamp, settings};
-    let today = date("2026-06-30");
-    let mut book = Book::new(today).unwrap();
-    let brk = book.account("Brokerage", AccountType::Brokerage).unwrap();
-    let ira = book.account("IRA", AccountType::TraditionalIra).unwrap();
-    let opening = book.find_category("Opening Balance").unwrap().unwrap();
-    let new = |s: &mut Book, name: &str, ticker: &str| {
-        s.security(name, ticker, SecurityType::Stock).unwrap()
-    };
-    let (none, old, gone) = (
-        new(&mut book, "No Price", "NOP"),
-        new(&mut book, "Old Price", "OLD"),
-        new(&mut book, "Sold Out", "OUT"),
-    );
-    book.price(old, date("2026-05-01"), "10".parse().unwrap())
-        .unwrap();
-    book.price(gone, date("2026-06-30"), "10".parse().unwrap())
-        .unwrap();
-    let trade = |b: &mut Book, a, action, sec, shares: &str| {
-        let mut i = InvInput::new(a, action, date("2026-02-01"));
-        i.security = Some(sec);
-        i.quantity = Some(shares.parse().unwrap());
-        i.amount = Some(m("100.00"));
-        b.invest(&i).unwrap();
-    };
-    for a in [brk, ira] {
-        let mut cash = InvInput::new(a, InvAction::CashIn, date("2026-01-02"));
-        cash.amount = Some(m("1000.00"));
-        cash.counterpart = Some(Target::Category(opening));
-        book.invest(&cash).unwrap();
-        // Held in both accounts: still one warning each.
-        trade(&mut book, a, InvAction::Buy, none, "10");
-        trade(&mut book, a, InvAction::Buy, old, "10");
-    }
-    trade(&mut book, brk, InvAction::Buy, gone, "10");
-    trade(&mut book, brk, InvAction::Sell, gone, "10");
-
-    // One unbalanced transaction.
-    let chk = book.account("Checking", AccountType::Checking).unwrap();
-    let food = book.category("Food", CategoryKind::Expense).unwrap();
-    let t = book
-        .entry(chk, date("2026-06-29"))
-        .amount(m("-10.00"))
-        .cleared(Cleared::Cleared)
-        .category(food)
-        .save()
-        .unwrap();
-    book.conn()
-        .execute(
-            "UPDATE posting SET amount = 999 WHERE txn_id = ?1 AND line_no = 2",
-            [t.id.0],
-        )
-        .unwrap();
-
-    // The last backup went to Downloads and carried two problems.
-    book.write(|tx| {
-        settings::record_backup(
-            tx,
-            Timestamp::from_ymd_hms(2026, 6, 29, 12, 0, 0)?,
-            "/tmp/b.kbak",
-            2,
-            true,
-        )
-    })
-    .unwrap();
-
-    let d = reports::card_data(book.conn(), today, 14).unwrap();
-    let got: Vec<_> = d
-        .warnings
-        .iter()
-        .map(|w| (w.kind, w.message.as_str()))
-        .collect();
-    assert_eq!(
-        got,
-        vec![
-            (WarningKind::MissingPrice, "NOP has no price."),
-            (
-                WarningKind::StalePrice,
-                "OLD price is out of date (last 2026-05-01)."
-            ),
-            (
-                WarningKind::Integrity,
-                "The integrity check found 1 problem."
-            ),
-            (
-                WarningKind::Backup,
-                "The backup folder is missing, so backups go to Downloads. Choose a folder in Settings."
-            ),
-            (
-                WarningKind::Backup,
-                "The last backup was made with 2 integrity problems."
-            ),
-        ]
     );
 }
 

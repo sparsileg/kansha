@@ -4,7 +4,9 @@
   import { commands } from "../api";
   import { dialogState } from "../state/dialogs.svelte";
   import Modal from "./Modal.svelte";
-  import mark from "../../assets/kansha-mark.png";
+  // Made small ahead of time: the browser shrinks a mask roughly, so
+  // the full-size image looked jagged at this size.
+  import mark from "../../assets/kansha-mark-small.png";
 
   let version = $state("");
   let schema = $state("");

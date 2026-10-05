@@ -106,6 +106,31 @@ describe("NavBar search", () => {
     expect(viewState.params).toEqual({ q: "rent", account: 4 });
   });
 
+  it("emptying the box on the Search view goes back to where the search was made", async () => {
+    listsState.accounts = [{ id: 4, name: "Checking" }] as never;
+    registerState.accountId = 4;
+    render(NavBar);
+    viewState.navigate("account");
+    await fireEvent.input(box(), { target: { value: "rent" } });
+    await fireEvent.submit(box().closest("form")!);
+    await fireEvent.input(box(), { target: { value: "gas" } });
+    await fireEvent.submit(box().closest("form")!);
+    expect(viewState.params).toEqual({ q: "gas" });
+    await fireEvent.input(box(), { target: { value: "" } });
+    expect(viewState.current).toBe("account"); // past both searches
+    await fireEvent.input(box(), { target: { value: "" } });
+    expect(viewState.current).toBe("account"); // not on Search: nothing
+  });
+
+  it("emptying the box with no earlier view goes to Insights", async () => {
+    render(NavBar);
+    viewState.navigate("search", { q: "gas" });
+    viewState.forget((e) => e.view !== "search");
+    await Promise.resolve();
+    await fireEvent.input(box(), { target: { value: "" } });
+    expect(viewState.current).toBe("insights");
+  });
+
   it("shows the text of the search being viewed", async () => {
     render(NavBar);
     viewState.navigate("search", { q: "gas" });

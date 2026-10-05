@@ -5,6 +5,7 @@
   import { call, commands } from "../lib/api";
   import RestoreModal from "../lib/components/backup/RestoreModal.svelte";
   import ThemePicker from "../lib/components/shell/ThemePicker.svelte";
+  import { verifyLastBackup } from "../lib/state/attention.svelte";
   import { bookState } from "../lib/state/book.svelte";
   import { openBookFile, switchBook } from "../lib/shell/books";
   import type { RecentBook } from "../lib/types/bindings";
@@ -68,8 +69,11 @@
     busy = true;
     error = null;
     try {
-      await call(commands.bookUnlock(passphrase));
+      const typed = passphrase;
+      await call(commands.bookUnlock(typed));
       passphrase = "";
+      // In the background; the book is usable meanwhile (BAK-080).
+      void verifyLastBackup(typed);
       await bookState.refresh();
     } catch (err) {
       error = message(err);
@@ -109,7 +113,7 @@
       <span class="mark" style:--mark="url({mark})" role="img" aria-label="感謝, kansha, in brush calligraphy"></span>
       <div>
         <h1>Kansha</h1>
-        <p class="meaning">Japanese for gratitude, heartfelt thanks.</p>
+        <p class="meaning">Gratitude</p>
       </div>
     </header>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}

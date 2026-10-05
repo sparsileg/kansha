@@ -371,8 +371,16 @@ pub struct BackupStatus {
     pub last_path: Option<String>,
     /// Integrity problems in the last backup's snapshot.
     pub last_issues: i64,
-    /// The last full decrypt-and-check (Verify backup…, restore drill).
+    /// The last full decrypt-and-check that passed (Verify backup…,
+    /// restore drill).
     pub last_verified_at: Option<Timestamp>,
+    /// When the last backup was last fully checked at startup (BAK-080),
+    /// passed or failed. Verify backup… does not count.
+    pub startup_checked_at: Option<Timestamp>,
+    /// The file that check was of.
+    pub startup_path: Option<String>,
+    /// Why that check failed; `None` when it passed.
+    pub startup_error: Option<String>,
     /// The backup folder was missing at the last backup, which went to
     /// Downloads instead (BAK-030). Cleared when a folder is chosen or a
     /// backup reaches it.
@@ -385,6 +393,9 @@ pub fn backup_status(conn: &Connection) -> Result<BackupStatus> {
         last_path: get_text(conn, "backup.last_path")?,
         last_issues: get(conn, "backup.last_issues", 0)?,
         last_verified_at: get_text(conn, "backup.last_verified_at")?.and_then(|v| v.parse().ok()),
+        startup_checked_at: get_text(conn, "backup.startup_at")?.and_then(|v| v.parse().ok()),
+        startup_path: get_text(conn, "backup.startup_path")?,
+        startup_error: get_text(conn, "backup.startup_error")?,
         folder_missing: get(conn, "backup.folder_missing", false)?,
     })
 }
@@ -406,6 +417,22 @@ pub fn record_backup(
 /// Record a full verification that passed.
 pub fn record_verified(tx: &Tx<'_>, at: Timestamp) -> Result<()> {
     repo::set(tx, "backup.last_verified_at", &at.to_string())
+}
+
+/// Record the full check of the last backup at startup (BAK-080):
+/// `error` is why it failed, `None` when it passed.
+pub fn record_startup_check(
+    tx: &Tx<'_>,
+    at: Timestamp,
+    path: &str,
+    error: Option<&str>,
+) -> Result<()> {
+    repo::set(tx, "backup.startup_at", &at.to_string())?;
+    repo::set(tx, "backup.startup_path", path)?;
+    match error {
+        Some(e) => repo::set(tx, "backup.startup_error", e),
+        None => repo::remove(tx, "backup.startup_error"),
+    }
 }
 
 /// Forget the missing-folder warning (a new folder was chosen).

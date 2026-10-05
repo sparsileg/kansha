@@ -12,6 +12,7 @@ const book = vi.hoisted(() => ({
   open: true,
   settings: null as unknown,
   unlocks: [] as string[],
+  verifies: [] as string[],
   setups: [] as unknown[][],
   picks: 0,
 }));
@@ -104,6 +105,10 @@ vi.mock("./lib/api", async (orig) => {
         book.open = true;
         return ok(null);
       },
+      backupVerifyLatest: (p: string) => {
+        book.verifies.push(p);
+        return ok(null);
+      },
       payeesForgetStale: () => ok(0),
       settingsGet: () => ok(book.settings ?? DEFAULT_SETTINGS),
       settingsSet: (s: unknown) => {
@@ -118,6 +123,9 @@ vi.mock("./lib/api", async (orig) => {
             last_path: null,
             last_issues: 0,
             last_verified_at: null,
+            startup_checked_at: null,
+            startup_path: null,
+            startup_error: null,
             folder_missing: false,
           },
           folder: "/home/u/Downloads",
@@ -170,6 +178,7 @@ beforeEach(() => {
   book.state = "locked";
   book.settings = null;
   book.unlocks = [];
+  book.verifies = [];
   settingsState.setAccountPanelOpen(true);
   settingsState.setStartup("insights");
   registerState.accountId = null;
@@ -336,6 +345,9 @@ describe("App shell", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Open" }));
     await account();
     expect(book.unlocks).toEqual(["wrong", "right"]);
+    // The last backup is checked with the passphrase that opened the
+    // book, and only that one (BAK-080).
+    expect(book.verifies).toEqual(["right"]);
   });
 
   it("a locked book still offers Create a new book…, with an empty name to fill in", async () => {

@@ -26,7 +26,10 @@ mod security;
 mod tax;
 mod tree;
 
-pub use cards::{CardData, Warning, WarningKind, card_data, net_worth, net_worth_trend};
+pub use cards::{
+    Attention, AttentionCheck, CardData, CheckKind, Finding, Notice, Session, age, attention,
+    card_data, net_worth, net_worth_trend,
+};
 pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;
 pub use range::{period_choices, period_label, periods, resolve};

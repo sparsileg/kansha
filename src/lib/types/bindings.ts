@@ -49,6 +49,18 @@ export const commands = {
 	backupManifest: (path: string) => typedError<Manifest_Serialize, IpcError>(__TAURI_INVOKE("backup_manifest", { path })),
 	backupVerify: (path: string, passphrase: string) => typedError<VerifyResult_Serialize, IpcError>(__TAURI_INVOKE("backup_verify", { path, passphrase })),
 	/**
+	 *  Right after the book is unlocked, while the start screen still has
+	 *  the passphrase: fully check the book's last backup (decrypt, run the
+	 *  integrity check) and record the result in the book (BAK-080). The
+	 *  book stays usable meanwhile; it is locked only to find the file and
+	 *  to record. `None` when there is no backup to check.
+	 */
+	backupVerifyLatest: (passphrase: string) => typedError<{
+	path: string,
+	/**  Why it failed; `None` when it passed. */
+	error: string | null,
+} | null, IpcError>(__TAURI_INVOKE("backup_verify_latest", { passphrase })),
+	/**
 	 *  Restore, step 1 (BAK-070, BAK-075): open the backup with its
 	 *  passphrase and compare it with the current book. Nothing changes until
 	 *  [`restore_apply`].
@@ -499,9 +511,15 @@ export const commands = {
 	taxLineList: () => typedError<TaxLine[], IpcError>(__TAURI_INVOKE("tax_line_list")),
 	/**
 	 *  What the Insights cards show; scheduled items due within
-	 *  `upcoming_days` (CARD-020).
+	 *  `upcoming_days` (CARD-020). Async, so it runs off the main thread
+	 *  and a slow read does not freeze the window.
 	 */
 	cardData: (upcomingDays: number) => typedError<CardData, IpcError>(__TAURI_INVOKE("card_data", { upcomingDays })),
+	/**
+	 *  The Needs attention card (CARD-030). The integrity check runs only
+	 *  when no result is kept for the open book. Async, as `card_data`.
+	 */
+	attention: () => typedError<Attention, IpcError>(__TAURI_INVOKE("attention")),
 	/**
 	 *  The Net worth over time card's graph: month-end net worth over the
 	 *  last `years` years (1 to 5); `fitted` sizes the money axis to the
@@ -724,6 +742,28 @@ export type AssetClass = "us_equity" | "intl_equity" | "bond" | "cash" | "real_e
 /**  Kind of an Other Asset account (ACCT-140). */
 export type AssetSubtype = "house" | "vehicle" | "other";
 
+/**
+ *  What the Needs attention card shows (CARD-030): a notice for each
+ *  problem found, and every check made, for "Show checks".
+ */
+export type Attention = {
+	checked_at: string,
+	/**  `checked_at` as a local clock time: "2:32 PM". */
+	as_of: string,
+	checks: AttentionCheck[],
+	notices: Notice[],
+};
+
+/**  One check and whether it passed. */
+export type AttentionCheck = {
+	kind: CheckKind,
+	/**  "Security prices", "Database integrity", ... */
+	label: string,
+	ok: boolean,
+	/**  More about it, such as how long ago the last backup was. */
+	detail: string | null,
+};
+
 /**  What happened. */
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
@@ -807,8 +847,20 @@ export type BackupStatus = {
 	last_path: string | null,
 	/**  Integrity problems in the last backup's snapshot. */
 	last_issues: number,
-	/**  The last full decrypt-and-check (Verify backup…, restore drill). */
+	/**
+	 *  The last full decrypt-and-check that passed (Verify backup…,
+	 *  restore drill).
+	 */
 	last_verified_at: string | null,
+	/**
+	 *  When the last backup was last fully checked at startup (BAK-080),
+	 *  passed or failed. Verify backup… does not count.
+	 */
+	startup_checked_at: string | null,
+	/**  The file that check was of. */
+	startup_path: string | null,
+	/**  Why that check failed; `None` when it passed. */
+	startup_error: string | null,
 	/**
 	 *  The backup folder was missing at the last backup, which went to
 	 *  Downloads instead (BAK-030). Cleared when a folder is chosen or a
@@ -880,9 +932,6 @@ export type CardData = {
 	/**  Overdue and upcoming scheduled transactions (CARD-020). */
 	upcoming: OccurrenceView[],
 	upcoming_days: number,
-	warnings: Warning[],
-	/**  Last backup and last full verification (CARD-030, BAK-080). */
-	backup: BackupStatus,
 };
 
 /**  Where an investment account's cash lives (INV-300). */
@@ -1021,6 +1070,12 @@ export type Check =
  *  shares it took out of lots.
  */
 "lot_quantity_mismatch";
+
+/**
+ *  One check of the Needs attention card (CARD-030), in the order
+ *  they are listed.
+ */
+export type CheckKind = "integrity" | "backup" | "verification" | "backup_folder" | "prices" | "overdue" | "uncleared" | "reconcile" | "uncategorized" | "investment_cash";
 
 /**  Cleared status of an account posting (glossary; RCN-020). */
 export type Cleared = "unmarked" | "cleared" | 
@@ -1299,6 +1354,13 @@ export type FieldChange = {
 	path: string,
 	before: string | null,
 	after: string | null,
+};
+
+/**  An item a notice names. */
+export type Finding = {
+	message: string,
+	/**  The account to open, if any. */
+	account: AccountId | null,
 };
 
 /**
@@ -1695,6 +1757,13 @@ export type Item = {
 	checked: boolean,
 };
 
+/**  The check of the last backup at startup (BAK-080). */
+export type LatestCheck = {
+	path: string,
+	/**  Why it failed; `None` when it passed. */
+	error: string | null,
+};
+
 /**  A lot as recorded at acquisition (LOT-010). */
 export type Lot = {
 	id: LotId,
@@ -1794,6 +1863,22 @@ export type MmfMode =
 "security" | 
 /**  Part of the account's cash balance. */
 "cash";
+
+/**
+ *  A problem a check found and what to do about it, shown as the
+ *  message, the items (": a, b, and 3 more."), then the remedy.
+ */
+export type Notice = {
+	kind: CheckKind,
+	/**  What is wrong, with no closing period. */
+	message: string,
+	/**  The accounts or securities it is about, at most [`SHOWN_ITEMS`]. */
+	items: Finding[],
+	/**  How many more items there are. */
+	more: number,
+	/**  What the user can do, as a sentence. */
+	remedy: string,
+};
 
 /**  A stored occurrence row. */
 export type Occurrence = {
@@ -2983,22 +3068,6 @@ export type VerifyResult_Serialize = {
 	manifest: Manifest_Serialize,
 	integrity: IntegrityReport,
 };
-
-/**  Something that needs attention. */
-export type Warning = {
-	kind: WarningKind,
-	message: string,
-	/**  The account to open, if any. */
-	account: AccountId | null,
-};
-
-/**  What a warning is about (CARD-030). */
-export type WarningKind = "stale_price" | "missing_price" | "unreconciled" | "integrity" | 
-/**
- *  The backup folder is missing, no backup was ever made, or the
- *  last backup's snapshot had integrity problems (BAK-030).
- */
-"backup";
 
 /**  First day of the week, for the calendar (SET-030). */
 export type WeekStart = "sunday" | "monday";

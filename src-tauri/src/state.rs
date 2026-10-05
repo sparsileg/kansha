@@ -12,8 +12,10 @@ use std::sync::{Mutex, MutexGuard};
 use kansha_core::backup::{self, BackupKind, BackupTimer};
 use kansha_core::book::{BookFiles, OpenBook};
 use kansha_core::import::Staged;
+use kansha_core::integrity::{self, IntegrityStatus};
 use kansha_core::ledger::TxnId;
 use kansha_core::local_config::LocalConfig;
+use kansha_core::reports::Session;
 use kansha_core::undo::{self, Undo};
 use kansha_core::{Clock, Db, Origin, SystemClock, Tx};
 use serde::Serialize;
@@ -94,6 +96,13 @@ pub struct AppState {
     timer: Mutex<BackupTimer>,
     /// The last register change, while it can be undone (UI-060).
     undo: Mutex<Option<Undo>>,
+    /// The last integrity check of the open book, for the Needs attention
+    /// card (CARD-030): run when the card first needs it, then taken from
+    /// each backup's snapshot check and from File > Integrity Check.
+    integrity: Mutex<Option<IntegrityStatus>>,
+    /// When the open book was opened, and whether the check of its last
+    /// backup is still running (CARD-030, BAK-080).
+    session: Mutex<Option<Session>>,
     /// A Quicken file read and waiting to be imported (MIG-040).
     pending_import: Mutex<Option<Staged>>,
     /// The book's files: the open book's, or the one the passphrase
@@ -119,6 +128,8 @@ impl AppState {
             pending_restore: Mutex::new(None),
             timer: Mutex::new(BackupTimer::default()),
             undo: Mutex::new(None),
+            integrity: Mutex::new(None),
+            session: Mutex::new(None),
             pending_import: Mutex::new(None),
             files: Mutex::new(files),
             config_path,
@@ -172,10 +183,11 @@ impl AppState {
     }
 
     /// An import or rollback changed the book: a timed backup will be
-    /// due, and the last register change can no longer be undone.
+    /// due, the last register change can no longer be undone, and the
+    /// kept integrity result is stale.
     pub fn note_import(&self) {
         self.note_change();
-        self.forget_undo();
+        self.forget_session();
     }
 
     /// Run `f` with the open book; `locked` when there is none.
@@ -261,11 +273,71 @@ impl AppState {
         Ok(u.txn())
     }
 
-    /// Another book opened, or none: its undo does not apply.
-    pub fn forget_undo(&self) {
+    /// Another book opened, or none, or the book's data replaced: its
+    /// undo does not apply, and its integrity result is not kept.
+    pub fn forget_session(&self) {
         if let Ok(mut slot) = self.undo.lock() {
             *slot = None;
         }
+        self.keep_integrity(None);
+    }
+
+    /// The book was just opened; `verifying` when its last backup is
+    /// about to be checked (BAK-080).
+    pub fn start_session(&self, verifying: bool) {
+        self.set_session(Some(Session {
+            started: self.clock.now(),
+            verifying,
+        }));
+    }
+
+    fn set_session(&self, session: Option<Session>) {
+        if let Ok(mut slot) = self.session.lock() {
+            *slot = session;
+        }
+    }
+
+    /// The check of the last backup at startup has finished.
+    pub fn end_verifying(&self) {
+        if let Ok(mut slot) = self.session.lock() {
+            if let Some(s) = slot.as_mut() {
+                s.verifying = false;
+            }
+        }
+    }
+
+    /// The open book's session; one starting now if none was recorded.
+    pub fn session(&self) -> Session {
+        self.session
+            .lock()
+            .ok()
+            .and_then(|g| *g)
+            .unwrap_or(Session {
+                started: self.clock.now(),
+                verifying: false,
+            })
+    }
+
+    /// Keep the result of an integrity check of the open book.
+    pub fn keep_integrity(&self, status: Option<IntegrityStatus>) {
+        if let Ok(mut slot) = self.integrity.lock() {
+            *slot = status;
+        }
+    }
+
+    /// The last integrity check of the open book; run now when there is
+    /// none kept (CARD-030).
+    pub fn integrity(&self) -> CmdResult<IntegrityStatus> {
+        if let Some(s) = self.integrity.lock().ok().and_then(|g| *g) {
+            return Ok(s);
+        }
+        let issues = self.read(|db, _| integrity::check(db.conn()))?.issues.len();
+        let status = IntegrityStatus {
+            checked_at: self.clock.now(),
+            issues,
+        };
+        self.keep_integrity(Some(status));
+        Ok(status)
     }
 
     /// A change was saved: a timed backup will be due (SET-050).
@@ -316,6 +388,11 @@ impl AppState {
         if let Ok(mut t) = self.timer.lock() {
             t.backed_up();
         }
+        // The snapshot was just checked (BAK-080): the book's result now.
+        self.keep_integrity(Some(IntegrityStatus {
+            checked_at: done.written.manifest.created_at,
+            issues: done.written.integrity_issues,
+        }));
         Ok(done)
     }
 
@@ -342,7 +419,8 @@ impl AppState {
         }
         *guard = None;
         drop(guard);
-        self.forget_undo();
+        self.forget_session();
+        self.set_session(None);
     }
 
     pub fn load_config(&self) -> LocalConfig {

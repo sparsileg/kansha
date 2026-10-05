@@ -2,6 +2,7 @@
 // marked `disabled` never get here (the callers check).
 
 import { call, commands, DECLINED, withConfirmation } from "../api";
+import { attentionState } from "../state/attention.svelte";
 import { confirmState } from "../state/confirm.svelte";
 import { investState } from "../state/invest.svelte";
 import { listsState } from "../state/lists.svelte";
@@ -129,6 +130,7 @@ export async function backUpNow(): Promise<void> {
   try {
     const m = backupMessage(await call(commands.backupNow()), "Backed up to ");
     statusState.show(m.text, m.kind);
+    attentionState.changed();
   } catch (e) {
     statusState.show(`The backup failed: ${e instanceof Error ? e.message : String(e)}`, "alert");
   }

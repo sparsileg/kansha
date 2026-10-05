@@ -32,6 +32,12 @@
     const account = thisAccount && inAccount ? registerState.accountId : null;
     viewState.navigate("search", account === null ? { q: text } : { q: text, account });
   }
+
+  // Emptying the box on the Search view (typing or its clear button)
+  // goes back to where the search was made from: the register unfiltered.
+  function cleared() {
+    if (q.trim() === "" && viewState.current === "search") viewState.leaveSearch();
+  }
 </script>
 
 <!--
@@ -69,6 +75,7 @@
       aria-label="Search"
       placeholder="Search payee, memo, category, amount"
       bind:value={q}
+      oninput={cleared}
     />
   </form>
 </div>

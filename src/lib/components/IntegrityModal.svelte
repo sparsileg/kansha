@@ -1,5 +1,6 @@
 <script lang="ts">
   import { call, commands } from "../api";
+  import { attentionState } from "../state/attention.svelte";
   import { dialogState } from "../state/dialogs.svelte";
   import type { IntegrityReport } from "../types/bindings";
   import Modal from "./Modal.svelte";
@@ -12,6 +13,7 @@
     error = null;
     try {
       report = await call(commands.integrityCheck());
+      attentionState.changed();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

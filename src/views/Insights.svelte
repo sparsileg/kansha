@@ -16,13 +16,15 @@
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
   import { openAccount, openInsight, openInsights } from "../lib/shell/nav";
+  import { attentionState } from "../lib/state/attention.svelte";
   import { confirmState } from "../lib/state/confirm.svelte";
+  import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { reportState } from "../lib/state/reports.svelte";
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { CardData, Chart, Insight } from "../lib/types/bindings";
+  import type { Attention, CardData, Chart, Insight } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -62,6 +64,34 @@
         if (mine === trendSeq) trendError = e instanceof Error ? e.message : String(e);
       });
   });
+
+  // The Needs attention card, loaded only while it is shown, and again
+  // after a backup or a check (CARD-030).
+  let attn = $state<Attention | null>(null);
+  let attnError = $state<string | null>(null);
+  let attnSeq = 0;
+  let showChecks = $state(false);
+  const showsAttention = $derived(cards.some((c) => c.id === "attention"));
+
+  $effect(() => {
+    if (!showsAttention) return;
+    void attentionState.stamp;
+    const mine = ++attnSeq;
+    call(commands.attention())
+      .then((a) => {
+        if (mine !== attnSeq) return;
+        attn = a;
+        attnError = null;
+      })
+      .catch((e) => {
+        if (mine === attnSeq) attnError = e instanceof Error ? e.message : String(e);
+      });
+  });
+
+  function showIntegrity() {
+    dialogState.integrityReport = null;
+    dialogState.integrity = true;
+  }
 
   const heading = (id: CardId, label: string, d: CardData) =>
     id === "upcoming"
@@ -263,27 +293,56 @@
   <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
 {/snippet}
 
-{#snippet attention(d: CardData)}
-  {#if d.warnings.length}
-    <ul class="warn">
-      {#each d.warnings as w, i (i)}
-        <li>
-          <span aria-hidden="true">⚠</span>
-          {#if w.account !== null}
-            <button type="button" class="link" onclick={() => openAccount(w.account!)}>{w.message}</button>
-          {:else}
-            {w.message}
-          {/if}
-        </li>
-      {/each}
-    </ul>
+{#snippet attention(_: CardData)}
+  {#if attnError}
+    <p class="err" role="alert">{attnError}</p>
+  {:else if attn}
+    <!-- Only problems are listed, each with what to do; ⚠ and words, not
+         color alone. -->
+    {#if attn.notices.length === 0}
+      <p class="verdict"><span aria-hidden="true">✓</span> As of {attn.as_of}: No problems found. {attn.checks.length} checks passed.</p>
+    {:else}
+      <p class="verdict">
+        <span aria-hidden="true">⚠</span>
+        As of {attn.as_of}:
+        {attn.notices.length}
+        {attn.notices.length === 1 ? "problem" : "problems"} found
+      </p>
+      <ul class="notices">
+        {#each attn.notices as n, i (i)}
+          <li data-notice={n.kind}>
+            {n.message}{#if n.items.length}:
+              {#each n.items as f, j (j)}{#if j > 0}{", "}{/if}{#if f.account !== null}<button type="button" class="link" onclick={() => openAccount(f.account!)}
+                    >{f.message}</button
+                  >{:else}{f.message}{/if}{/each}{#if n.more > 0}, and {n.more} more{/if}{/if}.
+            {n.remedy}
+            {#if n.kind === "integrity"}
+              <button type="button" class="link" onclick={showIntegrity}>Show details</button>
+            {:else if n.kind === "backup_folder"}
+              <button type="button" class="link" onclick={() => (dialogState.settings = true)}>Settings</button>
+            {:else if n.kind === "overdue"}
+              <button type="button" class="link" onclick={() => openPanel("scheduled")}>Reminders</button>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <button type="button" class="link" aria-expanded={showChecks} onclick={() => (showChecks = !showChecks)}>
+      {showChecks ? "Hide checks" : "Show checks"}
+    </button>
+    {#if showChecks}
+      <ul class="checks">
+        {#each attn.checks as c (c.kind)}
+          <li data-check={c.kind}>
+            <span aria-hidden="true">{c.ok ? "✓" : "⚠"}</span>
+            <span>{c.label}: {c.ok ? "OK" : "Problem"}{c.detail ? ` (${c.detail})` : ""}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   {:else}
-    <p class="sub">All clear.</p>
+    <p class="sub">Loading…</p>
   {/if}
-  <p class="sub">
-    Last backup: {d.backup.last_at ?? "none yet"}. Last full verification:
-    {d.backup.last_verified_at ?? "never"}.
-  </p>
 {/snippet}
 
 <style>
@@ -377,14 +436,28 @@
     cursor: pointer;
     text-align: left;
   }
-  .warn {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .verdict {
+    margin: 0 0 0.3rem;
+  }
+  .notices {
+    margin: 0 0 0.3rem;
+    padding-left: 1.2em;
     display: grid;
     gap: 0.3rem;
   }
-  .warn .link {
+  .checks {
+    list-style: none;
+    margin: 0.3rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .checks > li {
+    display: grid;
+    grid-template-columns: 1em 1fr;
+    column-gap: 0.4rem;
+  }
+  .notices .link {
     margin: 0;
   }
   .err {
