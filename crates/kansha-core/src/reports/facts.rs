@@ -748,9 +748,10 @@ fn conversion_lines(
         amount,
     };
     let mut out = Vec::new();
+    // Taxable income, though the money moves to another account.
     if !taxable.is_zero() {
         out.push(line(
-            Section::Transfers,
+            Section::Income,
             Target::Transfer(roth),
             format!("[{}]", lk.account_name(roth)),
             tax_line(total),

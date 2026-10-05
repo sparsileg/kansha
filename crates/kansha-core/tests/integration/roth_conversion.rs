@@ -487,6 +487,37 @@ fn the_tax_schedule_puts_a_conversion_on_1099_r() {
 }
 
 #[test]
+fn the_tax_summary_by_category_lists_a_conversion_as_income() {
+    use kansha_core::reports::{self, DatePreset, DateRange, ReportKind, ReportSettings, TaxGroup};
+    let (mut b, ira, roth, vti) = setup();
+    let mut i = conversion(ira, roth, "2026-03-02");
+    i.security = Some(vti);
+    i.quantity = Some(q("40"));
+    i.amount = Some(m("3200.00"));
+    b.invest(&i).unwrap();
+    let mut s = ReportSettings::defaults(ReportKind::TaxSummary);
+    s.tax_group = TaxGroup::Category;
+    s.range = DateRange {
+        preset: DatePreset::Custom,
+        from: Some(date("2026-01-01")),
+        to: Some(date("2026-12-31")),
+    };
+    let r = reports::run(b.conn(), &s, date("2026-12-31")).unwrap();
+    let amount = r.columns.iter().position(|c| c.id == "amount").unwrap();
+    let sections: Vec<&str> = r.rows.iter().map(|x| x.label.as_str()).collect();
+    assert_eq!(sections, ["INCOME", "OVERALL TOTAL"]);
+    let groups: Vec<(String, String)> = r.rows[0]
+        .children
+        .iter()
+        .map(|g| (g.label.clone(), g.cells[amount].clone()))
+        .collect();
+    assert_eq!(
+        groups,
+        [("Roth conversion [Roth]".to_string(), "3200.00".to_string())]
+    );
+}
+
+#[test]
 fn a_401k_conversion_is_a_pension_distribution() {
     use kansha_core::reports::ReportKind;
     let (mut b, _, roth, _) = setup();

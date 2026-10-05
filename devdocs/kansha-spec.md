@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.27 (draft) |
+| **Document version** | 0.7.28 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-04 |
 | **Owner** | Stan |
@@ -609,8 +609,10 @@ common patterns.
   part, which cannot be more. The Tax Schedule and Tax Summary list a
   conversion on 1099-R whatever the account's transfer tax lines:
   the taxable part on Total IRA taxable distrib. (from a 401(k), Total
-  pension taxable distrib.), shown as a transfer to the Roth IRA, and
-  the tax withheld on the matching federal and state withheld lines.
+  pension taxable distrib.), and the tax withheld on the matching
+  federal and state withheld lines. The Tax Summary by Category lists
+  the taxable part under INCOME, as Roth conversion [Roth IRA name]
+  (0.7.28).
   The registers show Roth Conversion in the IRA and Conversion In in
   the Roth IRA.
 
@@ -2488,6 +2490,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.28 | 2026-10-05 | INV-070, RPT-140: the Tax Summary by Category lists a Roth conversion's taxable part under INCOME, as Roth conversion [Roth IRA name], instead of under TRANSFERS. Tax Schedule and other Subtotal by choices unchanged. No schema change. No API change. |
 | 0.7.27 | 2026-10-05 | MSRV raised from 1.85 to 1.93: the pinned `specta` and `tauri-specta` `2.0.0-rc.25` (D-120) no longer build on 1.85; `specta` uses `fmt::from_fn` (stable in Rust 1.93) and `tauri-specta-macros` resolves `darling` 0.23 (Rust 1.88). Checked with `cargo +1.93 check --workspace`. The release checklist's MSRV check uses 1.93. Let-chains are now allowed; clippy (`collapsible_if`) rewrote 27 nested `if let` blocks as let-chains, with no change in behavior. Pins chosen under 1.85 (`age`, `zip`, `ureq`) stay. No schema change. No API change. |
 | 0.7.26 | 2026-10-04 | CARD-030: the Needs attention card's first line starts "As of 2:32 PM:", the local time the checks ran. Accounts reconciled: an account is named only if it has a transaction dated after its last reconcile (any, if never), replacing "used in the last year". No schema change. **API change:** `Attention` gains `as_of`. |
 | 0.7.25 | 2026-10-04 | CARD-030: the Needs attention card shows only problems, each with what to do, or "No problems found. 10 checks passed."; "Show checks" lists every check. New checks: changes from before Kansha was started with no backup after them (replaces the last backup's date), the last backup not checked at startup or failed (Verify backup… no longer counts), overdue reminders, accounts not reconciled in 60 days, transactions in Uncategorized, investment cash below zero. A backup folder not chosen is now a notice. BAK-080: the check at startup is recorded apart from Verify backup…. No schema change. **API change:** `attention` returns `Attention` (`checks`, `notices`; new types `AttentionCheck`, `Notice`; `CheckLine` removed; `CheckKind` values changed); `BackupStatus` loses `verified_path`, `verify_error`, gains `startup_checked_at`, `startup_path`, `startup_error`. |

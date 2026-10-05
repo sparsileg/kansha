@@ -141,6 +141,18 @@ fn grouped(
                 let children = match (section, by) {
                     (_, By::Payee) => payee_groups(mine, &details),
                     (Section::Transfers, _) => account_groups(mine, lk, &details),
+                    // Roth conversions: income moved to another account.
+                    (Section::Income, _) => {
+                        let (moved, own): (Vec<&Line>, Vec<&Line>) = mine
+                            .into_iter()
+                            .partition(|l| matches!(l.target, Target::Transfer(_)));
+                        let mut groups = category_tree(&own, lk, &details);
+                        for mut g in account_groups(moved, lk, &details) {
+                            g.label = format!("Roth conversion [{}]", g.label);
+                            groups.push(g);
+                        }
+                        groups
+                    }
                     _ => category_tree(&mine, lk, &details),
                 };
                 sections.push(group(RowKind::Section, section.label(), children));
