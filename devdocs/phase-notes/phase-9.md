@@ -957,3 +957,40 @@ the new one. `windowsize.ts` only calls it. The window's place is
 dropped (Wayland). Tests: `local_config.rs` (4 new),
 `windowsize.test.ts`. Saving while resizing is untested by automation
 (needs a real window).
+
+Reminder amount averaged from past payments (spec 0.7.43, REC-065,
+REC-110): migration 0017 adds `schedule.average_of` (1–99, NULL off).
+`ScheduleFields.average_of`; `validate_fields` allows it only for an
+estimated, one-line, Remind schedule. `schedule::refresh_average`
+(repo `entered_amounts`: the schedule's entered, non-void payments in
+its account, latest occurrence first; `set_amount` writes line 1 with
+an audit entry) runs after create, update, enter, and `release_txn`;
+`txn_changed` after `ledger::update`, `ledger::void`,
+`invest::update`, and `undo::apply`. Average rounded half to even
+(`mul_div`); one going the other way from the direction is 0.00.
+UI: `schedule/form.ts` `average`/`averageOf`, `canAverage`;
+`ScheduleModal` "Estimate from the last N payments", amount read-only
+("Average"). Entering already went through the register (prefilled,
+saved row selected); an investment cash in/out now opens the
+investment register with the new transaction selected
+(`schedule.svelte.ts`). Tests: `schedule.rs` (6 new, checked failing
+with the average switched off), `migrations.rs` 0017,
+`form.test.ts`, `ScheduleModal.test.ts`, `OccurrenceRow.test.ts`.
+Untested: averaging a schedule on an investment account (cash leg).
+
+Follow-up (spec 0.7.44): the "Amount is an estimate" checkbox is
+gone; `ScheduleModal` has an Amount choice (Fixed, Average of past
+payments; "Estimate (confirm each time)" only for a schedule loaded
+with a typed estimate). `form.ts` `amountKind` replaces `estimated`
+and `average`; Average disables Split and automatic entry. Migration
+0018 (data only) sets `average_of` = 3 on estimated, one-line, Remind
+schedules and works out their average in SQL (half to even, 0.00
+without payments or going the other way). Tests: `migrations.rs`
+0018, `form.test.ts`, `ScheduleModal.test.ts`.
+
+Follow-up (spec 0.7.45): `ScheduleModal`'s How often, Ends, and
+Entering fieldsets are one "Scheduling" fieldset; End (with its date
+or # left), Remind days, and Mode share a `.row` line. The weekend
+rule (REC-050) control is gone; `form.ts` still carries
+`weekendRule`, so a new schedule saves "none" and an edited one keeps
+what it had. The engine's weekend shifting is unchanged.

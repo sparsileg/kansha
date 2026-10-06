@@ -1068,3 +1068,130 @@ fn migration_0016_makes_auto_expenses_a_spending_card() {
         .is_err()
     );
 }
+
+#[test]
+fn migration_0017_adds_averaging_off_for_existing_schedules() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 16).unwrap();
+    db.conn()
+        .execute_batch(
+            "INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+                 VALUES ('C', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z');
+             INSERT INTO schedule (account_id, frequency, start_date, next_due, created_at)
+                 VALUES (1, 'once', '2026-07-01', '2026-07-01', '2026-06-30T12:00:00Z');",
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let n: Option<i64> = c
+        .query_row("SELECT average_of FROM schedule", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, None);
+    assert!(c.execute("UPDATE schedule SET average_of = 3", []).is_ok());
+    assert!(c.execute("UPDATE schedule SET average_of = 0", []).is_err());
+    assert!(
+        c.execute("UPDATE schedule SET average_of = 100", [])
+            .is_err()
+    );
+}
+
+#[test]
+fn migration_0018_makes_estimates_average_their_last_three_payments() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 17).unwrap();
+    let c = db.conn();
+    c.execute_batch(
+        "INSERT INTO account (name, type, account_group, tax_treatment, created_at)
+             VALUES ('C', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z');
+         INSERT INTO category (kind, name, created_at)
+             VALUES ('expense', 'Bills', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+    let cat: i64 = c
+        .query_row("SELECT max(id) FROM category", [], |r| r.get(0))
+        .unwrap();
+    // Schedule `id`: one line of `cents` (register sign).
+    let schedule = |id: i64, amount_type: &str, mode: &str, direction: &str, cents: i64| {
+        c.execute(
+            "INSERT INTO schedule (id, account_id, amount_type, mode, direction, frequency,
+                 start_date, next_due, created_at)
+             VALUES (?1, 1, ?2, ?3, ?4, 'daily', '2026-01-01', '2026-11-01',
+                 '2026-06-30T12:00:00Z')",
+            rusqlite::params![id, amount_type, mode, direction],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO schedule_line (schedule_id, line_no, category_id, amount)
+             VALUES (?1, 1, ?2, ?3)",
+            rusqlite::params![id, cat, -cents],
+        )
+        .unwrap();
+    };
+    // A payment of `cents` (register sign) entered from `id` for `due`.
+    let pay = |id: i64, due: &str, cents: i64, status: &str| {
+        c.execute(
+            "INSERT INTO txn (txn_date, status, origin, schedule_id, created_at)
+             VALUES (?1, ?2, 'schedule', ?3, '2026-06-30T12:00:00Z')",
+            rusqlite::params![due, status, id],
+        )
+        .unwrap();
+        let txn = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO posting (txn_id, line_no, account_id, amount) VALUES (?1, 1, 1, ?2)",
+            rusqlite::params![txn, cents],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO posting (txn_id, line_no, category_id, amount) VALUES (?1, 2, ?2, ?3)",
+            rusqlite::params![txn, cat, -cents],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO schedule_occurrence (schedule_id, due_date, status, txn_id)
+             VALUES (?1, ?2, 'entered', ?3)",
+            rusqlite::params![id, due, txn],
+        )
+        .unwrap();
+    };
+    // 1: the last 3 of 4, a void one left out: (100.00 + 100.01 + 100.03) / 3.
+    schedule(1, "estimated", "remind", "payment", -9999);
+    pay(1, "2026-06-01", -50000, "normal");
+    pay(1, "2026-07-01", -10000, "normal");
+    pay(1, "2026-08-01", -10001, "normal");
+    pay(1, "2026-09-01", -99999, "void");
+    pay(1, "2026-10-01", -10003, "normal");
+    // 2 and 3: halves round to even.
+    schedule(2, "estimated", "remind", "payment", -1);
+    pay(2, "2026-09-01", -10000, "normal");
+    pay(2, "2026-10-01", -10001, "normal");
+    schedule(3, "estimated", "remind", "payment", -1);
+    pay(3, "2026-09-01", -10001, "normal");
+    pay(3, "2026-10-01", -10002, "normal");
+    // 4: no payments yet.
+    schedule(4, "estimated", "remind", "payment", -12345);
+    // 5: a deposit whose payments went out.
+    schedule(5, "estimated", "remind", "deposit", 500);
+    pay(5, "2026-10-01", -700, "normal");
+    // 6: fixed; 7: auto-entry estimate. Both left as they are.
+    schedule(6, "fixed", "remind", "payment", -2500);
+    schedule(7, "estimated", "auto", "payment", -2600);
+
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let got = |id: i64| -> (Option<i64>, i64) {
+        c.query_row(
+            "SELECT s.average_of, -l.amount FROM schedule s
+             JOIN schedule_line l ON l.schedule_id = s.id WHERE s.id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    };
+    assert_eq!(got(1), (Some(3), -10001));
+    assert_eq!(got(2), (Some(3), -10000));
+    assert_eq!(got(3), (Some(3), -10002));
+    assert_eq!(got(4), (Some(3), 0));
+    assert_eq!(got(5), (Some(3), 0));
+    assert_eq!(got(6), (None, -2500));
+    assert_eq!(got(7), (None, -2600));
+}

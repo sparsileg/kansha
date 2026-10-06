@@ -91,7 +91,14 @@ pub(crate) fn create_with_source(
 /// its own method (as a true-up does, MIG-115); one that cannot be put
 /// back stops the change and nothing changes. A reconciled cash posting
 /// needs `confirmed` and keeps its reconciliation when its account stays.
+/// A cash in or out a schedule entered moves its average (REC-065).
 pub fn update(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Result<InvTxn> {
+    let changed = change(tx, id, input, confirmed)?;
+    crate::schedule::txn_changed(tx, id)?;
+    Ok(changed)
+}
+
+fn change(tx: &Tx<'_>, id: TxnId, input: &InvInput, confirmed: bool) -> Result<InvTxn> {
     let conn = tx.conn();
     let before = repo::get(conn, id)?;
     check_changeable(conn, &before, confirmed)?;

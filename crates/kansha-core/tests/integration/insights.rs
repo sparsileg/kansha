@@ -384,6 +384,7 @@ fn a_spending_card_counts_this_months_scheduled_transactions() {
                 end: End::Never,
                 remind_days: 3,
                 mode: EntryMode::Remind,
+                average_of: None,
             };
             b.write(|tx| schedule::create(tx, &f)).unwrap().id
         };

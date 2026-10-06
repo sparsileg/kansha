@@ -378,6 +378,7 @@ fn every_schedule_enum_value_is_accepted_by_the_schema() {
             end: End::Never,
             remind_days: 0,
             mode: EntryMode::Remind,
+            average_of: None,
         };
         for f in Frequency::ALL {
             let mut rec = Recurrence::new(*f, start);

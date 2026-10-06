@@ -1163,6 +1163,7 @@ impl Ctx<'_> {
                 Some(m) => parse::<EntryMode>("mode", m)?,
                 None => EntryMode::Remind,
             },
+            average_of: None,
         })
     }
 

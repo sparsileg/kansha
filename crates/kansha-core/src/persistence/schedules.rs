@@ -19,7 +19,7 @@ use crate::schedule::{
 
 const COLUMNS: &str = "id, account_id, payee_id, memo, direction, amount_type, frequency, interval, \
     day1, day2, weekday, week_of_month, start_date, next_due, end_kind, end_date, remaining, \
-    remind_days, mode, weekend_rule, status, created_at";
+    remind_days, mode, weekend_rule, status, created_at, average_of";
 
 fn from_row(r: &Row<'_>) -> Result<Schedule> {
     let end_kind: String = r.get("end_kind")?;
@@ -52,6 +52,7 @@ fn from_row(r: &Row<'_>) -> Result<Schedule> {
             end,
             remind_days: r.get("remind_days")?,
             mode: r.get("mode")?,
+            average_of: r.get("average_of")?,
         },
         next_due: r.get("next_due")?,
         status: r.get("status")?,
@@ -171,10 +172,10 @@ pub fn insert(tx: &Tx<'_>, f: &ScheduleFields, next_due: Option<Date>) -> Result
     tx.conn().execute(
         "INSERT INTO schedule (account_id, payee_id, memo, direction, amount_type, frequency, interval,
              day1, day2, weekday, week_of_month, start_date, next_due, end_kind, end_date,
-             remaining, remind_days, mode, weekend_rule, status, created_at)
+             remaining, remind_days, mode, weekend_rule, status, created_at, average_of)
          VALUES (:account, :payee, :memo, :direction, :amount_type, :frequency, :interval,
              :day1, :day2, :weekday, :week, :start, :next_due, :end_kind, :end_date,
-             :remaining, :remind, :mode, :weekend, :status, :created_at)",
+             :remaining, :remind, :mode, :weekend, :status, :created_at, :average_of)",
         named_params! {
             ":account": f.account,
             ":payee": f.payee,
@@ -197,6 +198,7 @@ pub fn insert(tx: &Tx<'_>, f: &ScheduleFields, next_due: Option<Date>) -> Result
             ":weekend": r.weekend_rule,
             ":status": status,
             ":created_at": tx.now(),
+            ":average_of": f.average_of,
         },
     )?;
     let id = ScheduleId(tx.conn().last_insert_rowid());
@@ -231,7 +233,8 @@ pub fn update(
              day1 = :day1, day2 = :day2, weekday = :weekday, week_of_month = :week,
              start_date = :start, next_due = :next_due, end_kind = :end_kind,
              end_date = :end_date, remaining = :remaining, remind_days = :remind,
-             mode = :mode, weekend_rule = :weekend, status = :status
+             mode = :mode, weekend_rule = :weekend, status = :status,
+             average_of = :average_of
          WHERE id = :id",
         named_params! {
             ":id": id.0,
@@ -255,6 +258,7 @@ pub fn update(
             ":mode": f.mode,
             ":weekend": r.weekend_rule,
             ":status": status,
+            ":average_of": f.average_of,
         },
     )?;
     write_lines(tx, id, &f.lines)?;
@@ -270,6 +274,51 @@ pub fn update(
         )?;
     }
     Ok(after)
+}
+
+/// Set a one-line schedule's amount (entry sign), as averaging does
+/// (REC-065). Recorded in the audit log only when it changes.
+pub fn set_amount(tx: &Tx<'_>, id: ScheduleId, amount: Money) -> Result<Schedule> {
+    let before = get(tx.conn(), id)?;
+    tx.conn().execute(
+        "UPDATE schedule_line SET amount = ?2 WHERE schedule_id = ?1 AND line_no = 1",
+        params![id.0, negate(amount)?],
+    )?;
+    let after = get(tx.conn(), id)?;
+    if after != before {
+        audit::record(
+            tx,
+            AuditEntity::Schedule,
+            id.0,
+            AuditAction::Update,
+            Some(&before),
+            Some(&after),
+        )?;
+    }
+    Ok(after)
+}
+
+/// The amounts (entry sign, in `account`'s register) of the schedule's
+/// latest `count` entered payments, latest first; void ones and ones no
+/// longer in `account` are left out.
+pub fn entered_amounts(
+    conn: &Connection,
+    schedule: ScheduleId,
+    account: AccountId,
+    count: i64,
+) -> Result<Vec<Money>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT sum(p.amount)
+         FROM schedule_occurrence o
+         JOIN txn t ON t.id = o.txn_id
+         JOIN posting p ON p.txn_id = t.id AND p.account_id = ?2 AND p.security_id IS NULL
+         WHERE o.schedule_id = ?1 AND o.status = 'entered' AND t.status = 'normal'
+         GROUP BY o.id
+         ORDER BY o.due_date DESC
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(params![schedule.0, account, count], |r| r.get(0))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<Money>>>()?)
 }
 
 /// Move a schedule on after an occurrence is entered or skipped: new

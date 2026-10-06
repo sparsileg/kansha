@@ -47,6 +47,32 @@ describe("ScheduleModal", () => {
     expect(names).toEqual(["(choose)", "Checking", "Brokerage 448"]);
   });
 
+  it("the amount is fixed or the average of past payments (REC-065)", async () => {
+    render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
+    expect(screen.queryByLabelText("Amount is an estimate (confirm each time)")).toBeNull();
+    const kind = screen.getByLabelText("Amount") as HTMLSelectElement;
+    expect(Array.from(kind.options).map((o) => o.textContent)).toEqual(["Fixed", "Average of past payments"]);
+    expect(screen.queryByLabelText("Payments to average")).toBeNull();
+    await fireEvent.change(kind, { target: { value: "average" } });
+    const count = (await screen.findByLabelText("Payments to average")) as HTMLInputElement;
+    expect(count.value).toBe("3");
+    const amount = screen.getByLabelText("Line 1 amount") as HTMLInputElement;
+    expect(amount.readOnly).toBe(true);
+    expect(amount.placeholder).toBe("Average");
+    // An average is entered by the user, on one line.
+    const auto = within(screen.getByLabelText("Mode")).getByRole("option", { name: /automatically/ }) as HTMLOptionElement;
+    expect(auto.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Split" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("has one Scheduling section and no weekend choice", () => {
+    render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
+    const legends = screen.getAllByRole("group").map((g) => g.querySelector("legend")?.textContent);
+    expect(legends).toContain("Scheduling");
+    for (const gone of ["How often", "Ends", "Entering"]) expect(legends).not.toContain(gone);
+    expect(screen.queryByLabelText("On a weekend")).toBeNull();
+  });
+
   it("offers the frequency choices and extra fields for Nth weekday", async () => {
     render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
     const freq = screen.getByLabelText("Frequency") as HTMLSelectElement;

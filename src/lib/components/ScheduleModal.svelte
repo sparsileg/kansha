@@ -8,6 +8,7 @@
     WEEKDAYS,
     buildFields,
     byScheduleUse,
+    canAverage,
     draftFromFields,
     emptyLine,
     newScheduleDraft,
@@ -44,6 +45,12 @@
   const payeeListId = `sched-payees-${Math.random().toString(36).slice(2)}`;
   /** One line: its memo is the transaction memo, as in the register. */
   const single = $derived(d.lines.length === 1);
+  /** The amount comes from past payments (REC-065), so it is not typed. */
+  const averaging = $derived(d.amountKind === "average");
+  /** A typed estimate is kept only where it was (REC-060, 0.7.43). */
+  const typedEstimate = init.fields?.amount_type === "estimated" && init.fields.average_of == null;
+  /** Already averaging: its amount is the current average. */
+  const wasAveraging = init.fields?.average_of != null;
   const mainAccount = $derived(d.account === "" ? undefined : Number(d.account));
   /** Investment accounts take cash in or out, never a split, and not with linked cash (INV-300). */
   const schedulable = (a: Account) => a.investment === null || a.investment.cash_mode !== "linked";
@@ -154,6 +161,23 @@
 
     <fieldset>
       <legend>Amount and category</legend>
+      <div class="kind">
+        <label>
+          Amount
+          <select bind:value={d.amountKind}>
+            <option value="fixed">Fixed</option>
+            <option value="average" disabled={!canAverage(d)}>Average of past payments</option>
+            {#if typedEstimate}<option value="estimate">Estimate (confirm each time)</option>{/if}
+          </select>
+        </label>
+        {#if averaging}
+          <span class="average">
+            of the last
+            <input class="count" inputmode="numeric" aria-label="Payments to average" bind:value={d.averageOf} />
+            payments; 0.00 until the first
+          </span>
+        {/if}
+      </div>
       <div class="line head" class:one={single} aria-hidden="true">
         <span>Amount</span><span>Category or transfer</span>{#if !single}<span>Memo</span>{/if}<span>Tag</span><span></span>
       </div>
@@ -164,7 +188,10 @@
             aria-label={`Line ${i + 1} amount`}
             inputmode="decimal"
            
-            value={line.amount}
+            value={averaging && !wasAveraging ? "" : line.amount}
+            placeholder={averaging ? "Average" : undefined}
+            readonly={averaging}
+            title={averaging ? "The average of past payments, set on save" : undefined}
             onbeforeinput={blockNonSplitAmountChar}
             oninput={(e) => onAmount(line, e)}
           />
@@ -177,7 +204,7 @@
               <button type="button" aria-label={`Remove line ${i + 1}`} onclick={() => d.lines.splice(i, 1)}>×</button>
             {/if}
             {#if i === d.lines.length - 1 && !mainIsInvestment}
-              <button type="button" class="split" aria-label="Split" title="Split into another category" onclick={() => d.lines.push(emptyLine())}>
+              <button type="button" class="split" aria-label="Split" disabled={averaging} title={averaging ? "An average has a single category" : "Split into another category"} onclick={() => d.lines.push(emptyLine())}>
                 <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14V8M8 8L3 2M8 8l5-6M3 2v3M3 2h3M13 2v3M13 2h-3" /></svg>
                 Split
               </button>
@@ -189,7 +216,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>How often</legend>
+      <legend>Scheduling</legend>
       <div class="grid">
         <label>
           Frequency
@@ -237,20 +264,10 @@
           {editing ? "Next due on or after" : "First due on or after"}
           <input bind:value={d.start} placeholder={datePattern()} />
         </label>
-        <label>
-          On a weekend
-          <select bind:value={d.weekendRule}>
-            <option value="none">Leave as is</option>
-            <option value="previous">Move to Friday</option>
-            <option value="next">Move to Monday</option>
-          </select>
-        </label>
       </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Ends</legend>
-      <div class="grid">
+      <!-- A weekend rule (REC-050) is no longer offered; one already
+           set is kept. -->
+      <div class="row">
         <label>
           End
           <select bind:value={d.endKind}>
@@ -264,12 +281,6 @@
         {:else if d.endKind === "after_count"}
           <label># left <input inputmode="numeric" bind:value={d.count} /></label>
         {/if}
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Entering</legend>
-      <div class="grid">
         <label>
           Remind days before due
           <input inputmode="numeric" bind:value={d.remindDays} />
@@ -278,12 +289,8 @@
           Mode
           <select bind:value={d.mode}>
             <option value="remind">Remind me</option>
-            <option value="auto">Enter automatically (flag for review)</option>
+            <option value="auto" disabled={averaging}>Enter automatically (flag for review)</option>
           </select>
-        </label>
-        <label class="check">
-          <input type="checkbox" bind:checked={d.estimated} />
-          Amount is an estimate (confirm each time)
         </label>
       </div>
     </fieldset>
@@ -317,15 +324,41 @@
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
     gap: 0.5rem;
   }
+  /* End, Remind, and Mode on one line. */
+  .row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: end;
+  }
+  .row > label {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .row select,
+  .row input {
+    width: 100%;
+    min-width: 0;
+  }
   label {
     display: grid;
     gap: 0.15rem;
     font-size: var(--fs-register);
   }
-  label.check {
+  .kind {
+    display: flex;
+    gap: 0.4rem;
+    align-items: end;
+  }
+  .average {
     display: flex;
     gap: 0.4rem;
     align-items: center;
+    font-size: var(--fs-register);
+    padding-bottom: 0.2rem;
+  }
+  .average .count {
+    width: 3rem;
+    text-align: right;
   }
   .line {
     display: grid;

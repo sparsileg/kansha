@@ -91,13 +91,13 @@ describe("OccurrenceRow", () => {
     expect(screen.getByRole("button", { name: "Edit…" })).toBeTruthy();
   });
 
-  it("a cash out of an investment account is entered as scheduled, after asking; a failure shows", async () => {
+  it("a cash out of an investment account is entered as scheduled, after asking, then shown selected; a failure shows", async () => {
     listsState.accounts = [{ id: 2, name: "Brokerage", status: "open", investment: { cash_mode: "internal" } }] as never;
     scheduleState.rows = [
       { schedule: { id: 1, fields: { account: 2, payee: null, lines: [{ target: { kind: "account", id: 3 } }] } } },
     ] as never;
     const ask = vi.spyOn(confirmState, "ask").mockResolvedValue(true);
-    enterNow.mockResolvedValueOnce({ status: "ok", data: {} });
+    enterNow.mockResolvedValueOnce({ status: "ok", data: { schedule: 1, nominal: "2026-10-01", txn: 77, date: "2026-10-01" } });
     render(OccurrenceRow, { view: view() });
     await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
     await waitFor(() =>
@@ -105,6 +105,10 @@ describe("OccurrenceRow", () => {
     );
     expect(ask).toHaveBeenCalled();
     expect(prefill).not.toHaveBeenCalled();
+    // The investment register opens with it selected, to change it there.
+    await waitFor(() => expect(registerState.selected).toBe(77));
+    expect(viewState.current).toBe("account");
+    expect(registerState.accountId).toBe(2);
 
     // Entering reloads the list (empty here): put the schedule back.
     scheduleState.rows = [

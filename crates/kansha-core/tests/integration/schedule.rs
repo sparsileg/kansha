@@ -65,6 +65,7 @@ fn rent_fields(fx: &Fx, start: &str) -> ScheduleFields {
         end: End::Never,
         remind_days: 3,
         mode: EntryMode::Remind,
+        average_of: None,
     }
 }
 
@@ -1259,6 +1260,7 @@ fn one_line(account: AccountId, target: Target, amount: &str) -> ScheduleFields 
         end: End::Never,
         remind_days: 3,
         mode: EntryMode::Remind,
+        average_of: None,
     }
 }
 
@@ -1668,4 +1670,174 @@ fn an_investment_cash_schedule_is_entered_as_scheduled() {
     let entered = enter(&mut fx, id, "2026-07-01").unwrap();
     let txn = ledger::get(fx.book.conn(), entered.txn).unwrap();
     assert_eq!(txn.memo, "Vanguard");
+}
+
+// ---------------------------------------------------------------------------
+// Amount averaged from past payments (REC-065)
+// ---------------------------------------------------------------------------
+
+/// Estimated rent, its amount the average of the last `n` payments.
+fn averaging(fx: &mut Fx, n: i64) -> ScheduleId {
+    let mut f = rent_fields(fx, "2026-07-01");
+    f.amount_type = AmountType::Estimated;
+    f.average_of = Some(n);
+    create(fx, &f)
+}
+
+fn pay(fx: &mut Fx, id: ScheduleId, due: &str, amount: &str) -> schedule::Entered {
+    let edits = EnterEdits {
+        entry: None,
+        date: None,
+        amount: Some(m(amount)),
+    };
+    fx.book
+        .write(|tx| schedule::enter(tx, id, date(due), &edits, false))
+        .unwrap()
+}
+
+fn amount(fx: &Fx, id: ScheduleId) -> Money {
+    get(fx, id).fields.amount().unwrap()
+}
+
+#[test]
+fn an_averaged_amount_is_zero_until_the_first_payment() {
+    let mut fx = fx();
+    // The typed 1000.00 is replaced: no payments yet.
+    let id = averaging(&mut fx, 3);
+    assert_eq!(amount(&fx, id), m("0.00"));
+    assert_eq!(get(&fx, id).fields.direction, Direction::Payment);
+}
+
+#[test]
+fn an_averaged_amount_follows_the_last_payments() {
+    let mut fx = fx();
+    let id = averaging(&mut fx, 3);
+    // Fewer than 3: the average of those there are.
+    pay(&mut fx, id, "2026-07-01", "-100.00");
+    assert_eq!(amount(&fx, id), m("-100.00"));
+    pay(&mut fx, id, "2026-08-01", "-200.00");
+    assert_eq!(amount(&fx, id), m("-150.00"));
+    // 601.00 / 3 = 200.333…
+    pay(&mut fx, id, "2026-09-01", "-301.00");
+    assert_eq!(amount(&fx, id), m("-200.33"));
+    // Only the last 3: (200 + 301 + 400) / 3 = 300.333…
+    pay(&mut fx, id, "2026-10-01", "-400.00");
+    assert_eq!(amount(&fx, id), m("-300.33"));
+    // Each change is in the schedule's history.
+    let history = audit::history(fx.book.conn(), AuditEntity::Schedule, id.0).unwrap();
+    assert!(history.len() >= 5, "{}", history.len());
+}
+
+#[test]
+fn an_average_rounds_half_to_even() {
+    let mut fx = fx();
+    let id = averaging(&mut fx, 2);
+    pay(&mut fx, id, "2026-07-01", "-100.00");
+    pay(&mut fx, id, "2026-08-01", "-100.01");
+    // 200.01 / 2 = 100.005 → 100.00 (even).
+    assert_eq!(amount(&fx, id), m("-100.00"));
+    pay(&mut fx, id, "2026-09-01", "-100.02");
+    // 200.03 / 2 = 100.015 → 100.02 (even).
+    assert_eq!(amount(&fx, id), m("-100.02"));
+}
+
+#[test]
+fn an_average_follows_edits_voids_and_deletes_of_its_payments() {
+    let mut fx = fx();
+    let id = averaging(&mut fx, 3);
+    let first = pay(&mut fx, id, "2026-07-01", "-100.00");
+    let second = pay(&mut fx, id, "2026-08-01", "-200.00");
+    let third = pay(&mut fx, id, "2026-09-01", "-300.00");
+    assert_eq!(amount(&fx, id), m("-200.00"));
+
+    // The real bill was 330.00, corrected in the register.
+    let txn = fx.book.txn(third.txn).unwrap();
+    let mut entry = ledger::Entry::from_txn(&txn, fx.chk).unwrap();
+    entry.amount = m("-330.00");
+    entry.lines[0].amount = m("-330.00");
+    fx.book
+        .write(|tx| ledger::update_entry(tx, third.txn, &entry, false))
+        .unwrap();
+    assert_eq!(amount(&fx, id), m("-210.00"));
+
+    // A void payment is left out: (200 + 330) / 2.
+    fx.book
+        .write(|tx| ledger::void(tx, first.txn, false))
+        .unwrap();
+    assert_eq!(amount(&fx, id), m("-265.00"));
+
+    // A deleted one too; only the 330.00 is left.
+    fx.book
+        .write(|tx| ledger::delete(tx, second.txn, false))
+        .unwrap();
+    assert_eq!(amount(&fx, id), m("-330.00"));
+}
+
+#[test]
+fn an_average_going_the_other_way_is_zero() {
+    let mut fx = fx();
+    let id = averaging(&mut fx, 3);
+    let e = pay(&mut fx, id, "2026-07-01", "-50.00");
+    // Edited into a refund in the register.
+    let txn = fx.book.txn(e.txn).unwrap();
+    let mut entry = ledger::Entry::from_txn(&txn, fx.chk).unwrap();
+    entry.amount = m("80.00");
+    entry.lines[0].amount = m("80.00");
+    fx.book
+        .write(|tx| ledger::update_entry(tx, e.txn, &entry, false))
+        .unwrap();
+    assert_eq!(amount(&fx, id), m("0.00"));
+}
+
+#[test]
+fn a_series_edit_keeps_the_average() {
+    let mut fx = fx();
+    let id = averaging(&mut fx, 3);
+    pay(&mut fx, id, "2026-07-01", "-120.00");
+    let mut f = get(&fx, id).fields;
+    f.memo = "rent, edited".into();
+    f.lines[0].amount = m("-999.00");
+    fx.book.write(|tx| schedule::update(tx, id, &f)).unwrap();
+    assert_eq!(amount(&fx, id), m("-120.00"));
+    // Turned off, the typed amount stays.
+    f.average_of = None;
+    fx.book.write(|tx| schedule::update(tx, id, &f)).unwrap();
+    assert_eq!(amount(&fx, id), m("-999.00"));
+}
+
+#[test]
+fn only_estimated_one_line_remind_schedules_average() {
+    let mut fx = fx();
+    let mut ok = rent_fields(&fx, "2026-07-01");
+    ok.amount_type = AmountType::Estimated;
+    ok.average_of = Some(3);
+    let refused = |fx: &mut Fx, f: &ScheduleFields, says: &str| {
+        let e = fx.book.write(|tx| schedule::create(tx, f)).unwrap_err();
+        assert!(e.to_string().contains(says), "{e}");
+    };
+
+    let mut f = ok.clone();
+    f.amount_type = AmountType::Fixed;
+    refused(&mut fx, &f, "only an estimated amount");
+
+    let mut f = ok.clone();
+    f.mode = EntryMode::Auto;
+    refused(&mut fx, &f, "choose Remind");
+
+    let mut f = ok.clone();
+    f.lines[0].amount = m("-600.00");
+    f.lines.push(ScheduleLine {
+        target: Target::Account(fx.sav),
+        amount: m("-400.00"),
+        memo: String::new(),
+        tag: None,
+    });
+    refused(&mut fx, &f, "split");
+
+    for n in [0, 100] {
+        let mut f = ok.clone();
+        f.average_of = Some(n);
+        refused(&mut fx, &f, "between 1 and 99");
+    }
+    assert!(fx.book.write(|tx| schedule::create(tx, &ok)).is_ok());
 }

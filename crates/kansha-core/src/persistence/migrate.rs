@@ -123,6 +123,18 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0016_spending_cards.sql"),
         foreign_keys_off: false,
     },
+    Migration {
+        version: 17,
+        description: "schedule average",
+        sql: include_str!("migrations/0017_schedule_average.sql"),
+        foreign_keys_off: false,
+    },
+    Migration {
+        version: 18,
+        description: "estimates average",
+        sql: include_str!("migrations/0018_estimates_average.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

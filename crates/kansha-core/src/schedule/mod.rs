@@ -28,13 +28,13 @@ mod recurrence;
 mod service;
 
 pub use recurrence::{Dates, Frequency, Recurrence, WeekendRule, add_days};
-pub(crate) use service::release_txn;
 pub use service::{
     AutoEnterFailure, AutoEnterReport, EnterEdits, Entered, auto_enter_due, create, delete,
     dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between, prefill_entry,
     projected_balances, register_between, review_list, scheduled_by_category, set_override, skip,
     update,
 };
+pub(crate) use service::{release_txn, txn_changed};
 
 use serde::{Deserialize, Serialize};
 
@@ -163,6 +163,12 @@ pub struct ScheduleFields {
     /// Days before the due date it shows in the due list.
     pub remind_days: i64,
     pub mode: EntryMode,
+    /// The amount is the average of this many of the schedule's latest
+    /// entered payments (REC-065), kept up to date as they are entered,
+    /// edited, or deleted; `None` keeps the amount as typed. Estimated,
+    /// remind-mode, one-line schedules only.
+    #[serde(default)]
+    pub average_of: Option<i64>,
 }
 
 impl ScheduleFields {

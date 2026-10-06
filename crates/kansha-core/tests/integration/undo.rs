@@ -320,6 +320,7 @@ fn deleting_a_scheduled_transaction_cannot_be_undone() {
         end: End::Never,
         remind_days: 3,
         mode: EntryMode::Remind,
+        average_of: None,
     };
     let id = fx.book.write(|tx| schedule::create(tx, &f)).unwrap().id;
     let entered = fx

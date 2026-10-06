@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.42 (draft) |
+| **Document version** | 0.7.45 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-05 |
 | **Owner** | Stan |
@@ -370,8 +370,32 @@ common patterns.
 - **REC-050** [1.0][R] Weekend/holiday adjustment option per schedule:
   none, move to previous business day, or move to next business
   day. 1.0 uses weekends only; a US bank holiday calendar is [Later].
+  The schedule dialog no longer offers the choice (0.7.45): a new
+  schedule has none, and one already set is kept on save.
 - **REC-060** [1.0][R] Amount type: fixed, or estimated (the user
-  confirms the actual amount when entering).
+  confirms the actual amount when entering). The schedule dialog's
+  Amount choice is Fixed or Average of past payments (REC-065), an
+  average being stored as estimated; a typed estimate is no longer
+  offered (0.7.44). An estimated split or auto-entry schedule from
+  before keeps "Estimate (confirm each time)" in the choice, and
+  loses it once changed to another.
+- **REC-065** [1.0][R] An estimated amount may be the average of the
+  schedule's last N payments (N 1 to 99, default 3; 0.7.43). The
+  schedule dialog's Amount choice "Average of past payments … of the
+  last N payments" (0.7.44) is for a one-line, Remind schedule (Split
+  and automatic entry are then unavailable); its amount field shows
+  the average and is not typed. Only payments this schedule entered
+  count (REC-160), latest by occurrence first, in the schedule's
+  account; void ones are left out. With fewer than N it averages
+  those there are; with none the amount is 0.00 until the first. The
+  average is rounded half to even and kept as the schedule's amount,
+  so the calendar, Upcoming, the projected balance, and spending
+  cards use it. It is worked out again when the schedule is saved,
+  when an occurrence is entered, and when one of its payments is
+  edited, voided, deleted, or undone. An average going the other way
+  from the transaction type (refunds outweighing payments) is 0.00. A
+  one-time amount (REC-110) is not changed. Splits and auto-entry
+  cannot average.
 - **REC-070** [1.0][R] Entry mode per schedule: **Remind** (user must
   confirm entry) or **Auto-enter** (entered automatically on the due
   date, flagged for review). Default: Remind.
@@ -382,7 +406,12 @@ common patterns.
   dedicated Scheduled Transactions list and from the calendar.
 - **REC-110** [1.0][R] For a single upcoming occurrence: **Enter**
   (with optional edits to amount/date), **Skip**, or **Edit this
-  occurrence only** without changing the series.
+  occurrence only** without changing the series. Enter opens the
+  account's register with the entry prefilled, focused on the amount;
+  saving it enters the occurrence and leaves it selected there. A
+  cash in or out of an investment account (REC-115), entered as
+  scheduled, opens the investment register with it selected, to
+  change it there (0.7.43).
 - **REC-115** [1.0][R] A schedule may be on an investment account, or
   transfer into one (a quarterly dividend moved to Savings, a monthly
   IRA contribution): one line, no split, and the investment account's
@@ -2119,7 +2148,11 @@ Modeling choices that affect other sections:
   `schedule_occurrence` row with `override_date` and/or
   `override_amount` (amount on single-line schedules only). Estimated
   amounts need confirmation on entry and are never auto-entered
-  (REC-060). Auto-enter (REC-070) enters every due occurrence, missed
+  (REC-060). `schedule.average_of` (migration 0017) is the number of
+  payments an estimated amount averages (REC-065); NULL keeps the
+  amount as typed. Migration 0018 made each estimated, one-line,
+  Remind schedule average its last 3 payments, its amount set to that
+  average. Auto-enter (REC-070) enters every due occurrence, missed
   ones included, with origin `scheduler`, and flags each for review
   (`needs_review`, migration 0002) until dismissed. A schedule with
   entered or skipped occurrences is soft-deleted (`status = deleted`)
@@ -2633,6 +2666,9 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.45 | 2026-10-06 | REC-050: the schedule dialog no longer offers the weekend rule; new schedules have none, one already set is kept. The dialog's How often, Ends, and Entering sections become one Scheduling section, End, Remind days, and Mode on one line. No API or schema change. |
+| 0.7.44 | 2026-10-06 | REC-060, REC-065: the schedule dialog's "Amount is an estimate" checkbox is replaced by an Amount choice, Fixed or Average of past payments; old estimated splits and auto-entry schedules keep "Estimate (confirm each time)". Existing estimated, one-line, Remind schedules average their last 3 payments. **Schema change:** migration 0018 (data only: sets `average_of` = 3 and the amount to the average, 0.00 without payments). No API change. |
+| 0.7.43 | 2026-10-06 | New REC-065: an estimated, one-line, Remind schedule may take its amount as the average of its last N payments (default 3; fewer if fewer; 0.00 before the first), worked out again on save, entry, and edits, voids, deletes, or undos of its payments. REC-110: Enter's register path written down; a cash in or out of an investment account opens the investment register with it selected after entering. §18 notes `schedule.average_of`. **Schema change:** migration 0017 (`schedule.average_of`). **API change:** `ScheduleFields` gains `average_of`. |
 | 0.7.42 | 2026-10-06 | New CARD-070 [Later]: spending card averages over several years (a longer average beside this year's, ▲/▼ between them), with its open points; not designed or built. No schema or API change. |
 | 0.7.41 | 2026-10-06 | SET-070, SECU-020: the main window keeps a start page size and a working size for each screen resolution, in logical pixels, saved as the user resizes and on close, and fitted to the screen; its place is no longer kept. The config file's `window` is replaced by `window_sizes` (an old one is ignored). No schema change. **API change:** commands `window_save` and `window_restore` replaced by `window_mode`; new type `WindowMode`. |
 | 0.7.40 | 2026-10-06 | CARD-010: the Net worth card (now double width) lists each account group (Banking, Credit, Investments, Retirement, Assets, Liabilities, Other; those with an account), then Net worth, at December 31 of the last two years and today, money owed negative; it replaces the Cash and bank, Investments, Other assets, and Liabilities lines. No schema change. **API change:** `CardData` drops `cash`, `investments`, `other_assets`, `liabilities` and gains `years`, `groups` (new type `GroupBalances`), `net_worths`. |

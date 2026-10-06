@@ -91,15 +91,31 @@ class ScheduleState {
   }
 
   /** There is no bank register to edit it in, so ask, then enter it as
-   * scheduled; the amount can be changed afterwards in the investment
-   * register. A failure is thrown to the caller, as for the register path. */
+   * scheduled and open the investment register with it selected, to
+   * change the amount there. A failure is thrown to the caller, as for
+   * the register path. */
   private async enterAsScheduled(v: OccurrenceView, f: ScheduleFields): Promise<void> {
     const payee = f.payee === null ? "" : (listsState.payee(f.payee)?.name ?? "");
     const amount = `${formatMoney(v.amount)}${v.estimated ? " (an estimate)" : ""}`;
     const what = `${payee || "this transaction"} for ${amount} on ${displayDate(v.date)}`;
-    if (!(await confirmState.ask(`Enter ${what} as scheduled? Change it afterwards in the investment register.`))) return;
-    await call(commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, true));
+    if (!(await confirmState.ask(`Enter ${what} as scheduled? The investment register opens with it selected, to change it there.`)))
+      return;
+    const entered = await call(
+      commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, true),
+    );
     await this.changed();
+    const account = this.investmentAccount(f);
+    dialogState.due = false;
+    viewState.navigate("account", { account });
+    await registerState.goToTransaction(account, entered.txn);
+  }
+
+  /** The investment account whose cash a schedule moves: its own, or the
+   * one it transfers to. */
+  private investmentAccount(f: ScheduleFields): number {
+    if (listsState.account(f.account)?.investment != null) return f.account;
+    const line = f.lines.find((l) => l.target.kind === "account" && listsState.account(l.target.id)?.investment != null);
+    return line?.target.kind === "account" ? line.target.id : f.account;
   }
 
   /** After entering, skipping, or editing: lists, balances, open register. */

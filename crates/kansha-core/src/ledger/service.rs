@@ -59,7 +59,10 @@ pub fn update(tx: &Tx<'_>, id: TxnId, input: &TxnInput, confirmed: bool) -> Resu
     check_changeable(tx.conn(), &before, confirmed)?;
     let importing = matches!(tx.origin(), Origin::Import(_));
     validate(tx.conn(), input, Some(&before), importing)?;
-    repo::update(tx, id, input)
+    let after = repo::update(tx, id, input)?;
+    // One a schedule entered moves its average (REC-065).
+    crate::schedule::txn_changed(tx, id)?;
+    Ok(after)
 }
 
 /// Replace a transaction from a register entry.
@@ -75,7 +78,9 @@ pub fn void(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<Txn> {
         return Err(Error::Invalid("transaction is already void".into()));
     }
     check_changeable(tx.conn(), &before, confirmed)?;
-    repo::void(tx, id)
+    let after = repo::void(tx, id)?;
+    crate::schedule::txn_changed(tx, id)?;
+    Ok(after)
 }
 
 /// Delete a transaction, both sides of a transfer included (TXN-030). A

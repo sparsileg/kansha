@@ -11,6 +11,62 @@ function filled() {
 }
 
 describe("buildFields", () => {
+  it("an average needs one line and Remind (REC-065)", () => {
+    const d = filled();
+    d.amountKind = "average";
+    d.lines[0].amount = "";
+    const r = buildFields(d, TODAY);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fields.average_of).toBe(3);
+    expect(r.fields.amount_type).toBe("estimated");
+    // A blank amount is 0.00 until the first payment.
+    expect(r.fields.lines[0].amount).toBe("0.00");
+    d.averageOf = "0";
+    expect(buildFields(d, TODAY)).toEqual({ ok: false, error: "Enter how many payments to average (1 to 99)." });
+    d.averageOf = "6";
+    d.mode = "auto";
+    expect(buildFields(d, TODAY)).toEqual({ ok: false, error: "An average is confirmed each time it is entered; choose Remind me." });
+    d.mode = "remind";
+    d.lines.push({ target: "c:6", amount: "5", memo: "", tag: "" });
+    expect(buildFields(d, TODAY)).toMatchObject({ ok: false, error: expect.stringContaining("remove the split") });
+  });
+
+  it("fixed is fixed; an old typed estimate stays one", () => {
+    const d = filled();
+    const fixed = buildFields(d, TODAY);
+    expect(fixed.ok && [fixed.fields.amount_type, fixed.fields.average_of]).toEqual(["fixed", null]);
+    d.amountKind = "estimate";
+    const est = buildFields(d, TODAY);
+    expect(est.ok && [est.fields.amount_type, est.fields.average_of]).toEqual(["estimated", null]);
+    if (!est.ok) return;
+    expect(draftFromFields(est.fields).amountKind).toBe("estimate");
+  });
+
+  it("round-trips the number of payments averaged", () => {
+    const d = filled();
+    d.amountKind = "average";
+    d.averageOf = "12";
+    const r = buildFields(d, TODAY);
+    if (!r.ok) throw new Error(r.error);
+    const back = draftFromFields(r.fields);
+    expect(back.amountKind).toBe("average");
+    expect(back.averageOf).toBe("12");
+    const off = draftFromFields({ ...r.fields, amount_type: "fixed", average_of: null });
+    expect(off.amountKind).toBe("fixed");
+    expect(off.averageOf).toBe("3");
+  });
+
+  it("a new schedule has no weekend rule; an edited one keeps its own (REC-050)", () => {
+    const r = buildFields(filled(), TODAY);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.fields.recurrence.weekend_rule).toBe("none");
+    const moved = { ...r.fields, recurrence: { ...r.fields.recurrence, weekend_rule: "next" as const } };
+    const again = buildFields(draftFromFields(moved), TODAY);
+    if (!again.ok) throw new Error(again.error);
+    expect(again.fields.recurrence.weekend_rule).toBe("next");
+  });
+
   it("builds a monthly payment with a negative amount", () => {
     const r = buildFields(filled(), TODAY);
     expect(r.ok).toBe(true);
@@ -155,7 +211,7 @@ describe("draftFromFields", () => {
     d.payee = "Landlord";
     d.preset = "quarterly";
     d.mode = "auto";
-    d.estimated = true;
+    d.amountKind = "estimate";
     const r = buildFields(d, TODAY);
     if (!r.ok) throw new Error(r.error);
     const back = draftFromFields(r.fields, "Landlord");

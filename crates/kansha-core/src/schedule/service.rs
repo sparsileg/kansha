@@ -18,7 +18,7 @@ use crate::date::{Clock, Date};
 use crate::error::{Error, Result};
 use crate::invest::{self, InvAction, InvInput};
 use crate::ledger::{self, Entry, EntryLine, Target, TxnId, TxnSource};
-use crate::money::Money;
+use crate::money::{Money, mul_div};
 use crate::persistence::audit::{self, AuditAction, AuditEntity};
 use crate::persistence::schedules as repo;
 use crate::persistence::{Db, Origin, Tx, accounts, categories, ledger as ledger_repo, payees};
@@ -29,6 +29,9 @@ const GENERATION_CAP: usize = 2000;
 
 /// Longest projection window, in days (CAL-050).
 const MAX_PROJECTION_DAYS: i64 = 3660;
+
+/// Most payments a schedule's amount can average (REC-065).
+const AVERAGE_MAX: i64 = 99;
 
 // ---------------------------------------------------------------------------
 // Series helpers
@@ -148,6 +151,30 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
             Target::Category(c) => {
                 categories::get(conn, c)?;
             }
+        }
+    }
+    if let Some(n) = f.average_of {
+        if !(1..=AVERAGE_MAX).contains(&n) {
+            return Err(Error::Invalid(format!(
+                "the number of payments to average must be between 1 and {AVERAGE_MAX}"
+            )));
+        }
+        if f.amount_type != AmountType::Estimated {
+            return Err(Error::Invalid(
+                "only an estimated amount can be the average of past payments".into(),
+            ));
+        }
+        if f.mode != EntryMode::Remind {
+            return Err(Error::Invalid(
+                "an averaged amount is an estimate to confirm, so it is not entered \
+                 automatically; choose Remind"
+                    .into(),
+            ));
+        }
+        if f.lines.len() != 1 {
+            return Err(Error::Invalid(
+                "a split's amount can't be the average of past payments".into(),
+            ));
         }
     }
     if !f.direction.allows(f.amount()?) {
@@ -279,7 +306,8 @@ pub fn create(tx: &Tx<'_>, fields: &ScheduleFields) -> Result<Schedule> {
     let next = first_from(fields, fields.recurrence.start_date).ok_or_else(|| {
         Error::Invalid("the schedule has no occurrence between its start and end".into())
     })?;
-    repo::insert(tx, fields, Some(next))
+    let created = repo::insert(tx, fields, Some(next))?;
+    refresh_average(tx, created.id)
 }
 
 /// Edit a schedule: "this and all future occurrences" (REC-120). What was
@@ -307,7 +335,58 @@ pub fn update(tx: &Tx<'_>, id: ScheduleId, fields: &ScheduleFields) -> Result<Sc
         ScheduleStatus::Ended
     };
     repo::delete_pending_occurrences(tx, id)?;
-    repo::update(tx, id, fields, next, status)
+    repo::update(tx, id, fields, next, status)?;
+    refresh_average(tx, id)
+}
+
+/// The average of `amounts`, rounded half to even; 0.00 for none.
+fn average(amounts: &[Money]) -> Result<Money> {
+    let Ok(count) = i64::try_from(amounts.len()) else {
+        return Err(Error::Overflow("payments to average"));
+    };
+    if count == 0 {
+        return Ok(Money::ZERO);
+    }
+    let total = amounts.iter().try_fold(Money::ZERO, |acc, a| {
+        acc.checked_add(*a)
+            .ok_or(Error::Overflow("payments to average"))
+    })?;
+    Ok(Money::from_cents(mul_div(total.cents(), 1, count)?))
+}
+
+/// Set an averaging schedule's amount (REC-065) to the average of its
+/// latest entered payments: as many as it averages, or as many as there
+/// are, 0.00 before the first. Void payments and ones moved to another
+/// account are left out. An average going the other way (refunds
+/// outweighing payments) is 0.00. Other schedules are returned as they
+/// are.
+pub(crate) fn refresh_average(tx: &Tx<'_>, id: ScheduleId) -> Result<Schedule> {
+    let s = repo::get(tx.conn(), id)?;
+    let Some(n) = s.fields.average_of else {
+        return Ok(s);
+    };
+    if s.status == ScheduleStatus::Deleted {
+        return Ok(s);
+    }
+    let avg = average(&repo::entered_amounts(tx.conn(), id, s.fields.account, n)?)?;
+    let avg = if s.fields.direction.allows(avg) {
+        avg
+    } else {
+        Money::ZERO
+    };
+    if s.fields.amount()? == avg {
+        return Ok(s);
+    }
+    repo::set_amount(tx, id, avg)
+}
+
+/// A transaction was edited or voided: if a schedule entered it, its
+/// average follows (REC-065).
+pub(crate) fn txn_changed(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
+    if let Some(occ) = repo::occurrence_for_txn(tx.conn(), txn)? {
+        refresh_average(tx, occ.schedule)?;
+    }
+    Ok(())
 }
 
 /// Delete a schedule (REC-100). Transactions it entered stay.
@@ -356,6 +435,7 @@ pub fn from_entry(entry: &Entry) -> Result<ScheduleFields> {
         end: End::Never,
         remind_days: 3,
         mode: EntryMode::Remind,
+        average_of: None,
     })
 }
 
@@ -535,6 +615,7 @@ pub fn enter(
         },
     )?;
     advance(tx, &s, due)?;
+    refresh_average(tx, id)?;
     Ok(Entered {
         schedule: id,
         nominal: due,
@@ -552,10 +633,18 @@ pub fn enter(
 /// become due again (occurrences are handled in order), one a series edit
 /// left out of the series is no longer one of its dates, an auto-entry
 /// one would only be entered again, and a deleted schedule has no Due.
+/// The schedule's average leaves the payment out (REC-065).
 pub(crate) fn release_txn(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
     let Some(occ) = repo::occurrence_for_txn(tx.conn(), txn)? else {
         return Ok(());
     };
+    let schedule = occ.schedule;
+    release(tx, occ)?;
+    refresh_average(tx, schedule)?;
+    Ok(())
+}
+
+fn release(tx: &Tx<'_>, occ: Occurrence) -> Result<()> {
     let s = repo::get(tx.conn(), occ.schedule)?;
     let latest = repo::last_acted(tx.conn(), s.id)? == Some(occ.due_date);
     let in_series = series_from(&s.fields, occ.due_date).next() == Some(occ.due_date);

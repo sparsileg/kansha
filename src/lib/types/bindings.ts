@@ -2676,6 +2676,13 @@ export type ScheduleFields = {
 	/**  Days before the due date it shows in the due list. */
 	remind_days: number,
 	mode: EntryMode,
+	/**
+	 *  The amount is the average of this many of the schedule's latest
+	 *  entered payments (REC-065), kept up to date as they are entered,
+	 *  edited, or deleted; `None` keeps the amount as typed. Estimated,
+	 *  remind-mode, one-line schedules only.
+	 */
+	average_of?: number | null,
 };
 
 /**  Row ID of a schedule. */

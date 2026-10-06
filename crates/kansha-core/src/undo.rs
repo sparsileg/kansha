@@ -127,6 +127,10 @@ pub fn apply(tx: &Tx<'_>, u: &Undo, confirmed: bool) -> Result<()> {
         .then(|| audit_json(conn, u.txn, investment))
         .transpose()?;
     rows::restore(tx, u.txn, target.as_ref())?;
+    // A schedule's average follows its payment back (REC-065).
+    if target.is_some() {
+        crate::schedule::txn_changed(tx, u.txn)?;
+    }
     let then = target
         .as_ref()
         .map(|_| audit_json(conn, u.txn, investment))

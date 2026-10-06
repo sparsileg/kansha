@@ -538,6 +538,7 @@ fn overdue_reminders() {
         end: End::Never,
         remind_days: 3,
         mode: EntryMode::Remind,
+        average_of: None,
     };
     book.write(|tx| schedule::create(tx, &f)).unwrap();
     let a = run(book.conn(), today);

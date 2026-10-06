@@ -65,7 +65,10 @@ export interface ScheduleDraft {
   account: string;
   payee: string;
   memo: string;
-  estimated: boolean;
+  /** Fixed, the average of past payments (REC-065), or a typed
+   * estimate (only on schedules from before 0.7.43 that cannot average:
+   * splits and auto-entry). */
+  amountKind: AmountKind;
   direction: Direction;
   lines: LineDraft[];
   preset: Preset;
@@ -81,7 +84,18 @@ export interface ScheduleDraft {
   count: string;
   remindDays: string;
   mode: EntryMode;
+  /** With `amountKind` "average": how many payments. */
+  averageOf: string;
 }
+
+export type AmountKind = "fixed" | "average" | "estimate";
+
+/** Payments averaged by default (REC-065). */
+export const AVERAGE_DEFAULT = 3;
+
+/** Whether the draft can average its amount over past payments: one
+ * line, entered by the user. */
+export const canAverage = (d: ScheduleDraft): boolean => d.lines.length === 1 && d.mode === "remind";
 
 /** `accounts` with those most used by existing schedules first; ties
  * keep their order. */
@@ -110,7 +124,7 @@ export function newScheduleDraft(
     account: account === null ? "" : String(account),
     payee: "",
     memo: "",
-    estimated: false,
+    amountKind: "fixed",
     direction: "payment",
     lines: [emptyLine()],
     preset: "monthly",
@@ -126,6 +140,7 @@ export function newScheduleDraft(
     count: "12",
     remindDays: "3",
     mode: "remind",
+    averageOf: String(AVERAGE_DEFAULT),
   };
 }
 
@@ -160,7 +175,7 @@ export function draftFromFields(f: ScheduleFields, payeeName = ""): ScheduleDraf
     payee: payeeName,
     // One line has no memo of its own; the form shows the transaction memo.
     memo: f.memo || (f.lines.length === 1 ? f.lines[0].memo : ""),
-    estimated: f.amount_type === "estimated",
+    amountKind: f.average_of != null ? "average" : f.amount_type === "estimated" ? "estimate" : "fixed",
     direction,
     lines: f.lines.map((l) => ({
       target: targetValue(l.target),
@@ -181,6 +196,7 @@ export function draftFromFields(f: ScheduleFields, payeeName = ""): ScheduleDraf
     count: f.end.kind === "after_count" ? String(f.end.count) : "12",
     remindDays: String(f.remind_days),
     mode: f.mode,
+    averageOf: String(f.average_of ?? AVERAGE_DEFAULT),
   };
 }
 
@@ -204,12 +220,22 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
   if (start === null) return fail("Enter a valid start date.");
 
   if (d.lines.length === 0) return fail("Add a category or transfer account.");
+  const averaging = d.amountKind === "average";
+  let averageOf: number | null = null;
+  if (averaging) {
+    if (d.lines.length !== 1) return fail("An average needs a single category or transfer; remove the split.");
+    if (d.mode !== "remind") return fail("An average is confirmed each time it is entered; choose Remind me.");
+    averageOf = whole(d.averageOf, 1, 99);
+    if (averageOf === null) return fail("Enter how many payments to average (1 to 99).");
+  }
   const lines = [];
   for (const [i, l] of d.lines.entries()) {
     const target = parseTargetValue(l.target);
     if (target === null) return fail(`Line ${i + 1}: choose a category or account.`);
-    const amount = signedLine(l.amount, d.direction === "payment");
-    if (amount === null || l.amount.trim() === "")
+    // An averaged amount is set from the payments; 0.00 before the first.
+    const text = averaging && l.amount.trim() === "" ? "0" : l.amount;
+    const amount = signedLine(text, d.direction === "payment");
+    if (amount === null || text.trim() === "")
       return fail(`Line ${i + 1}: enter an amount.`);
     lines.push({
       target,
@@ -288,7 +314,7 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
       payee: null,
       memo: d.memo !== "" || d.lines.length !== 1 ? d.memo : d.lines[0].memo,
       direction: d.direction,
-      amount_type: d.estimated ? "estimated" : "fixed",
+      amount_type: d.amountKind === "fixed" ? "fixed" : "estimated",
       lines,
       recurrence: {
         frequency,
@@ -303,6 +329,7 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
       end,
       remind_days: remind,
       mode: d.mode,
+      average_of: averageOf,
     },
   };
 }
