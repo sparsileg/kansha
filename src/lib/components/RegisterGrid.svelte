@@ -8,6 +8,7 @@
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
   import { registerState } from "../state/register.svelte";
+  import { viewState } from "../state/view.svelte";
   import type { RegisterRow, RegisterSort } from "../types/bindings";
   import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
   import EntryEditor from "./EntryEditor.svelte";
@@ -205,6 +206,7 @@
 
   async function otherSide(r: RegisterRow) {
     if (r.counterpart.kind !== "transfer") return;
+    viewState.navigate("account", { account: r.counterpart.id });
     await registerState.goToTransaction(r.counterpart.id, r.txn_id);
   }
 

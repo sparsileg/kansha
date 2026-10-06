@@ -35,6 +35,7 @@ const TABLES: &[&str] = &[
     "schema_version",
     "security",
     "setting",
+    "spending_card",
     "tag",
     "tax_line",
     "txn",
@@ -984,5 +985,86 @@ fn migration_0015_names_the_first_insight_status() {
                  VALUES ('STATUS', 2, '[]', '2026-10-01T00:00:00Z');"
         ),
         ["Dashboard", "STATUS"]
+    );
+}
+
+#[test]
+fn migration_0016_makes_auto_expenses_a_spending_card() {
+    let clock = clock();
+    // (cards on the first insight, the spending cards as
+    // "name|accounts|categories") after the setup SQL.
+    let after = |sql: &str| -> (String, Vec<String>) {
+        let mut db = Db::open_in_memory_at(&clock, 15).unwrap();
+        db.conn().execute_batch(sql).unwrap();
+        assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+        let c = db.conn();
+        assert_eq!(
+            count(
+                &db,
+                "setting WHERE key IN ('auto_accounts', 'auto_categories')"
+            ),
+            0
+        );
+        let cards = c
+            .query_row("SELECT cards FROM insight WHERE position = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let mut st = c
+            .prepare(
+                "SELECT id || ' ' || name || '|' || coalesce(accounts, 'null') || '|' || categories
+                 FROM spending_card ORDER BY id",
+            )
+            .unwrap();
+        let rows = st
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        (cards, rows)
+    };
+    let status = r#"["net_worth","this_month","net_worth_trend","upcoming","attention"]"#;
+
+    // Never used: no card.
+    assert_eq!(after(""), (status.into(), vec![]));
+    // Customized, not shown: the card keeps the choices.
+    assert_eq!(
+        after(
+            "INSERT INTO setting (key, value) VALUES ('auto_accounts', '[3,4]');
+             INSERT INTO setting (key, value) VALUES ('auto_categories', '[7]');"
+        ),
+        (status.into(), vec!["1 Auto Expenses|[3,4]|[7]".into()])
+    );
+    // Shown, never customized: in its place on each insight.
+    assert_eq!(
+        after(
+            r#"UPDATE insight SET cards = '["net_worth","auto_expenses","attention"]';
+               INSERT INTO insight (name, position, cards, created_at)
+                   VALUES ('Car', 2, '["auto_expenses"]', '2026-10-01T00:00:00Z');"#
+        ),
+        (
+            r#"["net_worth","spending:1","attention"]"#.into(),
+            vec!["1 Auto Expenses|null|[]".into()]
+        )
+    );
+
+    // The audit log takes spending cards and is still append-only.
+    let mut db = Db::open_in_memory_at(&clock, 15).unwrap();
+    db.migrate(&clock).unwrap();
+    let c = db.conn();
+    c.execute(
+        "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+             VALUES ('2026-01-01T00:00:00Z', 'spending_card', 1, 'create', '{}', 'ui')",
+        [],
+    )
+    .unwrap();
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+    assert!(
+        c.execute(
+            "INSERT INTO spending_card (name, categories, created_at)
+                 VALUES ('X', '{}', '2026-01-01T00:00:00Z')",
+            []
+        )
+        .is_err()
     );
 }

@@ -32,7 +32,8 @@ pub(crate) use service::release_txn;
 pub use service::{
     AutoEnterFailure, AutoEnterReport, EnterEdits, Entered, auto_enter_due, create, delete,
     dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between, prefill_entry,
-    projected_balances, register_between, review_list, set_override, skip, update,
+    projected_balances, register_between, review_list, scheduled_by_category, set_override, skip,
+    update,
 };
 
 use serde::{Deserialize, Serialize};

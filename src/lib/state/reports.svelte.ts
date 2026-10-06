@@ -180,6 +180,13 @@ export class ReportInstance {
   }
 }
 
+/** A closed report, for Back to reopen it (UI-025). */
+interface Kept {
+  settings: ReportSettings;
+  saved: number | null;
+  fromMenu: boolean;
+}
+
 class ReportsState {
   #open = new Map<number, ReportInstance>();
   /** The Manage Saved Reports dialog is open. */
@@ -193,6 +200,18 @@ class ReportsState {
     windowState.register(REPORT_WINDOW, {
       beforeClose: (id) => this.#beforeClose(id),
       closed: (id) => this.#open.delete(id),
+      keep: (id) => {
+        const inst = this.#open.get(id);
+        return inst && { settings: structuredClone($state.snapshot(inst.settings)), saved: inst.saved?.id ?? null, fromMenu: inst.fromMenu };
+      },
+      reopen: (kept) => {
+        const k = kept as Kept;
+        // A saved report deleted since is reopened unnamed.
+        const saved = k.saved === null ? null : (this.savedList.find((r) => r.id === k.saved) ?? null);
+        const inst = this.#create(k.settings, saved);
+        inst.fromMenu = k.fromMenu;
+        return inst.id;
+      },
     });
   }
 
@@ -219,11 +238,17 @@ class ReportsState {
 
   /** A report with given settings (e.g. from drilling down). */
   async openWith(settings: ReportSettings, saved: SavedReport | null = null): Promise<ReportInstance> {
+    const inst = this.#create(settings, saved);
+    windowState.show(inst.id);
+    return inst;
+  }
+
+  /** A report window, not yet shown. */
+  #create(settings: ReportSettings, saved: SavedReport | null): ReportInstance {
     let inst: ReportInstance | undefined;
     const id = windowState.add(REPORT_WINDOW, () => inst?.heading ?? "Report");
     inst = new ReportInstance(id, settings, saved);
     this.#open.set(id, inst);
-    windowState.show(id);
     return inst;
   }
 

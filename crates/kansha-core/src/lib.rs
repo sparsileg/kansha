@@ -28,6 +28,7 @@ pub mod securities;
 pub mod security;
 mod serde_impls;
 pub mod settings;
+pub mod spending;
 pub mod testkit;
 mod text_enum;
 pub mod undo;

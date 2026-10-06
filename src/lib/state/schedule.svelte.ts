@@ -75,7 +75,7 @@ class ScheduleState {
     }
     const entry = await call(commands.schedulePrefill(v.schedule, v.nominal));
     dialogState.due = false;
-    viewState.navigate("account");
+    viewState.navigate("account", { account: entry.account });
     await registerState.open(entry.account);
     registerState.prefill = { entry, schedule: v.schedule, due: v.nominal };
   }

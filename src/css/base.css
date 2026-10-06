@@ -32,6 +32,7 @@
     --fs-total:    0.92rem;   /* register totals */
     --fs-heading:  1.15rem;   /* dialog and panel headings */
     --fs-title:    1.6rem;    /* account and view titles (bold) */
+    --fs-arrow:    1.3rem;    /* scroll arrows, about a capital letter high */
 
     /* Button corners: just enough to take the square edge off; rem so
        they scale with the text. */

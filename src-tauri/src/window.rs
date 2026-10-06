@@ -1,84 +1,147 @@
-//! The main window's size and place. The window opens small for the
-//! start screen (`tauri.conf.json`); the working size and place from
-//! last time come back once the book is open (`window_restore`).
+//! The main window's size (SET-070). It has two: the start page's and
+//! the working window's (a book open, setup, restore), each kept for
+//! every screen resolution it has been used on, in logical pixels. A
+//! size is saved half a second after the user stops resizing, and on
+//! close. The window's place is not kept: Wayland neither tells nor
+//! lets an app set it, so the window opens centred where it can.
 
-use kansha_core::local_config::WindowGeometry;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use kansha_core::local_config::{WindowMode, screen_key};
+use tauri::{LogicalSize, Manager};
 
 use crate::state::AppState;
 
-/// Narrowest working window, in logical pixels; matches `FULL.minWidth`
-/// in `src/lib/shell/windowsize.ts`. Anything narrower is the start
-/// screen's compact window.
-const WORKING_MIN_WIDTH: f64 = 900.0;
+/// How long resizing must stop before the size is saved.
+const SETTLE: Duration = Duration::from_millis(500);
 
-/// Whether a window this wide (physical pixels at `scale`) is the
-/// working window rather than the compact start screen.
-fn is_working_size(width: u32, scale: f64) -> bool {
-    f64::from(width) / scale >= WORKING_MIN_WIDTH
+/// What the main window shows, and a pending save.
+#[derive(Default)]
+pub struct WindowTracker {
+    /// `None` until the start page or a book first sets it; resizes
+    /// before then are not saved.
+    mode: Mutex<Option<WindowMode>>,
+    /// When a pending save is due; `None` when none is.
+    due: Mutex<Option<Instant>>,
 }
 
-/// Remember the main window's place for next time. The compact start
-/// screen is not remembered: it would replace the working size.
-pub fn save_geometry(window: &tauri::Window, state: &AppState) {
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    match m.lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+/// The window's screen: its key and free area (logical pixels).
+fn screen(window: &tauri::Window) -> Option<(String, (u32, u32))> {
+    let m = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())?;
+    let scale = m.scale_factor();
+    let size = m.size().to_logical::<u32>(scale);
+    let area = m.work_area().size.to_logical::<u32>(scale);
+    Some((
+        screen_key(size.width, size.height),
+        (area.width, area.height),
+    ))
+}
+
+/// Save the window's size now for what it shows. Holds the mode while
+/// saving, so a switch cannot land between reading the size and
+/// writing it.
+fn save_now(window: &tauri::Window, state: &AppState) {
+    let mode = lock(&state.window.mode);
+    let Some(mode) = *mode else { return };
+    let (Some((key, _)), Ok(size), Ok(scale)) =
+        (screen(window), window.inner_size(), window.scale_factor())
+    else {
+        return;
+    };
+    let size = size.to_logical::<u32>(scale);
     let maximized = window.is_maximized().unwrap_or(false);
     let mut cfg = state.load_config();
-    if maximized {
-        // Keep the unmaximized size and place from before.
-        if let Some(g) = cfg.window.as_mut() {
-            g.maximized = true;
-        }
-    } else {
-        let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) else {
-            return;
-        };
-        let scale = window.scale_factor().unwrap_or(1.0);
-        if !is_working_size(size.width, scale) {
-            return;
-        }
-        cfg.window = Some(WindowGeometry {
-            x: pos.x,
-            y: pos.y,
-            width: size.width,
-            height: size.height,
-            maximized: false,
-        });
-    }
+    cfg.note_window(&key, mode, size.width, size.height, maximized);
     if let Err(e) = state.save_config(&cfg) {
-        eprintln!("could not save the window position: {}", e.message);
+        eprintln!("could not save the window size: {}", e.message);
     }
 }
 
-/// Put the main window where it was last closed. False when nothing
-/// was saved (the caller picks a default size).
-pub fn restore_geometry(window: &tauri::Window, state: &AppState) -> bool {
-    let Some(g) = state.load_config().window else {
-        return false;
-    };
-    let _ = window.set_size(tauri::PhysicalSize::new(g.width, g.height));
-    let _ = window.set_position(tauri::PhysicalPosition::new(g.x, g.y));
-    if g.maximized {
+/// Drop a pending save.
+fn cancel(state: &AppState) {
+    *lock(&state.window.due) = None;
+}
+
+/// The window was resized: save its size once resizing stops.
+pub fn resized(window: &tauri::Window, state: &AppState) {
+    if lock(&state.window.mode).is_none() {
+        return;
+    }
+    let mut due = lock(&state.window.due);
+    let waiting = due.is_some();
+    *due = Some(Instant::now() + SETTLE);
+    if waiting {
+        return;
+    }
+    drop(due);
+    let window = window.clone();
+    std::thread::spawn(move || {
+        loop {
+            let state = window.state::<AppState>();
+            let wait = {
+                let mut due = lock(&state.window.due);
+                let Some(at) = *due else { return };
+                let now = Instant::now();
+                if now >= at {
+                    *due = None;
+                    None
+                } else {
+                    Some(at - now)
+                }
+            };
+            match wait {
+                Some(d) => std::thread::sleep(d),
+                None => return save_now(&window, &state),
+            }
+        }
+    });
+}
+
+/// The window is closing: save its size now.
+pub fn closing(window: &tauri::Window, state: &AppState) {
+    cancel(state);
+    save_now(window, state);
+}
+
+/// Show the start page or the working window: keep the size of what
+/// was showing, then take the size saved for `mode` on this screen
+/// (else the default), fitted to the screen. Nothing happens when
+/// `mode` is showing already.
+pub fn set_mode(window: &tauri::Window, state: &AppState, mode: WindowMode) {
+    {
+        let shown = *lock(&state.window.mode);
+        if shown == Some(mode) {
+            return;
+        }
+        cancel(state);
+        save_now(window, state);
+        *lock(&state.window.mode) = Some(mode);
+    }
+    let (key, area) = screen(window).unzip();
+    let size = key
+        .and_then(|k| state.load_config().window_size(&k, mode))
+        .unwrap_or(mode.default_size())
+        .fit(mode, area);
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    }
+    let (min_w, min_h) = mode.min_size();
+    let _ = window.set_min_size(Some(LogicalSize::new(min_w, min_h)));
+    let _ = window.set_size(LogicalSize::new(size.width, size.height));
+    let _ = window.center();
+    if size.maximized {
         let _ = window.maximize();
-    }
-    true
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compact_start_screen_is_not_the_working_size() {
-        assert!(!is_working_size(520, 1.0));
-        assert!(is_working_size(900, 1.0));
-        assert!(is_working_size(1280, 1.0));
-    }
-
-    #[test]
-    fn working_size_is_judged_in_logical_pixels() {
-        // 1040 physical at 2× is a 520-wide compact window.
-        assert!(!is_working_size(1040, 2.0));
-        assert!(is_working_size(1800, 2.0));
-        assert!(!is_working_size(1349, 1.5));
-        assert!(is_working_size(1350, 1.5));
     }
 }

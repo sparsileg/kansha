@@ -86,6 +86,7 @@ id_sql!(
     crate::reports::SavedReportId,
     crate::reports::ReportFolderId,
     crate::insights::InsightId,
+    crate::spending::SpendingCardId,
     crate::reconcile::ReconciliationId,
     crate::schedule::ScheduleId,
     crate::securities::SecurityId,

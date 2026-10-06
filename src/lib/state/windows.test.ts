@@ -33,13 +33,20 @@ describe("windows", () => {
     expect(viewState.current).toBe("search");
   });
 
-  it("closing drops the window from history", async () => {
+  it("closing keeps the window in history; revive reopens it under a new number", async () => {
+    windowState.register("kept", { keep: () => "memo", reopen: (k) => windowState.add("kept", () => `B ${k}`) });
     viewState.navigate("search");
-    const a = windowState.add("test", () => "A");
+    const a = windowState.add("kept", () => "A");
     windowState.show(a);
     expect(await windowState.close(a)).toBe(true);
     expect(viewState.current).toBe("search");
-    expect(viewState.entries.map((e) => e.view)).toEqual(["insights", "search"]);
+    expect(viewState.entries.map((e) => e.view)).toEqual(["insights", "search", "window", "search"]);
+    expect(windowState.nameOf(a)).toBe("A");
+    const b = windowState.revive(a)!;
+    expect(b).not.toBe(a);
+    expect(windowState.get(b)?.label()).toBe("B memo");
+    expect(viewState.entries[2].params.window).toBe(b);
+    expect(windowState.canRevive(a)).toBe(false);
   });
 
   it("a kind's hook can keep a window open", async () => {

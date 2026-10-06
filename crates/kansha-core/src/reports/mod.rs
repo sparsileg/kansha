@@ -28,9 +28,9 @@ mod tax;
 mod tree;
 
 pub use cards::{
-    Attention, AttentionCheck, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding, Notice,
-    Session, account_bar_net_worth, age, attention, auto_expenses, card_data, net_worth,
-    net_worth_trend,
+    Attention, AttentionCheck, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding,
+    GroupBalances, Notice, Session, account_bar_net_worth, age, attention, card_data, net_worth,
+    net_worth_trend, spending_card,
 };
 pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;

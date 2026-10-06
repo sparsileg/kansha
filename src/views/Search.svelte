@@ -38,7 +38,7 @@
   /** Show the match in its account: the register opens scrolled to it,
    * selected (as the other side of a transfer does). */
   async function jump(h: SearchHit) {
-    viewState.navigate("account");
+    viewState.navigate("account", { account: h.account });
     await registerState.goToTransaction(h.account, h.txn_id);
   }
 </script>

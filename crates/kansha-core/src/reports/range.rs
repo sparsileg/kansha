@@ -31,7 +31,7 @@ fn sub_months(d: NaiveDate, n: u32) -> Result<NaiveDate> {
 }
 
 /// Last day of the month `months` after `d`'s month (0 = its own).
-fn month_end(d: Date, months: u32) -> Result<Date> {
+pub(super) fn month_end(d: Date, months: u32) -> Result<Date> {
     let first = ymd(d.year(), d.month(), 1)?.naive();
     let next = add_months(first, months + 1)?;
     Ok(Date::from_naive(

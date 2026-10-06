@@ -3,6 +3,8 @@
 // Reconcile). A window fills the view area; showing one is a
 // history entry ("window" view), so going anywhere else leaves it in the
 // dock, and Back returns to it. The dock lists every open window by name.
+// A closed window stays in the history: Back reopens it as it was when
+// closed (UI-025).
 
 import { viewState } from "./view.svelte";
 
@@ -20,11 +22,23 @@ export interface WinHooks {
   beforeClose?: (id: number) => Promise<boolean>;
   /** The window is gone: drop its state. */
   closed?: (id: number) => void;
+  /** What reopening it needs, taken as it closes (a report's settings). */
+  keep?: (id: number) => unknown;
+  /** A new window, not shown, from what `keep` took. Without it the
+   * kind reopens as a plain window of that kind (a panel). */
+  reopen?: (kept: unknown) => number;
+}
+
+interface Closed {
+  kind: string;
+  label: string;
+  kept: unknown;
 }
 
 class WindowState {
   wins = $state<Win[]>([]);
   #hooks = new Map<string, WinHooks>();
+  #closed = new Map<number, Closed>();
   #next = 1;
 
   register(kind: string, hooks: WinHooks): void {
@@ -79,10 +93,37 @@ class WindowState {
     const hooks = this.#hooks.get(win.kind);
     if (hooks?.beforeClose && !(await hooks.beforeClose(id))) return false;
     if (this.shown === id) this.minimize();
-    viewState.forget((e) => e.view === "window" && e.params.window === id);
+    this.#closed.set(id, { kind: win.kind, label: win.label(), kept: hooks?.keep?.(id) });
     this.wins = this.wins.filter((w) => w.id !== id);
     hooks?.closed?.(id);
     return true;
+  }
+
+  /** The window number `id` was: open, a closed one reopened (its
+   * history entries take the new number), or null if it cannot be. A
+   * panel already open again is that one. */
+  revive(id: number): number | null {
+    if (this.get(id)) return id;
+    const c = this.#closed.get(id);
+    if (!c) return null;
+    const hooks = this.#hooks.get(c.kind);
+    const label = c.label;
+    const fresh = hooks?.reopen
+      ? hooks.reopen(c.kept)
+      : (this.wins.find((w) => w.kind === c.kind)?.id ?? this.add(c.kind, () => label));
+    this.#closed.delete(id);
+    viewState.renumber(id, fresh);
+    return fresh;
+  }
+
+  /** The window is open, or closed and can be reopened. */
+  canRevive(id: number): boolean {
+    return this.get(id) !== undefined || this.#closed.has(id);
+  }
+
+  /** A window's name, open or closed (Back's tooltip). */
+  nameOf(id: number): string | null {
+    return this.labels().get(id) ?? this.#closed.get(id)?.label ?? null;
   }
 
   /** Before quitting (File > Exit): ask each window's kind whether it may
@@ -114,6 +155,7 @@ class WindowState {
   reset(): void {
     for (const w of this.wins) this.#hooks.get(w.kind)?.closed?.(w.id);
     this.wins = [];
+    this.#closed.clear();
   }
 }
 

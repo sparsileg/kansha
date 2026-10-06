@@ -30,6 +30,7 @@ text_enum! {
         SavedReport = "saved_report",
         ReportFolder = "report_folder",
         Insight = "insight",
+        SpendingCard = "spending_card",
     }
 }
 

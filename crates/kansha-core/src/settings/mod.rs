@@ -13,8 +13,7 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-use crate::accounts::{AccountId, LotMethod};
-use crate::categories::CategoryId;
+use crate::accounts::LotMethod;
 use crate::date::Timestamp;
 use crate::error::{Error, Result};
 use crate::persistence::{Tx, settings as repo};
@@ -80,13 +79,10 @@ pub struct Settings {
     pub upcoming_days: i64,
     /// Years the Net worth over time card shows (CARD-050).
     pub trend_years: i64,
+    /// Rows a spending card shows before the rest scroll (CARD-060).
+    pub spending_rows: i64,
     /// That card's money axis fits the data instead of reaching zero.
     pub trend_fitted: bool,
-    /// Accounts the Auto Expenses card counts (CARD-060); `None` = every
-    /// open account (never customized).
-    pub auto_accounts: Option<Vec<AccountId>>,
-    /// Categories the Auto Expenses card lists, each on its own.
-    pub auto_categories: Vec<CategoryId>,
     /// Backup folder (SET-050, BAK-030); `None` = the Downloads folder.
     pub backup_folder: Option<String>,
     /// Retention (BAK-040): newest automatic backups kept …
@@ -139,9 +135,8 @@ impl Default for Settings {
             price_download: false,
             upcoming_days: 14,
             trend_years: 1,
+            spending_rows: 10,
             trend_fitted: false,
-            auto_accounts: None,
-            auto_categories: Vec::new(),
             backup_folder: None,
             backup_keep_last: 10,
             backup_keep_months: 12,
@@ -163,6 +158,7 @@ impl Default for Settings {
 pub const STALE_PRICE_DAYS: std::ops::RangeInclusive<i64> = 1..=365;
 pub const UPCOMING_DAYS: std::ops::RangeInclusive<i64> = 1..=366;
 pub const TREND_YEARS: std::ops::RangeInclusive<i64> = 1..=5;
+pub const SPENDING_ROWS: std::ops::RangeInclusive<i64> = 3..=50;
 pub const KEEP_LAST: std::ops::RangeInclusive<i64> = 1..=1000;
 pub const KEEP_MONTHS: std::ops::RangeInclusive<i64> = 0..=120;
 pub const TIMEOUT_MINUTES: std::ops::RangeInclusive<i64> = 0..=1440;
@@ -187,14 +183,6 @@ fn get_in(
 }
 
 /// A JSON list; `None` when unset or unreadable.
-fn get_ids<T: serde::de::DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<Vec<T>>> {
-    Ok(get_text(conn, key)?.and_then(|v| serde_json::from_str(&v).ok()))
-}
-
-fn json<T: Serialize>(v: &T) -> Result<String> {
-    serde_json::to_string(v).map_err(|e| Error::Invalid(e.to_string()))
-}
-
 fn get_text(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(repo::get(conn, key)?.filter(|v| !v.is_empty()))
 }
@@ -225,9 +213,8 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         price_download: get(conn, "price_download", d.price_download)?,
         upcoming_days: get_in(conn, "upcoming_days", UPCOMING_DAYS, d.upcoming_days)?,
         trend_years: get_in(conn, "trend_years", TREND_YEARS, d.trend_years)?,
+        spending_rows: get_in(conn, "spending_rows", SPENDING_ROWS, d.spending_rows)?,
         trend_fitted: get(conn, "trend_fitted", d.trend_fitted)?,
-        auto_accounts: get_ids(conn, "auto_accounts")?,
-        auto_categories: get_ids(conn, "auto_categories")?.unwrap_or_default(),
         backup_folder: get_text(conn, "backup_folder")?,
         backup_keep_last: get_in(conn, "backup_keep_last", KEEP_LAST, d.backup_keep_last)?,
         backup_keep_months: get_in(
@@ -284,6 +271,11 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     check_range("Stale price days", s.stale_price_days, STALE_PRICE_DAYS)?;
     check_range("Upcoming days", s.upcoming_days, UPCOMING_DAYS)?;
     check_range("Net worth years", s.trend_years, TREND_YEARS)?;
+    check_range(
+        "Rows shown on spending cards",
+        s.spending_rows,
+        SPENDING_ROWS,
+    )?;
     check_range("Backups to keep", s.backup_keep_last, KEEP_LAST)?;
     check_range("Months to keep", s.backup_keep_months, KEEP_MONTHS)?;
     check_range(
@@ -324,9 +316,7 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     repo::set(tx, "price_download", &s.price_download.to_string())?;
     repo::set(tx, "upcoming_days", &s.upcoming_days.to_string())?;
     repo::set(tx, "trend_years", &s.trend_years.to_string())?;
-    let accounts = s.auto_accounts.as_ref().map(json).transpose()?;
-    put_text(tx, "auto_accounts", accounts.as_deref())?;
-    repo::set(tx, "auto_categories", &json(&s.auto_categories)?)?;
+    repo::set(tx, "spending_rows", &s.spending_rows.to_string())?;
     put_text(tx, "backup_folder", s.backup_folder.as_deref())?;
     repo::set(tx, "backup_keep_last", &s.backup_keep_last.to_string())?;
     repo::set(tx, "backup_keep_months", &s.backup_keep_months.to_string())?;

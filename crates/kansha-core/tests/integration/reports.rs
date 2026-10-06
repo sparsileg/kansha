@@ -1332,11 +1332,11 @@ fn net_worth_trend_settings_are_kept_in_the_book() {
 fn cards_sum_net_worth_month_and_due_items() {
     let fx = fixture();
     let d = reports::card_data(fx.book.conn(), date("2026-06-30"), 14).unwrap();
-    assert_eq!(d.cash, m("7640.00"));
-    assert_eq!(d.investments, m("55700.00"));
-    assert_eq!(d.other_assets, Money::ZERO);
-    assert_eq!(d.liabilities, m("50.00"));
     assert_eq!(d.net_worth, m("63290.00"));
+    // The groups add up to net worth, today's column last.
+    let today = d.groups.iter().fold(Money::ZERO, |a, g| a + g.balances[2]);
+    assert_eq!(today, d.net_worth);
+    assert_eq!(d.net_worths[2], d.net_worth);
     // June: nothing but a price.
     assert_eq!(d.income, Money::ZERO);
     assert_eq!(d.expenses, Money::ZERO);
@@ -1371,14 +1371,77 @@ fn cards_sum_this_months_income_and_spending_and_other_assets() {
     assert_eq!(d.income, m("3000.00"));
     assert_eq!(d.expenses, m("100.00"));
     assert_eq!(d.net, m("2900.00"));
-    assert_eq!(d.other_assets, m("300000.00"));
+    let assets = d.groups.iter().find(|g| g.label == "Assets").unwrap();
+    assert_eq!(assets.balances[2], m("300000.00"));
     assert_eq!(
         reports::net_worth(fx.book.conn(), date("2026-01-31")).unwrap(),
         d.net_worth
     );
+}
+
+/// CARD-010: a row per account group, in the account list's order, with
+/// its balance at the end of each of the last two years and today; owed
+/// amounts negative. An account counts in the group it is in now; a
+/// group with no account is left out.
+#[test]
+fn net_worth_card_lists_each_group_for_three_years() {
+    use kansha_core::accounts::AccountGroup;
+    let mut b = Book::new(date("2026-06-30")).unwrap();
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let visa = b.account("Visa", AccountType::CreditCard).unwrap();
+    let house = b.account("House", AccountType::OtherAsset).unwrap();
+    let loan = b.account("Loan", AccountType::Loan).unwrap();
+    let mut hsa_like = AccountFields::new("Rainy day", AccountType::Savings);
+    hsa_like.group = AccountGroup::Other;
+    let rainy = b.account_with(&hsa_like).unwrap();
+    let food = b.category("Food", CategoryKind::Expense).unwrap();
+
+    b.opening_balance(checking, date("2024-06-01"), m("1000.00"))
+        .unwrap();
+    b.opening_balance(checking, date("2025-03-01"), m("500.00"))
+        .unwrap();
+    b.opening_balance(checking, date("2026-02-01"), m("250.00"))
+        .unwrap();
+    // Dated December 31: in that year's column.
+    b.opening_balance(rainy, date("2024-12-31"), m("20.00"))
+        .unwrap();
+    for (d, amt) in [("2025-05-01", "-40.00"), ("2026-01-02", "-10.00")] {
+        b.entry(visa, date(d))
+            .amount(m(amt))
+            .category(food)
+            .save()
+            .unwrap();
+    }
+    b.opening_balance(house, date("2026-01-10"), m("300000.00"))
+        .unwrap();
+    b.opening_balance(loan, date("2025-01-01"), m("-2000.00"))
+        .unwrap();
+
+    let d = reports::card_data(b.conn(), date("2026-06-30"), 14).unwrap();
+    assert_eq!(d.years, [2024, 2025, 2026]);
+    let rows: Vec<String> = d
+        .groups
+        .iter()
+        .map(|g| {
+            let cols: Vec<String> = g.balances.iter().map(|v| v.to_string()).collect();
+            format!("{} {}", g.label, cols.join(" "))
+        })
+        .collect();
     assert_eq!(
-        d.net_worth,
-        d.cash + d.investments + d.other_assets - d.liabilities
+        rows,
+        [
+            "Banking 1000.00 1500.00 1750.00",
+            "Credit 0.00 -40.00 -50.00",
+            "Assets 0.00 0.00 300000.00",
+            "Liabilities 0.00 -2000.00 -2000.00",
+            "Other 20.00 20.00 20.00",
+        ]
+    );
+    assert_eq!(d.net_worths, [m("1020.00"), m("-520.00"), m("299720.00")]);
+    assert_eq!(d.net_worth, m("299720.00"));
+    assert_eq!(
+        reports::net_worth(b.conn(), date("2026-06-30")).unwrap(),
+        d.net_worth
     );
 }
 

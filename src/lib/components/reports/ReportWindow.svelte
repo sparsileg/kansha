@@ -215,7 +215,7 @@
     const base = $state.snapshot(inst.settings);
     switch (d.kind) {
       case "txn":
-        viewState.navigate("account");
+        viewState.navigate("account", { account: d.account });
         await registerState.goToTransaction(d.account, d.txn);
         break;
       case "account":

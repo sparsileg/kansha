@@ -2,8 +2,8 @@
 // SvelteKit router: this is the "simple view store" DR-02 calls for.
 //
 // The views visited form a history stack (each entry a view plus its
-// parameters), so Back and Forward can be added to the navigation bar
-// without reworking the callers (UI-conventions).
+// parameters), walked by the navigation bar's Back and Forward arrows
+// (UI-025; `shell/history.ts` reopens what an entry needs).
 
 export type ViewId =
   | "insights"
@@ -18,7 +18,8 @@ export type ManageTab = "payees" | "categories" | "tags" | "securities";
 export interface ViewParams {
   /** The Manage view's tab. */
   tab?: ManageTab;
-  /** The Search view's text, and the one account it is limited to. */
+  /** The Search view's text, and the one account it is limited to;
+   * the "account" view: whose register. */
   q?: string;
   account?: number;
   /** The "window" view: which window (windows.svelte.ts). */
@@ -28,7 +29,7 @@ export interface ViewParams {
   insight?: number;
 }
 
-interface Entry {
+export interface Entry {
   view: ViewId;
   params: ViewParams;
 }
@@ -76,7 +77,19 @@ class ViewState {
     return { view: "insights", params: {} };
   }
 
-  /** Drop the entries `drop` matches (a closed window's), and repeats
+  /** The entry `delta` steps away (-1 Back, +1 Forward), if any. */
+  peek(delta: number): Entry | null {
+    return this.entries[this.index + delta] ?? null;
+  }
+
+  /** A closed window came back with a new number: its entries follow. */
+  renumber(from: number, to: number) {
+    this.entries = this.entries.map((e) =>
+      e.view === "window" && e.params.window === from ? { ...e, params: { ...e.params, window: to } } : e,
+    );
+  }
+
+  /** Drop the entries `drop` matches (an account deleted), and repeats
    * that leaves side by side. The current entry stays current when kept;
    * otherwise the one before it becomes current. */
   forget(drop: (e: Entry) => boolean) {
@@ -90,6 +103,13 @@ class ViewState {
     if (out.length === 0) out.push({ view: "insights", params: {} });
     this.entries = out;
     this.index = index;
+  }
+
+  /** Forget what came before the current entry: the history starts
+   * here (the startup screen). */
+  startHere() {
+    this.entries = [this.entries[this.index]];
+    this.index = 0;
   }
 
   /** Forget the history (tests). */

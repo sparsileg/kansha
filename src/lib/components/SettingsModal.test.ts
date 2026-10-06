@@ -146,3 +146,17 @@ describe("SettingsModal investments", () => {
     expect(sent.price_download).toBe(true);
   });
 });
+
+describe("SettingsModal interface", () => {
+  it("sets the rows shown on spending cards (CARD-060)", async () => {
+    const { commands } = await import("../api");
+    render(SettingsModal);
+    await show("interface");
+    const rows = screen.getByLabelText(/Rows shown on spending cards/) as HTMLInputElement;
+    expect(rows.value).toBe("10");
+    await fireEvent.input(rows, { target: { value: "15" } });
+    await fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    const sent = vi.mocked(commands.settingsSet).mock.calls.at(-1)?.[0] as { spending_rows: number };
+    expect(sent.spending_rows).toBe(15);
+  });
+});

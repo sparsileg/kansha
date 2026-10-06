@@ -113,6 +113,8 @@ pub struct AppState {
     /// The system Downloads folder, the default backup folder (BAK-030).
     pub downloads: Option<PathBuf>,
     pub app_version: String,
+    /// The main window's size, saved per screen (SET-070).
+    pub window: crate::window::WindowTracker,
     clock: SystemClock,
 }
 
@@ -135,6 +137,7 @@ impl AppState {
             config_path,
             downloads,
             app_version,
+            window: Default::default(),
             clock: SystemClock,
         }
     }

@@ -35,10 +35,9 @@ vi.mock("./lib/api", async (orig) => {
     default_lot_method: "fifo",
     price_download: false,
     upcoming_days: 14,
+    spending_rows: 10,
     trend_years: 1,
     trend_fitted: false,
-    auto_accounts: null,
-    auto_categories: [],
     backup_folder: null,
     backup_keep_last: 10,
     backup_keep_months: 12,
@@ -142,6 +141,7 @@ vi.mock("./lib/api", async (orig) => {
       payeeList: () => ok([]),
       taxLineList: () => ok([]),
       insightList: () => ok([]),
+      spendingCardList: () => ok([]),
       cardData: () =>
         Promise.resolve({
           status: "error" as const,

@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Customize the Auto Expenses card (CARD-060): an Accounts tab and a
-  // Categories tab, as a report's Customize has, each with Select All
-  // and Clear All. Nothing changes until OK.
+  // Customize a spending card (CARD-060): its name, then an Accounts tab
+  // and a Categories tab (spending categories only), as a report's
+  // Customize has, each with Select All and Clear All. Nothing changes
+  // until OK; a refused name keeps the dialog open with the reason.
   import { listsState } from "../../state/lists.svelte";
   import type { AccountId, CategoryId } from "../../types/bindings";
   import Modal from "../Modal.svelte";
@@ -10,18 +11,26 @@
 
   let {
     title,
+    name: startName,
     accounts,
     categories,
     onsave,
     onclose,
   }: {
     title: string;
+    name: string;
     /** The accounts chosen; `null` (never chosen) checks every open one. */
     accounts: AccountId[] | null;
     categories: CategoryId[];
-    onsave: (accounts: AccountId[], categories: CategoryId[]) => void;
+    /** Rejects with the reason when Rust refuses (a name in use). */
+    onsave: (name: string, accounts: AccountId[], categories: CategoryId[]) => Promise<void>;
     onclose: () => void;
   } = $props();
+
+  // svelte-ignore state_referenced_locally
+  let name = $state(startName);
+  let error = $state<string | null>(null);
+  let saving = $state(false);
 
   // svelte-ignore state_referenced_locally
   let draft = $state<Record<Tab, number[]>>({
@@ -59,11 +68,11 @@
       }));
     }
     return listsState.categories
-      .filter((c) => c.kind !== "equity")
+      .filter((c) => c.kind === "expense")
       .map((c) => ({
         id: c.id,
         label: listsState.categoryPath(c.id),
-        heading: c.kind === "income" ? "Income" : "Expense",
+        heading: "",
         hidden: c.hidden,
       }));
   }
@@ -78,14 +87,27 @@
     draft[tab] = on ? (cur.includes(id) ? cur : [...cur, id]) : cur.filter((x) => x !== id);
   }
 
-  function save(e: Event) {
+  async function save(e: Event) {
     e.preventDefault();
-    onsave([...draft.accounts], [...draft.categories]);
+    if (!name.trim() || saving) return;
+    saving = true;
+    error = null;
+    try {
+      await onsave(name.trim(), [...draft.accounts], [...draft.categories]);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
 <Modal {title} {onclose} wide>
   <form onsubmit={save}>
+    <label class="name">
+      <span>Name</span>
+      <input type="text" bind:value={name} maxlength="60" />
+    </label>
     <div class="tabs" role="tablist">
       {#each [["accounts", "Accounts"], ["categories", "Categories"]] as [t, label] (t)}
         <button type="button" role="tab" aria-selected={tab === t} class:on={tab === t} onclick={() => ((tab = t as Tab), (contains = ""))}>{label}</button>
@@ -95,7 +117,7 @@
       <div>
         <ul class="list" aria-label={tab === "accounts" ? "Accounts" : "Categories"}>
           {#each shown as item, i (item.id)}
-            {#if item.heading !== shown[i - 1]?.heading}<li class="head">{item.heading}</li>{/if}
+            {#if item.heading && item.heading !== shown[i - 1]?.heading}<li class="head">{item.heading}</li>{/if}
             <li>
               <label class="check" class:dim={item.hidden}>
                 <input type="checkbox" checked={draft[tab].includes(item.id)} onchange={(e) => set(item.id, e.currentTarget.checked)} />
@@ -116,10 +138,11 @@
         <button type="button" onclick={() => (draft[tab] = [])}>Clear All</button>
       </div>
     </div>
+    {#if error}<p class="err" role="alert">{error}</p>{/if}
     <div class="buttons">
       <span class="grow"></span>
       <button type="button" onclick={onclose}>Cancel</button>
-      <button type="submit">OK</button>
+      <button type="submit" disabled={!name.trim() || saving}>OK</button>
     </div>
   </form>
 </Modal>
@@ -128,6 +151,18 @@
   form {
     display: grid;
     gap: 0.6rem;
+  }
+  .name {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .name input {
+    flex: 1;
+  }
+  .err {
+    color: var(--bad);
+    margin: 0;
   }
   .tabs {
     display: flex;

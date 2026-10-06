@@ -15,6 +15,7 @@ pub mod sample;
 pub mod schedule;
 
 use kansha_core::Date;
+use kansha_core::local_config::WindowMode;
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -34,20 +35,12 @@ pub fn schema_version() -> u32 {
     kansha_core::persistence::migrate::LATEST_VERSION
 }
 
-/// Remember the main window's working size and place, before the
-/// window shrinks to the start screen.
+/// Show the start page or the working window at its size for this
+/// screen (SET-070).
 #[tauri::command]
 #[specta::specta]
-pub fn window_save(window: tauri::Window, state: State<'_, AppState>) {
-    crate::window::save_geometry(&window, &state);
-}
-
-/// Put the main window back at its saved working size and place. False
-/// when none was saved.
-#[tauri::command]
-#[specta::specta]
-pub fn window_restore(window: tauri::Window, state: State<'_, AppState>) -> bool {
-    crate::window::restore_geometry(&window, &state)
+pub fn window_mode(window: tauri::Window, state: State<'_, AppState>, mode: WindowMode) {
+    crate::window::set_mode(&window, &state, mode);
 }
 
 /// Today's date from the app clock (financial dates never come from the

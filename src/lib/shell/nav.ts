@@ -15,7 +15,7 @@ import type { AccountId } from "../types/bindings";
 /** Show an account's register. Coming back to the account already open
  * keeps its filters and sort; a different one starts fresh. */
 export async function openAccount(id: AccountId): Promise<void> {
-  viewState.navigate("account");
+  viewState.navigate("account", { account: id });
   if (id !== registerState.accountId) await registerState.open(id);
 }
 
@@ -62,8 +62,13 @@ export function startupChoices(): { value: string; label: string }[] {
 }
 
 /** Open what the startup setting names; Insights if it names
- * nothing that exists. */
+ * nothing that exists. The history starts there (UI-025). */
 export async function openStartup(): Promise<void> {
+  await openStartupScreen();
+  viewState.startHere();
+}
+
+async function openStartupScreen(): Promise<void> {
   const to = settingsState.startup;
   if (to.startsWith("account:")) {
     const id = Number(to.slice("account:".length));

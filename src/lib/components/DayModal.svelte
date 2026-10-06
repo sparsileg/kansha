@@ -103,7 +103,7 @@
     const v = sel;
     if (v.status !== "pending" && v.status !== "skipped" && v.txn !== null) {
       onclose();
-      viewState.navigate("account");
+      viewState.navigate("account", { account: v.account });
       await registerState.goToTransaction(v.account, v.txn);
       return;
     }

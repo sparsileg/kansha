@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.33 (draft) |
+| **Document version** | 0.7.42 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-05 |
 | **Owner** | Stan |
@@ -1101,8 +1101,16 @@ DSH-010 … DSH-040, from when they made a fixed dashboard; older
 entries in Appendix A and migration 0014 use those IDs.
 
 - **CARD-010** [1.0][S] Household cards showing net worth with
-  breakdown (Investments, Cash, Other assets, Liabilities) and this
-  month's income, expenses, and net.
+  breakdown and this month's income, expenses, and net. The Net worth
+  card (double width, 0.7.40) lists one row per account group with an
+  account, in the account list's order (Banking, Credit, Investments,
+  Retirement, Assets, Liabilities, Other; ACCT-240), then a bold Net
+  worth row, in three columns headed by year: December 31 two years
+  ago, December 31 last year, and today (2024, 2025, 2026 in 2026).
+  Every account counts, closed ones too, in the group it is in now;
+  investments at market value as the Net Worth report has them; money
+  owed is negative, so the rows add up to net worth. Cents are shown
+  whatever SET-080 says.
 - **CARD-020** [1.0][R] Upcoming scheduled transactions (next 14 days,
   configurable) and overdue items.
 - **CARD-030** [1.0][R] Needs attention card: only problems are
@@ -1146,7 +1154,8 @@ entries in Appendix A and migration 0014 use those IDs.
   itself loads only on an insight that shows it.
 - **CARD-040** [1.0][R] Each card has a stable ID and name: Net
   worth, This month, Net worth over time, Due soon, Needs attention,
-  Auto Expenses.
+  and each spending card (CARD-060) by its own name, ID
+  `spending:<id>`.
   Insights choose and order them (INS-030). Migration 0014 turned the
   old fixed dashboard's card choice (`dashboard_cards`) into the first
   insight; migration 0015 names it "Status".
@@ -1157,20 +1166,67 @@ entries in Appendix A and migration 0014 use those IDs.
   settings; a new book shows 1 year from zero. The heading names the
   span: "Net worth, last 12 months", "…, last 2 years", "…, last 5
   years".
-- **CARD-060** [1.0][R] The Auto Expenses card (double width) lists
-  chosen categories, one row each by full name ("Car:BlueForester:Gas",
-  cut short with "…" when long), with YTD Expenses (January 1 through
-  today), MTD Expenses (the 1st of this month through today), and
-  Monthly Avg (YTD over the months begun this year, this one included,
-  as Quicken does: 10 in October), then a bold Total row whose average
-  is its own YTD over the months. Expenses are positive; refunds
-  reduce them. Each row is exactly the category checked; its
-  subcategories are not added in. Every chosen category is listed,
-  even at zero. The card's gear has Customize…, with an Accounts tab
-  and a Categories tab as a report's Customize has; the choices are
-  book settings. Until customized, every open account is checked and
-  no category, so the card says how to choose. With no account or
-  no category checked, it lists nothing.
+- **CARD-060** [1.0][R] Spending cards (0.7.36; was the one Auto
+  Expenses card): the user makes any number, each with a name (unique,
+  any case; its heading), chosen accounts, and chosen spending
+  categories, kept in the book (`spending_card` table). Each card
+  (double width) lists its categories, one row each by full name
+  ("Car:BlueForester:Gas", cut short with "…" when long), with Year
+  (January 1 through the end of this month), Month (the 1st of this
+  month through its end), and Monthly Avg (Year over the months begun
+  this year, this one included, as Quicken does: 10 in October), then
+  a bold Total row whose average is its own Year over the months.
+  Year and Month count past and scheduled transactions (0.7.39):
+  transactions through the month's end (later-dated ones too) and this
+  month's pending scheduled occurrences from schedules whose register
+  is a chosen account, overdue ones included (one from an earlier
+  month is not); a split counts its lines for the chosen categories,
+  an estimated amount counts as scheduled, and an entered occurrence
+  counts once, as a transaction. A figure with scheduled spending in
+  it says how much in its tooltip ("120.00 scheduled"). The heading
+  reads "Name – Includes past and scheduled transactions", the note in
+  lighter type. Expenses are positive; refunds reduce them. Each row is exactly the category
+  checked; its subcategories are not added in. A chosen category with
+  no transactions this year is left out (0.7.35); one whose purchases
+  and refunds net to zero is listed. Only spending (expense)
+  categories can be chosen. New spending card… in the insight dialog
+  (INS-030) makes one with every open account checked and no category,
+  so it says how to choose. The card's gear has Customize…, with a Name
+  field and an Accounts tab and a Categories tab as a report's
+  Customize has (a refused name keeps it open with the reason), and
+  Delete card…, which asks first, naming the insights the card is on,
+  and takes it off them. Taking a card off one insight keeps it. With
+  no account or no category checked, it lists nothing; with chosen
+  categories but none spent or scheduled this year, it says "No spending this
+  year in the chosen categories." Migration 0016 made the Auto
+  Expenses card, if customized or shown, the spending card "Auto
+  Expenses". A card shows at most "Rows shown on spending cards"
+  category rows (Settings > Interface, 3–50, default 10; a book
+  setting) (0.7.37); the rest scroll between the fixed header and
+  Total row, by wheel, touchpad, or keys, with no scrollbar taking
+  room. The edge with more rows past it fades, and two arrows there,
+  about a capital letter high, a third and two thirds across (0.7.38),
+  pulse from nearly unseen to unseen (still, when the desktop asks for
+  less motion); clicking one scrolls a page. "Rows 1–10 of 24"
+  under the table counts the rows in view; clicking it shows every
+  row until clicked again. Printing shows every row.
+- **CARD-070** [Later][S] Spending card averages over several years
+  (0.7.42; under consideration, not designed). Purpose: spending cards
+  keep the user aware of spending and of where to cut it, so a card
+  should show whether this year is better or worse than usual. Today
+  Monthly Avg covers this year only (CARD-060): in January it is
+  January alone, and early in a month the unfinished month pulls it
+  down. Idea: keep this year's average and add a longer one beside
+  it. Columns Category, Year, Month, This Yr Avg, 3 Yr Avg; 3 Yr Avg
+  is the monthly average over the last 3 full calendar years (in
+  2026: 2023–2025); with less history, the months since the first
+  transaction, the heading saying so ("Avg since Mar 2024"). Each
+  average's tooltip gives its months and total. This year's average
+  above the longer one shows ▲, below it ▼ (a symbol, not a color).
+  Open points: (1) the number of years: fixed at 3, or a card setting
+  in Customize; (2) whether this year's average leaves out the
+  unfinished month; (3) five columns are tight on a single-width
+  card, so whether spending cards are always double width.
 
 #### 12.4 Insights
 
@@ -1193,7 +1249,10 @@ entries in Appendix A and migration 0014 use those IDs.
   included, can be deleted while another remains. Customize and Create
   open the same dialog, laid out as Edit > Navigation Bar: a Name
   field; Available cards on the left, the insight's cards on the
-  right; Add › and ‹ Remove; ▲ Up and ▼ Down; Save and Cancel. Create
+  right, with New spending card… under them (CARD-060); Add › and
+  ‹ Remove; ▲ Up and ▼ Down; Save and Cancel. New spending card… asks
+  for a name and makes the card at once, putting it on the right;
+  Cancel then leaves it in Available cards. Create
   shows a new tab while the dialog is open; Cancel removes it and
   makes nothing, Save makes the insight and shows its tab. A refused
   name keeps the dialog open with the reason.
@@ -1377,8 +1436,9 @@ platform has one.
   Browser for SQLite (SQLCipher build). The passphrase screen opens
   in a small window with the 感謝 mark and what *kansha* means; the
   window grows to its working size when the book opens, or at once
-  for setup, restore, or a new book. A maximized window is left alone.
-  The small window is 520×760 (0.7.12).
+  for setup, restore, or a new book. Each size is the one last used
+  on that screen (SET-070, 0.7.41), else 520×760 for the small window
+  and 1280×800 for the working one.
 - **SECU-030** [1.0][R] Clear warning at setup: a lost passphrase
   makes the database and all backups unrecoverable. The user is
   prompted to record it durably (e.g., password manager).
@@ -1427,6 +1487,19 @@ platform has one.
   screen, any menu item (Insights among them), or any account, in the
   user's order, each with an icon and a text label; Reminders shows
   the number due. The search box (UI-070) is at its right.
+- **UI-025** [1.0][S] Back and Forward (0.7.34): two arrows at the left
+  end of the navigation bar walk the screens visited this session:
+  Insights tabs, accounts, Manage tabs, searches, reports, and the
+  Calendar, Reminders, Accounts, Reconcile, and Investments windows. A
+  step is a screen; register filters, sort, scrolling, report setting
+  changes, and dialogs are not steps. Back to a window in the dock
+  brings it to the top; back to a closed window reopens it, a report
+  with the settings it had when closed, without asking to save. Accounts
+  deleted since are skipped. Each arrow's tooltip names where it goes
+  ("Back to Checking"); with nowhere to go it is dimmed. The history
+  starts at the startup screen (SET-060), with nothing to go back to
+  (0.7.35), and lasts while the book is open. No keyboard or
+  mouse-button shortcuts.
 - **UI-030** [1.0][S] Account-centric design: each account opens to
   its own view with tabs appropriate to its type (banking: Register |
   Scheduled | Reconcile history; investment: see POS-040).
@@ -1547,10 +1620,16 @@ platform has one.
 - **SET-070** [1.0][R] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
   except per-computer ones: theme, font, font size (the passphrase
-  screen needs them before a book is open), window geometry, and the
+  screen needs them before a book is open), window sizes, and the
   recent books list with their paths (UI-080). Those are kept in a config file
   in the OS configuration folder, written by Rust. Browser storage
-  (localStorage) is not used for settings.
+  (localStorage) is not used for settings. The window keeps two sizes
+  for each screen resolution (logical pixels): the start page's and
+  the working window's, maximized or not. A size is saved half a
+  second after the user stops resizing, and on close; it is cut to
+  fit a smaller screen. The window's place is not kept (Wayland does
+  not let an app set it); it opens centred where the system allows
+  (0.7.41).
 
 #### 14.3 Command line entry (CLI)
 
@@ -2554,8 +2633,17 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
-| 0.7.32 | 2026-10-05 | New RPT-210: Current Spending vs. Average Spending by Category and by Payee, under a new Reports > Comparison menu; builds RPT-040's comparison to prior periods. Compared periods end on the range's last day; for Custom dates, the whole periods before today's. Headings show the dates. RPT-040: the comparison reports' own date presets, with new Current week (week to date) and Last week, which follow SET-030's first day of the week. No schema change (report settings are JSON). **API change:** `ReportKind` gains `compare_category`, `compare_payee`; `DatePreset` gains `week_to_date`, `last_week`; new types `CompareTo`, `CompareGroup`; `ReportSettings` gains `compare`, `compare_group`. |
+| 0.7.42 | 2026-10-06 | New CARD-070 [Later]: spending card averages over several years (a longer average beside this year's, ▲/▼ between them), with its open points; not designed or built. No schema or API change. |
+| 0.7.41 | 2026-10-06 | SET-070, SECU-020: the main window keeps a start page size and a working size for each screen resolution, in logical pixels, saved as the user resizes and on close, and fitted to the screen; its place is no longer kept. The config file's `window` is replaced by `window_sizes` (an old one is ignored). No schema change. **API change:** commands `window_save` and `window_restore` replaced by `window_mode`; new type `WindowMode`. |
+| 0.7.40 | 2026-10-06 | CARD-010: the Net worth card (now double width) lists each account group (Banking, Credit, Investments, Retirement, Assets, Liabilities, Other; those with an account), then Net worth, at December 31 of the last two years and today, money owed negative; it replaces the Cash and bank, Investments, Other assets, and Liabilities lines. No schema change. **API change:** `CardData` drops `cash`, `investments`, `other_assets`, `liabilities` and gains `years`, `groups` (new type `GroupBalances`), `net_worths`. |
+| 0.7.39 | 2026-10-05 | CARD-060: spending cards count past and scheduled transactions: Year and Month (renamed from YTD Expenses and MTD Expenses) run through the end of this month and add this month's pending scheduled occurrences (overdue ones from earlier months left out; an entered one counts once); Monthly Avg follows Year. A figure's tooltip says how much is scheduled. The heading adds "– Includes past and scheduled transactions". No schema change. **API change:** `ExpenseRow` gains `scheduled`. |
+| 0.7.38 | 2026-10-05 | CARD-060: a scrolling spending card shows two arrows at each faded edge, a third and two thirds across, about a capital letter high, in place of one small centred arrow. No schema change. No API change. |
+| 0.7.37 | 2026-10-05 | CARD-060: a spending card shows at most "Rows shown on spending cards" rows (Settings > Interface, 3–50, default 10); more scroll between a fixed header and Total with no scrollbar, a faded edge, and a faint pulsing arrow toward the hidden rows (a click scrolls a page); "Rows 1–10 of 24" under the table, clicked, shows every row. No schema change. **API change:** `Settings` gains `spending_rows`. |
+| 0.7.36 | 2026-10-05 | CARD-060: the Auto Expenses card becomes spending cards: any number, each with its own name, accounts, and spending categories (income categories can no longer be chosen). New spending card… in the insight dialog (INS-030) makes one; the card's gear has Customize… (now with a Name field) and Delete card…, which takes it off every insight. CARD-040: a spending card's ID is `spending:<id>`. **Schema change:** migration 0016 adds `spending_card`, turns the Auto Expenses settings (`auto_accounts`, `auto_categories`) and the card ID `auto_expenses`, where used, into the spending card "Auto Expenses", and lets the audit log record spending cards. **API change:** new commands `spending_card_list`, `spending_card_create`, `spending_card_update`, `spending_card_delete`, `spending_card_data`; new types `SpendingCard`, `SpendingCardId`; `auto_expenses` removed; `Settings` loses `auto_accounts`, `auto_categories`; `AuditEntity` gains `spending_card`. |
+| 0.7.35 | 2026-10-05 | CARD-060: a chosen category with no transactions this year is left off the Auto Expenses card; with none left, the card says "No spending this year in the chosen categories." UI-025: the history starts at the startup screen (SET-060), not Insights. No schema change. **API change:** `ExpenseCard` gains `chosen`. |
+| 0.7.34 | 2026-10-05 | New UI-025: Back and Forward arrows at the left of the navigation bar walk the screens visited (accounts, Insights tabs, Manage tabs, searches, report and panel windows). A docked window is brought to the top; a closed one reopens, a report with its last settings. Tooltips name the destination; dimmed when there is nowhere to go. No schema change. No API change. |
 | 0.7.33 | 2026-10-05 | RPT-210 headings: two lines under the title, colons lined up, with the Date range and Compare to texts and their dates; the range column headed with the Date range text; the average column "Avg spending" over the Compare to text, shortened ("Last 4 qtrs"; months spelled out). CSV: the two lines under the title. Last year against last year compares to the year before (2025 against 2024), not to itself. No API change. |
+| 0.7.32 | 2026-10-05 | New RPT-210: Current Spending vs. Average Spending by Category and by Payee, under a new Reports > Comparison menu; builds RPT-040's comparison to prior periods. Compared periods end on the range's last day; for Custom dates, the whole periods before today's. Headings show the dates. RPT-040: the comparison reports' own date presets, with new Current week (week to date) and Last week, which follow SET-030's first day of the week. No schema change (report settings are JSON). **API change:** `ReportKind` gains `compare_category`, `compare_payee`; `DatePreset` gains `week_to_date`, `last_week`; new types `CompareTo`, `CompareGroup`; `ReportSettings` gains `compare`, `compare_group`. |
 | 0.7.31 | 2026-10-05 | New CARD-060: the Auto Expenses card lists the categories and accounts chosen with its gear's Customize… (Accounts and Categories tabs), each category on its own, with YTD, MTD, and monthly average (YTD over the months begun this year, as Quicken) and a Total row. CARD-040 names it. No schema change. **API change:** new command `auto_expenses`; new types `ExpenseCard`, `ExpenseRow`; `Settings` gains `auto_accounts`, `auto_categories`. |
 | 0.7.30 | 2026-10-05 | ACCT-240, SET-080: new Interface setting "Show cents in Account Bar balances" (default on); off, the account list's balances, section totals, and net worth are whole dollars, rounded half-even in Rust. New REG-160: warn when a line, split lines included, is in the top-level Uncategorized category (default on). REG-150's setting is labelled "Ask before saving changes to an existing transaction". No schema change. **API change:** `Settings` gains `account_bar_cents`, `warn_uncategorized`; `EntryWarning` gains `uncategorized`; `account_balances`, `section_totals`, `net_worth` return the account bar's figures. |
 | 0.7.29 | 2026-10-05 | SET-030: dates in error messages from the engine show in the user's date format, not ISO (dates in file names and timestamps are left as they are). MIG-100 done and P-02 closed: the import result and the existing reports verified the import; no matching report layouts. D-70 decided: 6 decimal places, confirmed by the real import. D-80 decided: no parallel run; Kansha only since 2026-10-01, Quicken kept as a reference. D-130 decided: synthetic data ended 2026-10-01. No schema change. No API change. |

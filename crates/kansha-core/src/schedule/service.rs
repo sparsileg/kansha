@@ -13,6 +13,7 @@ use super::{
     ScheduleStatus, add_days,
 };
 use crate::accounts::{Account, AccountId, CashMode};
+use crate::categories::CategoryId;
 use crate::date::{Clock, Date};
 use crate::error::{Error, Result};
 use crate::invest::{self, InvAction, InvInput};
@@ -995,6 +996,41 @@ pub fn occurrences_between(
         }
     }
     out.sort_by_key(|v| (v.date, v.nominal, v.schedule));
+    Ok(out)
+}
+
+/// What pending occurrences dated `from..=to` will spend per category
+/// (CARD-060), from schedules whose register is one of `accounts`:
+/// `(category, amount)` with the entry line's sign (a payment
+/// negative). A simple schedule counts its occurrence's amount, a
+/// one-time amount included; a split counts its lines, as the
+/// projection does. Transfer lines are left out.
+pub fn scheduled_by_category(
+    conn: &Connection,
+    from: Date,
+    to: Date,
+    today: Date,
+    accounts: &[AccountId],
+) -> Result<Vec<(CategoryId, Money)>> {
+    let mut out = Vec::new();
+    for s in repo::list(conn)? {
+        if !accounts.contains(&s.fields.account) {
+            continue;
+        }
+        for v in pending_until(conn, &s, Some(from), to, today)? {
+            if let [line] = s.fields.lines.as_slice() {
+                if let Target::Category(c) = line.target {
+                    out.push((c, v.amount));
+                }
+                continue;
+            }
+            for l in &s.fields.lines {
+                if let Target::Category(c) = l.target {
+                    out.push((c, l.amount));
+                }
+            }
+        }
+    }
     Ok(out)
 }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { isCurrent, runAction } from "../../shell/actions";
+  import { arrowTitle, canGo, go } from "../../shell/history";
   import { navIcon } from "../../shell/icons";
   import { navCatalog, resolveNav } from "../../shell/navitems";
   import { listsState } from "../../state/lists.svelte";
@@ -41,10 +42,24 @@
 </script>
 
 <!--
-  Quick jumps. Each has a text label as well as an icon. Greyed ones are
-  planned; Back and Forward will go on the left once the history is used.
+  Back and Forward (UI-025), then quick jumps. Each jump has a text label
+  as well as an icon. Greyed ones are planned or have nowhere to go.
 -->
 <div class="navbar" role="toolbar" aria-label="Quick jump">
+  {#each [-1, 1] as const as d (d)}
+    {@const ok = canGo(d)}
+    <button
+      type="button"
+      class="arrow"
+      class:off={!ok}
+      aria-disabled={ok ? undefined : "true"}
+      aria-label={d < 0 ? "Back" : "Forward"}
+      title={arrowTitle(d)}
+      onclick={() => ok && go(d)}
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d={d < 0 ? "M10 3 5 8l5 5" : "M6 3l5 5-5 5"} /></svg>
+    </button>
+  {/each}
   {#each entries as e (e.id)}
     <button
       type="button"
@@ -111,6 +126,9 @@
   button.off {
     opacity: 0.55;
     cursor: default;
+  }
+  .arrow {
+    padding-inline: 0.3rem;
   }
   svg {
     width: 1rem;

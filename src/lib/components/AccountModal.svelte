@@ -121,7 +121,7 @@
       await listsState.loadAll();
       dialogState.closeAccount();
       if (isNew) {
-        viewState.navigate("account");
+        viewState.navigate("account", { account: saved.id });
         await registerState.open(saved.id);
       } else if (registerState.accountId === saved.id) {
         await registerState.refresh();

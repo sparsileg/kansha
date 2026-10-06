@@ -859,3 +859,101 @@ vitest `reports.test.ts` (3 new), menu order. Perf: two cases in
 the row's category or payee for the column's dates without the
 group's tag, account, or tax line; Difference has no dates of its
 own, so drilling it uses the report's range.
+
+## Back and Forward (spec 0.7.34, 2026-10-05)
+
+UI-025. The view history (`state/view.svelte.ts`) already existed;
+now on screen. `shell/history.ts`: `go(-1 | 1)` steps, first dropping
+dead entries (deleted accounts, windows that cannot be reopened);
+`arrowTitle` names the target ("Back to Checking"); `canGo` dims an
+arrow. Account entries carry `params.account` (every caller that
+switches registers now passes it, including a transfer's other side),
+so two accounts in a row are two steps. Closing a window no longer
+forgets its history: `windowState.close` keeps its kind, name, and
+what its `keep` hook returns; `revive` reopens it under a new number
+(`viewState.renumber`). Reports keep their settings, saved-report ID,
+and menu flag; a saved report deleted since reopens unnamed. Panels
+reopen as plain windows of their kind. Arrows in `NavBar.svelte`.
+Tests: `shell/history.test.ts` (4), `windows.test.ts` (revive),
+`NavBar.test.ts` (arrows). Known gaps: collapsed groups and the graph
+fold of a reopened report are not kept; Search's "leave search" step
+does not reopen a different register.
+
+Follow-up (spec 0.7.35): `openStartup` ends with
+`viewState.startHere()`, so the history starts at the startup screen
+(test in `nav.test.ts`, failed first). CARD-060: `auto_expenses`
+skips a chosen category with no lines this year (one netting to zero
+stays); `ExpenseCard.chosen` lets the card tell "choose some" from
+"No spending this year in the chosen categories."
+
+## Spending cards (spec 0.7.36, 2026-10-05)
+
+CARD-060. The Auto Expenses card is now any number of spending cards.
+Core: `spending.rs` (`SpendingCard`, `SpendingCardId`, card ID
+`spending:<id>`), `persistence/spending.rs` (list by name, insert,
+update keeps expense categories only, delete takes the card off every
+insight through `insights::update`, each audited),
+`reports::spending_card` (was `auto_expenses`). Migration 0016: table
+`spending_card` (accounts JSON or NULL = every open account,
+categories JSON); the `auto_*` settings and the `auto_expenses` card
+ID become the card "Auto Expenses" when either was used; audit log
+rebuilt for entity `spending_card`. Commands in
+`commands/insights.rs`. UI: `insights/cards.ts` `catalog(spending)`;
+`listsState.spendingCards` loads with the insights; `InsightModal`
+has New spending card… (makes the card at once); each card's gear
+has Customize… (`CardFilterModal` gains Name, expense categories only)
+and Delete card…. Tests: `insights.rs` (card figures; names, spending
+only, delete), `migrations.rs` (0016), `perf.rs`, `cards.test.ts`,
+`Insights.test.ts`. Known gaps: a category merged or deleted stays in
+a card's list (skipped when shown, dropped on the next save); an
+account likewise.
+
+Follow-up (spec 0.7.37): book setting `spending_rows` (3–50, default
+10, Settings > Interface). `components/insights/SpendingTable.svelte`
+caps the rows at that many (height measured from the rendered rows,
+so it follows the font), hides the scrollbar, keeps thead and tfoot
+sticky, fades the edge with more past it, pulses a faint ▲/▼ there
+(still under reduced motion; click scrolls a page), and counts "Rows
+1–10 of 24" (click: every row). Tests: `SpendingTable.test.ts` (3),
+`SettingsModal.test.ts`, `insights.rs` (setting range). Not checked
+on screen in WebKitGTK yet.
+
+Follow-up (spec 0.7.38): two ▲/▼ per faded edge, at 33% and 67%
+across, named size `--fs-arrow` (1.3rem, about a capital letter
+high; `base.css`); fade band 2em.
+
+Follow-up (spec 0.7.39): spending cards count past and scheduled.
+`schedule::scheduled_by_category` (pending occurrences in a date
+range, schedules whose register is one of the accounts; a simple
+schedule uses the occurrence amount, one-time override included, a
+split its lines, as `projected_balances` does). `spending_card` reads
+facts through the month's end and adds those for the month to Year,
+Month, and `ExpenseRow.scheduled`. Columns Year / Month / Monthly Avg;
+tooltip "N scheduled"; heading note "– Includes past and scheduled
+transactions". Tests: `insights.rs`
+`a_spending_card_counts_this_months_scheduled_transactions` (checked
+failing with the schedule part off), `SpendingTable.test.ts`,
+`Insights.test.ts`.
+
+Net worth card by group (spec 0.7.40, CARD-010): `reports/cards.rs`
+`group_balances` (each account's `shown_balances` at Dec 31 two years
+back, Dec 31 last year, and today, summed by its current
+`AccountGroup`, liabilities negated; empty groups dropped) replaces
+`Parts`; `net_worth` (account bar foot) sums the same rows for today.
+`CardData` gains `years`, `groups`, `net_worths`. The card is double
+width. Tests: `reports.rs`
+`net_worth_card_lists_each_group_for_three_years` (plus the two card
+tests updated), `Insights.test.ts`.
+
+Window sizes per screen (spec 0.7.41, SET-070, SECU-020):
+`local_config.rs` `WindowMode` (start, working), `WindowSize`
+(logical px, `fit` to the screen's free area and the mode's
+minimum), `LocalConfig.window_sizes` keyed by `screen_key` ("WxH",
+logical); `note_window` keeps the size from before when maximized.
+`src-tauri/src/window.rs` `WindowTracker` in `AppState`: `Resized`
+saves 500 ms after resizing stops (one waiting thread), close saves
+at once, command `window_mode` saves the old mode's size and applies
+the new one. `windowsize.ts` only calls it. The window's place is
+dropped (Wayland). Tests: `local_config.rs` (4 new),
+`windowsize.test.ts`. Saving while resizing is untested by automation
+(needs a real window).

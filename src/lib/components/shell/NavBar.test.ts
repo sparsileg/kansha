@@ -35,6 +35,21 @@ describe("NavBar", () => {
     expect(windowState.shownKind).toBeNull();
   });
 
+  it("Back and Forward are greyed until there is history, and walk it (UI-025)", async () => {
+    render(NavBar);
+    const back = screen.getByRole("button", { name: "Back" });
+    const fwd = screen.getByRole("button", { name: "Forward" });
+    expect(back.getAttribute("aria-disabled")).toBe("true");
+    await fireEvent.click(screen.getByRole("button", { name: "Reminders" }));
+    expect(back.getAttribute("aria-disabled")).toBeNull();
+    expect(back.title).toBe("Back to Insights");
+    await fireEvent.click(back);
+    expect(viewState.current).toBe("insights");
+    expect(fwd.title).toBe("Forward to Reminders");
+    await fireEvent.click(fwd);
+    expect(windowState.shownKind).toBe("scheduled");
+  });
+
   it("planned buttons are greyed with a reason and do nothing", async () => {
     settingsState.setNavItems(["file.export", "view.investments"]);
     render(NavBar);
@@ -55,8 +70,8 @@ describe("NavBar contents come from the setting", () => {
     listsState.accounts = [{ id: 4, name: "Checking" }] as never;
     settingsState.setNavItems(["account:4", "tools.calendar", "tools.payees"]);
     render(NavBar);
-    const names = screen.getAllByRole("button").map((b) => b.textContent?.trim());
-    expect(names).toEqual(["Checking", "Calendar", "Memorized Payees"]);
+    const names = screen.getAllByRole("button").map((b) => b.textContent?.trim() || b.getAttribute("aria-label"));
+    expect(names).toEqual(["Back", "Forward", "Checking", "Calendar", "Memorized Payees"]);
   });
 
   it("clicking an account item opens that account", async () => {

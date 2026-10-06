@@ -17,15 +17,10 @@ export const commands = {
 	 */
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
 	/**
-	 *  Remember the main window's working size and place, before the
-	 *  window shrinks to the start screen.
+	 *  Show the start page or the working window at its size for this
+	 *  screen (SET-070).
 	 */
-	windowSave: () => __TAURI_INVOKE<void>("window_save"),
-	/**
-	 *  Put the main window back at its saved working size and place. False
-	 *  when none was saved.
-	 */
-	windowRestore: () => __TAURI_INVOKE<boolean>("window_restore"),
+	windowMode: (mode: WindowMode) => __TAURI_INVOKE<void>("window_mode", { mode }),
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
 	/**
 	 *  First-run setup (SECU-080), or a new book beside a locked one: a new
@@ -532,11 +527,6 @@ export const commands = {
 	 *  data (CARD-050).
 	 */
 	netWorthTrend: (years: number, fitted: boolean) => typedError<Chart, IpcError>(__TAURI_INVOKE("net_worth_trend", { years, fitted })),
-	/**
-	 *  The Auto Expenses card (CARD-060): the categories and accounts
-	 *  chosen in the book settings.
-	 */
-	autoExpenses: () => typedError<ExpenseCard, IpcError>(__TAURI_INVOKE("auto_expenses")),
 	/**  Every insight, in tab order. */
 	insightList: () => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_list")),
 	/**  A new insight, after the others. */
@@ -550,6 +540,19 @@ export const commands = {
 	 *  new order.
 	 */
 	insightMove: (id: InsightId, delta: number) => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_move", { id, delta })),
+	/**  Every spending card, by name (CARD-060). */
+	spendingCardList: () => typedError<SpendingCard[], IpcError>(__TAURI_INVOKE("spending_card_list")),
+	/**  A new spending card: every open account, no category. */
+	spendingCardCreate: (name: string) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_create", { name })),
+	/**
+	 *  Rename a spending card and set its accounts (`None` = every open
+	 *  one) and spending categories.
+	 */
+	spendingCardUpdate: (id: SpendingCardId, name: string, accounts: AccountId[] | null, categories: CategoryId[]) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_update", { id, name, accounts, categories })),
+	/**  Delete a spending card; it leaves every insight showing it. */
+	spendingCardDelete: (id: SpendingCardId) => typedError<null, IpcError>(__TAURI_INVOKE("spending_card_delete", { id })),
+	/**  What a spending card shows today (CARD-060). */
+	spendingCardData: (id: SpendingCardId) => typedError<ExpenseCard, IpcError>(__TAURI_INVOKE("spending_card_data", { id })),
 	/**
 	 *  Net worth today, for the foot of the account list (ACCT-240), as the
 	 *  account bar shows it.
@@ -782,7 +785,7 @@ export type AttentionCheck = {
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -928,14 +931,18 @@ export type CardData = {
 	today: string,
 	/**  Assets minus liabilities today (CARD-010). */
 	net_worth: string,
-	/**  Checking, savings, cash, and money market accounts. */
-	cash: string,
-	/**  Investment accounts at market value. */
-	investments: string,
-	/**  Every other asset (houses, vehicles, ...). */
-	other_assets: string,
-	/**  Owed on credit cards, loans, and other liabilities (positive). */
-	liabilities: string,
+	/**
+	 *  The Net worth card's columns: two years ago and last year (at
+	 *  December 31), then this year (today).
+	 */
+	years: number[],
+	/**
+	 *  One row per account group with an account, in the account
+	 *  list's order.
+	 */
+	groups: GroupBalances[],
+	/**  Net worth at each of `years`; the last is `net_worth`. */
+	net_worths: string[],
 	/**  This month so far. */
 	month_from: string,
 	income: string,
@@ -1379,18 +1386,24 @@ export type ErrorKind =
 /**  Anything else: a database, file, or internal failure. */
 "internal";
 
-/**  The Auto Expenses card (CARD-060). */
+/**  What a spending card shows (CARD-060). */
 export type ExpenseCard = {
 	/**
-	 *  The chosen categories by name; none when no category or no
-	 *  account is chosen.
+	 *  The chosen categories with transactions this year (scheduled
+	 *  this month included), by name;
+	 *  none when no category or no account is chosen.
 	 */
 	rows: ExpenseRow[],
 	total: ExpenseRow,
+	/**
+	 *  How many categories are chosen (0 when no account is), so an
+	 *  empty card can tell "choose some" from "no spending this year".
+	 */
+	chosen: number,
 };
 
 /**
- *  One row of the Auto Expenses card (CARD-060): spent this year, this
+ *  One row of a spending card (CARD-060): spent this year, this
  *  month, and per month, expenses positive.
  */
 export type ExpenseRow = {
@@ -1398,15 +1411,20 @@ export type ExpenseRow = {
 	category: CategoryId | null,
 	/**  "Car:BlueForester:Gas", or "Total". */
 	label: string,
-	/**  January 1 through today. */
+	/**  January 1 through the end of this month, scheduled included. */
 	ytd: string,
-	/**  The 1st of this month through today. */
+	/**  The 1st of this month through its end, scheduled included. */
 	mtd: string,
 	/**
 	 *  `ytd` over the months begun this year, this one included, as
 	 *  Quicken does.
 	 */
 	monthly_avg: string,
+	/**
+	 *  The part of `ytd` and `mtd` still only scheduled: pending
+	 *  occurrences dated this month.
+	 */
+	scheduled: string,
 };
 
 /**
@@ -1432,6 +1450,15 @@ export type Finding = {
  *  are `Monthly` with interval 3 and 6.
  */
 export type Frequency = "once" | "daily" | "weekly" | "twice_monthly" | "monthly" | "monthly_last_day" | "monthly_nth_weekday" | "yearly";
+
+/**  One account group's row on the Net worth card (CARD-010). */
+export type GroupBalances = {
+	group: AccountGroup,
+	/**  As the account list names it: "Banking". */
+	label: string,
+	/**  At each of `CardData::years`; money owed is negative. */
+	balances: string[],
+};
 
 /**  A run of accounts in one account-list group, in list order (ACCT-240). */
 export type GroupOrder = {
@@ -2909,15 +2936,10 @@ export type Settings = {
 	upcoming_days: number,
 	/**  Years the Net worth over time card shows (CARD-050). */
 	trend_years: number,
+	/**  Rows a spending card shows before the rest scroll (CARD-060). */
+	spending_rows: number,
 	/**  That card's money axis fits the data instead of reaching zero. */
 	trend_fitted: boolean,
-	/**
-	 *  Accounts the Auto Expenses card counts (CARD-060); `None` = every
-	 *  open account (never customized).
-	 */
-	auto_accounts: AccountId[] | null,
-	/**  Categories the Auto Expenses card lists, each on its own. */
-	auto_categories: CategoryId[],
 	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */
 	backup_folder: string | null,
 	/**  Retention (BAK-040): newest automatic backups kept … */
@@ -2962,6 +2984,23 @@ export type Settings = {
 	 */
 	account_bar_cents: boolean,
 };
+
+/**  One spending card. */
+export type SpendingCard = {
+	id: SpendingCardId,
+	/**  Unique, any case; the card's heading. */
+	name: string,
+	/**
+	 *  The accounts counted; `None` = every open account (never
+	 *  customized).
+	 */
+	accounts: AccountId[] | null,
+	/**  The spending categories listed, each on its own. */
+	categories: CategoryId[],
+};
+
+/**  Row ID of a spending card. */
+export type SpendingCardId = number;
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */
 export type SplitRatio = {
@@ -3166,6 +3205,13 @@ export type WeekStart = "sunday" | "monday";
 
 /**  What to do when a due date falls on a weekend (REC-050). */
 export type WeekendRule = "none" | "previous" | "next";
+
+/**
+ *  What the main window shows: the start page (the passphrase screen)
+ *  or the working window (a book open, setup, restore). Each has its
+ *  own size (SET-070).
+ */
+export type WindowMode = "start" | "working";
 
 /**
  *  What the date axis names: each day (a span of three months or

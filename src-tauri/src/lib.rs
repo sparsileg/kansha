@@ -31,8 +31,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::app_version,
             commands::schema_version,
             commands::today,
-            commands::window_save,
-            commands::window_restore,
+            commands::window_mode,
             commands::book::book_status,
             commands::book::book_setup,
             commands::book::book_unlock,
@@ -188,12 +187,16 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::card_data,
             commands::reports::attention,
             commands::reports::net_worth_trend,
-            commands::reports::auto_expenses,
             commands::insights::insight_list,
             commands::insights::insight_create,
             commands::insights::insight_update,
             commands::insights::insight_delete,
             commands::insights::insight_move,
+            commands::insights::spending_card_list,
+            commands::insights::spending_card_create,
+            commands::insights::spending_card_update,
+            commands::insights::spending_card_delete,
+            commands::insights::spending_card_data,
             commands::reports::net_worth,
             commands::pdf::report_save_pdf,
         ])
@@ -278,8 +281,11 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                window::save_geometry(window, &window.state::<AppState>());
+            let state = window.state::<AppState>();
+            match event {
+                tauri::WindowEvent::Resized(_) => window::resized(window, &state),
+                tauri::WindowEvent::CloseRequested { .. } => window::closing(window, &state),
+                _ => {}
             }
         })
         .build(tauri::generate_context!())

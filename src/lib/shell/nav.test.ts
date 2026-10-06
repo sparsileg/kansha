@@ -45,6 +45,17 @@ describe("openInsights", () => {
 });
 
 describe("openStartup", () => {
+  it("starts the history at the startup screen: nothing to go Back to (UI-025)", async () => {
+    settingsState.setStartup("account:7");
+    await openStartup();
+    expect(viewState.current).toBe("account");
+    expect(viewState.canBack).toBe(false);
+    expect(viewState.untouched).toBe(true);
+    settingsState.setStartup("calendar");
+    await openStartup();
+    expect(viewState.entries.map((e) => e.view)).toEqual(["window"]);
+  });
+
   it("opens what the startup setting says", async () => {
     settingsState.setStartup("calendar");
     await openStartup();

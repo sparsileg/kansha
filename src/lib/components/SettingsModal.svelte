@@ -46,6 +46,7 @@
   const NUMBERS: [keyof Settings, string][] = [
     ["stale_price_days", "Price is stale after"],
     ["upcoming_days", "Due soon items within"],
+    ["spending_rows", "Rows shown on spending cards"],
     ["backup_keep_last", "Backups to keep"],
     ["backup_keep_months", "Months of monthly backups"],
     ["backup_timeout_minutes", "Minutes before a timed backup"],
@@ -122,6 +123,10 @@
         <label>
           <span>Show cents in Account Bar balances</span>
           <input type="checkbox" bind:checked={s.account_bar_cents} />
+        </label>
+        <label>
+          <span>Rows shown on spending cards (more rows scroll)</span>
+          <input type="number" min="3" max="50" bind:value={s.spending_rows} />
         </label>
       {:else if category === "data"}
         <label>

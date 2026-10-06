@@ -3,7 +3,7 @@
   // title band. The cards (CARD-010 … CARD-060, `lib/insights/cards.ts`)
   // show net worth and its parts, this month's income and spending, net
   // worth over 1, 2, or 5 years, what is due, what needs attention, and
-  // auto expenses.
+  // the user's spending cards.
   // The gear acts on the tab shown:
   // Customize…, Create new insight…, Move left/right, Delete insight….
   // Every figure comes from Rust.
@@ -13,8 +13,9 @@
   import GearButton from "../lib/components/GearButton.svelte";
   import InsightModal from "../lib/components/InsightModal.svelte";
   import CardFilterModal from "../lib/components/insights/CardFilterModal.svelte";
+  import SpendingTable from "../lib/components/insights/SpendingTable.svelte";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
-  import { cardsOf, type CardId } from "../lib/insights/cards";
+  import { cardsOf, spendingId, type CardId } from "../lib/insights/cards";
   import { displayDate } from "../lib/format/date";
   import { formatMoney } from "../lib/format/money";
   import { openAccount, openInsight, openInsights } from "../lib/shell/nav";
@@ -26,7 +27,7 @@
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight } from "../lib/types/bindings";
+  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight, SpendingCard, SpendingCardId } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -41,7 +42,7 @@
   const selected = $derived(insights.find((i) => i.id === viewState.params.insight) ?? insights[0] ?? null);
   const at = $derived(selected === null ? -1 : insights.indexOf(selected));
   const creating = $derived(editing === "new");
-  const cards = $derived(creating || selected === null ? [] : cardsOf(selected.cards));
+  const cards = $derived(creating || selected === null ? [] : cardsOf(selected.cards, listsState.spendingCards));
 
   // The Net worth over time card's graph, loaded only while it is shown;
   // its years and fit are book settings (CARD-050).
@@ -90,40 +91,67 @@
       });
   });
 
-  // The Auto Expenses card, loaded only while it is shown, and again when
-  // its accounts or categories change (CARD-060). Its gear's Customize…
-  // chooses them; they are book settings.
-  let auto = $state<ExpenseCard | null>(null);
-  let autoError = $state<string | null>(null);
-  let autoSeq = 0;
-  let autoMenu = $state<{ x: number; y: number } | null>(null);
-  let customizingAuto = $state(false);
-  const showsAuto = $derived(cards.some((c) => c.id === "auto_expenses"));
+  // Spending cards, each loaded only while it is shown, and again when the
+  // cards are reloaded after a change (CARD-060). A card's gear has
+  // Customize… (name, accounts, categories) and Delete card….
+  let spent = $state<Record<SpendingCardId, ExpenseCard>>({});
+  let spentError = $state<Record<SpendingCardId, string>>({});
+  const spentSeq: Record<SpendingCardId, number> = {};
+  let cardMenu = $state<{ x: number; y: number; card: SpendingCard } | null>(null);
+  let customizing = $state<SpendingCard | null>(null);
+  const shownSpending = $derived(
+    cards.flatMap((c) => listsState.spendingCards.filter((s) => s.id === c.spending)),
+  );
 
   $effect(() => {
-    if (!showsAuto) return;
-    void [bookSettings.value.auto_accounts, bookSettings.value.auto_categories];
-    const mine = ++autoSeq;
-    call(commands.autoExpenses())
-      .then((c) => {
-        if (mine !== autoSeq) return;
-        auto = c;
-        autoError = null;
-      })
-      .catch((e) => {
-        if (mine === autoSeq) autoError = e instanceof Error ? e.message : String(e);
-      });
+    for (const s of shownSpending) {
+      const mine = (spentSeq[s.id] = (spentSeq[s.id] ?? 0) + 1);
+      call(commands.spendingCardData(s.id))
+        .then((c) => {
+          if (mine !== spentSeq[s.id]) return;
+          spent[s.id] = c;
+          delete spentError[s.id];
+        })
+        .catch((e) => {
+          if (mine === spentSeq[s.id]) spentError[s.id] = e instanceof Error ? e.message : String(e);
+        });
+    }
   });
 
-  function openAutoMenu(e: MouseEvent) {
+  function openCardMenu(e: MouseEvent, card: SpendingCard) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    autoMenu = autoMenu ? null : { x: r.right, y: r.bottom };
+    cardMenu = cardMenu ? null : { x: r.right, y: r.bottom, card };
   }
 
-  async function saveAuto(accounts: AccountId[], categories: CategoryId[]) {
-    customizingAuto = false;
-    const err = await bookSettings.update({ auto_accounts: accounts, auto_categories: categories });
-    if (err) statusState.show(err, "alert");
+  const cardItems = (card: SpendingCard) => [
+    { label: "Customize…", action: () => (customizing = card) },
+    { label: "Delete card…", action: () => void deleteCard(card) },
+  ];
+  const cardMenuItems = $derived(cardMenu === null ? [] : cardItems(cardMenu.card));
+
+  async function saveCard(name: string, accounts: AccountId[], categories: CategoryId[]) {
+    if (customizing === null) return;
+    await call(commands.spendingCardUpdate(customizing.id, name, accounts, categories));
+    await listsState.loadInsights();
+    customizing = null;
+  }
+
+  async function newCard(name: string): Promise<string> {
+    const made = await call(commands.spendingCardCreate(name));
+    await listsState.loadInsights();
+    return spendingId(made.id);
+  }
+
+  async function deleteCard(card: SpendingCard) {
+    const on = insights.filter((i) => i.cards.includes(spendingId(card.id))).map((i) => `“${i.name}”`);
+    const where = on.length === 0 ? "It is on no insight." : `It will be taken off ${on.length === 1 ? "the insight" : "the insights"} ${on.join(", ")}.`;
+    if (!(await confirmState.ask(`Delete the spending card “${card.name}”? ${where}`))) return;
+    try {
+      await call(commands.spendingCardDelete(card.id));
+      await listsState.loadInsights();
+    } catch (e) {
+      statusState.show(e instanceof Error ? e.message : String(e), "alert");
+    }
   }
 
   function showIntegrity() {
@@ -131,7 +159,7 @@
     dialogState.integrity = true;
   }
 
-  const heading = (id: CardId, label: string, d: CardData) =>
+  const heading = (id: string, label: string, d: CardData) =>
     id === "upcoming"
       ? `Due in the next ${d.upcoming_days} days`
       : id === "net_worth_trend"
@@ -209,7 +237,6 @@
     net_worth_trend: trendChart,
     upcoming,
     attention,
-    auto_expenses: autoExpenses,
   };
 </script>
 
@@ -233,20 +260,21 @@
     <ContextMenu x={menu.x} y={menu.y} onclose={() => (menu = null)} items={menuItems} />
   {/if}
   {#if editing === "new"}
-    <InsightModal title="New insight" name="" cards={[]} onsave={save} onclose={() => (editing = null)} />
+    <InsightModal title="New insight" name="" cards={[]} onsave={save} onnewcard={newCard} onclose={() => (editing = null)} />
   {:else if editing !== null}
-    <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onclose={() => (editing = null)} />
+    <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onnewcard={newCard} onclose={() => (editing = null)} />
   {/if}
-  {#if autoMenu}
-    <ContextMenu x={autoMenu.x} y={autoMenu.y} onclose={() => (autoMenu = null)} items={[{ label: "Customize…", action: () => (customizingAuto = true) }]} />
+  {#if cardMenu}
+    <ContextMenu x={cardMenu.x} y={cardMenu.y} onclose={() => (cardMenu = null)} items={cardMenuItems} />
   {/if}
-  {#if customizingAuto}
+  {#if customizing}
     <CardFilterModal
-      title="Customize Auto Expenses"
-      accounts={bookSettings.value.auto_accounts}
-      categories={bookSettings.value.auto_categories}
-      onsave={saveAuto}
-      onclose={() => (customizingAuto = false)}
+      title="Customize spending card"
+      name={customizing.name}
+      accounts={customizing.accounts}
+      categories={customizing.categories}
+      onsave={saveCard}
+      onclose={() => (customizing = null)}
     />
   {/if}
   <div class="view-body">
@@ -257,11 +285,20 @@
         {#each cards as c (c.id)}
           <article class="card sheet" class:wide={c.wide} class:double={c.double} data-card={c.id} aria-labelledby={`card-${c.id}`}>
             <header>
-              <h2 id={`card-${c.id}`}>{heading(c.id, c.label, d)}</h2>
+              <h2>
+                <span id={`card-${c.id}`}>{heading(c.id, c.label, d)}</span>{#if c.spending !== undefined}<span class="note"
+                    >{" "}– Includes past and scheduled transactions</span
+                  >{/if}
+              </h2>
               {#if c.id === "net_worth_trend"}{@render trendControls()}{/if}
-              {#if c.id === "auto_expenses"}<GearButton label="Auto Expenses options" onclick={openAutoMenu} />{/if}
+              {#if c.spending !== undefined}
+                {@const card = listsState.spendingCards.find((s) => s.id === c.spending)}
+                {#if card}<GearButton label={`${card.name} options`} onclick={(e) => openCardMenu(e, card)} />{/if}
+              {/if}
             </header>
-            <div class="body">{@render bodies[c.id](d)}</div>
+            <div class="body">
+              {#if c.spending !== undefined}{@render spendingCard(c.spending)}{:else}{@render bodies[c.id as CardId](d)}{/if}
+            </div>
           </article>
         {/each}
       </div>
@@ -274,13 +311,22 @@
 
 {#snippet netWorth(d: CardData)}
   <p class="big">{formatMoney(d.net_worth)}</p>
-  <table>
+  <!-- Each group at December 31 of the last two years, and today. -->
+  <table class="groups">
+    <thead>
+      <tr>
+        <th>Group</th>
+        {#each d.years as y, i (y)}<th class="num" title={i < d.years.length - 1 ? `December 31, ${y}` : "Today"}>{y}</th>{/each}
+      </tr>
+    </thead>
     <tbody>
-      <tr><td>Cash and bank</td><td class="num">{formatMoney(d.cash)}</td></tr>
-      <tr><td>Investments</td><td class="num">{formatMoney(d.investments)}</td></tr>
-      <tr><td>Other assets</td><td class="num">{formatMoney(d.other_assets)}</td></tr>
-      <tr><td>Liabilities</td><td class="num">−{formatMoney(d.liabilities)}</td></tr>
+      {#each d.groups as g (g.group)}
+        <tr><td>{g.label}</td>{#each g.balances as v, i (i)}<td class="num">{formatMoney(v)}</td>{/each}</tr>
+      {/each}
     </tbody>
+    <tfoot>
+      <tr class="net"><td>Net worth</td>{#each d.net_worths as v, i (i)}<td class="num">{formatMoney(v)}</td>{/each}</tr>
+    </tfoot>
   </table>
   <button type="button" class="link" onclick={() => openReport("net_worth")}>Net Worth report</button>
 {/snippet}
@@ -397,34 +443,17 @@
   {/if}
 {/snippet}
 
-{#snippet autoExpenses(_: CardData)}
-  {#if autoError}
-    <p class="err" role="alert">{autoError}</p>
+{#snippet spendingCard(id: SpendingCardId)}
+  {@const auto = spent[id]}
+  {#if spentError[id]}
+    <p class="err" role="alert">{spentError[id]}</p>
   {:else if auto}
-    {#if auto.rows.length === 0}
+    {#if auto.rows.length === 0 && auto.chosen === 0}
       <p class="sub">Choose accounts and categories: the gear’s Customize….</p>
+    {:else if auto.rows.length === 0}
+      <p class="sub">No spending this year in the chosen categories.</p>
     {:else}
-      <table class="expenses">
-        <thead>
-          <tr><th>Category</th><th class="num">YTD Expenses</th><th class="num">MTD Expenses</th><th class="num">Monthly Avg</th></tr>
-        </thead>
-        <tbody>
-          {#each auto.rows as r (r.category)}
-            <tr>
-              <td class="label" title={r.label}>{r.label}</td>
-              <td class="num">{formatMoney(r.ytd)}</td>
-              <td class="num">{formatMoney(r.mtd)}</td>
-              <td class="num">{formatMoney(r.monthly_avg)}</td>
-            </tr>
-          {/each}
-          <tr class="net">
-            <td>Total</td>
-            <td class="num">{formatMoney(auto.total.ytd)}</td>
-            <td class="num">{formatMoney(auto.total.mtd)}</td>
-            <td class="num">{formatMoney(auto.total.monthly_avg)}</td>
-          </tr>
-        </tbody>
-      </table>
+      <SpendingTable card={auto} rows={bookSettings.value.spending_rows} />
     {/if}
   {:else}
     <p class="sub">Loading…</p>
@@ -432,6 +461,11 @@
 {/snippet}
 
 <style>
+  /* After a spending card's name: lighter, so the name stands out. */
+  .note {
+    font-weight: 400;
+    opacity: 0.8;
+  }
   /* The tabs share the title band with the heading and the gear. */
   section.view-sheet > header.view-title > h1 {
     flex: none;
@@ -498,30 +532,19 @@
   td {
     padding: 0.1rem 0.3rem;
   }
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .expenses {
-    table-layout: fixed;
-  }
-  .expenses th {
+  /* The Net worth card's year columns, headed like a spending card's. */
+  .groups th {
+    padding: 0.1rem 0.3rem;
     font-weight: 400;
     text-align: left;
     border-bottom: 1px solid var(--line);
-    padding: 0.1rem 0.3rem;
   }
-  .expenses th.num {
+  .groups th.num {
     text-align: right;
   }
-  .expenses th:first-child {
-    width: 40%;
-  }
-  /* A long category path ends in "…"; the full one is its tooltip. */
-  .expenses .label {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .net td {

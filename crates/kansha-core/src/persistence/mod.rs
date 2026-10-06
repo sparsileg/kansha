@@ -21,6 +21,7 @@ pub mod reports;
 pub mod schedules;
 pub mod securities;
 pub mod settings;
+pub mod spending;
 pub mod tags;
 pub mod undo;
 mod values;

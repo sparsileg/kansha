@@ -9,6 +9,7 @@ import type {
   Category,
   CategoryId,
   Insight,
+  SpendingCard,
   Payee,
   Tag,
   TagId,
@@ -33,6 +34,8 @@ class ListsState {
   taxLines = $state<TaxLine[]>([]);
   /** Insights (INS-010), in tab order. */
   insights = $state<Insight[]>([]);
+  /** Spending cards (CARD-060), by name. */
+  spendingCards = $state<SpendingCard[]>([]);
   loaded = $state(false);
   error = $state<string | null>(null);
 
@@ -80,7 +83,7 @@ class ListsState {
 
   async loadAll(): Promise<void> {
     try {
-      const [today, accounts, balances, categories, tags, payees, taxLines, insights] = await Promise.all([
+      const [today, accounts, balances, categories, tags, payees, taxLines, insights, spendingCards] = await Promise.all([
         call(commands.today()),
         call(commands.accountList()),
         call(commands.accountBalances()),
@@ -89,6 +92,7 @@ class ListsState {
         call(commands.payeeList()),
         call(commands.taxLineList()),
         call(commands.insightList()),
+        call(commands.spendingCardList()),
       ]);
       this.today = today;
       this.accounts = accounts;
@@ -98,6 +102,7 @@ class ListsState {
       this.payees = payees;
       this.taxLines = taxLines;
       this.insights = insights;
+      this.spendingCards = spendingCards;
       this.error = null;
       void this.loadNetWorth();
     } catch (e) {
@@ -111,8 +116,9 @@ class ListsState {
     this.categories = await call(commands.categoryList());
   }
 
+  /** The insights and the spending cards they can show. */
   async loadInsights(): Promise<void> {
-    this.insights = await call(commands.insightList());
+    [this.insights, this.spendingCards] = await Promise.all([call(commands.insightList()), call(commands.spendingCardList())]);
   }
 
   async loadPayees(): Promise<void> {

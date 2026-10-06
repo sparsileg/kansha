@@ -1,6 +1,6 @@
 //! What the Insights cards show (CARD-010 … CARD-060): net worth and its
 //! parts, this month's income and spending, net worth over time, what is
-//! due, what needs attention, and auto expenses.
+//! due, what needs attention, and spending cards.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -11,10 +11,10 @@ use serde::Serialize;
 use super::chart::{self, Chart, SeriesStyle};
 use super::facts::{self, Lookups, Section, Want};
 use super::net_worth::shown_balances;
-use super::range::{day_before, periods};
+use super::range::{day_before, month_end, periods};
 use super::{DatePreset, DateRange, ReportKind, ReportSettings, ResolvedRange};
-use crate::accounts::{Account, AccountId, AccountStatus, AccountType};
-use crate::categories::CategoryId;
+use crate::accounts::{Account, AccountGroup, AccountId, AccountStatus, AccountType};
+use crate::categories::{CategoryId, CategoryKind};
 use crate::date::{Clock, Date, Timestamp};
 use crate::error::{Error, Result};
 use crate::integrity::IntegrityStatus;
@@ -23,6 +23,7 @@ use crate::money::{Money, mul_div};
 use crate::persistence::{accounts, audit, reports as repo};
 use crate::schedule::{self, OccurrenceView};
 use crate::settings;
+use crate::spending::SpendingCard;
 use crate::text_enum::text_enum;
 
 /// Uncleared transactions older than this many days are flagged.
@@ -166,14 +167,14 @@ pub struct CardData {
     pub today: Date,
     /// Assets minus liabilities today (CARD-010).
     pub net_worth: Money,
-    /// Checking, savings, cash, and money market accounts.
-    pub cash: Money,
-    /// Investment accounts at market value.
-    pub investments: Money,
-    /// Every other asset (houses, vehicles, ...).
-    pub other_assets: Money,
-    /// Owed on credit cards, loans, and other liabilities (positive).
-    pub liabilities: Money,
+    /// The Net worth card's columns: two years ago and last year (at
+    /// December 31), then this year (today).
+    pub years: Vec<i32>,
+    /// One row per account group with an account, in the account
+    /// list's order.
+    pub groups: Vec<GroupBalances>,
+    /// Net worth at each of `years`; the last is `net_worth`.
+    pub net_worths: Vec<Money>,
     /// This month so far.
     pub month_from: Date,
     pub income: Money,
@@ -186,55 +187,90 @@ pub struct CardData {
     pub upcoming_days: i64,
 }
 
+/// One account group's row on the Net worth card (CARD-010).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct GroupBalances {
+    pub group: AccountGroup,
+    /// As the account list names it: "Banking".
+    pub label: String,
+    /// At each of `CardData::years`; money owed is negative.
+    pub balances: Vec<Money>,
+}
+
 fn add(a: Money, b: Money) -> Result<Money> {
     a.checked_add(b).ok_or(Error::Overflow("insight cards"))
 }
 
-/// Net worth's parts today: cash, investments, other assets, and
-/// liabilities (owed, positive), every account counted.
-struct Parts {
-    cash: Money,
-    investments: Money,
-    other_assets: Money,
-    liabilities: Money,
+/// The account list's groups, in its order (ACCT-240).
+const GROUPS: [(AccountGroup, &str); 7] = [
+    (AccountGroup::Banking, "Banking"),
+    (AccountGroup::Credit, "Credit"),
+    (AccountGroup::Investments, "Investments"),
+    (AccountGroup::Retirement, "Retirement"),
+    (AccountGroup::Assets, "Assets"),
+    (AccountGroup::Liabilities, "Liabilities"),
+    (AccountGroup::Other, "Other"),
+];
+
+/// Each group's balance on each of `dates`, every account counted
+/// (closed ones too) in the group it is in now; investments at market
+/// value, money owed negative. Groups with no account are left out.
+fn group_balances(conn: &Connection, dates: &[Date]) -> Result<Vec<GroupBalances>> {
+    let mut rows: Vec<(GroupBalances, bool)> = GROUPS
+        .iter()
+        .map(|(group, label)| {
+            (
+                GroupBalances {
+                    group: *group,
+                    label: (*label).to_string(),
+                    balances: vec![Money::ZERO; dates.len()],
+                },
+                false,
+            )
+        })
+        .collect();
+    for a in &accounts::list(conn)? {
+        let Some((row, used)) = rows.iter_mut().find(|(r, _)| r.group == a.fields.group) else {
+            continue;
+        };
+        *used = true;
+        let owed = a.fields.account_type.is_liability();
+        for (sum, v) in row.balances.iter_mut().zip(shown_balances(conn, a, dates)?) {
+            let v = if owed {
+                v.checked_neg().ok_or(Error::Overflow("insight cards"))?
+            } else {
+                v
+            };
+            *sum = add(*sum, v)?;
+        }
+    }
+    Ok(rows
+        .into_iter()
+        .filter(|(_, used)| *used)
+        .map(|(r, _)| r)
+        .collect())
 }
 
-impl Parts {
-    fn load(conn: &Connection, today: Date) -> Result<Parts> {
-        let mut p = Parts {
-            cash: Money::ZERO,
-            investments: Money::ZERO,
-            other_assets: Money::ZERO,
-            liabilities: Money::ZERO,
-        };
-        for a in &accounts::list(conn)? {
-            let v = shown_balances(conn, a, &[today])?[0];
-            let t = a.fields.account_type;
-            let slot = if t.is_liability() {
-                &mut p.liabilities
-            } else if t.is_investment() {
-                &mut p.investments
-            } else if t.is_cash_bearing() {
-                &mut p.cash
-            } else {
-                &mut p.other_assets
-            };
-            *slot = add(*slot, v)?;
-        }
-        Ok(p)
-    }
-
-    fn net_worth(&self) -> Result<Money> {
-        add(add(self.cash, self.investments)?, self.other_assets)?
-            .checked_sub(self.liabilities)
-            .ok_or(Error::Overflow("insight cards"))
-    }
+/// Net worth at each of `dates`: the groups' sum.
+fn net_worths(groups: &[GroupBalances], dates: usize) -> Result<Vec<Money>> {
+    (0..dates)
+        .map(|i| {
+            groups
+                .iter()
+                .try_fold(Money::ZERO, |acc, g| add(acc, g.balances[i]))
+        })
+        .collect()
 }
 
 /// Net worth today, as the Net worth card shows it (CARD-010): for the foot of
 /// the account list (ACCT-240).
 pub fn net_worth(conn: &Connection, today: Date) -> Result<Money> {
-    Parts::load(conn, today)?.net_worth()
+    let groups = group_balances(conn, &[today])?;
+    Ok(net_worths(&groups, 1)?
+        .first()
+        .copied()
+        .unwrap_or(Money::ZERO))
 }
 
 /// [`net_worth`] as the account bar shows it (ACCT-240).
@@ -243,14 +279,17 @@ pub fn account_bar_net_worth(conn: &Connection, today: Date) -> Result<Money> {
 }
 
 pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<CardData> {
-    let parts = Parts::load(conn, today)?;
-    let net_worth = parts.net_worth()?;
-    let Parts {
-        cash,
-        investments,
-        other_assets,
-        liabilities,
-    } = parts;
+    // Net worth by group: December 31 two years ago and last year, and
+    // today.
+    let years = vec![today.year() - 2, today.year() - 1, today.year()];
+    let dates = [
+        Date::from_ymd(years[0], 12, 31)?,
+        Date::from_ymd(years[1], 12, 31)?,
+        today,
+    ];
+    let groups = group_balances(conn, &dates)?;
+    let net_worths = net_worths(&groups, dates.len())?;
+    let net_worth = net_worths.last().copied().unwrap_or(Money::ZERO);
 
     // This month's income and spending.
     let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
@@ -297,10 +336,9 @@ pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<C
     Ok(CardData {
         today,
         net_worth,
-        cash,
-        investments,
-        other_assets,
-        liabilities,
+        years,
+        groups,
+        net_worths,
         month_from,
         income,
         expenses,
@@ -350,7 +388,7 @@ pub fn net_worth_trend(conn: &Connection, today: Date, years: i64, fitted: bool)
     }
 }
 
-/// One row of the Auto Expenses card (CARD-060): spent this year, this
+/// One row of a spending card (CARD-060): spent this year, this
 /// month, and per month, expenses positive.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -359,69 +397,100 @@ pub struct ExpenseRow {
     pub category: Option<CategoryId>,
     /// "Car:BlueForester:Gas", or "Total".
     pub label: String,
-    /// January 1 through today.
+    /// January 1 through the end of this month, scheduled included.
     pub ytd: Money,
-    /// The 1st of this month through today.
+    /// The 1st of this month through its end, scheduled included.
     pub mtd: Money,
     /// `ytd` over the months begun this year, this one included, as
     /// Quicken does.
     pub monthly_avg: Money,
+    /// The part of `ytd` and `mtd` still only scheduled: pending
+    /// occurrences dated this month.
+    pub scheduled: Money,
 }
 
-/// The Auto Expenses card (CARD-060).
+/// What a spending card shows (CARD-060).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct ExpenseCard {
-    /// The chosen categories by name; none when no category or no
-    /// account is chosen.
+    /// The chosen categories with transactions this year (scheduled
+    /// this month included), by name;
+    /// none when no category or no account is chosen.
     pub rows: Vec<ExpenseRow>,
     pub total: ExpenseRow,
+    /// How many categories are chosen (0 when no account is), so an
+    /// empty card can tell "choose some" from "no spending this year".
+    pub chosen: u32,
 }
 
-/// The Auto Expenses card (CARD-060): each category chosen in the book
-/// settings, on its own (subcategories are not added in), counting only
-/// the chosen accounts (every open one if never chosen).
-pub fn auto_expenses(conn: &Connection, today: Date) -> Result<ExpenseCard> {
-    let s = settings::load(conn)?;
+/// A spending card (CARD-060): each spending category chosen on the
+/// card, on its own (subcategories are not added in), counting only the
+/// chosen accounts (every open one if never chosen). Past and scheduled:
+/// transactions through the end of this month (later-dated ones
+/// included) and this month's pending scheduled occurrences, so what
+/// is due later this month counts now.
+pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Result<ExpenseCard> {
     let lk = Lookups::load(conn)?;
-    let accounts = s.auto_accounts.unwrap_or_else(|| {
+    let accounts = card.accounts.clone().unwrap_or_else(|| {
         lk.accounts
             .iter()
             .filter(|a| a.status == AccountStatus::Open)
             .map(|a| a.id)
             .collect()
     });
-    let mut chosen: Vec<CategoryId> = s
-        .auto_categories
-        .into_iter()
-        .filter(|c| lk.category(*c).is_some())
+    let mut chosen: Vec<CategoryId> = card
+        .categories
+        .iter()
+        .copied()
+        .filter(|c| {
+            lk.category(*c)
+                .is_some_and(|x| x.fields.kind == CategoryKind::Expense)
+        })
         .collect();
     if accounts.is_empty() {
         chosen.clear();
     }
     let months = i64::from(today.month());
-    let row = |category, label, ytd: Money, mtd| -> Result<ExpenseRow> {
+    let row = |category, label, ytd: Money, mtd, scheduled| -> Result<ExpenseRow> {
         Ok(ExpenseRow {
             category,
             label,
             ytd,
             mtd,
             monthly_avg: Money::from_cents(mul_div(ytd.cents(), 1, months)?),
+            scheduled,
         })
     };
 
     let mut ytd: BTreeMap<CategoryId, Money> = BTreeMap::new();
     let mut mtd: BTreeMap<CategoryId, Money> = BTreeMap::new();
+    let mut sched: BTreeMap<CategoryId, Money> = BTreeMap::new();
     if !chosen.is_empty() {
         let year_from = Date::from_ymd(today.year(), 1, 1)?;
         let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
+        let month_to = month_end(today, 0)?;
+        for (c, amount) in
+            schedule::scheduled_by_category(conn, month_from, month_to, today, &accounts)?
+        {
+            if !chosen.contains(&c) {
+                continue;
+            }
+            // A payment line is negative; spent is shown positive.
+            let spent = amount
+                .checked_neg()
+                .ok_or(Error::Overflow("insight cards"))?;
+            for m in [&mut ytd, &mut mtd, &mut sched] {
+                let v = m.entry(c).or_insert(Money::ZERO);
+                *v = add(*v, spent)?;
+            }
+        }
         let mut rs = ReportSettings::defaults(ReportKind::IncomeExpense);
         rs.accounts = Some(accounts);
         rs.categories = Some(chosen.clone());
         rs.transfers = false;
         let range = ResolvedRange {
             from: Some(year_from),
-            to: today,
+            to: month_to,
         };
         for l in facts::lines(&facts::load(conn, range)?, &rs, &lk, Want::All)? {
             let facts::Target::Category(c) = l.target else {
@@ -443,20 +512,25 @@ pub fn auto_expenses(conn: &Connection, today: Date) -> Result<ExpenseCard> {
 
     chosen.sort_by_cached_key(|c| lk.category_path(*c).to_lowercase());
     chosen.dedup();
+    let count = u32::try_from(chosen.len()).unwrap_or(u32::MAX);
     let mut rows = Vec::new();
-    let (mut ty, mut tm) = (Money::ZERO, Money::ZERO);
+    let (mut ty, mut tm, mut ts) = (Money::ZERO, Money::ZERO, Money::ZERO);
     for c in chosen {
-        let (y, m) = (
-            ytd.get(&c).copied().unwrap_or(Money::ZERO),
-            mtd.get(&c).copied().unwrap_or(Money::ZERO),
-        );
+        // No transactions this year: left out (one netting to zero stays).
+        let Some(&y) = ytd.get(&c) else {
+            continue;
+        };
+        let m = mtd.get(&c).copied().unwrap_or(Money::ZERO);
+        let s = sched.get(&c).copied().unwrap_or(Money::ZERO);
         ty = add(ty, y)?;
         tm = add(tm, m)?;
-        rows.push(row(Some(c), lk.category_path(c), y, m)?);
+        ts = add(ts, s)?;
+        rows.push(row(Some(c), lk.category_path(c), y, m, s)?);
     }
     Ok(ExpenseCard {
         rows,
-        total: row(None, "Total".into(), ty, tm)?,
+        total: row(None, "Total".into(), ty, tm, ts)?,
+        chosen: count,
     })
 }
 
