@@ -103,6 +103,27 @@ describe("EntryEditor keyboard entry (REG-030)", () => {
     await waitFor(() => expect(field("Payment").value).toBe(""));
   });
 
+  it("warns about an Uncategorized line and saves only if told to (REG-160)", async () => {
+    c.entryWarnings.mockImplementation(() => ok(["uncategorized" as const]));
+    const { confirmState } = await import("../state/confirm.svelte");
+    const ask = vi.spyOn(confirmState, "ask").mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    try {
+      render(EntryEditor, { account: 1 });
+      await fireEvent.input(field("Payment"), { target: { value: "9" } });
+      await pick("Category", "food");
+      const form = field("Date").closest("form")!;
+      await fireEvent.submit(form);
+      await waitFor(() => expect(ask).toHaveBeenCalledWith("A line is in Uncategorized. Save anyway?"));
+      await new Promise((r) => setTimeout(r, 0)); // the declined save finishes
+      expect(c.entryCreate).not.toHaveBeenCalled();
+      await fireEvent.submit(form);
+      await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
+    } finally {
+      c.entryWarnings.mockImplementation(() => ok([]));
+      ask.mockRestore();
+    }
+  });
+
   it("saves after picking a category and resets for the next entry", async () => {
     render(EntryEditor, { account: 1 });
     await fireEvent.input(field("Payment"), { target: { value: "9" } });

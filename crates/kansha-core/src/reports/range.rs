@@ -1,12 +1,13 @@
 //! Date range presets (RPT-040) and report periods.
 
-use chrono::{Duration, Months, NaiveDate};
+use chrono::{Datelike, Duration, Months, NaiveDate};
 use rusqlite::Connection;
 
-use super::{DatePreset, DateRange, Interval, PeriodChoice, ResolvedRange};
+use super::{CompareTo, DatePreset, DateRange, Interval, PeriodChoice, ResolvedRange};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::persistence::reports as repo;
+use crate::settings::{self, WeekStart};
 
 fn ymd(y: i32, m: u32, d: u32) -> Result<Date> {
     Date::from_ymd(y, m, d)
@@ -42,6 +43,59 @@ fn quarter_start(d: Date) -> Result<Date> {
     ymd(d.year(), (d.month() - 1) / 3 * 3 + 1, 1)
 }
 
+/// The first day of the week holding `d`.
+fn week_start(d: Date, first: WeekStart) -> Result<Date> {
+    let wd = d.naive().weekday();
+    let back = match first {
+        WeekStart::Sunday => wd.num_days_from_sunday(),
+        WeekStart::Monday => wd.num_days_from_monday(),
+    };
+    add_days(d, -i64::from(back))
+}
+
+/// The periods a comparison report averages (RPT-210): `compare`'s
+/// weeks, months, quarters, or years ending on `to`, so a range's own
+/// dates are part of its average.
+pub fn compare_window(to: Date, compare: CompareTo) -> Result<(Date, Date)> {
+    use CompareTo as C;
+    let n = compare.count();
+    let after = add_days(to, 1)?.naive();
+    let from = match compare {
+        C::Weeks4 | C::Weeks8 | C::Weeks12 => return Ok((add_days(to, 1 - 7 * i64::from(n))?, to)),
+        C::Months3 | C::Months6 | C::Months12 => sub_months(after, n)?,
+        C::Quarters4 | C::Quarters8 | C::Quarters12 => sub_months(after, 3 * n)?,
+        C::Years1 | C::Years3 | C::Years5 => sub_months(after, 12 * n)?,
+    };
+    Ok((Date::from_naive(from), to))
+}
+
+/// The periods a comparison report averages for Custom dates
+/// (RPT-210): `compare`'s whole weeks, months, quarters, or years
+/// before the current one on `today` ("last year" in 2026 is 2025).
+pub fn compare_before(today: Date, compare: CompareTo, first: WeekStart) -> Result<(Date, Date)> {
+    use CompareTo as C;
+    let n = compare.count();
+    let (start, from) = match compare {
+        C::Weeks4 | C::Weeks8 | C::Weeks12 => {
+            let start = week_start(today, first)?;
+            (start, add_days(start, -7 * i64::from(n))?)
+        }
+        C::Months3 | C::Months6 | C::Months12 => {
+            let start = ymd(today.year(), today.month(), 1)?;
+            (start, Date::from_naive(sub_months(start.naive(), n)?))
+        }
+        C::Quarters4 | C::Quarters8 | C::Quarters12 => {
+            let start = quarter_start(today)?;
+            (start, Date::from_naive(sub_months(start.naive(), 3 * n)?))
+        }
+        C::Years1 | C::Years3 | C::Years5 => {
+            let start = ymd(today.year(), 1, 1)?;
+            (start, Date::from_naive(sub_months(start.naive(), 12 * n)?))
+        }
+    };
+    Ok((from, add_days(start, -1)?))
+}
+
 /// A range's dates on `today`. "All dates" starts at the first
 /// transaction; a custom range with no start does too.
 pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<ResolvedRange> {
@@ -75,6 +129,15 @@ pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<Reso
             Some(ymd(today.year() - 1, 1, 1)?),
             ymd(today.year() - 1, 12, 31)?,
         ),
+        P::WeekToDate => {
+            let first = settings::load(conn)?.week_start;
+            (Some(week_start(today, first)?), today)
+        }
+        P::LastWeek => {
+            let first = settings::load(conn)?.week_start;
+            let start = add_days(week_start(today, first)?, -7)?;
+            (Some(start), add_days(start, 6)?)
+        }
         P::Last30Days => (Some(add_days(today, -29)?), today),
         P::Last12Months => {
             let start = Date::from_naive(sub_months(add_days(today, 1)?.naive(), 12)?);
@@ -233,6 +296,80 @@ mod tests {
             from: None,
             to: None,
         }
+    }
+
+    /// Week presets follow Settings' first day of the week (RPT-210).
+    #[test]
+    fn week_presets_start_on_the_chosen_day() {
+        // A Thursday.
+        let today = d("2026-10-01");
+        let clock = FixedClock::new(today);
+        let mut db = Db::open_in_memory(&clock).unwrap();
+        let pair = |db: &Db, p| {
+            let x = resolve(db.conn(), &range(p), today).unwrap();
+            (x.from.unwrap().to_string(), x.to.to_string())
+        };
+        let s = |a: &str, b: &str| (a.to_string(), b.to_string());
+        assert_eq!(
+            pair(&db, DatePreset::WeekToDate),
+            s("2026-09-27", "2026-10-01")
+        );
+        assert_eq!(
+            pair(&db, DatePreset::LastWeek),
+            s("2026-09-20", "2026-09-26")
+        );
+        let mut set = settings::load(db.conn()).unwrap();
+        set.week_start = WeekStart::Monday;
+        db.write(&clock, crate::Origin::System, |tx| settings::save(tx, &set))
+            .unwrap();
+        assert_eq!(
+            pair(&db, DatePreset::WeekToDate),
+            s("2026-09-28", "2026-10-01")
+        );
+        assert_eq!(
+            pair(&db, DatePreset::LastWeek),
+            s("2026-09-21", "2026-09-27")
+        );
+    }
+
+    /// The averaged periods end on the range's last day (RPT-210).
+    #[test]
+    fn compare_window_ends_on_the_last_day() {
+        let w = |to: &str, c| {
+            let (a, b) = compare_window(d(to), c).unwrap();
+            format!("{a} {b}")
+        };
+        assert_eq!(w("2026-09-30", CompareTo::Months3), "2026-07-01 2026-09-30");
+        assert_eq!(w("2026-10-05", CompareTo::Months3), "2026-07-06 2026-10-05");
+        assert_eq!(w("2026-02-28", CompareTo::Months3), "2025-12-01 2026-02-28");
+        assert_eq!(w("2026-10-05", CompareTo::Weeks4), "2026-09-08 2026-10-05");
+        assert_eq!(
+            w("2026-06-30", CompareTo::Quarters4),
+            "2025-07-01 2026-06-30"
+        );
+        assert_eq!(w("2026-12-31", CompareTo::Years1), "2026-01-01 2026-12-31");
+        assert_eq!(w("2026-10-05", CompareTo::Years5), "2021-10-06 2026-10-05");
+    }
+
+    /// Custom dates: whole periods before today's (RPT-210).
+    #[test]
+    fn compare_before_counts_back_from_today() {
+        // A Thursday.
+        let today = d("2026-10-01");
+        let w = |c, first| {
+            let (a, b) = compare_before(today, c, first).unwrap();
+            format!("{a} {b}")
+        };
+        let sun = WeekStart::Sunday;
+        assert_eq!(w(CompareTo::Years1, sun), "2025-01-01 2025-12-31");
+        assert_eq!(w(CompareTo::Years3, sun), "2023-01-01 2025-12-31");
+        assert_eq!(w(CompareTo::Months3, sun), "2026-07-01 2026-09-30");
+        assert_eq!(w(CompareTo::Quarters4, sun), "2025-10-01 2026-09-30");
+        assert_eq!(w(CompareTo::Weeks4, sun), "2026-08-30 2026-09-26");
+        assert_eq!(
+            w(CompareTo::Weeks4, WeekStart::Monday),
+            "2026-08-31 2026-09-27"
+        );
     }
 
     /// Date range presets (RPT-040).

@@ -10,7 +10,7 @@ describe("insight cards (INS-020)", () => {
   });
 
   it("offers the cards not yet on the insight, in catalog order", () => {
-    expect(ids(cardsNotIn(["this_month", "attention"]))).toEqual(["net_worth", "net_worth_trend", "upcoming"]);
+    expect(ids(cardsNotIn(["this_month", "attention"]))).toEqual(["net_worth", "net_worth_trend", "upcoming", "auto_expenses"]);
     expect(ids(cardsNotIn([]))).toEqual(ids([...CARDS]));
   });
 });

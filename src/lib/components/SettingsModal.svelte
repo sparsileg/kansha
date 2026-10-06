@@ -9,6 +9,7 @@
   import { startupChoices } from "../shell/nav";
   import { bookSettings } from "../state/booksettings.svelte";
   import { dialogState } from "../state/dialogs.svelte";
+  import { listsState } from "../state/lists.svelte";
   import { DATE_FORMATS } from "../state/dateformat.svelte";
   import type { BackupInfo, Settings } from "../types/bindings";
   import Modal from "./Modal.svelte";
@@ -58,11 +59,14 @@
       error = `${bad[1]} must be a whole number.`;
       return;
     }
+    const centsChanged = s.account_bar_cents !== bookSettings.value.account_bar_cents;
     error = await bookSettings.update(s);
     if (error) {
       await bookSettings.load();
       return;
     }
+    // Rust rounds the account bar's figures; fetch them again.
+    if (centsChanged) void listsState.loadBalances();
     dialogState.settings = false;
   }
 
@@ -114,6 +118,10 @@
             <option value="left">Left</option>
             <option value="right">Right</option>
           </select>
+        </label>
+        <label>
+          <span>Show cents in Account Bar balances</span>
+          <input type="checkbox" bind:checked={s.account_bar_cents} />
         </label>
       {:else if category === "data"}
         <label>
@@ -170,8 +178,12 @@
           <input type="checkbox" bind:checked={s.warn_check_reuse} />
         </label>
         <label>
-          <span>Save a transaction after changing it</span>
+          <span>Ask before saving changes to an existing transaction</span>
           <input type="checkbox" bind:checked={s.confirm_save_change} />
+        </label>
+        <label>
+          <span>When entering uncategorized transactions (split lines included)</span>
+          <input type="checkbox" bind:checked={s.warn_uncategorized} />
         </label>
       {:else}
         <div class="folder">

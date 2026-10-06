@@ -1,8 +1,9 @@
 <script lang="ts">
   // Insights (INS-010 … INS-030): named tabs of cards, in the sheet's
-  // title band. The cards (CARD-010 … CARD-050, `lib/insights/cards.ts`)
+  // title band. The cards (CARD-010 … CARD-060, `lib/insights/cards.ts`)
   // show net worth and its parts, this month's income and spending, net
-  // worth over 1, 2, or 5 years, what is due, and what needs attention.
+  // worth over 1, 2, or 5 years, what is due, what needs attention, and
+  // auto expenses.
   // The gear acts on the tab shown:
   // Customize…, Create new insight…, Move left/right, Delete insight….
   // Every figure comes from Rust.
@@ -11,6 +12,7 @@
   import ContextMenu from "../lib/components/ContextMenu.svelte";
   import GearButton from "../lib/components/GearButton.svelte";
   import InsightModal from "../lib/components/InsightModal.svelte";
+  import CardFilterModal from "../lib/components/insights/CardFilterModal.svelte";
   import ReportChart from "../lib/components/reports/ReportChart.svelte";
   import { cardsOf, type CardId } from "../lib/insights/cards";
   import { displayDate } from "../lib/format/date";
@@ -24,7 +26,7 @@
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { Attention, CardData, Chart, Insight } from "../lib/types/bindings";
+  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -87,6 +89,42 @@
         if (mine === attnSeq) attnError = e instanceof Error ? e.message : String(e);
       });
   });
+
+  // The Auto Expenses card, loaded only while it is shown, and again when
+  // its accounts or categories change (CARD-060). Its gear's Customize…
+  // chooses them; they are book settings.
+  let auto = $state<ExpenseCard | null>(null);
+  let autoError = $state<string | null>(null);
+  let autoSeq = 0;
+  let autoMenu = $state<{ x: number; y: number } | null>(null);
+  let customizingAuto = $state(false);
+  const showsAuto = $derived(cards.some((c) => c.id === "auto_expenses"));
+
+  $effect(() => {
+    if (!showsAuto) return;
+    void [bookSettings.value.auto_accounts, bookSettings.value.auto_categories];
+    const mine = ++autoSeq;
+    call(commands.autoExpenses())
+      .then((c) => {
+        if (mine !== autoSeq) return;
+        auto = c;
+        autoError = null;
+      })
+      .catch((e) => {
+        if (mine === autoSeq) autoError = e instanceof Error ? e.message : String(e);
+      });
+  });
+
+  function openAutoMenu(e: MouseEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    autoMenu = autoMenu ? null : { x: r.right, y: r.bottom };
+  }
+
+  async function saveAuto(accounts: AccountId[], categories: CategoryId[]) {
+    customizingAuto = false;
+    const err = await bookSettings.update({ auto_accounts: accounts, auto_categories: categories });
+    if (err) statusState.show(err, "alert");
+  }
 
   function showIntegrity() {
     dialogState.integrityReport = null;
@@ -171,6 +209,7 @@
     net_worth_trend: trendChart,
     upcoming,
     attention,
+    auto_expenses: autoExpenses,
   };
 </script>
 
@@ -198,6 +237,18 @@
   {:else if editing !== null}
     <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onclose={() => (editing = null)} />
   {/if}
+  {#if autoMenu}
+    <ContextMenu x={autoMenu.x} y={autoMenu.y} onclose={() => (autoMenu = null)} items={[{ label: "Customize…", action: () => (customizingAuto = true) }]} />
+  {/if}
+  {#if customizingAuto}
+    <CardFilterModal
+      title="Customize Auto Expenses"
+      accounts={bookSettings.value.auto_accounts}
+      categories={bookSettings.value.auto_categories}
+      onsave={saveAuto}
+      onclose={() => (customizingAuto = false)}
+    />
+  {/if}
   <div class="view-body">
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     {#if data}
@@ -208,6 +259,7 @@
             <header>
               <h2 id={`card-${c.id}`}>{heading(c.id, c.label, d)}</h2>
               {#if c.id === "net_worth_trend"}{@render trendControls()}{/if}
+              {#if c.id === "auto_expenses"}<GearButton label="Auto Expenses options" onclick={openAutoMenu} />{/if}
             </header>
             <div class="body">{@render bodies[c.id](d)}</div>
           </article>
@@ -345,6 +397,40 @@
   {/if}
 {/snippet}
 
+{#snippet autoExpenses(_: CardData)}
+  {#if autoError}
+    <p class="err" role="alert">{autoError}</p>
+  {:else if auto}
+    {#if auto.rows.length === 0}
+      <p class="sub">Choose accounts and categories: the gear’s Customize….</p>
+    {:else}
+      <table class="expenses">
+        <thead>
+          <tr><th>Category</th><th class="num">YTD Expenses</th><th class="num">MTD Expenses</th><th class="num">Monthly Avg</th></tr>
+        </thead>
+        <tbody>
+          {#each auto.rows as r (r.category)}
+            <tr>
+              <td class="label" title={r.label}>{r.label}</td>
+              <td class="num">{formatMoney(r.ytd)}</td>
+              <td class="num">{formatMoney(r.mtd)}</td>
+              <td class="num">{formatMoney(r.monthly_avg)}</td>
+            </tr>
+          {/each}
+          <tr class="net">
+            <td>Total</td>
+            <td class="num">{formatMoney(auto.total.ytd)}</td>
+            <td class="num">{formatMoney(auto.total.mtd)}</td>
+            <td class="num">{formatMoney(auto.total.monthly_avg)}</td>
+          </tr>
+        </tbody>
+      </table>
+    {/if}
+  {:else}
+    <p class="sub">Loading…</p>
+  {/if}
+{/snippet}
+
 <style>
   /* The tabs share the title band with the heading and the gear. */
   section.view-sheet > header.view-title > h1 {
@@ -415,6 +501,27 @@
   .num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .expenses {
+    table-layout: fixed;
+  }
+  .expenses th {
+    font-weight: 400;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    padding: 0.1rem 0.3rem;
+  }
+  .expenses th.num {
+    text-align: right;
+  }
+  .expenses th:first-child {
+    width: 40%;
+  }
+  /* A long category path ends in "…"; the full one is its tooltip. */
+  .expenses .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .net td {

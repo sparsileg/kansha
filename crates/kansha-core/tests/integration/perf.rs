@@ -127,6 +127,24 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
             ReportKind::ItemizedCategories,
             custom("2025-01-01", "2025-12-31"),
         ),
+        (
+            "spending vs. average by category",
+            ReportKind::CompareCategory,
+            DateRange {
+                preset: DatePreset::LastMonth,
+                from: None,
+                to: None,
+            },
+        ),
+        (
+            "spending vs. average by payee",
+            ReportKind::ComparePayee,
+            DateRange {
+                preset: DatePreset::LastMonth,
+                from: None,
+                to: None,
+            },
+        ),
     ];
     for (what, kind, range) in cases {
         let mut s = ReportSettings::defaults(kind);
@@ -158,6 +176,27 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     let t = Instant::now();
     reports::net_worth_trend(db.conn(), today, 5, false).unwrap();
     check("net worth card, 5 years", t.elapsed(), 2000, &mut failures);
+
+    // Auto Expenses with every category chosen (CARD-060).
+    let mut s = kansha_core::settings::load(db.conn()).unwrap();
+    s.auto_categories = kansha_core::persistence::categories::list(db.conn())
+        .unwrap()
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    db.write(&clock, Origin::System, |tx| {
+        kansha_core::settings::save(tx, &s)
+    })
+    .unwrap();
+    let t = Instant::now();
+    let card = reports::auto_expenses(db.conn(), today).unwrap();
+    assert!(!card.rows.is_empty());
+    check(
+        "auto expenses card, every category",
+        t.elapsed(),
+        2000,
+        &mut failures,
+    );
 
     // Integrity check (INT): timed, no limit.
     let t = Instant::now();

@@ -7,7 +7,7 @@ import {
   parseMoney,
   splitPaymentDeposit,
 } from "./money";
-import { addDays, applyDateKey, completeDate, datePattern, displayDate, parseDate } from "./date";
+import { addDays, applyDateKey, completeDate, datePattern, displayDate, displayDatesIn, parseDate } from "./date";
 import { dateFormatState } from "../state/dateformat.svelte";
 
 describe("parseMoney", () => {
@@ -112,6 +112,27 @@ describe("dates", () => {
     }
     expect(displayDate("2026-03-05")).toBe("03/05/2026");
     expect(datePattern()).toBe("MM/DD/YYYY");
+  });
+
+  it("shows dates inside a message in the user's format", () => {
+    expect(displayDatesIn("no price on 2026-03-05 for security 4")).toBe(
+      "no price on 03/05/2026 for security 4",
+    );
+    expect(displayDatesIn("from 2025-12-31 to 2026-01-02.")).toBe(
+      "from 12/31/2025 to 01/02/2026.",
+    );
+    // File names, timestamps, and invalid dates stay as they are.
+    expect(displayDatesIn("kansha-2026-03-05-1230Z-manual.zip")).toBe(
+      "kansha-2026-03-05-1230Z-manual.zip",
+    );
+    expect(displayDatesIn("at 2026-03-05T12:30:00Z")).toBe("at 2026-03-05T12:30:00Z");
+    expect(displayDatesIn('invalid date "2026-13-05"')).toBe('invalid date "2026-13-05"');
+    try {
+      dateFormatState.set("dmy");
+      expect(displayDatesIn("on 2026-03-05")).toBe("on 05/03/2026");
+    } finally {
+      dateFormatState.set("mdy");
+    }
   });
 
   it("handles register date keys", () => {

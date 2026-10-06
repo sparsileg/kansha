@@ -220,8 +220,9 @@ Gaps:
 
 ## Known gaps
 
-- MIG-100: only the per-account before/after/expected table in the
-  import result. Matching report layouts wait for P-02.
+- ~~MIG-100~~: done 2026-10-05 (spec 0.7.29). The per-account
+  before/after/expected table and the existing reports were enough;
+  P-02 closed, no matching report layouts.
 - MIG-150 (scheduled transactions): closed, not needed (spec 0.7.2);
   Stan re-entered his schedules by hand.
 - From 2026-10-01 Stan's imported book is his production book. Fixes
@@ -800,3 +801,61 @@ shown tab is `ViewParams.insight` (absent = first). Nav item
 integration `insights` (3), migration 0014; vitest Insights view
 (12), cards, navitems, actions, menus. Not seen in the app yet.
 Deferred: more cards; per-insight card sizes.
+
+## Auto Expenses card (spec 0.7.31, 2026-10-05)
+
+CARD-060. Core: `reports::auto_expenses` in `reports/cards.rs` (types
+`ExpenseCard`, `ExpenseRow`) reads the chosen accounts and categories
+from the book settings and runs the Income/Expense lines (`facts`)
+for January 1 through today with those filters; exact categories, no
+rollup. Monthly Avg = YTD ÷ today's month number (Quicken: the month
+begun counts), half-even; the Total row's average is its own YTD ÷
+months, not the sum of the rows'. Settings `auto_accounts` (JSON list;
+unset = every open account) and `auto_categories` (JSON list). Command
+`auto_expenses`. UI: card `auto_expenses` (double) in `cards.ts`; gear
+on the card header → Customize… → `components/insights/
+CardFilterModal.svelte` (Accounts and Categories tabs, copied from the
+report Customize's filter pane). Not added to existing insights; add
+it with the insight's Customize…. Tests: Rust integration
+`insights::auto_expenses_card_totals_the_chosen_categories`; vitest
+Insights view (4 new). Known gap: a category merged or deleted later
+drops out of the card's list (report filters are rewritten, these are
+not).
+
+## Comparison reports (spec 0.7.32, 2026-10-05)
+
+RPT-210 (and RPT-040's comparison). Core: `reports/compare.rs` builds
+`compare_category` and `compare_payee`: expense lines (`facts`, no
+transfers) from the earlier of the range start and the compare
+window, each line counted in the range column and/or the window
+column. Rows are summed with `tree::sum_up` while the second column
+still holds the window's exact total; `average` then turns it into
+total ÷ count (half-even) and fills Difference, so groups and the
+overall total average their own totals. `range::compare_window`: the
+N weeks/months/quarters/years ending on the range's last day;
+`range::compare_before` (Custom dates, Stan 2026-10-05): the N whole
+periods before today's, so a 2024 range against last year is 2025.
+Last year against last year (0.7.33): the year before the range
+(2025 against 2024), else the average equals the range.
+Headings (0.7.33): Rust labels the range column with the Date range
+text (`compare::range_label`) and the average column with the Compare
+to text (`CompareTo::label`), each with its dates. `ReportWindow`
+shows both as "Label: dates" lines under the title (CSS grid, colons
+lined up; `ReportTable` allows a line for it when paging);
+`columnHeading` gives "Avg spending" over the Compare to text,
+shortened ("Last 4 qtrs", "Last 3 yrs"; months spelled out). CSV puts the two lines under the
+title and heads the average "Avg spending, Last 4 quarters".
+`CompareTo::choices` / `for_range`: options per date range; a stored
+choice the range does not offer falls back to its first. New presets
+`week_to_date` and `last_week` (SET-030 week start, read in
+`range::resolve`). Subtotal by tag uses the first tag by name of each
+split (`facts::Line` now carries tag IDs). UI: `meta.ts` (`REPORTS`,
+`presetGroups`, `COMPARES`, `compareChoices` mirroring Rust,
+`compareFor`, `compareGroups`), Reports > Comparison in `menus.ts`,
+Compare to and Subtotal by on the report bar and in Customize. Tests:
+Rust integration `compare::*` (6, one CSV), unit `range::tests` (3 new);
+vitest `reports.test.ts` (3 new), menu order. Perf: two cases in
+`perf.rs`. Known gaps: drilling a row under a subtotal group opens
+the row's category or payee for the column's dates without the
+group's tag, account, or tax line; Difference has no dates of its
+own, so drilling it uses the report's range.

@@ -188,6 +188,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::reports::card_data,
             commands::reports::attention,
             commands::reports::net_worth_trend,
+            commands::reports::auto_expenses,
             commands::insights::insight_list,
             commands::insights::insight_create,
             commands::insights::insight_update,

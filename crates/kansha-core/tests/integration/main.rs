@@ -8,6 +8,7 @@
 
 mod attention;
 mod backup;
+mod compare;
 mod encryption;
 mod fixture;
 mod import;

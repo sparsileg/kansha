@@ -283,7 +283,7 @@
   }
 
   /** The warnings and the save confirmation the settings ask for
-   * (REG-130, REG-140, REG-150). A scheduled item is not warned about its
+   * (REG-130, REG-140, REG-150, REG-160). A scheduled item is not warned about its
    * date: it is due when it is. */
   async function confirmSave(entry: Entry): Promise<boolean> {
     const notes: string[] = [];
@@ -294,6 +294,9 @@
       }
       if (found.includes("check_reused")) {
         notes.push(`Check number ${entry.check_num.trim()} is already used in this account.`);
+      }
+      if (found.includes("uncategorized")) {
+        notes.push("A line is in Uncategorized.");
       }
     }
     if (txn !== null && bookSettings.value.confirm_save_change) {

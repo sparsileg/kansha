@@ -1,11 +1,11 @@
-// The cards an insight can show (INS-020, CARD-010 … CARD-050). Each has a
+// The cards an insight can show (INS-020, CARD-010 … CARD-060). Each has a
 // stable ID; an insight stores the IDs of its cards, in order, in the
 // book (`insight` table). One card can be on several insights.
 //
 // To add a card: add its ID to `CardId`, its entry to `CARDS`, and its
 // body to `bodies` in `views/Insights.svelte`.
 
-export type CardId = "net_worth" | "this_month" | "net_worth_trend" | "upcoming" | "attention";
+export type CardId = "net_worth" | "this_month" | "net_worth_trend" | "upcoming" | "attention" | "auto_expenses";
 
 export interface CardDef {
   id: CardId;
@@ -24,6 +24,7 @@ export const CARDS: readonly CardDef[] = [
   { id: "net_worth_trend", label: "Net worth over time", wide: true },
   { id: "upcoming", label: "Due soon", double: true },
   { id: "attention", label: "Needs attention" },
+  { id: "auto_expenses", label: "Auto Expenses", double: true },
 ];
 
 const byId = new Map<string, CardDef>(CARDS.map((c) => [c.id, c]));

@@ -12,7 +12,19 @@
   import DatePicker from "../invest/DatePicker.svelte";
   import { call, commands } from "../../api";
   import { displayDate } from "../../format/date";
-  import { INTERVALS, PERIOD_PRESETS, SORTABLE, SORTS, SUBTOTALS, TAX_GROUPS, presetGroups } from "../../reports/meta";
+  import {
+    INTERVALS,
+    PERIOD_PRESETS,
+    REPORTS,
+    SORTABLE,
+    SORTS,
+    SUBTOTALS,
+    TAX_GROUPS,
+    compareChoices,
+    compareFor,
+    compareGroups,
+    presetGroups,
+  } from "../../reports/meta";
   import type { Line } from "../../reports/rows";
   import { openAccount } from "../../shell/nav";
   import { investState } from "../../state/invest.svelte";
@@ -24,6 +36,8 @@
   import type {
     CategoryId,
     Column,
+    CompareGroup,
+    CompareTo,
     DatePreset,
     DetailSort,
     Interval,
@@ -66,6 +80,17 @@
     return report.from
       ? `${displayDate(report.from)} through ${displayDate(report.to)}`
       : `Through ${displayDate(report.to)}`;
+  });
+
+  /** The comparison reports (RPT-210): "Last quarter:" and "Last 4
+   * quarters:" with their dates, the colons lined up. Keyed by
+   * position: both labels can be "Last year". */
+  const spans = $derived.by(() => {
+    if (!report || !REPORTS[report.kind].compare) return null;
+    return report.columns.slice(0, 2).map((c) => [
+      `${c.label}:`,
+      c.to === null ? "" : c.from === null ? `through ${displayDate(c.to)}` : `${displayDate(c.from)} - ${displayDate(c.to)}`,
+    ]);
   });
 
   /** Apply one toolbar change to the report. */
@@ -265,6 +290,20 @@
       </select>
     {/if}
     {#if st.range.preset === "custom"}<button type="button" onclick={openCustom}>Change Dates…</button>{/if}
+    {#if REPORTS[st.kind].compare}
+      <label>
+        Compare to:
+        <select value={compareFor(st.range.preset, st.compare)} onchange={(e) => change({ compare: e.currentTarget.value as CompareTo })}>
+          {#each compareChoices(st.range.preset) as [v, label] (v)}<option value={v}>{label}</option>{/each}
+        </select>
+      </label>
+      <label>
+        Subtotal by:
+        <select value={st.compare_group} onchange={(e) => change({ compare_group: e.currentTarget.value as CompareGroup })}>
+          {#each compareGroups(st.kind) as [v, label] (v)}<option value={v}>{label}</option>{/each}
+        </select>
+      </label>
+    {/if}
     {#if SORTABLE.includes(st.kind)}
       <label>
         Sort by:
@@ -315,7 +354,13 @@
       <h1>{inst.heading}</h1>
       {#if report}
         {#if report.note}<p>{report.note}</p>{/if}
-        <p>{dates}</p>
+        {#if spans}
+          <div class="spans">
+            {#each spans as [label, d], i (i)}<span>{label}</span><span>{d}</span>{/each}
+          </div>
+        {:else}
+          <p>{dates}</p>
+        {/if}
       {/if}
       <p class="today">{displayDate(listsState.today)}</p>
     </header>
@@ -455,6 +500,19 @@
   }
   .title p {
     margin: 0.1rem 0;
+  }
+  /* Labels right-aligned, so the dates start at one place. */
+  .spans {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    column-gap: 0.4rem;
+    margin: 0.1rem 0;
+  }
+  .spans span:nth-child(odd) {
+    text-align: right;
+  }
+  .spans span:nth-child(even) {
+    text-align: left;
   }
   .today {
     position: absolute;

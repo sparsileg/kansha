@@ -3,6 +3,7 @@
 // always passed in from the Rust clock (`commands.today`). Shown and typed
 // dates follow the user's date format (SET-030).
 
+import { setMessageFormatter } from "../api";
 import { dateFormatState } from "../state/dateformat.svelte";
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -75,6 +76,18 @@ export function displayDate(iso: string): string {
       return `${m[2]}/${m[3]}/${m[1]}`;
   }
 }
+
+/** Every ISO date standing alone in `text` (an engine message) shown in
+ * the user's format. Dates inside file names (`-` or `.` beside them),
+ * timestamps (`T` after), and invalid dates are left as they are. */
+export function displayDatesIn(text: string): string {
+  return text.replace(/(?<![\w./\\-])\d{4}-\d{2}-\d{2}(?![\w/\\:-]|\.\w)/g, (iso) =>
+    isValidIso(iso) ? displayDate(iso) : iso,
+  );
+}
+
+// Engine messages (ApiError) write dates as ISO; show them as above.
+setMessageFormatter(displayDatesIn);
 
 /**
  * A typed date written out in full when the field is left: "9/28" gets

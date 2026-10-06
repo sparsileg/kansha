@@ -9,6 +9,16 @@ import type { ErrorKind, IpcError } from "../types/bindings";
 export { commands };
 export type { ErrorKind, IpcError };
 
+// Rewrites an engine message for display. format/date.ts sets it to show
+// ISO dates in the user's format (SET-030); set from there, not imported
+// here, because the date format comes from book settings, which call the
+// API.
+let showMessage: (message: string) => string = (m) => m;
+
+export function setMessageFormatter(f: (message: string) => string): void {
+  showMessage = f;
+}
+
 /** A failed IPC command. `kind` says how the UI should react. */
 export class ApiError extends Error {
   readonly kind: ErrorKind;
@@ -23,7 +33,7 @@ export class ApiError extends Error {
             message: (typeof error === "string" ? error : "") || "The command failed.",
           }
         : error;
-    super(e.message);
+    super(showMessage(e.message));
     this.name = "ApiError";
     this.kind = e.kind;
   }

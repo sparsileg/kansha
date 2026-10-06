@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { columnHeading, formatCell } from "../format/report";
 import type { Column, Row } from "../types/bindings";
-import { MENU_REPORTS, REPORTS, presetGroups, toggleFilter } from "./meta";
+import { MENU_REPORTS, REPORTS, compareChoices, compareFor, compareGroups, presetGroups, toggleFilter } from "./meta";
 import { fitColumns, MIN_CUT, paginate } from "./fit";
 import { closingLabel, flatten } from "./rows";
 
@@ -181,6 +181,15 @@ describe("report cells", () => {
     expect(columnHeading(col("money", "Balance", null, "2026-01-31"))).toEqual(["01/31/2026", "Balance"]);
     expect(columnHeading(col("money", "", "2026-01-01", "2026-01-07"))).toEqual(["01/01/2026", "– 01/07/2026"]);
     expect(columnHeading(col("money", "Q1 2026", "2026-01-01", "2026-03-31"))).toEqual(["Q1 2026"]);
+    // Comparison reports (RPT-210).
+    const cmp = (id: string, label: string, from: string | null, to: string | null) => ({ ...col("money", label, from, to), id });
+    expect(columnHeading(cmp("current", "Last quarter", "2026-07-01", "2026-09-30"))).toEqual(["Last quarter"]);
+    const avg = (label: string) => columnHeading(cmp("average", label, "2025-10-01", "2026-09-30"));
+    expect(avg("Last 4 quarters")).toEqual(["Avg spending", "Last 4 qtrs"]);
+    expect(avg("Last 12 weeks")).toEqual(["Avg spending", "Last 12 wks"]);
+    expect(avg("Last 6 months")).toEqual(["Avg spending", "Last 6 months"]);
+    expect(avg("Last 3 years")).toEqual(["Avg spending", "Last 3 yrs"]);
+    expect(avg("Last year")).toEqual(["Avg spending", "Last year"]);
   });
 });
 
@@ -214,5 +223,32 @@ describe("presetGroups (RPT-040)", () => {
 
   it("a saved report's old preset is added at the end", () => {
     expect(labels(presetGroups("net_worth", "this_month")).at(-1)).toEqual(["This month"]);
+  });
+});
+
+describe("comparison reports (RPT-210)", () => {
+  const values = (l: [string, string][]) => l.map(([v]) => v);
+
+  it("offer current and last week, month, quarter, year, and custom", () => {
+    expect(presetGroups("compare_category", "month_to_date").map((g) => g.map(([, l]) => l))).toEqual([
+      ["Current week", "Current month", "Current quarter", "Current year"],
+      ["Last week", "Last month", "Last quarter", "Last year", "Custom dates"],
+    ]);
+  });
+
+  it("Compare to follows the date range; custom offers every choice", () => {
+    expect(values(compareChoices("week_to_date"))).toEqual(["weeks_4", "weeks_8", "weeks_12"]);
+    expect(values(compareChoices("last_month"))).toEqual(["months_3", "months_6", "months_12"]);
+    expect(values(compareChoices("quarter_to_date"))).toEqual(["quarters_4", "quarters_8", "quarters_12"]);
+    expect(compareChoices("last_year").map(([, l]) => l)).toEqual(["Last year", "Last 3 years", "Last 5 years"]);
+    expect(compareChoices("custom")).toHaveLength(12);
+    expect(compareFor("last_month", "weeks_8")).toBe("months_3");
+    expect(compareFor("custom", "weeks_8")).toBe("weeks_8");
+    expect(compareFor("year_to_date", undefined)).toBe("years_1");
+  });
+
+  it("Subtotal by: the category report offers Payee, the payee report Category", () => {
+    expect(values(compareGroups("compare_category"))).toEqual(["none", "payee", "tag", "account", "tax_line"]);
+    expect(values(compareGroups("compare_payee"))).toEqual(["none", "category", "tag", "account", "tax_line"]);
   });
 });

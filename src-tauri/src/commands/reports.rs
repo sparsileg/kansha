@@ -7,8 +7,9 @@ use kansha_core::Money;
 use kansha_core::categories::TaxLine;
 use kansha_core::persistence::reports as repo;
 use kansha_core::reports::{
-    self, Attention, CardData, Chart, Column, DateRange, PeriodChoice, Report, ReportFolder,
-    ReportFolderId, ReportKind, ReportSettings, ResolvedRange, SavedReport, SavedReportId,
+    self, Attention, CardData, Chart, Column, DateRange, ExpenseCard, PeriodChoice, Report,
+    ReportFolder, ReportFolderId, ReportKind, ReportSettings, ResolvedRange, SavedReport,
+    SavedReportId,
 };
 use tauri::{Manager, State};
 
@@ -231,11 +232,20 @@ pub fn net_worth_trend(state: State<'_, AppState>, years: i64, fitted: bool) -> 
     state.read(|db, today| reports::net_worth_trend(db.conn(), today, years, fitted))
 }
 
-/// Net worth today, for the foot of the account list (ACCT-240).
+/// The Auto Expenses card (CARD-060): the categories and accounts
+/// chosen in the book settings.
+#[tauri::command]
+#[specta::specta]
+pub fn auto_expenses(state: State<'_, AppState>) -> CmdResult<ExpenseCard> {
+    state.read(|db, today| reports::auto_expenses(db.conn(), today))
+}
+
+/// Net worth today, for the foot of the account list (ACCT-240), as the
+/// account bar shows it.
 #[tauri::command]
 #[specta::specta]
 pub fn net_worth(state: State<'_, AppState>) -> CmdResult<Money> {
-    state.read(|db, today| reports::net_worth(db.conn(), today))
+    state.read(|db, today| reports::account_bar_net_worth(db.conn(), today))
 }
 
 #[cfg(test)]

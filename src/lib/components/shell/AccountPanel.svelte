@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { formatMoney } from "../../format/money";
+  import { formatMoney, formatMoneyWhole } from "../../format/money";
+  import { bookSettings } from "../../state/booksettings.svelte";
   import { listsState } from "../../state/lists.svelte";
   import { settingsState } from "../../state/settings.svelte";
   import { drawer } from "../../shell/motion";
@@ -73,7 +74,11 @@
     <footer>
       <span>Net Worth</span>
       <span class="num" class:neg={listsState.netWorth?.startsWith("-")}>
-        {listsState.netWorth === null ? "—" : formatMoney(listsState.netWorth)}
+        {listsState.netWorth === null
+          ? "—"
+          : bookSettings.value.account_bar_cents
+            ? formatMoney(listsState.netWorth)
+            : formatMoneyWhole(listsState.netWorth)}
       </span>
     </footer>
   </div>

@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.28 (draft) |
+| **Document version** | 0.7.33 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-04 |
+| **Last updated** | 2026-10-05 |
 | **Owner** | Stan |
-| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); verification reports (MIG-100) next |
+| **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
 ---
 
@@ -173,6 +173,10 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   its accounts, each moved up or down within its section or to
   another, stored on Save (an account's place is its `sort_order`).
   The list ends with "Net Worth" and today's net worth (as CARD-010).
+  With "Show cents in Account Bar balances" off (SET-080; default on),
+  account balances, section totals, and net worth there are whole
+  dollars, each rounded half-even in Rust from exact cents, so a total
+  can differ from the sum of the rounded lines.
 
 ### 6. Categories, Payees, and Tags (CAT, PAY, TAG)
 
@@ -323,7 +327,12 @@ had a combined column.
   number is already on another live transaction in the same account
   (default on).
 - **REG-150** [1.0][R] Ask "Save the changes to this transaction?"
-  before saving a changed transaction (default off).
+  before saving a changed transaction (default off). Setting: "Ask
+  before saving changes to an existing transaction".
+- **REG-160** [1.0][S] Warn, with a choice to save anyway, when a line
+  of the transaction, split lines included, is in the top-level
+  Uncategorized category (default on). A line with no category at all
+  is still refused.
 
 ### 8. Scheduled and Recurring Transactions (REC) and Calendar (CAL)
 
@@ -732,7 +741,8 @@ income and fees) is its own row, so the rows add up to the account.
 
 Decided 2026-09-30 (`devdocs/phase-notes/import-proposal.md`, Part A);
 built in Phase 9 (`devdocs/phase-notes/phase-9.md`) except where a
-requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
+requirement says not built. P-02 is closed (0.7.29); P-04 is settled
+(0.7.2).
 
 #### 11.1 Known facts and decisions
 
@@ -822,16 +832,14 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
 - **MIG-090** [1.0][S] Imported cleared/reconciled status is
   preserved, on both sides of a transfer (`*`/`c` cleared, `X`/`R`
   reconciled).
-- **MIG-100** [1.0][R] **Verification after import:** compare Kansha
-  account balances as of the export date and category totals by year
-  against Quicken reports. Stan exports the Quicken reports; Kansha
-  provides matching report layouts so comparison is direct. Built so
-  far: the import result lists each account's balance (cash for
-  investment accounts) before and after, against what the file says it
-  adds, marking any difference; the existing reports (Net Worth,
-  Income/Expense by Category by year, Holdings) do the rest.
-  ⟨PLACEHOLDER P-02: which Quicken reports to export as the
-  reference.⟩
+- **MIG-100** [1.0][S] **Verification after import** (done,
+  0.7.29): compare Kansha account balances as of the export date and
+  category totals by year against Quicken reports. The import result
+  lists each account's balance (cash for investment accounts) before
+  and after, against what the file says it adds, marking any
+  difference; the existing reports (Net Worth, Income/Expense by
+  Category by year, Holdings) do the rest. No matching report layouts
+  are needed: Stan verified his import this way (P-02 closed).
 - **MIG-110** [1.0][S] Investment data: the full QIF investment
   history is imported and lots are rebuilt by the lot engine, with each
   account's lot method (P-03 settled: no seeding for Stan's accounts;
@@ -950,7 +958,11 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   is added at its end. This month, This quarter, and This year are no
   longer offered (they differ from "to date" only by future-dated
   transactions); a report saved with one still opens with it, shown at
-  the end of the list.
+  the end of the list. The comparison reports (RPT-210) list their own
+  presets instead (0.7.32): Current week, Current month, Current
+  quarter, Current year (each from its first day to today); Last
+  week, Last month, Last quarter, Last year, Custom dates. A week
+  starts on the Settings' first day of the week (SET-030).
 - **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the
   Downloads folder, every group expanded; printing and PDF show only
   the report. Save PDF… asks Portrait or Landscape (remembered while
@@ -1041,6 +1053,43 @@ requirement says not built. P-02 stays open; P-04 is settled (0.7.2).
   (0.7.11): INCOME, EXPENSES, and TRANSFERS are the shaded rows;
   categories, subcategories, payees, and accounts carry their totals
   on their heading lines; the overall total stays at the end.
+- **RPT-210** [1.0][S] **Current Spending vs. Average Spending** by
+  Category and by Payee (Reports > Comparison, 0.7.32): spending in the
+  date range against the average spending of the periods before. The bar
+  has Date range (RPT-040), Compare to, and Subtotal by. Compare to
+  offers the last 4, 8, or 12 weeks for a week range; the last 3, 6, or
+  12 months for a month; the last 4, 8, or 12 quarters for a quarter;
+  last year, the last 3 or 5 years for a year; all of these for Custom
+  dates. The compared periods end on the range's last day, so they
+  include it: Last month (September) against the last 3 months averages
+  July–September; Current month on October 5 averages July 6–October 5.
+  For Custom dates they are the whole periods before the current one on
+  today's date instead: in 2026, last year is 2025 and the last 3 years
+  2023–2025, whatever the range. Last year against last year is the year
+  before it: in 2026, 2025 against 2024 (0.7.33). Average = the periods'
+  total ÷ their number (periods with nothing count), rounded half-even;
+  a group's or the total's average comes from its own total, not from
+  its rows' rounded averages. Under the title, two lines, colons lined
+  up: the Date range text and its dates ("Last quarter: 7/1/2026 -
+  9/30/2026"), then the Compare to text and its dates ("Last 4 quarters:
+  10/1/2025 - 9/30/2026"). Columns, kept close together: the row; the
+  range's total, headed with the Date range text on one line ("Last
+  quarter"); the average, headed "Avg spending" over the Compare to text
+  on one line, with weeks, quarters, and years shortened ("Last 4 qtrs",
+  "Last 12 wks", "Last 3 yrs", "Last 6 months") (0.7.33); Difference =
+  range − average (positive: more spent than usual; the sign shows it,
+  no color). Only expense categories count, as spending (positive; a
+  refund lowers it); income and transfers are left out. By Category: the
+  expense category tree, a parent's line carrying its subcategories. By
+  Payee: one row per payee name, ignoring case, "(No payee)" last. Rows
+  with nothing in the range or the compared periods are left out.
+  Subtotal by: Don't subtotal, Payee (category report) or Category
+  (payee report), Tag, Account, Tax Schedule (by tax line, in form
+  order; categories with no tax line under "Not tax-related"). Amounts
+  are per split, so a split counts once; a split with several tags
+  counts under the first by name, "(No tag)" last. Customize has the
+  Accounts, Categories, and Payees tabs; Totals only, save, CSV, and PDF
+  as the other reports.
 - **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
 - **RPT-310** [1.0][R] Performance reports (TWR/IRR): Investment
   Performance (POS-030).
@@ -1096,7 +1145,8 @@ entries in Appendix A and migration 0014 use those IDs.
   "As of" is the local time the checks ran (0.7.26). The card
   itself loads only on an insight that shows it.
 - **CARD-040** [1.0][R] Each card has a stable ID and name: Net
-  worth, This month, Net worth over time, Due soon, Needs attention.
+  worth, This month, Net worth over time, Due soon, Needs attention,
+  Auto Expenses.
   Insights choose and order them (INS-030). Migration 0014 turned the
   old fixed dashboard's card choice (`dashboard_cards`) into the first
   insight; migration 0015 names it "Status".
@@ -1107,6 +1157,20 @@ entries in Appendix A and migration 0014 use those IDs.
   settings; a new book shows 1 year from zero. The heading names the
   span: "Net worth, last 12 months", "…, last 2 years", "…, last 5
   years".
+- **CARD-060** [1.0][R] The Auto Expenses card (double width) lists
+  chosen categories, one row each by full name ("Car:BlueForester:Gas",
+  cut short with "…" when long), with YTD Expenses (January 1 through
+  today), MTD Expenses (the 1st of this month through today), and
+  Monthly Avg (YTD over the months begun this year, this one included,
+  as Quicken does: 10 in October), then a bold Total row whose average
+  is its own YTD over the months. Expenses are positive; refunds
+  reduce them. Each row is exactly the category checked; its
+  subcategories are not added in. Every chosen category is listed,
+  even at zero. The card's gear has Customize…, with an Accounts tab
+  and a Categories tab as a report's Customize has; the choices are
+  book settings. Until customized, every open account is checked and
+  no category, so the card says how to choose. With no account or
+  no category checked, it lists nothing.
 
 #### 12.4 Insights
 
@@ -1453,9 +1517,9 @@ platform has one.
   computer, not in the book (SET-070).
 - **SET-030** [1.0][R] Date display format: MM/DD/YYYY (default),
   DD/MM/YYYY, or YYYY-MM-DD. Every user-facing date, shown or typed,
-  follows it; a four-digit year typed first is always accepted. Logs
-  and histories show timestamps as `YYYY-MM-DDTHH:MM:SSZ` (UTC). First
-  day of week.
+  follows it, dates in error messages included; a four-digit year
+  typed first is always accepted. Logs and histories show timestamps
+  as `YYYY-MM-DDTHH:MM:SSZ` (UTC). First day of week.
 - **SET-040** [1.0][R] Default lot selection method, which a new
   investment account starts with (each account and security then
   keeps its own, LOT-100); stale-price threshold in days (default 7; a
@@ -1475,10 +1539,11 @@ platform has one.
   Data, Investments, Register, Notifications, Backups) over one card
   showing that category's settings, with OK and Cancel below on the
   right. Edits are kept until OK. Interface: date format, first day of
-  week, startup view, account list side. Data: integrity check at
+  week, startup view, account list side, show cents in Account Bar
+  balances (ACCT-240). Data: integrity check at
   startup, Due soon look-ahead days. Investments: stale price days,
   lot method, price download. Register: REG-070, REG-100 … REG-120.
-  Notifications: REG-130 … REG-150. Backups: SET-050.
+  Notifications: REG-130 … REG-160. Backups: SET-050.
 - **SET-070** [1.0][R] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
   except per-computer ones: theme, font, font size (the passphrase
@@ -2361,9 +2426,8 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 
 1. **Migration verification** (MIG-100): Kansha balances and category
    totals match Quicken reports exactly.
-2. **Parallel run** (D-80): Kansha and Quicken used side by side,
-   including at least one full reconciliation cycle per account,
-   before Quicken is retired.
+2. **Parallel run** (D-80): none. Since 2026-10-01 data is entered in
+   Kansha only; Quicken is kept as a read-only reference.
 3. **Backup/restore drills:** restore a backup to a scratch location
    and run the integrity check.
 4. **Stan reviews** the lot, recurrence, and reconciliation scenario
@@ -2398,13 +2462,13 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-40 | Price download in 1.0, and which provider | **Decided** (2026-09-29) | In 1.0 behind a provider interface; Yahoo Finance's chart service first (no key), a keyed provider later; latest price only, on demand, off until enabled (PRC-040, SECU-070) |
 | D-50 | Money market funds: security or cash | **Decided** | Per-account option (`account.mmf_mode`) |
 | D-60 | Lot selection methods | **Decided** | `fifo`, `specific`, `average` (LOT-110, migration 0004), `hifo`, and `min_tax` (LOT-115), all built |
-| D-70 | Share/price decimal precision | Open | 6 decimal places; confirm with brokerage data |
-| D-80 | Parallel-run duration before retiring Quicken | Open | 2–3 months |
+| D-70 | Share/price decimal precision | **Decided** (2026-10-05) | 6 decimal places, confirmed by the real import: holdings trued up to the Fidelity and Vanguard cost-basis files match |
+| D-80 | Parallel-run duration before retiring Quicken | **Decided** (2026-10-05) | No parallel run: since 2026-10-01 data is entered in Kansha only; Quicken is kept as a read-only reference for a while |
 | D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
 | D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | **Decided** | As listed in ACCT-010/020 |
 | D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; encryption enabled in Phase 8 (decided 2026-09-29) |
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
-| D-130 | Prototype data | Open | Synthetic data only; no real financial data until 1.0 development |
+| D-130 | Prototype data | **Decided** (2026-10-05) | Synthetic data only through the prototype; ended 2026-10-01, when Stan's imported book became his production book |
 | D-140 | Chart library | **Decided** (2026-09-27) | None: hand-drawn SVG. Rust places values on the axis; the frontend only scales. Series differ by pattern and shape as well as color (red-green colorblind). |
 | D-150 | CLI one-shot secret file (CLI-030): the backup passphrase, or the database key alone | Open | Database key alone: it opens the book but not the backups or the private key |
 | D-160 | CLI modes: one-shot, background (tray), or both | Open | — |
@@ -2416,7 +2480,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | ID | Placeholder | Needed to resolve |
 |---|---|---|
 | P-01 | ~~Source format for income/expense history (QIF vs. QXF)~~ Settled 0.6: one whole-file QIF (§11.1) | — |
-| P-02 | Quicken reports used as reference for import verification | Choose reports (e.g., account balances as of export date; category totals by year) |
+| P-02 | ~~Quicken reports used as reference for import verification~~ Closed 0.7.29: not needed; the import result and the existing reports were enough (MIG-100) | — |
 | P-03 | ~~Source for seeding investment lots~~ Settled 0.6: full QIF history, trued up to the broker's cost-basis CSV (MIG-110, MIG-115) | Check each brokerage's CSV layout when MIG-115 is built |
 | P-04 | ~~Whether Quicken scheduled transactions can be exported~~ Settled 0.7.2: re-entered by hand (MIG-150 closed) | — |
 | P-05 | ~~Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form~~ Settled 0.6: the whole-file export does; per-account ones do not (§11.1) | — |
@@ -2449,11 +2513,11 @@ all IPC and never performs money arithmetic.
 REG, REC, CAL, RCN, SEC, PRC (manual, price list import, download),
 INV, LOT (all five methods), POS, RPT, CARD, INT, AUD, BAK, SECU, UI,
 SET, TEST, and MIG-120's lot seeding on synthetic data. Phase 9
-(after the prototype) built the Quicken QIF import (MIG, except
-MIG-115 and the open P-02 part). Not built: the [1.0] items
-listed as missing in
+(after the prototype) built the Quicken QIF import (MIG), the lot
+true-up (MIG-115), and import verification (MIG-100). Not built: the
+[1.0] items listed as missing in
 `devdocs/phase-notes/prototype-review.md`, which keep their status
-until decided (RPT-040 comparison, RPT-120, RPT-190, RPT-200,
+until decided (RPT-120, RPT-190, RPT-200,
 TAG-030 grouping, UI-030 tabs, UI-050, and TEST-140 while CI is
 off). [Later] items are out of scope.
 
@@ -2490,6 +2554,11 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.32 | 2026-10-05 | New RPT-210: Current Spending vs. Average Spending by Category and by Payee, under a new Reports > Comparison menu; builds RPT-040's comparison to prior periods. Compared periods end on the range's last day; for Custom dates, the whole periods before today's. Headings show the dates. RPT-040: the comparison reports' own date presets, with new Current week (week to date) and Last week, which follow SET-030's first day of the week. No schema change (report settings are JSON). **API change:** `ReportKind` gains `compare_category`, `compare_payee`; `DatePreset` gains `week_to_date`, `last_week`; new types `CompareTo`, `CompareGroup`; `ReportSettings` gains `compare`, `compare_group`. |
+| 0.7.33 | 2026-10-05 | RPT-210 headings: two lines under the title, colons lined up, with the Date range and Compare to texts and their dates; the range column headed with the Date range text; the average column "Avg spending" over the Compare to text, shortened ("Last 4 qtrs"; months spelled out). CSV: the two lines under the title. Last year against last year compares to the year before (2025 against 2024), not to itself. No API change. |
+| 0.7.31 | 2026-10-05 | New CARD-060: the Auto Expenses card lists the categories and accounts chosen with its gear's Customize… (Accounts and Categories tabs), each category on its own, with YTD, MTD, and monthly average (YTD over the months begun this year, as Quicken) and a Total row. CARD-040 names it. No schema change. **API change:** new command `auto_expenses`; new types `ExpenseCard`, `ExpenseRow`; `Settings` gains `auto_accounts`, `auto_categories`. |
+| 0.7.30 | 2026-10-05 | ACCT-240, SET-080: new Interface setting "Show cents in Account Bar balances" (default on); off, the account list's balances, section totals, and net worth are whole dollars, rounded half-even in Rust. New REG-160: warn when a line, split lines included, is in the top-level Uncategorized category (default on). REG-150's setting is labelled "Ask before saving changes to an existing transaction". No schema change. **API change:** `Settings` gains `account_bar_cents`, `warn_uncategorized`; `EntryWarning` gains `uncategorized`; `account_balances`, `section_totals`, `net_worth` return the account bar's figures. |
+| 0.7.29 | 2026-10-05 | SET-030: dates in error messages from the engine show in the user's date format, not ISO (dates in file names and timestamps are left as they are). MIG-100 done and P-02 closed: the import result and the existing reports verified the import; no matching report layouts. D-70 decided: 6 decimal places, confirmed by the real import. D-80 decided: no parallel run; Kansha only since 2026-10-01, Quicken kept as a reference. D-130 decided: synthetic data ended 2026-10-01. No schema change. No API change. |
 | 0.7.28 | 2026-10-05 | INV-070, RPT-140: the Tax Summary by Category lists a Roth conversion's taxable part under INCOME, as Roth conversion [Roth IRA name], instead of under TRANSFERS. Tax Schedule and other Subtotal by choices unchanged. No schema change. No API change. |
 | 0.7.27 | 2026-10-05 | MSRV raised from 1.85 to 1.93: the pinned `specta` and `tauri-specta` `2.0.0-rc.25` (D-120) no longer build on 1.85; `specta` uses `fmt::from_fn` (stable in Rust 1.93) and `tauri-specta-macros` resolves `darling` 0.23 (Rust 1.88). Checked with `cargo +1.93 check --workspace`. The release checklist's MSRV check uses 1.93. Let-chains are now allowed; clippy (`collapsible_if`) rewrote 27 nested `if let` blocks as let-chains, with no change in behavior. Pins chosen under 1.85 (`age`, `zip`, `ureq`) stay. No schema change. No API change. |
 | 0.7.26 | 2026-10-04 | CARD-030: the Needs attention card's first line starts "As of 2:32 PM:", the local time the checks ran. Accounts reconciled: an account is named only if it has a transaction dated after its last reconcile (any, if never), replacing "used in the last year". No schema change. **API change:** `Attention` gains `as_of`. |

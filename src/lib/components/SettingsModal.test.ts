@@ -123,7 +123,9 @@ describe("SettingsModal categories", () => {
     await show("notifications");
     expect(screen.getByLabelText(/out-of-date transactions/)).toBeTruthy();
     expect(screen.getByLabelText("A check number is reused")).toBeTruthy();
-    expect(screen.getByLabelText("Save a transaction after changing it")).toBeTruthy();
+    expect(screen.getByLabelText("Ask before saving changes to an existing transaction")).toBeTruthy();
+    const uncat = screen.getByLabelText(/uncategorized transactions/) as HTMLInputElement;
+    expect(uncat.checked).toBe(true);
   });
 });
 

@@ -12,13 +12,16 @@
     SUBTOTALS,
     TAX_GROUPS,
     TAB_LABELS,
+    compareChoices,
+    compareFor,
+    compareGroups,
     presetGroups,
     toggleFilter,
     type FilterTab,
   } from "../../reports/meta";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
-  import type { Column, PeriodChoice, ReportSettings, ResolvedRange } from "../../types/bindings";
+  import type { Column, CompareTo, PeriodChoice, ReportSettings, ResolvedRange } from "../../types/bindings";
   import DatePicker from "../invest/DatePicker.svelte";
   import Modal from "../Modal.svelte";
 
@@ -251,6 +254,20 @@
               Subtotal by
               <select bind:value={draft.subtotal}>
                 {#each SUBTOTALS as [v, label] (v)}<option value={v}>{label}</option>{/each}
+              </select>
+            </label>
+          {/if}
+          {#if meta.compare}
+            <label>
+              Compare to
+              <select value={compareFor(draft.range.preset, draft.compare)} onchange={(e) => (draft.compare = e.currentTarget.value as CompareTo)}>
+                {#each compareChoices(draft.range.preset) as [v, label] (v)}<option value={v}>{label}</option>{/each}
+              </select>
+            </label>
+            <label>
+              Subtotal by
+              <select bind:value={draft.compare_group}>
+                {#each compareGroups(draft.kind) as [v, label] (v)}<option value={v}>{label}</option>{/each}
               </select>
             </label>
           {/if}

@@ -1,7 +1,5 @@
 //! Building report rows: groups, totals, hidden columns, rounding.
 
-use rust_decimal::RoundingStrategy;
-
 use super::{Column, ColumnKind, Drill, Report, Row, RowKind};
 use crate::error::{Error, Result};
 use crate::money::Money;
@@ -136,10 +134,7 @@ pub(super) fn round_to_dollars(report: &mut Report) -> Result<()> {
                     && !cell.is_empty()
                 {
                     let m: Money = cell.parse()?;
-                    let dollars = m
-                        .to_decimal()
-                        .round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
-                    *cell = Money::from_decimal(dollars)?.to_string();
+                    *cell = m.round_to_dollars()?.to_string();
                 }
             }
             walk(&mut row.children, money)?;

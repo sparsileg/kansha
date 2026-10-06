@@ -61,6 +61,14 @@ impl Money {
             .map(Money)
             .ok_or(Error::Overflow("Money::from_decimal"))
     }
+
+    /// Rounded to whole dollars, half-even.
+    pub fn round_to_dollars(self) -> Result<Money> {
+        Money::from_decimal(
+            self.to_decimal()
+                .round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven),
+        )
+    }
 }
 
 impl FromStr for Money {

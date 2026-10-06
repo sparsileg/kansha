@@ -104,6 +104,10 @@ impl Lookups {
         self.paths.get(&id).cloned().unwrap_or_default()
     }
 
+    pub fn tag_name(&self, id: TagId) -> Option<&str> {
+        self.tags.get(&id).map(String::as_str)
+    }
+
     pub fn tag_names(&self, ids: &[TagId]) -> String {
         ids.iter()
             .filter_map(|t| self.tags.get(t).map(String::as_str))
@@ -399,6 +403,8 @@ pub(super) struct Line {
     /// "Parent:Child", or "[Account]" for a transfer.
     pub category: String,
     pub tag: String,
+    /// The tags behind `tag`.
+    pub tags: Vec<TagId>,
     pub tax_line: Option<TaxLineId>,
     pub clr: String,
     /// The transaction is a split ([`TxnFacts::is_split`]).
@@ -472,6 +478,7 @@ pub(super) fn lines(
             memo: t.memo_of(p),
             category,
             tag: lk.tag_names(&t.tags_for(p)),
+            tags: t.tags_for(p),
             tax_line: None,
             clr: t.clr(account),
             split,
@@ -742,6 +749,7 @@ fn conversion_lines(
         memo: t.memo.clone(),
         category,
         tag: lk.tag_names(&t.tags_for(first)),
+        tags: t.tags_for(first),
         tax_line,
         clr: t.clr(inv.account),
         split: false,

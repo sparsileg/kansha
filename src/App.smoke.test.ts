@@ -37,6 +37,8 @@ vi.mock("./lib/api", async (orig) => {
     upcoming_days: 14,
     trend_years: 1,
     trend_fitted: false,
+    auto_accounts: null,
+    auto_categories: [],
     backup_folder: null,
     backup_keep_last: 10,
     backup_keep_months: 12,

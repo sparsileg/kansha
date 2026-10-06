@@ -1,6 +1,6 @@
-//! What the Insights cards show (CARD-010 … CARD-050): net worth and its
+//! What the Insights cards show (CARD-010 … CARD-060): net worth and its
 //! parts, this month's income and spending, net worth over time, what is
-//! due, and what needs attention.
+//! due, what needs attention, and auto expenses.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -14,11 +14,12 @@ use super::net_worth::shown_balances;
 use super::range::{day_before, periods};
 use super::{DatePreset, DateRange, ReportKind, ReportSettings, ResolvedRange};
 use crate::accounts::{Account, AccountId, AccountStatus, AccountType};
+use crate::categories::CategoryId;
 use crate::date::{Clock, Date, Timestamp};
 use crate::error::{Error, Result};
 use crate::integrity::IntegrityStatus;
 use crate::invest;
-use crate::money::Money;
+use crate::money::{Money, mul_div};
 use crate::persistence::{accounts, audit, reports as repo};
 use crate::schedule::{self, OccurrenceView};
 use crate::settings;
@@ -236,6 +237,11 @@ pub fn net_worth(conn: &Connection, today: Date) -> Result<Money> {
     Parts::load(conn, today)?.net_worth()
 }
 
+/// [`net_worth`] as the account bar shows it (ACCT-240).
+pub fn account_bar_net_worth(conn: &Connection, today: Date) -> Result<Money> {
+    crate::ledger::account_bar_figure(conn, net_worth(conn, today)?)
+}
+
 pub fn card_data(conn: &Connection, today: Date, upcoming_days: i64) -> Result<CardData> {
     let parts = Parts::load(conn, today)?;
     let net_worth = parts.net_worth()?;
@@ -342,6 +348,116 @@ pub fn net_worth_trend(conn: &Connection, today: Date, years: i64, fitted: bool)
     } else {
         chart::build(dates, series)
     }
+}
+
+/// One row of the Auto Expenses card (CARD-060): spent this year, this
+/// month, and per month, expenses positive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct ExpenseRow {
+    /// `None` on the Total row.
+    pub category: Option<CategoryId>,
+    /// "Car:BlueForester:Gas", or "Total".
+    pub label: String,
+    /// January 1 through today.
+    pub ytd: Money,
+    /// The 1st of this month through today.
+    pub mtd: Money,
+    /// `ytd` over the months begun this year, this one included, as
+    /// Quicken does.
+    pub monthly_avg: Money,
+}
+
+/// The Auto Expenses card (CARD-060).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct ExpenseCard {
+    /// The chosen categories by name; none when no category or no
+    /// account is chosen.
+    pub rows: Vec<ExpenseRow>,
+    pub total: ExpenseRow,
+}
+
+/// The Auto Expenses card (CARD-060): each category chosen in the book
+/// settings, on its own (subcategories are not added in), counting only
+/// the chosen accounts (every open one if never chosen).
+pub fn auto_expenses(conn: &Connection, today: Date) -> Result<ExpenseCard> {
+    let s = settings::load(conn)?;
+    let lk = Lookups::load(conn)?;
+    let accounts = s.auto_accounts.unwrap_or_else(|| {
+        lk.accounts
+            .iter()
+            .filter(|a| a.status == AccountStatus::Open)
+            .map(|a| a.id)
+            .collect()
+    });
+    let mut chosen: Vec<CategoryId> = s
+        .auto_categories
+        .into_iter()
+        .filter(|c| lk.category(*c).is_some())
+        .collect();
+    if accounts.is_empty() {
+        chosen.clear();
+    }
+    let months = i64::from(today.month());
+    let row = |category, label, ytd: Money, mtd| -> Result<ExpenseRow> {
+        Ok(ExpenseRow {
+            category,
+            label,
+            ytd,
+            mtd,
+            monthly_avg: Money::from_cents(mul_div(ytd.cents(), 1, months)?),
+        })
+    };
+
+    let mut ytd: BTreeMap<CategoryId, Money> = BTreeMap::new();
+    let mut mtd: BTreeMap<CategoryId, Money> = BTreeMap::new();
+    if !chosen.is_empty() {
+        let year_from = Date::from_ymd(today.year(), 1, 1)?;
+        let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
+        let mut rs = ReportSettings::defaults(ReportKind::IncomeExpense);
+        rs.accounts = Some(accounts);
+        rs.categories = Some(chosen.clone());
+        rs.transfers = false;
+        let range = ResolvedRange {
+            from: Some(year_from),
+            to: today,
+        };
+        for l in facts::lines(&facts::load(conn, range)?, &rs, &lk, Want::All)? {
+            let facts::Target::Category(c) = l.target else {
+                continue;
+            };
+            // Report sign is income positive; spent is shown positive.
+            let spent = l
+                .amount
+                .checked_neg()
+                .ok_or(Error::Overflow("insight cards"))?;
+            let y = ytd.entry(c).or_insert(Money::ZERO);
+            *y = add(*y, spent)?;
+            if l.date >= month_from {
+                let m = mtd.entry(c).or_insert(Money::ZERO);
+                *m = add(*m, spent)?;
+            }
+        }
+    }
+
+    chosen.sort_by_cached_key(|c| lk.category_path(*c).to_lowercase());
+    chosen.dedup();
+    let mut rows = Vec::new();
+    let (mut ty, mut tm) = (Money::ZERO, Money::ZERO);
+    for c in chosen {
+        let (y, m) = (
+            ytd.get(&c).copied().unwrap_or(Money::ZERO),
+            mtd.get(&c).copied().unwrap_or(Money::ZERO),
+        );
+        ty = add(ty, y)?;
+        tm = add(tm, m)?;
+        rows.push(row(Some(c), lk.category_path(c), y, m)?);
+    }
+    Ok(ExpenseCard {
+        rows,
+        total: row(None, "Total".into(), ty, tm)?,
+    })
 }
 
 /// The Needs attention card (CARD-030): every check, and a notice for

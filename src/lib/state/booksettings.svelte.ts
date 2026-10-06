@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS: Settings = {
   upcoming_days: 14,
   trend_years: 1,
   trend_fitted: false,
+  auto_accounts: null,
+  auto_categories: [],
   backup_folder: null,
   backup_keep_last: 10,
   backup_keep_months: 12,
@@ -36,6 +38,8 @@ export const DEFAULT_SETTINGS: Settings = {
   warn_out_of_date: true,
   warn_check_reuse: true,
   confirm_save_change: false,
+  warn_uncategorized: true,
+  account_bar_cents: true,
 };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

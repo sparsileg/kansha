@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { formatMoney } from "../format/money";
+  import { formatMoney, formatMoneyWhole } from "../format/money";
 
-  let { amount }: { amount: string | undefined } = $props();
+  // `whole`: the amount is already rounded to dollars (by Rust); drop ".00".
+  let { amount, whole = false }: { amount: string | undefined; whole?: boolean } = $props();
 </script>
 
 {#if amount !== undefined}
-  <span class="bal" class:neg={amount.startsWith("-")}>{formatMoney(amount)}</span>
+  <span class="bal" class:neg={amount.startsWith("-")}
+    >{whole ? formatMoneyWhole(amount) : formatMoney(amount)}</span
+  >
 {/if}
 
 <style>

@@ -5,6 +5,7 @@ const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const openAcct = vi.hoisted(() => vi.fn());
 const trendCall = vi.hoisted(() => vi.fn());
 const attentionCall = vi.hoisted(() => vi.fn());
+const autoCall = vi.hoisted(() => vi.fn());
 const CHECKS = (bad: string[]) =>
   [
     ["integrity", "Database integrity"],
@@ -58,6 +59,7 @@ vi.mock("../lib/api", async (orig) => {
         return ok({ dates: ["2026-08-31", "2026-09-27"], labels: [], series: [{ name: "Net Worth", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [{ label: "0", pos: 0 }, { label: "2", pos: 10000 }], zero: 0, x_unit: "month" });
       },
       settingsSet: (s: unknown) => ok(s),
+      autoExpenses: () => ok(autoCall() ?? { rows: [], total: { category: null, label: "Total", ytd: "0.00", mtd: "0.00", monthly_avg: "0.00" } }),
       attention: () => {
         attentionCall();
         return ok(attn.value ?? PROBLEMS);
@@ -103,7 +105,10 @@ beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
-  listsState.accounts = [{ id: 1, name: "Checking" }] as never;
+  listsState.accounts = [
+    { id: 1, name: "Checking", group: "banking", status: "open", show_in_list: true },
+    { id: 2, name: "Old Visa", group: "credit", status: "closed", show_in_list: true },
+  ] as never;
   listsState.insights = [status];
   attn.value = null;
   bookSettings.reset();
@@ -300,7 +305,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {
     expect(name.value).toBe("Status");
     await fireEvent.input(name, { target: { value: "Overview" } });
     const shown = within(dlg).getByRole("listbox", { name: "On this insight (in order)" });
-    for (const id of ["net_worth", "net_worth_trend", "upcoming", "attention"]) {
+    for (const id of ["net_worth", "net_worth_trend", "upcoming", "attention", "auto_expenses"]) {
       await fireEvent.change(shown, { target: { value: id } });
       await fireEvent.click(within(dlg).getByRole("button", { name: "‹ Remove" }));
     }
@@ -384,5 +389,74 @@ describe("Insights: Net worth over time (CARD-050)", () => {
     render(Insights);
     await screen.findByText("10,019,506.27");
     expect(trendCall).not.toHaveBeenCalled();
+  });
+});
+
+describe("Insights: Auto Expenses (CARD-060)", () => {
+  const row = (category: number | null, label: string, ytd: string, mtd: string, monthly_avg: string) => ({ category, label, ytd, mtd, monthly_avg });
+  const auto = (): Insight => ({ id: 3, name: "Car", cards: ["auto_expenses"] });
+
+  it("says how to choose when nothing is chosen", async () => {
+    listsState.insights = [auto()];
+    render(Insights);
+    const card = await screen.findByRole("article", { name: "Auto Expenses" });
+    expect(card.classList.contains("double")).toBe(true);
+    await within(card).findByText(/Choose accounts and categories/);
+  });
+
+  it("lists each chosen category with YTD, MTD, and monthly average, then the total", async () => {
+    autoCall.mockReturnValue({
+      rows: [row(7, "Car:BlueForester:Gas", "1711.19", "0.00", "171.11"), row(8, "Car:BlueForester:Insurance", "524.50", "0.00", "52.45")],
+      total: row(null, "Total", "2235.69", "0.00", "223.57"),
+    });
+    listsState.insights = [auto()];
+    render(Insights);
+    const card = await screen.findByRole("article", { name: "Auto Expenses" });
+    await within(card).findByText("1,711.19");
+    const rows = within(card)
+      .getAllByRole("row")
+      .map((r) => [...r.querySelectorAll("th,td")].map((c) => c.textContent?.trim()));
+    expect(rows).toEqual([
+      ["Category", "YTD Expenses", "MTD Expenses", "Monthly Avg"],
+      ["Car:BlueForester:Gas", "1,711.19", "0.00", "171.11"],
+      ["Car:BlueForester:Insurance", "524.50", "0.00", "52.45"],
+      ["Total", "2,235.69", "0.00", "223.57"],
+    ]);
+    expect(within(card).getByText("Car:BlueForester:Insurance").getAttribute("title")).toBe("Car:BlueForester:Insurance");
+  });
+
+  it("the gear's Customize… chooses accounts (open ones first) and categories, kept as book settings", async () => {
+    listsState.categories = [
+      { id: 5, name: "Car", parent: null, kind: "expense", hidden: false },
+      { id: 7, name: "Gas", parent: 5, kind: "expense", hidden: false },
+    ] as never;
+    listsState.insights = [auto()];
+    render(Insights);
+    const card = await screen.findByRole("article", { name: "Auto Expenses" });
+    await waitFor(() => expect(autoCall).toHaveBeenCalledTimes(1));
+    await fireEvent.click(within(card).getByRole("button", { name: "Auto Expenses options" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Customize…" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Customize Auto Expenses" });
+    expect((within(dialog).getByRole("checkbox", { name: "Checking" }) as HTMLInputElement).checked).toBe(true);
+    await fireEvent.click(within(dialog).getByRole("checkbox", { name: "Show hidden and closed" }));
+    expect((within(dialog).getByRole("checkbox", { name: "Old Visa" }) as HTMLInputElement).checked).toBe(false);
+
+    await fireEvent.click(within(dialog).getByRole("tab", { name: "Categories" }));
+    expect((within(dialog).getByRole("checkbox", { name: "Car" }) as HTMLInputElement).checked).toBe(false);
+    await fireEvent.click(within(dialog).getByRole("checkbox", { name: "Car:Gas" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bookSettings.value.auto_accounts).toEqual([1]);
+    expect(bookSettings.value.auto_categories).toEqual([7]);
+    await waitFor(() => expect(autoCall.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it("is not loaded for an insight without the card", async () => {
+    listsState.insights = [spending];
+    render(Insights);
+    await screen.findByText("10,019,506.27");
+    expect(autoCall).not.toHaveBeenCalled();
   });
 });

@@ -23,7 +23,7 @@
     paginate,
     type Fit,
   } from "../../reports/fit";
-  import { COLUMN_SORTS } from "../../reports/meta";
+  import { COLUMN_SORTS, REPORTS } from "../../reports/meta";
   import { flatten, type Line } from "../../reports/rows";
   import type { ReportInstance } from "../../state/reports.svelte";
   import type { Column, DetailSort, PageOrientation, Report } from "../../types/bindings";
@@ -138,7 +138,7 @@
     const head = t.tHead ? pt(t.tHead) : 0;
     t.classList.remove("paper");
     t.style.fontSize = "";
-    pages = paginate(rows, head, PAGE_HEIGHT_PT[orientation], TITLE_PT + (report.note ? NOTE_PT : 0));
+    pages = paginate(rows, head, PAGE_HEIGHT_PT[orientation], TITLE_PT + (report.note ? NOTE_PT : 0) + (REPORTS[report.kind].compare ? NOTE_PT : 0));
     await tick();
   }
 

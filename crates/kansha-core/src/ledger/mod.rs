@@ -708,6 +708,39 @@ pub fn section_totals(conn: &Connection, today: Date) -> Result<Vec<SectionTotal
     Ok(totals)
 }
 
+/// `m` as the account bar shows it: whole dollars (half-even) when the
+/// setting turns cents off (ACCT-240). Each figure is rounded from exact
+/// cents, so a total can differ from the sum of the rounded lines.
+pub fn account_bar_figure(conn: &Connection, m: Money) -> Result<Money> {
+    if crate::settings::load(conn)?.account_bar_cents {
+        Ok(m)
+    } else {
+        m.round_to_dollars()
+    }
+}
+
+/// [`account_balances`] as the account bar shows them.
+pub fn account_bar_balances(conn: &Connection, today: Date) -> Result<Vec<AccountBalance>> {
+    let cents = crate::settings::load(conn)?.account_bar_cents;
+    let mut out = account_balances(conn, today)?;
+    if !cents {
+        for b in &mut out {
+            b.current = b.current.round_to_dollars()?;
+            b.ending = b.ending.round_to_dollars()?;
+        }
+    }
+    Ok(out)
+}
+
+/// [`section_totals`] as the account bar shows them.
+pub fn account_bar_section_totals(conn: &Connection, today: Date) -> Result<Vec<SectionTotal>> {
+    let mut out = section_totals(conn, today)?;
+    for t in &mut out {
+        t.total = account_bar_figure(conn, t.total)?;
+    }
+    Ok(out)
+}
+
 /// Register footer figures (REG-060).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]

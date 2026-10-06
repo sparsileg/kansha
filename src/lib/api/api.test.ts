@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, DECLINED, call, withConfirmation } from "./index";
+import "../format/date";
 
 const ok = <T>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const err = (kind: "invalid" | "confirmation_required", message: string) =>
@@ -15,6 +16,11 @@ describe("call", () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e.kind).toBe("invalid");
     expect(e.message).toBe("nope");
+  });
+
+  it("shows dates in the message in the user's format (SET-030)", async () => {
+    const e = (await call(err("invalid", "no price on 2026-03-05")).catch((x) => x)) as ApiError;
+    expect(e.message).toBe("no price on 03/05/2026");
   });
 });
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { openAccount } from "../../shell/nav";
+  import { bookSettings } from "../../state/booksettings.svelte";
   import { groupAccounts } from "../../state/groups";
   import { listsState } from "../../state/lists.svelte";
   import { registerState } from "../../state/register.svelte";
@@ -12,6 +13,8 @@
   let { onpick }: { onpick?: () => void } = $props();
 
   const groups = $derived(groupAccounts(listsState.accounts, settingsState.showClosedAccounts));
+  // Cents off: Rust sends whole dollars (ACCT-240).
+  const whole = $derived(!bookSettings.value.account_bar_cents);
 
   function pick(id: number) {
     onpick?.();
@@ -27,7 +30,7 @@
   {#each groups as g (g.section)}
     <h3>
       <span>{g.label}</span>
-      <AccountBalance amount={listsState.sectionTotals[g.section]} />
+      <AccountBalance amount={listsState.sectionTotals[g.section]} {whole} />
     </h3>
     <ul>
       {#each g.accounts as a (a.id)}
@@ -39,7 +42,7 @@
             onclick={() => pick(a.id)}
           >
             <span class="name">{a.name}{a.status === "closed" ? " (closed)" : ""}</span>
-            <AccountBalance amount={listsState.balance(a.id)?.current} />
+            <AccountBalance amount={listsState.balance(a.id)?.current} {whole} />
           </button>
         </li>
       {/each}

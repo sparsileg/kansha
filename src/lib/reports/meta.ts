@@ -2,6 +2,8 @@
 // settings' values. Data only: the reports themselves are built in Rust.
 
 import type {
+  CompareGroup,
+  CompareTo,
   DatePreset,
   DetailSort,
   Interval,
@@ -21,6 +23,8 @@ export interface ReportMeta {
   subtotal?: boolean;
   /** Tax Summary's own "Subtotal by". */
   taxGroup?: boolean;
+  /** The comparison reports' "Compare to" and "Subtotal by". */
+  compare?: boolean;
   interval?: boolean;
   sort?: boolean;
   totalsOnly?: boolean;
@@ -114,6 +118,20 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     sort: true,
     totalsOnly: true,
   },
+  compare_category: {
+    kind: "compare_category",
+    name: "Current Spending vs. Average by Category",
+    tabs: ["accounts", "categories", "payees"],
+    compare: true,
+    totalsOnly: true,
+  },
+  compare_payee: {
+    kind: "compare_payee",
+    name: "Current Spending vs. Average by Payee",
+    tabs: ["accounts", "categories", "payees"],
+    compare: true,
+    totalsOnly: true,
+  },
 };
 
 export const TAB_LABELS: Record<FilterTab, string> = {
@@ -142,6 +160,8 @@ export const PRESETS: [DatePreset, string][] = [
   ["last_30_days", "Last 30 days"],
   ["last_12_months", "Last 12 months"],
   ["custom", "Custom dates"],
+  ["week_to_date", "Week to date"],
+  ["last_week", "Last week"],
 ];
 
 export const presetLabel = (p: DatePreset): string =>
@@ -157,6 +177,19 @@ const labelled = (ps: DatePreset[]): [DatePreset, string][] => ps.map((p) => [p,
  * report saved with a preset no longer offered (This month) gets it as
  * a last group. */
 export function presetGroups(kind: ReportKind, current: DatePreset): [DatePreset, string][][] {
+  if (REPORTS[kind].compare) {
+    const groups: [DatePreset, string][][] = [
+      [
+        ["week_to_date", "Current week"],
+        ["month_to_date", "Current month"],
+        ["quarter_to_date", "Current quarter"],
+        ["year_to_date", "Current year"],
+      ],
+      [...labelled(["last_week", "last_month", "last_quarter", "last_year"]), ["custom", "Custom dates"]],
+    ];
+    if (!groups.some((g) => g.some(([p]) => p === current))) groups.push(labelled([current]));
+    return groups;
+  }
   const groups = [
     labelled(["all_dates"]),
     ...(kind === "tax_schedule" ? [labelled(PERIOD_PRESETS)] : []),
@@ -200,6 +233,60 @@ export const TAX_GROUPS: [TaxGroup, string][] = [
   ["none", "Don't subtotal"],
 ];
 
+export const COMPARES: [CompareTo, string][] = [
+  ["weeks_4", "Last 4 weeks"],
+  ["weeks_8", "Last 8 weeks"],
+  ["weeks_12", "Last 12 weeks"],
+  ["months_3", "Last 3 months"],
+  ["months_6", "Last 6 months"],
+  ["months_12", "Last 12 months"],
+  ["quarters_4", "Last 4 quarters"],
+  ["quarters_8", "Last 8 quarters"],
+  ["quarters_12", "Last 12 quarters"],
+  ["years_1", "Last year"],
+  ["years_3", "Last 3 years"],
+  ["years_5", "Last 5 years"],
+];
+
+/** The "Compare to" choices a date range offers (as Rust's
+ * `CompareTo::choices`, which also falls back to the first when a
+ * saved choice is not offered). */
+export function compareChoices(preset: DatePreset): [CompareTo, string][] {
+  const unit: Partial<Record<DatePreset, string>> = {
+    week_to_date: "weeks",
+    last_week: "weeks",
+    month_to_date: "months",
+    this_month: "months",
+    last_month: "months",
+    quarter_to_date: "quarters",
+    this_quarter: "quarters",
+    last_quarter: "quarters",
+    year_to_date: "years",
+    this_year: "years",
+    last_year: "years",
+  };
+  const prefix = unit[preset] ?? "";
+  return COMPARES.filter(([v]) => v.startsWith(prefix));
+}
+
+/** `compare` when `preset` offers it, else its first choice. */
+export function compareFor(preset: DatePreset, compare: CompareTo | undefined): CompareTo {
+  const choices = compareChoices(preset);
+  return compare && choices.some(([v]) => v === compare) ? compare : choices[0][0];
+}
+
+/** "Subtotal by" for a comparison report: by category offers Payee, by
+ * payee offers Category. */
+export function compareGroups(kind: ReportKind): [CompareGroup, string][] {
+  return [
+    ["none", "Don't subtotal"],
+    kind === "compare_payee" ? ["category", "Category"] : ["payee", "Payee"],
+    ["tag", "Tag"],
+    ["account", "Account"],
+    ["tax_line", "Tax Schedule"],
+  ];
+}
+
 export const SORTS: [DetailSort, string][] = [
   ["date", "Date/Account"],
   ["account_date", "Account/Date"],
@@ -232,6 +319,8 @@ export const MENU_REPORTS: Record<string, ReportKind> = {
   "reports.tax_capital_gains": "capital_gains",
   "reports.tax_schedule": "tax_schedule",
   "reports.tax_summary": "tax_summary",
+  "reports.compare_category": "compare_category",
+  "reports.compare_payee": "compare_payee",
 };
 
 /** Add or remove one id from a filter. `null` stands for `base` (what

@@ -131,4 +131,15 @@ describe("AccountBar", () => {
     expect(foot.textContent).toContain("-1,234.50");
     listsState.netWorth = null;
   });
+
+  it("without cents, shows Rust's whole dollars with no .00 (ACCT-240)", async () => {
+    bookSettings.value = { ...bookSettings.value, account_bar_cents: false };
+    listsState.netWorth = "-1235.00";
+    render(AccountPanel);
+    const foot = screen.getByText("Net Worth").parentElement!;
+    expect(foot.textContent).toContain("-1,235");
+    expect(foot.textContent).not.toContain(".00");
+    listsState.netWorth = null;
+    bookSettings.value = { ...bookSettings.value, account_bar_cents: true };
+  });
 });

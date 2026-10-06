@@ -96,6 +96,14 @@ export const MENUS: Menu[] = [
         ],
       },
       {
+        id: "reports.comparison",
+        label: "Comparison",
+        items: [
+          { id: "reports.compare_category", label: "Current Spending vs. Average by Category" },
+          { id: "reports.compare_payee", label: "Current Spending vs. Average by Payee" },
+        ],
+      },
+      {
         id: "reports.tax",
         label: "Tax",
         items: [

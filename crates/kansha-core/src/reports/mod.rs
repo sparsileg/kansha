@@ -15,6 +15,7 @@
 mod capital_gains;
 mod cards;
 mod chart;
+mod compare;
 mod csv;
 mod facts;
 mod income_expense;
@@ -27,12 +28,13 @@ mod tax;
 mod tree;
 
 pub use cards::{
-    Attention, AttentionCheck, CardData, CheckKind, Finding, Notice, Session, age, attention,
-    card_data, net_worth, net_worth_trend,
+    Attention, AttentionCheck, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding, Notice,
+    Session, account_bar_net_worth, age, attention, auto_expenses, card_data, net_worth,
+    net_worth_trend,
 };
 pub use chart::{Chart, Series, SeriesStyle, Tick, XUnit};
 pub use csv::to_csv;
-pub use range::{period_choices, period_label, periods, resolve};
+pub use range::{compare_before, compare_window, period_choices, period_label, periods, resolve};
 pub use security::{
     ChartSpan, SecurityChartKind, SecurityTxn, security_chart, security_transactions, span_dates,
 };
@@ -93,6 +95,11 @@ text_enum! {
         TaxSchedule = "tax_schedule",
         /// Tax-related categories and their transactions (RPT-140).
         TaxSummary = "tax_summary",
+        /// Spending in a period against the average of the periods
+        /// before it, by category (RPT-210).
+        CompareCategory = "compare_category",
+        /// The same by payee (RPT-210).
+        ComparePayee = "compare_payee",
     }
 }
 
@@ -130,6 +137,9 @@ text_enum! {
         Last30Days = "last_30_days",
         Last12Months = "last_12_months",
         Custom = "custom",
+        /// From the first day of this week (Settings, SET-030) to today.
+        WeekToDate = "week_to_date",
+        LastWeek = "last_week",
     }
 }
 
@@ -175,6 +185,94 @@ text_enum! {
         Quarter = "quarter",
         Year = "year",
         None = "none",
+    }
+}
+
+text_enum! {
+    /// What the comparison reports average (RPT-210): the periods
+    /// ending on the report's last day.
+    pub enum CompareTo {
+        Weeks4 = "weeks_4",
+        Weeks8 = "weeks_8",
+        Weeks12 = "weeks_12",
+        Months3 = "months_3",
+        Months6 = "months_6",
+        Months12 = "months_12",
+        Quarters4 = "quarters_4",
+        Quarters8 = "quarters_8",
+        Quarters12 = "quarters_12",
+        Years1 = "years_1",
+        Years3 = "years_3",
+        Years5 = "years_5",
+    }
+}
+
+impl CompareTo {
+    const WEEKS: &[CompareTo] = &[Self::Weeks4, Self::Weeks8, Self::Weeks12];
+    const MONTHS: &[CompareTo] = &[Self::Months3, Self::Months6, Self::Months12];
+    const QUARTERS: &[CompareTo] = &[Self::Quarters4, Self::Quarters8, Self::Quarters12];
+    const YEARS: &[CompareTo] = &[Self::Years1, Self::Years3, Self::Years5];
+
+    /// The choices a date range offers: weeks for a week, months for a
+    /// month, and so on; every choice for a custom range.
+    pub fn choices(preset: DatePreset) -> &'static [CompareTo] {
+        use DatePreset as P;
+        match preset {
+            P::WeekToDate | P::LastWeek => Self::WEEKS,
+            P::MonthToDate | P::ThisMonth | P::LastMonth => Self::MONTHS,
+            P::QuarterToDate | P::ThisQuarter | P::LastQuarter => Self::QUARTERS,
+            P::YearToDate | P::ThisYear | P::LastYear => Self::YEARS,
+            _ => Self::ALL,
+        }
+    }
+
+    /// `self` when the range offers it, else the range's first choice.
+    pub fn for_range(self, preset: DatePreset) -> CompareTo {
+        let choices = Self::choices(preset);
+        if choices.contains(&self) {
+            self
+        } else {
+            choices[0]
+        }
+    }
+
+    /// The "Compare to" text, as the dropdown shows it.
+    pub fn label(self) -> String {
+        let unit = match self {
+            Self::Weeks4 | Self::Weeks8 | Self::Weeks12 => "weeks",
+            Self::Months3 | Self::Months6 | Self::Months12 => "months",
+            Self::Quarters4 | Self::Quarters8 | Self::Quarters12 => "quarters",
+            Self::Years1 => return "Last year".into(),
+            Self::Years3 | Self::Years5 => "years",
+        };
+        format!("Last {} {unit}", self.count())
+    }
+
+    /// How many periods are averaged.
+    pub fn count(self) -> u32 {
+        match self {
+            Self::Years1 => 1,
+            Self::Months3 | Self::Years3 => 3,
+            Self::Weeks4 | Self::Quarters4 => 4,
+            Self::Years5 => 5,
+            Self::Months6 => 6,
+            Self::Weeks8 | Self::Quarters8 => 8,
+            Self::Weeks12 | Self::Months12 | Self::Quarters12 => 12,
+        }
+    }
+}
+
+text_enum! {
+    /// The comparison reports' "Subtotal by" (RPT-210). Category is
+    /// offered by the payee report only, Payee by the category report
+    /// only.
+    pub enum CompareGroup {
+        None = "none",
+        Category = "category",
+        Payee = "payee",
+        Tag = "tag",
+        Account = "account",
+        TaxLine = "tax_line",
     }
 }
 
@@ -237,6 +335,12 @@ pub struct ReportSettings {
     /// Tax Summary.
     #[serde(default = "default_tax_group")]
     pub tax_group: TaxGroup,
+    /// Comparison reports: what the date range is set against.
+    #[serde(default = "default_compare")]
+    pub compare: CompareTo,
+    /// Comparison reports.
+    #[serde(default = "default_compare_group")]
+    pub compare_group: CompareGroup,
     /// Net worth, income and expense.
     #[serde(default = "default_interval")]
     pub interval: Interval,
@@ -288,6 +392,12 @@ const fn default_subtotal() -> Subtotal {
 const fn default_tax_group() -> TaxGroup {
     TaxGroup::Category
 }
+const fn default_compare() -> CompareTo {
+    CompareTo::Months3
+}
+const fn default_compare_group() -> CompareGroup {
+    CompareGroup::None
+}
 const fn default_interval() -> Interval {
     Interval::None
 }
@@ -313,6 +423,14 @@ impl ReportSettings {
             K::AssetAllocation => ("Asset Allocation", DatePreset::YearToDate),
             K::TaxSchedule => ("Tax Schedule", DatePreset::LastYear),
             K::TaxSummary => ("Tax Summary", DatePreset::LastYear),
+            K::CompareCategory => (
+                "Current Spending vs. Average by Category",
+                DatePreset::MonthToDate,
+            ),
+            K::ComparePayee => (
+                "Current Spending vs. Average by Payee",
+                DatePreset::MonthToDate,
+            ),
         };
         ReportSettings {
             kind,
@@ -324,6 +442,8 @@ impl ReportSettings {
             },
             subtotal: Subtotal::Term,
             tax_group: TaxGroup::Category,
+            compare: CompareTo::Months3,
+            compare_group: CompareGroup::None,
             interval: if kind == K::NetWorth {
                 Interval::Month
             } else {
@@ -562,6 +682,12 @@ pub fn run(conn: &Connection, settings: &ReportSettings, today: Date) -> Result<
         ReportKind::InvestmentIncome => investing::income(conn, settings, range)?,
         ReportKind::Holdings => investing::holdings(conn, settings, range)?,
         ReportKind::AssetAllocation => investing::allocation(conn, settings, range)?,
+        ReportKind::CompareCategory => {
+            compare::build(conn, settings, range, today, compare::By::Category)?
+        }
+        ReportKind::ComparePayee => {
+            compare::build(conn, settings, range, today, compare::By::Payee)?
+        }
     };
     tree::hide_columns(&mut report, &settings.hidden_columns);
     report.totals_on_heading = settings.totals_on_heading();
@@ -586,8 +712,10 @@ pub fn columns(kind: ReportKind) -> Vec<Column> {
         ReportKind::InvestmentIncome => investing::income_columns(),
         ReportKind::Holdings => investing::holdings_columns(),
         ReportKind::AssetAllocation => investing::allocation_columns(),
-        ReportKind::NetWorth | ReportKind::IncomeExpense | ReportKind::IncomeExpensePayee => {
-            Vec::new()
-        }
+        ReportKind::NetWorth
+        | ReportKind::IncomeExpense
+        | ReportKind::IncomeExpensePayee
+        | ReportKind::CompareCategory
+        | ReportKind::ComparePayee => Vec::new(),
     }
 }

@@ -17,18 +17,20 @@ pub fn account_list(state: State<'_, AppState>) -> CmdResult<Vec<Account>> {
     state.read(|db, _| accounts::list(db.conn()))
 }
 
-/// Current and ending balance of every account (ACCT-230).
+/// Current and ending balance of every account (ACCT-230), as the
+/// account bar shows them: without cents if the setting says so.
 #[tauri::command]
 #[specta::specta]
 pub fn account_balances(state: State<'_, AppState>) -> CmdResult<Vec<AccountBalance>> {
-    state.read(|db, today| ledger::account_balances(db.conn(), today))
+    state.read(|db, today| ledger::account_bar_balances(db.conn(), today))
 }
 
-/// Each account list section's total (ACCT-240).
+/// Each account list section's total (ACCT-240), as the account bar
+/// shows it.
 #[tauri::command]
 #[specta::specta]
 pub fn section_totals(state: State<'_, AppState>) -> CmdResult<Vec<SectionTotal>> {
-    state.read(|db, today| ledger::section_totals(db.conn(), today))
+    state.read(|db, today| ledger::account_bar_section_totals(db.conn(), today))
 }
 
 /// A new account's fields with the type's defaults: group, tax treatment,

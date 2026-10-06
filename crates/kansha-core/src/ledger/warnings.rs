@@ -1,15 +1,15 @@
 //! Register aids the settings switch on: warnings before a save
-//! (REG-130, REG-140) and forgetting payees not used for a while
+//! (REG-130, REG-140, REG-160) and forgetting payees not used for a while
 //! (REG-120).
 
 use rusqlite::Connection;
 use serde::Serialize;
 
-use super::{Entry, TxnId};
+use super::{Entry, Target, TxnId};
 use crate::categories::PayeeFields;
 use crate::date::Date;
 use crate::error::Result;
-use crate::persistence::{Tx, ledger as repo, payees};
+use crate::persistence::{Tx, categories, ledger as repo, payees};
 use crate::settings;
 
 /// Something to confirm before an entry is saved.
@@ -21,6 +21,9 @@ pub enum EntryWarning {
     OutOfDate,
     /// The check number is on another transaction in the account.
     CheckReused,
+    /// A line, split lines included, is in the top-level Uncategorized
+    /// category.
+    Uncategorized,
 }
 
 /// The warnings `entry` earns, for those the settings leave on. `txn` is
@@ -44,8 +47,23 @@ pub fn entry_warnings(
     {
         out.push(EntryWarning::CheckReused);
     }
+    if s.warn_uncategorized {
+        for line in &entry.lines {
+            if let Target::Category(id) = line.target {
+                let c = categories::get(conn, id)?;
+                if c.fields.parent.is_none() && c.fields.name == UNCATEGORIZED {
+                    out.push(EntryWarning::Uncategorized);
+                    break;
+                }
+            }
+        }
+    }
     Ok(out)
 }
+
+/// The category the import puts lines without one in (the Needs
+/// attention card counts the same one).
+const UNCATEGORIZED: &str = "Uncategorized";
 
 /// In the past, or later than the same day a year on.
 fn is_out_of_date(today: Date, date: Date) -> bool {

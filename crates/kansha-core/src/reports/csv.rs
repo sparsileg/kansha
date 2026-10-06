@@ -5,7 +5,7 @@
 //! Amounts are plain decimals and dates ISO, so spreadsheets read them
 //! exactly.
 
-use super::{Report, Row, RowKind};
+use super::{Report, ReportKind, Row, RowKind};
 
 fn field(text: &str) -> String {
     if text.contains([',', '"', '\n', '\r']) || text.starts_with(' ') || text.ends_with(' ') {
@@ -66,16 +66,32 @@ fn rows(out: &mut String, list: &[Row], depth: usize, on_heading: bool) {
 pub fn to_csv(report: &Report) -> String {
     let mut out = String::new();
     line(&mut out, &report.title, &[]);
-    let dates = match (report.as_of, report.from) {
-        (true, _) | (false, None) => format!("As of {}", report.to),
-        (false, Some(from)) => format!("{from} through {}", report.to),
-    };
-    line(&mut out, &dates, &[]);
+    if matches!(
+        report.kind,
+        ReportKind::CompareCategory | ReportKind::ComparePayee
+    ) {
+        // RPT-210: "Last quarter: …" and "Last 4 quarters: …".
+        for c in report.columns.iter().take(2) {
+            let dates = match (c.from, c.to) {
+                (Some(f), Some(t)) => format!("{f} - {t}"),
+                (None, Some(t)) => format!("through {t}"),
+                _ => String::new(),
+            };
+            line(&mut out, &format!("{}: {dates}", c.label), &[]);
+        }
+    } else {
+        let dates = match (report.as_of, report.from) {
+            (true, _) | (false, None) => format!("As of {}", report.to),
+            (false, Some(from)) => format!("{from} through {}", report.to),
+        };
+        line(&mut out, &dates, &[]);
+    }
     let header: Vec<String> = report
         .columns
         .iter()
         .map(|c| match c.to {
             Some(d) if c.label == "Balance" => format!("{d} Balance"),
+            Some(_) if c.id == "average" => format!("Avg spending, {}", c.label),
             Some(d) if c.label.is_empty() => match c.from {
                 Some(f) => format!("{f} - {d}"),
                 None => d.to_string(),

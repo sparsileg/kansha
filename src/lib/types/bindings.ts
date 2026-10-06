@@ -110,9 +110,15 @@ export const commands = {
 	bookRename: (name: string, passphrase: string) => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_rename", { name, passphrase })),
 	/**  All accounts, open and closed, in display order. */
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
-	/**  Current and ending balance of every account (ACCT-230). */
+	/**
+	 *  Current and ending balance of every account (ACCT-230), as the
+	 *  account bar shows them: without cents if the setting says so.
+	 */
 	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
-	/**  Each account list section's total (ACCT-240). */
+	/**
+	 *  Each account list section's total (ACCT-240), as the account bar
+	 *  shows it.
+	 */
 	sectionTotals: () => typedError<SectionTotal[], IpcError>(__TAURI_INVOKE("section_totals")),
 	/**
 	 *  A new account's fields with the type's defaults: group, tax treatment,
@@ -526,6 +532,11 @@ export const commands = {
 	 *  data (CARD-050).
 	 */
 	netWorthTrend: (years: number, fitted: boolean) => typedError<Chart, IpcError>(__TAURI_INVOKE("net_worth_trend", { years, fitted })),
+	/**
+	 *  The Auto Expenses card (CARD-060): the categories and accounts
+	 *  chosen in the book settings.
+	 */
+	autoExpenses: () => typedError<ExpenseCard, IpcError>(__TAURI_INVOKE("auto_expenses")),
 	/**  Every insight, in tab order. */
 	insightList: () => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_list")),
 	/**  A new insight, after the others. */
@@ -539,7 +550,10 @@ export const commands = {
 	 *  new order.
 	 */
 	insightMove: (id: InsightId, delta: number) => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_move", { id, delta })),
-	/**  Net worth today, for the foot of the account list (ACCT-240). */
+	/**
+	 *  Net worth today, for the foot of the account list (ACCT-240), as the
+	 *  account bar shows it.
+	 */
 	netWorth: () => typedError<string, IpcError>(__TAURI_INVOKE("net_worth")),
 	/**
 	 *  Save the window's page as a PDF in the Downloads folder and open it
@@ -1100,6 +1114,19 @@ export type ColumnKind = "text" | "date" | "money" | "quantity" |
 /**  A percent with two decimals, e.g. "12.34". */
 "percent";
 
+/**
+ *  The comparison reports' "Subtotal by" (RPT-210). Category is
+ *  offered by the payee report only, Payee by the category report
+ *  only.
+ */
+export type CompareGroup = "none" | "category" | "payee" | "tag" | "account" | "tax_line";
+
+/**
+ *  What the comparison reports average (RPT-210): the periods
+ *  ending on the report's last day.
+ */
+export type CompareTo = "weeks_4" | "weeks_8" | "weeks_12" | "months_3" | "months_6" | "months_12" | "quarters_4" | "quarters_8" | "quarters_12" | "years_1" | "years_3" | "years_5";
+
 /**  The whole comparison. */
 export type Comparison = {
 	backup_created_at: string,
@@ -1162,7 +1189,9 @@ export type DatePreset = "all_dates" |
  *  One calendar month, quarter, or year, chosen from a list
  *  (Tax Schedule, RPT-040). `from` is its first day.
  */
-"monthly" | "quarterly" | "yearly" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom";
+"monthly" | "quarterly" | "yearly" | "month_to_date" | "quarter_to_date" | "year_to_date" | "this_month" | "last_month" | "this_quarter" | "last_quarter" | "this_year" | "last_year" | "last_30_days" | "last_12_months" | "custom" | 
+/**  From the first day of this week (Settings, SET-030) to today. */
+"week_to_date" | "last_week";
 
 /**  A date range: a preset, or `Custom` with its own dates. */
 export type DateRange = {
@@ -1327,7 +1356,12 @@ export type EntryWarning =
 /**  Dated before today, or more than a year after it. */
 "out_of_date" | 
 /**  The check number is on another transaction in the account. */
-"check_reused";
+"check_reused" | 
+/**
+ *  A line, split lines included, is in the top-level Uncategorized
+ *  category.
+ */
+"uncategorized";
 
 export type ErrorKind = 
 /**  The request broke a domain rule; show the message. */
@@ -1344,6 +1378,36 @@ export type ErrorKind =
 "locked" | 
 /**  Anything else: a database, file, or internal failure. */
 "internal";
+
+/**  The Auto Expenses card (CARD-060). */
+export type ExpenseCard = {
+	/**
+	 *  The chosen categories by name; none when no category or no
+	 *  account is chosen.
+	 */
+	rows: ExpenseRow[],
+	total: ExpenseRow,
+};
+
+/**
+ *  One row of the Auto Expenses card (CARD-060): spent this year, this
+ *  month, and per month, expenses positive.
+ */
+export type ExpenseRow = {
+	/**  `None` on the Total row. */
+	category: CategoryId | null,
+	/**  "Car:BlueForester:Gas", or "Total". */
+	label: string,
+	/**  January 1 through today. */
+	ytd: string,
+	/**  The 1st of this month through today. */
+	mtd: string,
+	/**
+	 *  `ytd` over the months begun this year, this one included, as
+	 *  Quicken does.
+	 */
+	monthly_avg: string,
+};
 
 /**
  *  One field that differs between the before and after snapshots.
@@ -2423,7 +2487,14 @@ export type ReportKind =
 /**  Tax-line totals and their transactions (CAT-050). */
 "tax_schedule" | 
 /**  Tax-related categories and their transactions (RPT-140). */
-"tax_summary";
+"tax_summary" | 
+/**
+ *  Spending in a period against the average of the periods
+ *  before it, by category (RPT-210).
+ */
+"compare_category" | 
+/**  The same by payee (RPT-210). */
+"compare_payee";
 
 /**
  *  Everything the Customize dialog sets (RPT-020). Filters are `None` for
@@ -2438,6 +2509,10 @@ export type ReportSettings = {
 	subtotal?: Subtotal,
 	/**  Tax Summary. */
 	tax_group?: TaxGroup,
+	/**  Comparison reports: what the date range is set against. */
+	compare?: CompareTo,
+	/**  Comparison reports. */
+	compare_group?: CompareGroup,
 	/**  Net worth, income and expense. */
 	interval?: Interval,
 	/**  Itemized and tax reports. */
@@ -2836,6 +2911,13 @@ export type Settings = {
 	trend_years: number,
 	/**  That card's money axis fits the data instead of reaching zero. */
 	trend_fitted: boolean,
+	/**
+	 *  Accounts the Auto Expenses card counts (CARD-060); `None` = every
+	 *  open account (never customized).
+	 */
+	auto_accounts: AccountId[] | null,
+	/**  Categories the Auto Expenses card lists, each on its own. */
+	auto_categories: CategoryId[],
 	/**  Backup folder (SET-050, BAK-030); `None` = the Downloads folder. */
 	backup_folder: string | null,
 	/**  Retention (BAK-040): newest automatic backups kept … */
@@ -2869,6 +2951,16 @@ export type Settings = {
 	warn_check_reuse: boolean,
 	/**  Ask before saving a changed transaction (REG-150). */
 	confirm_save_change: boolean,
+	/**
+	 *  Warn when a line is in the top-level Uncategorized category
+	 *  (REG-160).
+	 */
+	warn_uncategorized: boolean,
+	/**
+	 *  The account bar shows cents; off, its balances, section totals,
+	 *  and net worth are rounded to whole dollars (ACCT-240).
+	 */
+	account_bar_cents: boolean,
 };
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */

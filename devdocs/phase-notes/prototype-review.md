@@ -155,7 +155,7 @@ D-40 decided; Appendix A in one order, newest first.
 |---|---|
 | UI-030 | Account view tabs (Register, Scheduled, Reconcile history) |
 | UI-050 | Global keyboard shortcuts (Ctrl+N in the register and Ctrl+Z only) |
-| RPT-040 | Compare with a prior period |
+| ~~RPT-040~~ | Built 2026-10-05: comparison reports (RPT-210, spec 0.7.32) |
 | RPT-120, RPT-190, RPT-200 | Account balances, cash flow, transaction reports (D-90) |
 | TAG-030 | Group a report by tag (filter works) |
 | ~~TEST-070~~ | Built 2026-10-04: `just trace` |
@@ -174,28 +174,29 @@ tried by Stan in the app (2026-10-01); large fonts break the layout
 
 | ID | Status |
 |---|---|
-| D-70 | 6-decimal shares: settle with the brokerage CSVs (Phase 9) |
-| D-80 | Parallel run 2–3 months: to confirm |
+| ~~D-70~~ | Decided 2026-10-05: 6 places, confirmed by the real import |
+| ~~D-80~~ | Decided 2026-10-05: no parallel run; Quicken kept as a reference |
 | D-90 | 1.0 report list: settles RPT-120/190/200 |
-| D-130 | Synthetic data only: ends when Phase 9 imports real data |
+| ~~D-130~~ | Decided 2026-10-05: ended 2026-10-01 with the real import |
 
-Placeholders P-01–P-05 belong to Phase 9.
+Placeholders P-01–P-05 belong to Phase 9; all settled or closed
+(P-02 on 2026-10-05).
 
 ## 6. Known items carried from earlier phases
 
-- Shift+F10 and the Menu key do not open the register context menu;
-  the right-click menu is placed wrong near the window's bottom
-  (Phase 3).
+- ~~Register context menu (Shift+F10, Menu key, placement near the
+  window's bottom)~~: closed by Stan 2026-10-05.
 - Register at a 24 px base font: columns overflow; the "Today" label
   sits over a balance; native checkboxes do not scale (shell). Stan
   confirmed in the app (2026-10-01): too big a font breaks the layout.
 - Investment register: no keyboard grid; not measured at thousands of
   rows (NFR-040); a transfer-in row opens only from the sending side.
-- No lot replay: fixing an old trade means re-entering later ones.
-  On hold (Stan, 2026-10-01); true-up covers it for now.
+- ~~No lot replay~~: edits replay later lot events (built 0.7.6);
+  closed by Stan 2026-10-05.
 - Save PDF is Linux only.
-- Dockable registers: three questions open (`shell.md`).
-- Engine error messages show ISO dates, not the user's format.
+- ~~Dockable registers~~: closed by Stan 2026-10-03.
+- ~~Engine error messages show ISO dates~~: fixed 2026-10-05 (spec
+  0.7.29).
 
 ## Large book (NFR-040, NFR-050)
 

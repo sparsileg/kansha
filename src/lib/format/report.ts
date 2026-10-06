@@ -24,8 +24,13 @@ export function formatCell(kind: ColumnKind, text: string, cents: boolean): stri
 }
 
 /** A column heading's lines: a balance column shows its date over
- * "Balance"; a period column without a name shows its dates. */
+ * "Balance"; a period column without a name shows its dates. The
+ * comparison reports (RPT-210): "Avg spending" over the Compare to
+ * text, shortened ("Last 4 qtrs"; months stay whole). */
 export function columnHeading(c: Column): string[] {
+  if (c.id === "average") {
+    return ["Avg spending", c.label.replace(/\bweeks\b/, "wks").replace(/\bquarters\b/, "qtrs").replace(/\byears\b/, "yrs")];
+  }
   if (c.to !== null && c.label === "Balance") return [displayDate(c.to), c.label];
   if (c.label === "" && c.to !== null) {
     return c.from !== null && c.from !== c.to
@@ -34,3 +39,4 @@ export function columnHeading(c: Column): string[] {
   }
   return [c.label];
 }
+

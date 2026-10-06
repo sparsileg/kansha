@@ -15,7 +15,7 @@ describe("menu definitions", () => {
       "Accounts", "Calendar", "Reminders", "Investments", "Insights", "Memorized Payees", "Categories", "Tags", "Securities", "Import Prices…", "Reconcile",
     ]);
     expect(MENUS[1].items.map((i) => i.label)).toEqual(["Undo (Ctrl+Z)", "Settings…", "Navigation Bar…", "Renaming…"]);
-    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports", "Investing", "Net Worth", "Spending", "Tax"]);
+    expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports", "Investing", "Net Worth", "Spending", "Comparison", "Tax"]);
     const sub = (label: string) => MENUS[3].items.find((i) => i.label === label)?.items?.map((i) => i.label);
     expect(sub("Saved Reports")).toEqual(["Manage Saved Reports…"]);
     expect(sub("Investing")).toEqual([

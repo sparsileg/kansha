@@ -917,3 +917,103 @@ impl<I: Iterator<Item = Money>> SumMoney for I {
         self.fold(Money::ZERO, |a, b| a.checked_add(b).unwrap())
     }
 }
+
+/// ACCT-240, SET-080: the account bar without cents.
+#[test]
+fn account_bar_figures_drop_cents_when_the_setting_is_off() {
+    let today = date("2026-06-30");
+    let mut book = Book::new(today).unwrap();
+    let chk = book
+        .account("Checking", kansha_core::accounts::AccountType::Checking)
+        .unwrap();
+    let sav = book
+        .account("Savings", kansha_core::accounts::AccountType::Savings)
+        .unwrap();
+    // Checking 1,234.56; Savings 0.50 (half-even: rounds to 0).
+    book.opening_balance(chk, date("2026-01-01"), m("1234.56"))
+        .unwrap();
+    book.opening_balance(sav, date("2026-01-01"), m("0.50"))
+        .unwrap();
+    let mut f = Fixture { book, chk, sav };
+    let figures = |f: &Fixture| {
+        let conn = f.book.conn();
+        let bal = ledger::account_bar_balances(conn, today).unwrap();
+        let get = |id| bal.iter().find(|b| b.account == id).unwrap().current;
+        let banking = ledger::account_bar_section_totals(conn, today)
+            .unwrap()
+            .into_iter()
+            .find(|t| t.section == "banking")
+            .unwrap()
+            .total;
+        let nw = kansha_core::reports::account_bar_net_worth(conn, today).unwrap();
+        (get(f.chk), get(f.sav), banking, nw)
+    };
+    // On by default: exact cents.
+    assert_eq!(
+        figures(&f),
+        (m("1234.56"), m("0.50"), m("1235.06"), m("1235.06"))
+    );
+    set_settings(&mut f, |s| s.account_bar_cents = false);
+    // Each figure rounded on its own from exact cents.
+    assert_eq!(
+        figures(&f),
+        (m("1235.00"), m("0.00"), m("1235.00"), m("1235.00"))
+    );
+    // The ledger's own balances keep their cents.
+    let exact = ledger::account_balances(f.book.conn(), today).unwrap();
+    assert!(exact.iter().any(|b| b.current == m("1234.56")));
+}
+
+/// REG-160.
+#[test]
+fn warnings_flag_lines_in_uncategorized() {
+    let mut f = fixture();
+    let today = date("2026-06-30");
+    let uncat = f
+        .book
+        .category("Uncategorized", CategoryKind::Expense)
+        .unwrap();
+    let sub = f
+        .book
+        .category("Food:Uncategorized", CategoryKind::Expense)
+        .unwrap();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let warn = |f: &Fixture, e: &ledger::Entry| {
+        ledger::entry_warnings(f.book.conn(), today, e, None).unwrap()
+    };
+    let simple = |f: &mut Fixture, c| {
+        f.book
+            .entry(f.chk, today)
+            .amount(m("-5.00"))
+            .category(c)
+            .build()
+            .unwrap()
+    };
+    let e = simple(&mut f, uncat);
+    assert_eq!(warn(&f, &e), vec![ledger::EntryWarning::Uncategorized]);
+    // Only the top-level Uncategorized counts.
+    let e = simple(&mut f, sub);
+    assert_eq!(warn(&f, &e), vec![]);
+    // A split with one line in it.
+    let split = f
+        .book
+        .entry(f.chk, today)
+        .amount(m("-5.00"))
+        .split(Target::Category(groceries), m("-3.00"))
+        .split(Target::Category(uncat), m("-2.00"))
+        .build()
+        .unwrap();
+    assert_eq!(warn(&f, &split), vec![ledger::EntryWarning::Uncategorized]);
+    // A transfer is not uncategorized.
+    let t = f
+        .book
+        .entry(f.chk, today)
+        .amount(m("-5.00"))
+        .transfer(f.sav)
+        .build()
+        .unwrap();
+    assert_eq!(warn(&f, &t), vec![]);
+
+    set_settings(&mut f, |s| s.warn_uncategorized = false);
+    assert_eq!(warn(&f, &split), vec![]);
+}
