@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.45 (draft) |
+| **Document version** | 0.7.46 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-05 |
+| **Last updated** | 2026-10-06 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -1598,6 +1598,34 @@ platform has one.
   under it. A rename a crash
   interrupted is finished at the next start. The window title shows
   the book's name.
+- **UI-085** [1.0][R] **New book contents** (0.7.46). File > New…
+  asks how the new book starts:
+  - **Empty**: the built-in categories only (CAT-060, RCN-040), for
+    a book that will be filled by import (MIG-020).
+  - **Standard categories**: the built-in categories plus a
+    predefined household category list, with tax-related flags and
+    tax lines set (P-06).
+  - **Copy of this book** (only when a book is open): a refresh of
+    the open book. Everything is copied except transactions:
+    accounts, categories with their tax lines and flags, payees and
+    memorized payees, tags, securities and prices, schedules and
+    reminders, budgets, saved reports, insights and cards, the
+    navigation bar, and the book's settings. The user picks
+    **Balances**: *Zero* (every account opens at 0) or *Carry* (each
+    account's balance on a date the user picks, today by default,
+    becomes its opening balance on that date, reconciled). The user
+    picks whether closed accounts are copied or dropped; schedules
+    and reminders that use a dropped account are dropped with it.
+    Investment accounts are copied without holdings or lots; with
+    Carry, only their cash balance carries, and holdings are seeded
+    again (MIG-120).
+
+  Built-in categories are in every new book. Per-computer settings
+  (SET-070) are not in a book and are not copied. The passphrase and
+  backup folder are asked for as for any new book (UI-080), and the
+  new book's audit log starts empty. The first-run form and "Create
+  a new book…" on the passphrase and missing-key screens offer Empty
+  and Standard categories only (no book is open to copy).
 
 #### 14.2 Settings
 
@@ -2596,6 +2624,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | P-03 | ~~Source for seeding investment lots~~ Settled 0.6: full QIF history, trued up to the broker's cost-basis CSV (MIG-110, MIG-115) | Check each brokerage's CSV layout when MIG-115 is built |
 | P-04 | ~~Whether Quicken scheduled transactions can be exported~~ Settled 0.7.2: re-entered by hand (MIG-150 closed) | — |
 | P-05 | ~~Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form~~ Settled 0.6: the whole-file export does; per-account ones do not (§11.1) | — |
+| P-06 | The Standard categories list for a new book (UI-085): names, hierarchy, tax-related flags, tax lines | Stan and Claude draft it together |
 
 ---
 
@@ -2666,6 +2695,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.46 | 2026-10-06 | UI-085 (new): File > New… starts a book Empty (built-in categories only), with Standard categories, or as a copy of the open book without transactions (balances zeroed or carried as reconciled opening balances; closed accounts copied or dropped; investment holdings not copied). P-06 (new): the Standard categories list, to be drafted. Not built. No API or schema change. |
 | 0.7.45 | 2026-10-06 | REC-050: the schedule dialog no longer offers the weekend rule; new schedules have none, one already set is kept. The dialog's How often, Ends, and Entering sections become one Scheduling section, End, Remind days, and Mode on one line. No API or schema change. |
 | 0.7.44 | 2026-10-06 | REC-060, REC-065: the schedule dialog's "Amount is an estimate" checkbox is replaced by an Amount choice, Fixed or Average of past payments; old estimated splits and auto-entry schedules keep "Estimate (confirm each time)". Existing estimated, one-line, Remind schedules average their last 3 payments. **Schema change:** migration 0018 (data only: sets `average_of` = 3 and the amount to the average, 0.00 without payments). No API change. |
 | 0.7.43 | 2026-10-06 | New REC-065: an estimated, one-line, Remind schedule may take its amount as the average of its last N payments (default 3; fewer if fewer; 0.00 before the first), worked out again on save, entry, and edits, voids, deletes, or undos of its payments. REC-110: Enter's register path written down; a cash in or out of an investment account opens the investment register with it selected after entering. §18 notes `schedule.average_of`. **Schema change:** migration 0017 (`schedule.average_of`). **API change:** `ScheduleFields` gains `average_of`. |
