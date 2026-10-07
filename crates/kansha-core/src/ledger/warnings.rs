@@ -17,7 +17,7 @@ use crate::settings;
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "snake_case")]
 pub enum EntryWarning {
-    /// Dated before today, or more than a year after it.
+    /// Dated more than 7 days before today, or more than 30 after it.
     OutOfDate,
     /// The check number is on another transaction in the account.
     CheckReused,
@@ -65,13 +65,15 @@ pub fn entry_warnings(
 /// attention card counts the same one).
 const UNCATEGORIZED: &str = "Uncategorized";
 
-/// In the past, or later than the same day a year on.
+/// Days before today a date may be without a warning (REG-130).
+const PAST_DAYS: i64 = 7;
+/// Days after today a date may be without a warning (REG-130).
+const FUTURE_DAYS: i64 = 30;
+
+/// More than `PAST_DAYS` before today, or more than `FUTURE_DAYS` after.
 fn is_out_of_date(today: Date, date: Date) -> bool {
-    let limit = today
-        .naive()
-        .checked_add_months(chrono::Months::new(12))
-        .map_or(today, Date::from_naive);
-    date < today || date > limit
+    let days = (date.naive() - today.naive()).num_days();
+    !(-PAST_DAYS..=FUTURE_DAYS).contains(&days)
 }
 
 /// Clear the memorized defaults of payees no transaction has used for the

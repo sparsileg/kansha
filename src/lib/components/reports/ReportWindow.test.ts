@@ -23,6 +23,7 @@ const defaults = (kind: string) => ({
   totals_on_heading: null,
   show_zero: false,
   transfers: true,
+  cash_flow: false,
   accounts: null,
   categories: null,
   payees: null,

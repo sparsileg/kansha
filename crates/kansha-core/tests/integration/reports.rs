@@ -369,6 +369,64 @@ fn income_expense_by_month_rolls_up_subcategories() {
     assert_eq!(food.drill, Some(Drill::Category { category: cat }));
 }
 
+/// Cash flow (RPT-190): transfers to and from accounts not chosen count;
+/// those between chosen accounts do not. The total is the chosen
+/// accounts' change, opening balances aside.
+#[test]
+fn income_expense_cash_flow_counts_transfers_to_accounts_not_chosen() {
+    let fx = fixture();
+    let mut s = settings(ReportKind::IncomeExpense);
+    s.interval = Interval::Quarter;
+    s.accounts = Some(vec![fx.checking]);
+    s.cash_flow = true;
+    let r = run(&fx, &s);
+    assert_eq!(
+        text(&r),
+        "\
+# INCOME | 3000.00 | 0.00 | 3000.00
+  - Salary | 3000.00 | 0.00 | 3000.00
+# EXPENSES | -1360.00 | 0.00 | -1360.00
+  + Food | -160.00 | 0.00 | -160.00
+    - Dining | -20.00 | 0.00 | -20.00
+    - Groceries | -140.00 | 0.00 | -140.00
+  + Tax | -1200.00 | 0.00 | -1200.00
+    - Real Estate | -1200.00 | 0.00 | -1200.00
+# TRANSFERS | -500.00 | 5000.00 | 4500.00
+  - Savings | -500.00 | 0.00 | -500.00
+  - IRA | 0.00 | 5000.00 | 5000.00
+= OVERALL TOTAL | 1140.00 | 5000.00 | 6140.00"
+    );
+    let savings = &r.rows[2].children[0];
+    assert_eq!(
+        savings.drill,
+        Some(Drill::Account {
+            account: fx.savings
+        })
+    );
+
+    // Savings chosen too: money between the two is not cash flow.
+    s.accounts = Some(vec![fx.checking, fx.savings]);
+    let r = run(&fx, &s);
+    assert!(text(&r).contains(
+        "\
+# TRANSFERS | 0.00 | 5000.00 | 5000.00
+  - IRA | 0.00 | 5000.00 | 5000.00
+= OVERALL TOTAL | 1640.00 | 5000.00 | 6640.00"
+    ));
+
+    // By payee: the same TRANSFERS section.
+    s.kind = ReportKind::IncomeExpensePayee;
+    assert!(text(&run(&fx, &s)).contains("# TRANSFERS | 0.00 | 5000.00 | 5000.00"));
+
+    // Off, or every account chosen: no transfers.
+    s.kind = ReportKind::IncomeExpense;
+    s.cash_flow = false;
+    assert!(!text(&run(&fx, &s)).contains("TRANSFERS"));
+    s.cash_flow = true;
+    s.accounts = None;
+    assert!(!text(&run(&fx, &s)).contains("TRANSFERS"));
+}
+
 #[test]
 fn detail_sorts_by_date_then_account_by_num_and_reversed() {
     let mut fx = fixture();

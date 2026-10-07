@@ -103,7 +103,7 @@ pub struct Settings {
     /// Memorized payees not used in this many months are removed when the
     /// book opens (REG-120); 0 = never.
     pub purge_payees_months: i64,
-    /// Warn about a transaction dated in the past or over a year ahead
+    /// Warn about a transaction dated over 7 days past or 30 days ahead
     /// (REG-130).
     pub warn_out_of_date: bool,
     /// Warn when a check number is used twice in an account (REG-140).

@@ -290,7 +290,7 @@
     if (!occ) {
       const found = await call(commands.entryWarnings(entry, txn));
       if (found.includes("out_of_date")) {
-        notes.push("The date is in the past or more than a year ahead.");
+        notes.push("The date is more than 7 days past or more than 30 days ahead.");
       }
       if (found.includes("check_reused")) {
         notes.push(`Check number ${entry.check_num.trim()} is already used in this account.`);

@@ -307,6 +307,9 @@
               /> Totals on group heading</label
             >
             {#if meta.transfers}<label class="check"><input type="checkbox" bind:checked={draft.transfers} /> Transfers</label>{/if}
+            {#if meta.cashFlow}<label class="check" title="Count money moved to or from accounts not chosen on the Accounts tab"
+                ><input type="checkbox" bind:checked={draft.cash_flow} /> Cash flow (transfers to other accounts)</label
+              >{/if}
             {#if meta.showZero}<label class="check"><input type="checkbox" bind:checked={draft.show_zero} /> Accounts with zero balances</label>{/if}
           </fieldset>
         </fieldset>

@@ -369,6 +369,10 @@ pub struct ReportSettings {
     /// Itemized reports: include transfers between accounts.
     #[serde(default = "yes")]
     pub transfers: bool,
+    /// Income and expense: also count transfers to and from accounts
+    /// not chosen, as cash flow does (RPT-190).
+    #[serde(default)]
+    pub cash_flow: bool,
     /// `None` is every account, except Capital Gains, where it is every
     /// taxable investment account.
     #[serde(default)]
@@ -467,6 +471,7 @@ impl ReportSettings {
             totals_on_heading: None,
             show_zero: false,
             transfers: true,
+            cash_flow: false,
             accounts: None,
             categories: None,
             payees: None,

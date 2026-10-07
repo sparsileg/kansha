@@ -1360,7 +1360,7 @@ export type EntryMode = "remind" | "auto";
 
 /**  Something to confirm before an entry is saved. */
 export type EntryWarning = 
-/**  Dated before today, or more than a year after it. */
+/**  Dated more than 7 days before today, or more than 30 after it. */
 "out_of_date" | 
 /**  The check number is on another transaction in the account. */
 "check_reused" | 
@@ -2562,6 +2562,11 @@ export type ReportSettings = {
 	/**  Itemized reports: include transfers between accounts. */
 	transfers?: boolean,
 	/**
+	 *  Income and expense: also count transfers to and from accounts
+	 *  not chosen, as cash flow does (RPT-190).
+	 */
+	cash_flow?: boolean,
+	/**
 	 *  `None` is every account, except Capital Gains, where it is every
 	 *  taxable investment account.
 	 */
@@ -2972,7 +2977,7 @@ export type Settings = {
 	 */
 	purge_payees_months: number,
 	/**
-	 *  Warn about a transaction dated in the past or over a year ahead
+	 *  Warn about a transaction dated over 7 days past or 30 days ahead
 	 *  (REG-130).
 	 */
 	warn_out_of_date: boolean,

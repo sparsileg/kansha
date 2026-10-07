@@ -175,7 +175,7 @@
         </label>
       {:else if category === "notifications"}
         <label>
-          <span>When entering out-of-date transactions (past, or over a year ahead)</span>
+          <span>When entering out-of-date transactions (over 7 days past or 30 days ahead)</span>
           <input type="checkbox" bind:checked={s.warn_out_of_date} />
         </label>
         <label>

@@ -29,6 +29,8 @@ export interface ReportMeta {
   sort?: boolean;
   totalsOnly?: boolean;
   transfers?: boolean;
+  /** Income and expense: count transfers to accounts not chosen (RPT-190). */
+  cashFlow?: boolean;
   showZero?: boolean;
 }
 
@@ -72,6 +74,7 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     tabs: SPENDING,
     interval: true,
     totalsOnly: true,
+    cashFlow: true,
   },
   income_expense_payee: {
     kind: "income_expense_payee",
@@ -79,6 +82,7 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     tabs: SPENDING,
     interval: true,
     totalsOnly: true,
+    cashFlow: true,
   },
   performance: {
     kind: "performance",

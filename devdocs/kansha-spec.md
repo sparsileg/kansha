@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.46 (draft) |
+| **Document version** | 0.7.49 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-06 |
+| **Last updated** | 2026-10-07 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -320,9 +320,10 @@ had a combined column.
   since, loses those defaults. The payee stays, so old transactions keep
   their names.
 - **REG-130** [1.0][R] Settings > Notifications: warn, with a choice to
-  save anyway, when a transaction is dated in the past or more than a
-  year after today (default on). A scheduled item entered from its
-  occurrence is not warned about.
+  save anyway, when a transaction is dated more than 7 days before
+  today or more than 30 days after it (default on; 0.7.47, was any
+  past date or more than a year ahead). A scheduled item entered from
+  its occurrence is not warned about.
 - **REG-140** [1.0][R] Warn, with a choice to save anyway, when a check
   number is already on another live transaction in the same account
   (default on).
@@ -1022,8 +1023,11 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   trends. The same report **by payee** totals each payee.
 - **RPT-110** [1.0][S] **Net worth** — as of a date and over time
   (graph), by account group.
-- **RPT-120** [1.0][S] **Account balances/status** — all or selected
-  accounts as of a date.
+- **RPT-120** [Later][S] **Account balances/status** — all or selected
+  accounts as of a date. Deferred (0.7.48): the Net Worth report
+  (RPT-110) covers it with Interval None and chosen accounts. A
+  per-account status (last reconcile, cleared vs. ending balance)
+  would be a requirement of its own.
 - **RPT-130** **[Withdrawn]** (0.3.22) Tithing report. Existing
   reports (Itemized Categories, Income/Expense by Category) cover it.
 - **RPT-140** [1.0][S] **Tax summary** — totals of tax-related
@@ -1070,10 +1074,23 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
 - **RPT-180** [1.0][S] **Asset allocation** — table and chart, by
   asset class as of a date; investment cash counts as Cash. A class
   opens Holdings for its securities.
-- **RPT-190** [1.0][R] **Cash flow** — inflows vs. outflows by month,
-  excluding transfers between own accounts.
-- **RPT-200** [1.0][R] **Transaction report** — filtered list of
-  transactions (general-purpose query tool).
+- **RPT-190** [1.0][R] **Cash flow** (0.7.49) — an option on
+  Income/Expense by Category and by Payee, "Cash flow (transfers to
+  other accounts)" in Customize. Besides income and expenses, it lists
+  a TRANSFERS section with one row per account not chosen on the
+  Accounts tab that money moved to or from (a loan's principal, a
+  brokerage, a retirement account), in account-list order; a row opens
+  that account's register. Transfers between two chosen accounts are
+  left out, so the overall total is what the chosen accounts gained or
+  lost (opening balances aside). By month with Interval Month. With
+  every account chosen there is nothing to list, and the report is
+  plain income and expense. Off by default.
+- **RPT-200** [Later][R] **Transaction report** — filtered list of
+  transactions (general-purpose query tool). Deferred (0.7.48):
+  Itemized Categories and Itemized Payees (RPT-205) cover it, with
+  their filters and saved reports, and the search box (UI-070) finds
+  by memo, note, check number, or amount. A filter those lack (cleared
+  status, amount range) would be added to them, not a new report.
 - **RPT-205** [1.0][S] **Itemized Categories** and **Itemized Payees**
   — transactions grouped under INCOME, EXPENSES, and TRANSFERS by
   category (with subcategories) or by payee, with totals. Transactions
@@ -2604,7 +2621,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-60 | Lot selection methods | **Decided** | `fifo`, `specific`, `average` (LOT-110, migration 0004), `hifo`, and `min_tax` (LOT-115), all built |
 | D-70 | Share/price decimal precision | **Decided** (2026-10-05) | 6 decimal places, confirmed by the real import: holdings trued up to the Fidelity and Vanguard cost-basis files match |
 | D-80 | Parallel-run duration before retiring Quicken | **Decided** (2026-10-05) | No parallel run: since 2026-10-01 data is entered in Kansha only; Quicken is kept as a read-only reference for a while |
-| D-90 | Confirm 1.0 report list (Section 12.2) | Open | As listed |
+| D-90 | Confirm 1.0 report list (Section 12.2) | **Decided** (2026-10-07) | As listed, except RPT-120 and RPT-200 moved to [Later] (0.7.48); RPT-190 is an Income/Expense option (0.7.49) |
 | D-100 | Confirm account type list, including 401(k) and Loan/Mortgage | **Decided** | As listed in ACCT-010/020 |
 | D-110 | Encryption during the prototype | **Decided** | Unencrypted prototype database (synthetic data only) using the same SQLCipher build; encryption enabled in Phase 8 (decided 2026-09-29) |
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
@@ -2695,6 +2712,9 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.49 | 2026-10-07 | RPT-190: Cash flow is an option on Income/Expense by Category and by Payee: a TRANSFERS section lists money moved to or from accounts not chosen; transfers between chosen accounts are left out. D-90 decided. No schema change (saved reports without the option read as off). **API change:** `ReportSettings` gains `cash_flow`. |
+| 0.7.48 | 2026-10-07 | RPT-120 (Account balances/status) moves to [Later]: Net Worth (RPT-110) with Interval None and chosen accounts covers it (D-90). RPT-200 (Transaction report) moves to [Later]: Itemized Categories and Payees (RPT-205) and the search box (UI-070) cover it. No API or schema change. |
+| 0.7.47 | 2026-10-07 | REG-130: the date warning fires only for a date more than 7 days before today or more than 30 days after it (was any past date, or more than a year ahead), so a slightly late entry is not warned about and a wrong-year typo is. No API or schema change. |
 | 0.7.46 | 2026-10-06 | UI-085 (new): File > New… starts a book Empty (built-in categories only), with Standard categories, or as a copy of the open book without transactions (balances zeroed or carried as reconciled opening balances; closed accounts copied or dropped; investment holdings not copied). P-06 (new): the Standard categories list, to be drafted. Not built. No API or schema change. |
 | 0.7.45 | 2026-10-06 | REC-050: the schedule dialog no longer offers the weekend rule; new schedules have none, one already set is kept. The dialog's How often, Ends, and Entering sections become one Scheduling section, End, Remind days, and Mode on one line. No API or schema change. |
 | 0.7.44 | 2026-10-06 | REC-060, REC-065: the schedule dialog's "Amount is an estimate" checkbox is replaced by an Amount choice, Fixed or Average of past payments; old estimated splits and auto-entry schedules keep "Estimate (confirm each time)". Existing estimated, one-line, Remind schedules average their last 3 payments. **Schema change:** migration 0018 (data only: sets `average_of` = 3 and the amount to the average, 0.00 without payments). No API change. |

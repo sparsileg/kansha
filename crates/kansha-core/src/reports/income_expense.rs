@@ -1,7 +1,9 @@
 //! Income/Expense by Category (RPT-100) and by Payee: category totals
 //! with subcategory rollup, or payee totals, optionally one column per
 //! period. Transfers between accounts are not income or expense and are
-//! left out.
+//! left out, unless the report is a cash flow (RPT-190): then transfers
+//! to and from accounts not chosen are listed too, by account, so the
+//! total is what the chosen accounts gained or lost.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -13,6 +15,7 @@ use super::tree::{column, detail, group, money_columns, sum_up, total_row};
 use super::{
     Column, ColumnKind, Drill, Interval, Report, ReportSettings, ResolvedRange, Row, RowKind,
 };
+use crate::accounts::AccountId;
 use crate::categories::{CategoryId, PayeeId};
 use crate::error::{Error, Result};
 use crate::money::Money;
@@ -31,11 +34,18 @@ pub(super) fn build(
 ) -> Result<Report> {
     let lk = Lookups::load(conn)?;
     let txns = facts::load(conn, range)?;
-    let no_transfers = ReportSettings {
-        transfers: false,
+    let with = ReportSettings {
+        transfers: s.cash_flow,
         ..s.clone()
     };
-    let lines = facts::lines(&txns, &no_transfers, &lk, Want::All)?;
+    // Money between two chosen accounts stays inside them.
+    let lines: Vec<facts::Line> = facts::lines(&txns, &with, &lk, Want::All)?
+        .into_iter()
+        .filter(|l| match l.target {
+            Target::Category(_) => true,
+            Target::Transfer(other) => !s.account_ok(other),
+        })
+        .collect();
 
     // Columns: one per period plus a total, or just the amount.
     let start = range
@@ -85,6 +95,9 @@ pub(super) fn build(
     } else {
         category_sections(&lines, width, &lk, &add)?
     };
+    if let Some(t) = transfer_section(&lines, width, &lk, &add)? {
+        sections.push(t);
+    }
     let sums = sum_up(&mut sections, width, &money)?;
     if s.totals_only {
         for sec in &mut sections {
@@ -150,6 +163,44 @@ fn payee_sections(lines: &[facts::Line], width: usize, add: &Add) -> Result<Vec<
         }
     }
     Ok(sections)
+}
+
+/// Cash flow: one row per account money went to or came from, in
+/// account-list order; `None` without transfer lines.
+fn transfer_section(
+    lines: &[facts::Line],
+    width: usize,
+    lk: &Lookups,
+    add: &Add,
+) -> Result<Option<Row>> {
+    let mut by_account: BTreeMap<(usize, AccountId), Vec<Money>> = BTreeMap::new();
+    for l in lines {
+        let Target::Transfer(other) = l.target else {
+            continue;
+        };
+        let cells = by_account
+            .entry((lk.account_order(other), other))
+            .or_insert_with(|| vec![Money::ZERO; width]);
+        add(cells, l)?;
+    }
+    if by_account.is_empty() {
+        return Ok(None);
+    }
+    let children = by_account
+        .into_iter()
+        .map(|((_, account), cells)| {
+            detail(
+                lk.account_name(account),
+                cells.iter().map(Money::to_string).collect(),
+                Some(Drill::Account { account }),
+            )
+        })
+        .collect();
+    Ok(Some(group(
+        RowKind::Section,
+        Section::Transfers.label(),
+        children,
+    )))
 }
 
 /// Category rows in category-list order, subcategories inside their

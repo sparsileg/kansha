@@ -206,6 +206,59 @@ button:focus-visible {
     position: relative;
     z-index: 1;
 }
+/* ── Checkboxes ───────────────────────────────────────────────────── */
+/* Drawn here, not by the system: the native box is about 13px and does
+   not grow. About half again as big, in rem so it follows the base size; the
+   tick scales with it and sits in the middle. Checked uses the
+   selection pair, which every theme keeps far apart. Not in :where(),
+   so it wins over the focus colors above; the focus ring moves outside
+   the box, where it does not cover the tick. */
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    /* !important: dialogs size their inputs (width: auto or 100%,
+       min-width: 0), and a drawn box has no width of its own to fall
+       back on. */
+    flex: none !important;
+    width: 1.1rem !important;
+    min-width: 1.1rem !important;
+    max-width: 1.1rem !important;
+    height: 1.1rem !important;
+    margin: 0 0.15rem;
+    vertical-align: middle;
+    box-sizing: border-box;
+    background: var(--bg);
+    border: 2px solid var(--fg);
+    border-radius: 0.2rem;
+    cursor: pointer;
+}
+input[type="checkbox"]:checked {
+    background: var(--sel-bg);
+    border-color: var(--sel-bg);
+}
+input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 32%;
+    height: 62%;
+    box-sizing: border-box;
+    border: solid var(--sel-fg);
+    border-width: 0 0.16rem 0.16rem 0;
+    /* Up a little: the tick's corner is its heavy end. */
+    transform: translate(-50%, -60%) rotate(45deg);
+}
+input[type="checkbox"]:focus {
+    outline-offset: 2px;
+    box-shadow: none;
+}
+input[type="checkbox"]:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
 /* A dropdown's open list: the theme's plain colors, never the focus
    colors its field has while open. */
 option,

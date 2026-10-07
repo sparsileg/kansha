@@ -776,12 +776,14 @@ fn warnings_flag_old_far_future_and_reused_check_numbers() {
         vec![ledger::EntryWarning::CheckReused]
     );
     assert_eq!(warn(&f, &first, Some(id)), vec![]);
-    // Past; a year ahead is fine, a day more is not.
-    let past = build(&mut f, "2026-06-29", "");
-    let year = build(&mut f, "2027-06-30", "");
-    let beyond = build(&mut f, "2027-07-01", "");
+    // 7 days back and 30 ahead are fine, a day more either way is not.
+    let week = build(&mut f, "2026-06-23", "");
+    let past = build(&mut f, "2026-06-22", "");
+    let month = build(&mut f, "2026-07-30", "");
+    let beyond = build(&mut f, "2026-07-31", "");
+    assert_eq!(warn(&f, &week, None), vec![]);
     assert_eq!(warn(&f, &past, None), vec![ledger::EntryWarning::OutOfDate]);
-    assert_eq!(warn(&f, &year, None), vec![]);
+    assert_eq!(warn(&f, &month, None), vec![]);
     assert_eq!(
         warn(&f, &beyond, None),
         vec![ledger::EntryWarning::OutOfDate]
