@@ -111,6 +111,33 @@ export function blockNonAmountChar(e: InputEvent): void {
   if (e.data && /[^0-9.,]/.test(e.data)) e.preventDefault();
 }
 
+/**
+ * True when an amount field holds a sum to work out (REG-035): any of
+ * `+ * /`, or a `-` after the first character ("10-2.5"). A lone leading
+ * sign is not a sum. Rust does the arithmetic (`amountEval`).
+ */
+export function isAmountSum(text: string): boolean {
+  const t = text.trim();
+  return /[+*/]/.test(t) || t.slice(1).includes("-");
+}
+
+/**
+ * A register amount field that also takes a sum (REG-035): a sum keeps
+ * digits, commas, points, spaces, and `+ - * /` (each number's decimals
+ * are checked when it is worked out); anything else is cleaned as
+ * `sanitizeAmountInput`, or `sanitizeSplitAmountInput` for a split line.
+ */
+export function sanitizeSumInput(text: string, split = false): string {
+  if (isAmountSum(text)) return text.replace(/[^0-9.,+\-*/ ]/g, "");
+  return split ? sanitizeSplitAmountInput(text) : sanitizeAmountInput(text);
+}
+
+/** Block a typed character that can never be part of an amount or a
+ * sum. `=` is the caller's: it works the sum out. */
+export function blockNonSumChar(e: InputEvent): void {
+  if (e.data && /[^0-9.,+\-*/ ]/.test(e.data)) e.preventDefault();
+}
+
 /** A whole-dollar canonical amount ("1235.00") as "1,235": for reports
  * shown without cents, which Rust has already rounded. */
 export function formatMoneyWhole(canonical: string): string {

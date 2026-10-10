@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   sanitizeAmountInput,
   sanitizeSplitAmountInput,
+  sanitizeSumInput,
+  isAmountSum,
   combinePaymentDeposit,
   formatMoney,
   parseMoney,
@@ -165,4 +167,35 @@ describe("sanitizeSplitAmountInput", () => {
     ["12a.5x", "12.5"],
     ["-", "-"],
   ])("%j → %j", (i, o) => expect(sanitizeSplitAmountInput(i)).toBe(o));
+});
+
+describe("isAmountSum", () => {
+  it.each([
+    ["2.99+3.39", true],
+    ["10-2.5", true],
+    ["3*4", true],
+    ["8/2", true],
+    ["+7", true],
+    [" 5 - 1 ", true],
+    ["5", false],
+    ["-5", false],
+    [" -5", false],
+    ["1,234.56", false],
+    ["", false],
+  ])("%j → %j", (i, o) => expect(isAmountSum(i)).toBe(o));
+});
+
+describe("sanitizeSumInput", () => {
+  it.each([
+    ["2.99+3.39", false, "2.99+3.39"],
+    ["$5 + $3x", false, "5 + 3"],
+    ["12.99*1.0825", false, "12.99*1.0825"],
+    ["10/3", false, "10/3"],
+    // Not a sum: cleaned as before.
+    ["-5", false, "5"],
+    ["$1,234.567", false, "1,234.56"],
+    ["-5", true, "-5"],
+    ["-5+2", true, "-5+2"],
+    ["5-00", true, "5-00"],
+  ])("%j split=%j → %j", (i, split, o) => expect(sanitizeSumInput(i, split)).toBe(o));
 });

@@ -177,6 +177,15 @@ pub fn split_remainder(total: Money, parts: Vec<Money>) -> CmdResult<Money> {
     Ok(ledger::split_remainder(total, parts)?)
 }
 
+/// Work out a sum typed in an amount field (REG-035): "2.99+3.39" →
+/// 6.38, rounded to cents half-even. Signed; the UI decides whether a
+/// negative result fits the field.
+#[tauri::command]
+#[specta::specta]
+pub fn amount_eval(text: String) -> CmdResult<Money> {
+    Ok(kansha_core::calc::eval_amount(&text)?)
+}
+
 /// What changed, when, and from where, for one record (AUD-020).
 #[tauri::command]
 #[specta::specta]

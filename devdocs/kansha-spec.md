@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.49 (draft) |
+| **Document version** | 0.7.50 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-07 |
 | **Owner** | Stan |
@@ -285,6 +285,16 @@ had a combined column.
 - **REG-030** [1.0][R] Inline entry and editing at the bottom of the
   register, keyboard-driven: Tab moves between fields; Enter saves;
   Esc cancels; `+`/`-` adjusts date; `t` sets today.
+- **REG-035** [1.0][R] **Amount sums** (0.7.50). The Payment and
+  Deposit fields and split line amounts take a sum: numbers joined by
+  `+`, `-`, `*`, `/` ("2.99+3.39"). `*` and `/` go before `+` and
+  `-`, each left to right; no parentheses. Numbers may have commas, a
+  `$`, and any number of decimals; the exact result is rounded to
+  cents half-even once, at the end. `=` works the sum out at once;
+  leaving the field, or Enter, does too. Rust does the arithmetic. A
+  negative result in Payment or Deposit is an error; in a split line
+  it is the line going the other way (TXN-020). Divide by zero or a
+  malformed sum is an error, and the field keeps what was typed.
 - **REG-040** [1.0][R] Sort by any column; filter by date range,
   payee, category, tag, and cleared status. Text search is the
   navigation bar search (UI-070), which can be limited to the open
@@ -2712,6 +2722,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.50 | 2026-10-10 | REG-035 (new): amount sums with `+ - * /` in register Payment, Deposit, and split amounts; `=`, leaving the field, or Enter works them out in Rust, rounded half-even; negative Payment/Deposit is an error. No schema change. **API change:** new command `amount_eval`. |
 | 0.7.49 | 2026-10-07 | RPT-190: Cash flow is an option on Income/Expense by Category and by Payee: a TRANSFERS section lists money moved to or from accounts not chosen; transfers between chosen accounts are left out. D-90 decided. No schema change (saved reports without the option read as off). **API change:** `ReportSettings` gains `cash_flow`. |
 | 0.7.48 | 2026-10-07 | RPT-120 (Account balances/status) moves to [Later]: Net Worth (RPT-110) with Interval None and chosen accounts covers it (D-90). RPT-200 (Transaction report) moves to [Later]: Itemized Categories and Payees (RPT-205) and the search box (UI-070) cover it. No API or schema change. |
 | 0.7.47 | 2026-10-07 | REG-130: the date warning fires only for a date more than 7 days before today or more than 30 days after it (was any past date, or more than a year ahead), so a slightly late entry is not warned about and a wrong-year typo is. No API or schema change. |

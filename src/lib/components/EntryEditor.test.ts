@@ -13,6 +13,7 @@ vi.mock("../api", async (orig) => {
       payeeSearch: vi.fn(),
       payeeList: vi.fn(),
       splitRemainder: vi.fn(),
+      amountEval: vi.fn(),
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       accountBalances: vi.fn(),
@@ -302,8 +303,84 @@ describe("mixed-sign splits (TXN-020)", () => {
     render(EntryEditor, { account: 1 });
     await fireEvent.input(field("Deposit"), { target: { value: "2000" } });
     await pick("Category", "split");
-    await fireEvent.input(field("Split 2 amount"), { target: { value: "-5-00" } });
+    await fireEvent.input(field("Split 2 amount"), { target: { value: "-5a00" } });
     expect(field("Split 2 amount").value).toBe("-500");
+  });
+});
+
+describe("amount sums (REG-035)", () => {
+  const sums: Record<string, string> = { "2.99+3.39": "6.38", "3-10": "-7.00", "-5+2": "-3.00", "1000+234": "1234.00" };
+  beforeEach(() => {
+    c.amountEval.mockImplementation((text: string) =>
+      text in sums
+        ? ok(sums[text])
+        : (Promise.resolve({ status: "error", error: { message: "cannot divide by zero" } }) as never),
+    );
+  });
+
+  it("leaving Payment works the sum out in Rust", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "2.99+3.39" } });
+    expect(field("Payment").value).toBe("2.99+3.39");
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("6.38"));
+    expect(c.amountEval).toHaveBeenCalledWith("2.99+3.39");
+  });
+
+  it("= works it out at once and is not typed", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Deposit"), { target: { value: "1000+234" } });
+    const ev = new InputEvent("beforeinput", { data: "=", cancelable: true, bubbles: true });
+    field("Deposit").dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    await waitFor(() => expect(field("Deposit").value).toBe("1,234.00"));
+  });
+
+  it("other letters are still blocked", () => {
+    render(EntryEditor, { account: 1 });
+    const ev = new InputEvent("beforeinput", { data: "x", cancelable: true, bubbles: true });
+    field("Payment").dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    const op = new InputEvent("beforeinput", { data: "*", cancelable: true, bubbles: true });
+    field("Payment").dispatchEvent(op);
+    expect(op.defaultPrevented).toBe(false);
+  });
+
+  it("a negative Payment sum is an error and is kept as typed", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "3-10" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(screen.getByText(/Payment 3-10 = -7\.00: it cannot be negative/)).toBeTruthy());
+    expect(field("Payment").value).toBe("3-10");
+  });
+
+  it("Enter works a sum out before saving", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payee"), { target: { value: "Shell" } });
+    await fireEvent.input(field("Payment"), { target: { value: "2.99+3.39" } });
+    await pick("Category", "fuel");
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
+    expect(c.entryCreate.mock.calls[0][0].amount).toBe("-6.38");
+  });
+
+  it("a sum Rust cannot work out blocks the save with its message", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payee"), { target: { value: "Shell" } });
+    await fireEvent.input(field("Payment"), { target: { value: "5/0" } });
+    await pick("Category", "fuel");
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(screen.getByText(/cannot divide by zero/)).toBeTruthy());
+    expect(c.entryCreate).not.toHaveBeenCalled();
+  });
+
+  it("a split line sum may come out negative: the line goes the other way", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Deposit"), { target: { value: "2000" } });
+    await pick("Category", "split");
+    await fireEvent.input(field("Split 2 amount"), { target: { value: "-5+2" } });
+    await fireEvent.blur(field("Split 2 amount"));
+    await waitFor(() => expect(field("Split 2 amount").value).toBe("-3.00"));
   });
 });
 

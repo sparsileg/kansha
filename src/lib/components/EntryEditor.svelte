@@ -3,12 +3,11 @@
   import { DECLINED, call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import {
-    blockNonAmountChar,
-    blockNonSplitAmountChar,
+    blockNonSumChar,
     formatMoney,
+    isAmountSum,
     isZeroMoney,
-    sanitizeAmountInput,
-    sanitizeSplitAmountInput,
+    sanitizeSumInput,
   } from "../format/money";
   import {
     SPLIT,
@@ -133,6 +132,17 @@
     );
   });
 
+  /** The split remainder from Rust now, not when the effect answers. */
+  async function freshRemainder(): Promise<string | null> {
+    const parts = splitParts($state.snapshot(d) as Draft);
+    if (parts === null) return null;
+    try {
+      return await call(commands.splitRemainder(parts.total, parts.parts));
+    } catch {
+      return null;
+    }
+  }
+
   function onDateKey(e: KeyboardEvent) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const next = dateFieldKey(e.key, d.date, listsState.today);
@@ -200,10 +210,11 @@
     d.splits = [...d.splits, emptySplit()];
   }
 
-  /** Amount fields take digits, commas, and one decimal point only. */
+  /** Amount fields take digits, commas, and one decimal point, or a sum
+   * (REG-035). */
   function amountField(field: "payment" | "deposit") {
     return (e: Event & { currentTarget: HTMLInputElement }) => {
-      const clean = sanitizeAmountInput(e.currentTarget.value);
+      const clean = sanitizeSumInput(e.currentTarget.value);
       if (clean !== e.currentTarget.value) e.currentTarget.value = clean;
       d = setAmountField(d, field, clean);
     };
@@ -211,10 +222,67 @@
 
   function splitAmountInput(i: number) {
     return (e: Event & { currentTarget: HTMLInputElement }) => {
-      const clean = sanitizeSplitAmountInput(e.currentTarget.value);
+      const clean = sanitizeSumInput(e.currentTarget.value, true);
       if (clean !== e.currentTarget.value) e.currentTarget.value = clean;
       d.splits[i].amount = clean;
     };
+  }
+
+  /** `=` works the sum out now; other keys as `blockNonSumChar`. */
+  function sumKey(settle: () => Promise<boolean>) {
+    return (e: InputEvent) => {
+      if (e.data === "=") {
+        e.preventDefault();
+        void settle();
+        return;
+      }
+      blockNonSumChar(e);
+    };
+  }
+
+  /**
+   * Work out a sum typed in Payment or Deposit (REG-035) and put the
+   * result in its place. Rust does the arithmetic. These fields hold
+   * amounts without sign, so a negative result is an error. False (with
+   * the error shown) when the sum cannot be worked out.
+   */
+  async function settleAmount(field: "payment" | "deposit"): Promise<boolean> {
+    const text = d[field];
+    if (!isAmountSum(text)) return true;
+    try {
+      const r = await call(commands.amountEval(text));
+      if (r.startsWith("-") && !isZeroMoney(r)) {
+        error = `${field === "payment" ? "Payment" : "Deposit"} ${text.trim()} = ${formatMoney(r)}: it cannot be negative.`;
+        return false;
+      }
+      if (d[field] === text) d = setAmountField(d, field, formatMoney(r));
+      return true;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  /** As `settleAmount` for split line `i`; a negative result is the
+   * line going the other way, as a typed leading `-` (TXN-020). */
+  async function settleSplit(i: number): Promise<boolean> {
+    const text = d.splits[i]?.amount ?? "";
+    if (!isAmountSum(text)) return true;
+    try {
+      const r = await call(commands.amountEval(text));
+      if (d.splits[i]?.amount === text) d.splits[i].amount = formatMoney(r);
+      return true;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  /** Every sum on the form worked out, before a save. */
+  async function settleSums(): Promise<boolean> {
+    if (!(await settleAmount("payment")) || !(await settleAmount("deposit"))) return false;
+    for (let i = 0; i < d.splits.length; i++) if (!(await settleSplit(i))) return false;
+    return true;
   }
 
   /**
@@ -318,11 +386,17 @@
       return;
     }
     status = null;
+    busy = true;
+    const settled = await settleSums();
+    busy = false;
+    if (!settled) return;
     const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today);
     if (!built.ok) {
       error = built.error;
       return;
     }
+    // A sum just worked out may not have reached the live remainder yet.
+    if (isSplit) remainder = await freshRemainder();
     if (isSplit && (remainder === null || !isZeroMoney(remainder))) {
       error = `Split lines must add up to the total${
         remainder !== null ? ` (remainder ${formatMoney(remainder)})` : ""
@@ -422,8 +496,8 @@
     <input class="c-num" aria-label="Num" placeholder="Num" bind:value={d.check_num} />
     <input class="c-payee" aria-label="Payee" placeholder="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" placeholder="Payment" inputmode="decimal" value={d.payment} onbeforeinput={blockNonAmountChar} oninput={amountField("payment")} />
-    <input class="c-dep num" aria-label="Deposit" placeholder="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={blockNonAmountChar} oninput={amountField("deposit")} />
+    <input class="c-pay num" aria-label="Payment" placeholder="Payment" inputmode="decimal" value={d.payment} onbeforeinput={sumKey(() => settleAmount("payment"))} oninput={amountField("payment")} onblur={() => void settleAmount("payment")} />
+    <input class="c-dep num" aria-label="Deposit" placeholder="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={sumKey(() => settleAmount("deposit"))} oninput={amountField("deposit")} onblur={() => void settleAmount("deposit")} />
     <div class="c-cat">
       <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit placeholder="Category" newKind={newKind} onchange={onCategoryChange} />
     </div>
@@ -457,7 +531,7 @@
       {#each d.splits as s, i (i)}
         <div class="split-line" role="group" aria-label={`Split line ${i + 1}`} onfocusin={() => prefill(i)}>
           <TargetCombo bind:value={s.target} excludeAccount={account} newKind={newKind} label={`Split ${i + 1} category`} />
-          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={blockNonSplitAmountChar} oninput={splitAmountInput(i)} />
+          <input aria-label={`Split ${i + 1} amount`} class="num" inputmode="decimal" value={s.amount} onbeforeinput={sumKey(() => settleSplit(i))} oninput={splitAmountInput(i)} onblur={() => void settleSplit(i)} />
           <select aria-label={`Split ${i + 1} tag`} value={splitTagValue(s)} onchange={(e) => (d.splits[i] = setSplitTag(s, e.currentTarget.value))}>
             <option value="">—</option>
             {#each listsState.tags.filter((t) => !t.hidden || s.tags.includes(t.id)) as t (t.id)}

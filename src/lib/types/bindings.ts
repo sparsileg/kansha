@@ -239,6 +239,12 @@ export const commands = {
 	 *  (TXN-020). The UI does no money arithmetic, so it asks here.
 	 */
 	splitRemainder: (total: string, parts: string[]) => typedError<string, IpcError>(__TAURI_INVOKE("split_remainder", { total, parts })),
+	/**
+	 *  Work out a sum typed in an amount field (REG-035): "2.99+3.39" →
+	 *  6.38, rounded to cents half-even. Signed; the UI decides whether a
+	 *  negative result fits the field.
+	 */
+	amountEval: (text: string) => typedError<string, IpcError>(__TAURI_INVOKE("amount_eval", { text })),
 	/**  What changed, when, and from where, for one record (AUD-020). */
 	auditHistory: (entity: AuditEntity, id: number) => typedError<AuditEntry[], IpcError>(__TAURI_INVOKE("audit_history", { entity, id })),
 	/**  Run the integrity check (INT-030). */
