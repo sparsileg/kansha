@@ -8,6 +8,7 @@
 import { call, commands } from "../api";
 import {
   defaultView,
+  nextSort,
   parseViews,
   serializeViews,
   shownAccounts,
@@ -16,7 +17,7 @@ import {
   type ViewsState,
 } from "../invest/views";
 import { accountKey } from "../invest/rows";
-import type { Portfolio } from "../types/bindings";
+import type { Portfolio, PortfolioColumn } from "../types/bindings";
 import { listsState } from "./lists.svelte";
 import { investState } from "./invest.svelte";
 import { bookSettings } from "./booksettings.svelte";
@@ -82,6 +83,11 @@ class InvestViewState {
     this.update({ ...this.view, showClosed: on });
   }
 
+  /** Sort by a column; again to reverse (POS-040). Kept per view. */
+  sortBy(by: PortfolioColumn) {
+    this.update({ ...this.view, sort: nextSort(this.view.sort, by) });
+  }
+
   toggle(key: string) {
     const next = new Set(this.expanded);
     if (!next.delete(key)) next.add(key);
@@ -99,7 +105,7 @@ class InvestViewState {
         this.view,
         investState.securities.map((s) => s.id),
       );
-      const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null, this.showClosed));
+      const p = await call(commands.invPortfolio(accounts, securities, this.asOf || null, this.showClosed, this.view.sort));
       if (seq !== this.#seq) return;
       const fresh = p.accounts.map((a) => a.account).filter((id) => !this.seenAccounts.has(id));
       if (fresh.length) {

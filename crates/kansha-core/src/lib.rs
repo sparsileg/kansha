@@ -20,6 +20,7 @@ pub mod invest;
 pub mod ledger;
 pub mod local_config;
 pub mod money;
+pub mod newbook;
 pub mod persistence;
 pub mod reconcile;
 pub mod reports;

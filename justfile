@@ -101,7 +101,8 @@ scenario-demo-fail:
 
 # Touches every workspace .rs file and rebuilds (build, test, clippy), so
 # the workspace crates recompile once; any incremental dir those builds
-# don't write is dead.
+# don't write is dead. First, `cargo sweep --installed` drops artifacts
+# from toolchains no longer installed (needs cargo-sweep).
 #
 # Delete stale incremental dirs from target/debug (full workspace rebuild)
 [unix]
@@ -110,6 +111,11 @@ sweep:
     set -euo pipefail
     marker=$(mktemp target/sweep-marker.XXXXXX)
     trap 'rm -f "$marker"' EXIT
+    if command -v cargo-sweep >/dev/null; then
+        cargo sweep --installed
+    else
+        echo "sweep: cargo-sweep missing; install with: cargo install cargo-sweep"
+    fi
     sleep 1
     find crates src-tauri -name target -prune -o -name '*.rs' -exec touch -c {} +
     cargo build --workspace

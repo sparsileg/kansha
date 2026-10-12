@@ -41,6 +41,7 @@ function totalCells(t: PortfolioTotals): Row["cells"] {
     cost_basis: money(t.basis),
     market_value: money(t.market_value),
     gain: money(t.gain),
+    gain_percent: percent(t.gain_percent),
     day_gain: money(t.day_gain),
     day_percent: percent(t.day_percent),
   };
@@ -60,6 +61,7 @@ function positionCells(p: PortfolioPosition): Row["cells"] {
     cost_basis: money(p.basis),
     market_value: money(p.market_value),
     gain: money(p.gain),
+    gain_percent: percent(p.gain_percent),
     day_gain: money(p.day_gain),
     day_percent: percent(p.day_percent),
   };
@@ -111,6 +113,7 @@ export function buildRows(
             cost_basis: money(l.basis),
             market_value: money(l.market_value),
             gain: money(l.gain),
+            gain_percent: percent(l.gain_percent),
             day_gain: money(l.day_gain),
             day_percent: percent(p.day_percent),
           },
@@ -128,6 +131,7 @@ export function buildRows(
             cost_basis: money(x.basis),
             market_value: money(x.proceeds),
             gain: money(x.gain),
+            gain_percent: percent(x.gain_percent),
           },
         });
       }

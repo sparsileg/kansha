@@ -15,6 +15,7 @@ pub mod integrity;
 pub mod invest;
 pub mod ledger;
 pub mod migrate;
+pub mod newbook;
 pub mod payees;
 pub mod reconcile;
 pub mod reports;

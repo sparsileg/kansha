@@ -1,5 +1,6 @@
 <script lang="ts">
   import { call, commands } from "../lib/api";
+  import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
 
   let busy = $state(false);
@@ -22,6 +23,7 @@
 <section>
   <h1>No accounts yet</h1>
   <p>Create an account, or fill the book with synthetic sample data.</p>
+  <button onclick={() => dialogState.newAccount()}>New account…</button>
   <button onclick={load} disabled={busy}>
     {busy ? "Loading…" : "Load sample data"}
   </button>

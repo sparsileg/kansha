@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import { DECLINED, call, commands, withConfirmation } from "../api";
-  import { displayDate } from "../format/date";
+  import { completeDate, displayDate } from "../format/date";
   import {
     blockNonSumChar,
     formatMoney,
@@ -492,7 +492,7 @@
 <form class="entry" class:editing={txn !== null} onsubmit={save} {onkeydown} bind:this={formEl}>
   {#if isSplit && !registerState.descending}{@render splitPanel()}{/if}
   <div class="cells">
-    <input class="c-date" aria-label="Date" placeholder="Date" bind:this={dateInput} bind:value={d.date} onkeydown={onDateKey} onblur={() => (d.date = d.date.trim())} />
+    <input class="c-date" aria-label="Date" placeholder="Date" bind:this={dateInput} bind:value={d.date} onkeydown={onDateKey} onblur={() => (d.date = completeDate(d.date.trim(), listsState.today))} />
     <input class="c-num" aria-label="Num" placeholder="Num" bind:value={d.check_num} />
     <input class="c-payee" aria-label="Payee" placeholder="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>

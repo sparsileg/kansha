@@ -65,6 +65,23 @@ describe("ScheduleModal", () => {
     expect((screen.getByRole("button", { name: "Split" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("a short start or end date gets its year on leaving the field", async () => {
+    listsState.today = "2026-09-24";
+    render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
+    const start = screen.getByLabelText("First due on or after") as HTMLInputElement;
+    await fireEvent.input(start, { target: { value: "11/2" } });
+    await fireEvent.blur(start);
+    expect(start.value).toBe("11/02/2026");
+    await fireEvent.change(screen.getByLabelText("End"), { target: { value: "on_date" } });
+    const end = screen.getByLabelText("End date") as HTMLInputElement;
+    await fireEvent.input(end, { target: { value: "12/31/27" } });
+    await fireEvent.blur(end);
+    expect(end.value).toBe("12/31/2027");
+    await fireEvent.input(end, { target: { value: "abc" } });
+    await fireEvent.blur(end);
+    expect(end.value).toBe("abc");
+  });
+
   it("has one Scheduling section and no weekend choice", () => {
     render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
     const legends = screen.getAllByRole("group").map((g) => g.querySelector("legend")?.textContent);

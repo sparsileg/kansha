@@ -50,6 +50,8 @@
   let again = $state("");
   let folder = $state<string | null>(null);
   let choice = $state<"create" | "restore">("create");
+  /** What a new book starts with (UI-085); no book is open to copy. */
+  let start = $state<"empty" | "standard">("empty");
   let restoring = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -94,7 +96,7 @@
     busy = true;
     error = null;
     try {
-      await call(commands.bookSetup(passphrase, folder, name.trim(), bookFolder));
+      await call(commands.bookSetup(passphrase, folder, name.trim(), bookFolder, { kind: fresh ? start : "empty" }));
       passphrase = again = "";
       creating = false;
       await bookState.refresh();
@@ -163,7 +165,7 @@
             <input type="radio" bind:group={choice} value="create" />
             {status.state === "unencrypted" && !creating
               ? "Keep the existing book; it will be encrypted"
-              : "Create a new, empty book"}
+              : "Create a new book"}
           </label>
           <label class="opt">
             <input type="radio" bind:group={choice} value="restore" />
@@ -191,6 +193,11 @@
               </span>
             </div>
             <p class="note">Letters, digits, - and _. The name is the book's file name and names its backups.</p>
+            <div class="row" role="radiogroup" aria-label="Start with">
+              Start with:
+              <label><input type="radio" bind:group={start} value="empty" /> Empty (built-in categories only, for an import)</label>
+              <label><input type="radio" bind:group={start} value="standard" /> Standard categories</label>
+            </div>
             {#if recent.length > 0}
               <p>
                 Or open:

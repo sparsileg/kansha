@@ -10,6 +10,7 @@
   import DatePicker from "../lib/components/invest/DatePicker.svelte";
   import { buildRows } from "../lib/invest/rows";
   import { columnLabel } from "../lib/invest/views";
+  import type { PortfolioColumn } from "../lib/types/bindings";
   import { downloadPrices } from "../lib/shell/actions";
   import { openAccount } from "../lib/shell/nav";
   import { investViewState as st } from "../lib/state/investview.svelte";
@@ -52,8 +53,21 @@
     st.portfolio ? buildRows(st.portfolio, st.expanded, (id) => listsState.account(id)?.name ?? `#${id}`) : [],
   );
   const columns = $derived(st.view.columns);
-  const NUMERIC = new Set(["price", "shares", "cost_basis", "market_value", "gain", "day_gain", "day_percent"]);
+  const NUMERIC = new Set(["price", "shares", "cost_basis", "market_value", "gain", "gain_percent", "day_gain", "day_percent"]);
+  const sort = $derived(st.view.sort);
 </script>
+
+{#snippet head(by: PortfolioColumn, label: string, cls: string)}
+  {@const on = sort.by === by}
+  <th class={cls} aria-sort={on ? (sort.desc ? "descending" : "ascending") : undefined}>
+    <button
+      type="button"
+      class="sort"
+      title={on && !sort.desc ? `Sort by ${label}, descending` : `Sort by ${label}, ascending`}
+      onclick={() => st.sortBy(by)}
+    >{label}<span class="dir" aria-hidden="true">{on ? (sort.desc ? " ▼" : " ▲") : " ⇅"}</span></button>
+  </th>
+{/snippet}
 
 <section class="inv">
   <div class="bar">
@@ -84,8 +98,8 @@
       <table>
         <thead>
           <tr>
-            <th class="name">Name</th>
-            {#each columns as c (c)}<th class:num={NUMERIC.has(c)}>{columnLabel(c)}</th>{/each}
+            {@render head("name", "Name", "name")}
+            {#each columns as c (c)}{@render head(c, columnLabel(c), NUMERIC.has(c) ? "num" : "")}{/each}
           </tr>
         </thead>
         <tbody>
@@ -180,6 +194,21 @@
     background: var(--head-bg);
     color: var(--head-fg);
     border-bottom: 1px solid var(--line);
+  }
+  /* A heading sorts by its column; the arrow shows the direction. */
+  .sort {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .sort:hover {
+    text-decoration: underline;
+  }
+  .dir {
+    font-size: var(--fs-small);
   }
   /* Stripes by position, as in the registers. */
   tbody tr.alt {

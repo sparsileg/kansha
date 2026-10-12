@@ -41,6 +41,14 @@ pub(crate) fn create_with_source(tx: &Tx<'_>, source: TxnSource, input: &TxnInpu
     repo::insert(tx, source, input)
 }
 
+/// A copied book's opening balance (UI-085): stored reconciled without a
+/// reconciliation, as an imported reconciled entry is (MIG-090).
+pub(crate) fn create_carried(tx: &Tx<'_>, entry: &Entry) -> Result<Txn> {
+    let input = entry.to_input()?;
+    validate(tx.conn(), &input, None, true)?;
+    repo::insert(tx, TxnSource::System, &input)
+}
+
 /// Create a transaction from a register entry.
 pub fn create_entry(tx: &Tx<'_>, entry: &Entry) -> Result<Txn> {
     create(tx, &entry.to_input()?)

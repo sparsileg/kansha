@@ -15,6 +15,7 @@ const book = vi.hoisted(() => ({
   verifies: [] as string[],
   setups: [] as unknown[][],
   picks: 0,
+  empty: false,
 }));
 
 vi.mock("./lib/api", async (orig) => {
@@ -133,7 +134,10 @@ vi.mock("./lib/api", async (orig) => {
           folder_missing_now: false,
         }),
       today: () => ok("2026-09-24"),
-      accountList: () => ok([acct]),
+      accountList: () => ok(book.empty ? [] : [acct]),
+      accountNumberMasked: () => Promise.resolve(""),
+      accountDefaults: (name: string, t: string) =>
+        ok({ ...acct, name, account_type: t, description: "", institution: "", account_number: "", notes: "", opening_date: null }),
       accountBalances: () =>
         ok([{ account: 1, current: "10.00", ending: "10.00" }]),
       categoryList: () => ok([]),
@@ -169,6 +173,7 @@ vi.mock("./lib/api", async (orig) => {
 
 import App from "./App.svelte";
 import { registerState } from "./lib/state/register.svelte";
+import { dialogState } from "./lib/state/dialogs.svelte";
 import { settingsState } from "./lib/state/settings.svelte";
 import { viewState } from "./lib/state/view.svelte";
 import { windowState } from "./lib/state/windows.svelte";
@@ -181,6 +186,8 @@ beforeEach(() => {
   book.settings = null;
   book.unlocks = [];
   book.verifies = [];
+  book.empty = false;
+  dialogState.account = undefined;
   settingsState.setAccountPanelOpen(true);
   settingsState.setStartup("insights");
   registerState.accountId = null;
@@ -295,6 +302,30 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Edit Savings" })).toBeTruthy();
   });
 
+  it("a book with no accounts offers New account…", async () => {
+    book.empty = true;
+    render(App);
+    await screen.findByRole("heading", { name: "No accounts yet" });
+    await fireEvent.click(screen.getByRole("button", { name: "New account…" }));
+    expect(await screen.findByRole("dialog", { name: "New account" })).toBeTruthy();
+  });
+
+  it("a book with no accounts still opens Categories and Accounts from Tools", async () => {
+    book.empty = true;
+    render(App);
+    await screen.findByRole("heading", { name: "No accounts yet" });
+    await fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Categories" }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Categories", selected: true })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("heading", { name: "No accounts yet" })).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Accounts" }));
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New account" })).toBeTruthy();
+  });
+
   it("picks the theme, font, and font size from the right end of the menu bar", async () => {
     render(App);
     const bar = await screen.findByRole("navigation", { name: "Menu bar" });
@@ -358,7 +389,7 @@ describe("App shell", () => {
     book.setups = [];
     render(App);
     await fireEvent.click(await screen.findByRole("button", { name: "Create a new book…" }));
-    expect(screen.getByText(/Create a new, empty book/)).toBeTruthy();
+    expect(screen.getByText(/Create a new book$/)).toBeTruthy();
     const create = screen.getByRole("button", { name: "Create book" }) as HTMLButtonElement;
     await fireEvent.input(screen.getByLabelText("Passphrase"), { target: { value: "p" } });
     await fireEvent.input(screen.getByLabelText("Again"), { target: { value: "p" } });
@@ -373,7 +404,7 @@ describe("App shell", () => {
     book.open = false;
     book.state = "new";
     render(App);
-    expect(await screen.findByText(/Create a new, empty book/)).toBeTruthy();
+    expect(await screen.findByText(/Create a new book$/)).toBeTruthy();
     expect(screen.getByText("/home/u/Downloads (default)")).toBeTruthy();
     expect(
       screen.getByText(/If it is lost, they cannot be recovered/),
@@ -414,7 +445,19 @@ describe("App shell", () => {
     await fireEvent.input(name, { target: { value: "barton2026" } });
     expect(create.disabled).toBe(false);
     await fireEvent.click(create);
-    expect(book.setups).toEqual([["p", null, "barton2026", null]]);
+    expect(book.setups).toEqual([["p", null, "barton2026", null, { kind: "empty" }]]);
+  });
+
+  it("first run can start with the Standard categories (UI-085)", async () => {
+    book.open = false;
+    book.state = "new";
+    book.setups = [];
+    render(App);
+    await fireEvent.click(await screen.findByLabelText("Standard categories"));
+    await fireEvent.input(screen.getByLabelText("Passphrase"), { target: { value: "p" } });
+    await fireEvent.input(screen.getByLabelText("Again"), { target: { value: "p" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Create book" }));
+    expect(book.setups).toEqual([["p", null, "kansha", null, { kind: "standard" }]]);
   });
 
   it("first run can open an existing book instead", async () => {

@@ -4,7 +4,7 @@ import { dateFormatState } from "../state/dateformat.svelte";
 import type { Portfolio } from "../types/bindings";
 
 const totals = {
-  basis: "3100.00", market_value: "10050.00", gain: "50.00", day_gain: "150.00",
+  basis: "3100.00", market_value: "10050.00", gain: "50.00", gain_percent: "1.61", day_gain: "150.00",
   day_percent: "5.00", missing_prices: false, stale_prices: false,
 };
 const pf: Portfolio = {
@@ -18,10 +18,10 @@ const pf: Portfolio = {
         {
           security: 1, name: "Total Stock Market", ticker: "VTI", shares: "15", basis: "3100.00",
           price: "210", price_date: "2026-06-30", stale: false, market_value: "3150.00", gain: "50.00",
-          day_gain: "150.00", day_percent: "5.00",
+          gain_percent: "1.61", day_gain: "150.00", day_percent: "5.00",
           lots: [
-            { lot: 7, acquired: "2026-02-01", shares: "10", basis: "2000.00", market_value: "2100.00", gain: "100.00", day_gain: "100.00" },
-            { lot: 8, acquired: "2026-03-01", shares: "5", basis: "1100.00", market_value: "1050.00", gain: "-50.00", day_gain: null },
+            { lot: 7, acquired: "2026-02-01", shares: "10", basis: "2000.00", market_value: "2100.00", gain: "100.00", gain_percent: "5.00", day_gain: "100.00" },
+            { lot: 8, acquired: "2026-03-01", shares: "5", basis: "1100.00", market_value: "1050.00", gain: "-50.00", gain_percent: null, day_gain: null },
           ],
           sales: [],
         },
@@ -39,7 +39,7 @@ describe("investment rows", () => {
     const rows = buildRows(pf, new Set(), name);
     expect(rows.map((r) => r.name)).toEqual(["Brokerage", "Totals:"]);
     expect(rows[0].cells).toEqual({
-      cost_basis: "3,100.00", market_value: "10,050.00", gain: "50.00",
+      cost_basis: "3,100.00", market_value: "10,050.00", gain: "50.00", gain_percent: "1.61%",
       day_gain: "150.00", day_percent: "5.00%",
     });
     expect(rows[1].cells.market_value).toBe("10,050.00");
@@ -53,7 +53,7 @@ describe("investment rows", () => {
     expect(rows[2].cells).toEqual({ market_value: "6,900.00" });
     expect(rows[1].cells).toEqual({
       ticker: "VTI", price: "210.00", shares: "15", cost_basis: "3,100.00",
-      market_value: "3,150.00", gain: "50.00", day_gain: "150.00", day_percent: "5.00%",
+      market_value: "3,150.00", gain: "50.00", gain_percent: "1.61%", day_gain: "150.00", day_percent: "5.00%",
     });
   });
 
@@ -65,6 +65,8 @@ describe("investment rows", () => {
     expect(lots[0].cells.day_gain).toBe("100.00");
     expect(lots[1].cells.day_gain).toBe("");
     expect(lots[1].cells.gain).toBe("-50.00");
+    expect(lots[0].cells.gain_percent).toBe("5.00%");
+    expect(lots[1].cells.gain_percent).toBe("");
     expect(rows.find((r) => r.kind === "position")?.cells).toEqual({ ticker: "VTI" });
     // Cash follows the equities' lots.
     expect(rows.map((r) => r.kind).slice(-2)).toEqual(["cash", "total"]);
@@ -85,13 +87,13 @@ describe("investment rows", () => {
   it("sales (Show closed lots): each after the open lots, even part of a lot", () => {
     const closed = structuredClone(pf);
     closed.accounts[0].positions[0].sales = [
-      { lot: 7, acquired: "2022-02-02", sold: "2024-03-01", shares: "150", basis: "1500.00", proceeds: "1800.00", gain: "300.00", term: "long" },
+      { lot: 7, acquired: "2022-02-02", sold: "2024-03-01", shares: "150", basis: "1500.00", proceeds: "1800.00", gain: "300.00", gain_percent: "20.00", term: "long" },
     ];
     const rows = buildRows(closed, new Set(["a2", "p2:1"]), name);
     expect(rows.map((r) => r.kind)).toEqual(["account", "position", "lot", "lot", "sale", "cash", "total"]);
     const sale = rows[4];
     expect(sale.name).toBe("Sold 03/01/2024 (lot 02/02/2022)");
-    expect(sale.cells).toEqual({ shares: "150", cost_basis: "1,500.00", market_value: "1,800.00", gain: "300.00" });
+    expect(sale.cells).toEqual({ shares: "150", cost_basis: "1,500.00", market_value: "1,800.00", gain: "300.00", gain_percent: "20.00%" });
     expect(rows[1].security).toBe(1);
   });
 });

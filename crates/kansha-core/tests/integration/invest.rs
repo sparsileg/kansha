@@ -718,16 +718,35 @@ fn portfolio_rolls_up_lots_and_day_change() {
     assert_eq!(pos.gain, Some(m("50.00")));
     assert_eq!(pos.day_gain, Some(m("150.00")));
     assert_eq!(pos.day_percent.as_deref(), Some("5.00"));
+    // Gain ÷ basis: 50 ÷ 3100.
+    assert_eq!(pos.gain_percent.as_deref(), Some("1.61"));
     let lots: Vec<_> = pos
         .lots
         .iter()
-        .map(|l| (l.market_value, l.gain, l.day_gain))
+        .map(|l| {
+            (
+                l.market_value,
+                l.gain,
+                l.day_gain,
+                l.gain_percent.as_deref(),
+            )
+        })
         .collect();
     assert_eq!(
         lots,
         vec![
-            (Some(m("2100.00")), Some(m("100.00")), Some(m("100.00"))),
-            (Some(m("1050.00")), Some(m("-50.00")), Some(m("50.00"))),
+            (
+                Some(m("2100.00")),
+                Some(m("100.00")),
+                Some(m("100.00")),
+                Some("5.00")
+            ),
+            (
+                Some(m("1050.00")),
+                Some(m("-50.00")),
+                Some(m("50.00")),
+                Some("-4.55")
+            ),
         ]
     );
     // Account and grand totals: cash counts in market value, not in gain
@@ -737,6 +756,7 @@ fn portfolio_rolls_up_lots_and_day_change() {
     assert_eq!(acct.totals.gain, m("50.00"));
     assert_eq!(acct.totals.day_gain, Some(m("150.00")));
     assert_eq!(acct.totals.day_percent.as_deref(), Some("5.00"));
+    assert_eq!(acct.totals.gain_percent.as_deref(), Some("1.61"));
     assert_eq!(pf.total, acct.totals);
 
     // No price dated exactly that day: valued at the latest, no day change.
@@ -814,9 +834,12 @@ fn portfolio_shows_sales_when_asked() {
             m("300.00")
         )
     );
+    assert_eq!(sale.gain_percent.as_deref(), Some("20.00"));
     assert_eq!(sold_out.shares, Quantity::ZERO);
     assert!(sold_out.lots.is_empty());
     assert_eq!(sold_out.sales[0].gain, m("-100.00"));
+    assert_eq!(sold_out.sales[0].gain_percent.as_deref(), Some("-10.00"));
+    assert_eq!(sold_out.gain_percent, None);
     assert_eq!(sold_out.market_value, Some(Money::ZERO));
     assert_eq!(pf.total, open.total, "sales change no total");
     // Before the sale, nothing is closed.
@@ -839,9 +862,181 @@ fn portfolio_flags_positions_without_a_price() {
     let pos = &pf.accounts[0].positions[0];
     assert_eq!(pos.market_value, None);
     assert_eq!(pos.gain, None);
+    assert_eq!(pos.gain_percent, None);
+    assert_eq!(pos.lots[0].gain_percent, None);
+    assert_eq!(pf.total.gain_percent, None, "no priced basis");
     assert!(pf.total.missing_prices);
     assert_eq!(pf.total.basis, m("2000.00"));
     assert_eq!(pf.total.market_value, m("8000.00"));
+}
+
+/// POS-040: Gain/Loss % of the totals counts only priced positions; a
+/// zero basis has no percent.
+#[test]
+fn portfolio_gain_percent_leaves_out_unpriced_and_zero_basis() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let oth = b
+        .security("Other Fund", "OTH", SecurityType::MutualFund)
+        .unwrap();
+    let free = b.security("Free Fund", "FRE", SecurityType::Etf).unwrap();
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
+        .unwrap();
+    b.invest(&buy(brk, oth, "2026-02-01", "1", "100.00"))
+        .unwrap();
+    b.invest(&buy(brk, free, "2026-02-01", "1", "0.00"))
+        .unwrap();
+    b.price(vti, date("2026-06-30"), p("190")).unwrap();
+    b.price(free, date("2026-06-30"), p("5")).unwrap();
+    let pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), false).unwrap();
+    let by = |n: &str| {
+        pf.accounts[0]
+            .positions
+            .iter()
+            .find(|p| p.name == n)
+            .unwrap()
+    };
+    assert_eq!(by("Free Fund").gain, Some(m("5.00")));
+    assert_eq!(by("Free Fund").gain_percent, None);
+    // (−100 + 5) ÷ (2000 + 0): Other Fund has no price.
+    assert_eq!(pf.total.gain, m("-95.00"));
+    assert_eq!(pf.total.gain_percent.as_deref(), Some("-4.75"));
+}
+
+/// POS-040: a column sorts equities, lots, and sales, either way; blanks
+/// go last both ways and ties keep the default order.
+#[test]
+fn portfolio_sorts_by_a_column() {
+    use invest::{PortfolioColumn as C, PortfolioSort};
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let bnd = b.security("Bond Fund", "BND", SecurityType::Etf).unwrap();
+    let oth = b
+        .security("Other Fund", "OTH", SecurityType::MutualFund)
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-02-01", "10", "2000.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-03-01", "5", "1100.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-04-01", "2", "500.00"))
+        .unwrap();
+    b.invest(&buy(brk, bnd, "2026-02-01", "10", "1000.00"))
+        .unwrap();
+    b.invest(&buy(brk, oth, "2026-02-01", "1", "100.00"))
+        .unwrap();
+    let sell = |d: &str, amount: &str| {
+        let mut i = InvInput::new(brk, InvAction::Sell, date(d));
+        i.security = Some(vti);
+        i.quantity = Some(q("1"));
+        i.amount = Some(m(amount));
+        i
+    };
+    // FIFO from the 02-01 lot (200.00 a share): +10%, then −10%.
+    b.invest(&sell("2026-05-01", "220.00")).unwrap();
+    b.invest(&sell("2026-05-02", "180.00")).unwrap();
+    b.price(vti, date("2026-06-30"), p("210")).unwrap();
+    b.price(bnd, date("2026-06-30"), p("95")).unwrap();
+
+    let sorted = |by: C, desc: bool| {
+        let mut pf = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), true).unwrap();
+        invest::sort_portfolio(&mut pf, PortfolioSort { by, desc });
+        pf
+    };
+    let names = |pf: &invest::Portfolio| -> Vec<String> {
+        pf.accounts[0]
+            .positions
+            .iter()
+            .map(|p| p.name.clone())
+            .collect()
+    };
+    let vti_of = |pf: &invest::Portfolio| {
+        pf.accounts[0]
+            .positions
+            .iter()
+            .find(|p| p.security == vti)
+            .unwrap()
+            .clone()
+    };
+    let lots = |pf: &invest::Portfolio| -> Vec<String> {
+        vti_of(pf)
+            .lots
+            .iter()
+            .map(|l| l.acquired.to_string())
+            .collect()
+    };
+    let sales = |pf: &invest::Portfolio| -> Vec<String> {
+        vti_of(pf)
+            .sales
+            .iter()
+            .map(|x| x.sold.to_string())
+            .collect()
+    };
+
+    // Default order is Name ascending: equities by name, lots by date.
+    let plain = invest::portfolio(b.conn(), &[brk], None, date("2026-06-30"), true).unwrap();
+    assert_eq!(sorted(C::Name, false), plain);
+    let pf = sorted(C::Name, true);
+    assert_eq!(
+        names(&pf),
+        ["Total Stock Market", "Other Fund", "Bond Fund"]
+    );
+    assert_eq!(lots(&pf), ["2026-04-01", "2026-03-01", "2026-02-01"]);
+    assert_eq!(sales(&pf), ["2026-05-02", "2026-05-01"]);
+
+    // VTI −50 ÷ 3200 = −1.56%, BND −5.00%, OTH no price (last).
+    // Lots 5.00%, −4.55%, −16.00%; sales +10%, −10%.
+    let pf = sorted(C::GainPercent, true);
+    assert_eq!(
+        names(&pf),
+        ["Total Stock Market", "Bond Fund", "Other Fund"]
+    );
+    assert_eq!(lots(&pf), ["2026-02-01", "2026-03-01", "2026-04-01"]);
+    assert_eq!(sales(&pf), ["2026-05-01", "2026-05-02"]);
+    let pf = sorted(C::GainPercent, false);
+    assert_eq!(
+        names(&pf),
+        ["Bond Fund", "Total Stock Market", "Other Fund"]
+    );
+    assert_eq!(lots(&pf), ["2026-04-01", "2026-03-01", "2026-02-01"]);
+    assert_eq!(sales(&pf), ["2026-05-02", "2026-05-01"]);
+
+    let pf = sorted(C::Ticker, true);
+    assert_eq!(
+        names(&pf),
+        ["Total Stock Market", "Other Fund", "Bond Fund"]
+    );
+    // Lots have no ticker: default order.
+    assert_eq!(lots(&pf), ["2026-02-01", "2026-03-01", "2026-04-01"]);
+
+    // Basis: OTH 100, BND 1000, VTI 3200; lots 500, 1100, 1600.
+    let pf = sorted(C::CostBasis, false);
+    assert_eq!(
+        names(&pf),
+        ["Other Fund", "Bond Fund", "Total Stock Market"]
+    );
+    assert_eq!(lots(&pf), ["2026-04-01", "2026-03-01", "2026-02-01"]);
+    // Market value: OTH none, last both ways.
+    let pf = sorted(C::MarketValue, true);
+    assert_eq!(
+        names(&pf),
+        ["Total Stock Market", "Bond Fund", "Other Fund"]
+    );
+    let pf = sorted(C::MarketValue, false);
+    assert_eq!(
+        names(&pf),
+        ["Bond Fund", "Total Stock Market", "Other Fund"]
+    );
+    // Sales: proceeds under Market Value.
+    assert_eq!(sales(&pf), ["2026-05-02", "2026-05-01"]);
+
+    // Every column sorts without moving the totals.
+    for &by in C::ALL {
+        for desc in [false, true] {
+            let pf = sorted(by, desc);
+            assert_eq!(pf.total, plain.total, "{by} {desc}");
+            assert_eq!(pf.accounts[0].positions.len(), 3, "{by} {desc}");
+        }
+    }
 }
 
 /// PRC-040, SECU-070: download targets are the shown securities with a

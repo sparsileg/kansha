@@ -86,8 +86,8 @@ describe("TargetCombo: entering a new category", () => {
 
   it("keeps the best match as the default; creating is a separate row", async () => {
     render(TargetCombo, { value: "", newKind: "expense" });
-    await fireEvent.input(box(), { target: { value: "foo" } });
-    expect(listed()).toEqual(["Food", "+ Create new expense category “foo”"]);
+    await fireEvent.input(box(), { target: { value: "oo" } });
+    expect(listed()).toEqual(["Food", "+ Create new expense category “oo”"]);
     await fireEvent.input(box(), { target: { value: "Food" } });
     expect(listed()).toEqual(["Food"]); // exact match: nothing to create
     await fireEvent.keyDown(box(), { key: "Enter" });
@@ -110,5 +110,59 @@ describe("TargetCombo: entering a new category", () => {
     render(TargetCombo, { value: "" });
     await fireEvent.input(box(), { target: { value: "Fuel" } });
     expect(listed()).toEqual(["No match"]);
+  });
+});
+
+describe("TargetCombo: filling in a path level", () => {
+  beforeEach(() => {
+    listsState.categories = [
+      cat(1, "Car"),
+      cat(2, "BlueForester", 1),
+      cat(3, "Gas", 2),
+      cat(4, "Repairs", 2),
+      cat(5, "Charity"),
+    ] as never;
+    listsState.accounts = [{ id: 9, name: "Checking", investment: null, status: "open" }] as never;
+  });
+  const type = (value: string, inputType = "insertText") =>
+    fireEvent.input(box(), { target: { value }, inputType });
+
+  it("fills in the one fitting name, selected, and Tab takes it", async () => {
+    render(TargetCombo, { value: "", newKind: "expense" });
+    await type("Car:B");
+    expect(box().value).toBe("Car:BlueForester");
+    await waitFor(() => expect([box().selectionStart, box().selectionEnd]).toEqual([5, 16]));
+    expect(listed()).not.toContain("+ Create new expense category “Car:B”");
+    await fireEvent.keyDown(box(), { key: "Tab" });
+    expect(box().value).toBe("Car:BlueForester");
+  });
+
+  it("':' keeps the filled-in name and the next level fills in too", async () => {
+    render(TargetCombo, { value: "", newKind: "expense" });
+    await type("Car:B");
+    await waitFor(() => expect(box().selectionStart).toBe(5));
+    await fireEvent.keyDown(box(), { key: ":" });
+    expect([box().selectionStart, box().selectionEnd]).toEqual([16, 16]);
+    await type("Car:BlueForester:G");
+    expect(box().value).toBe("Car:BlueForester:Gas");
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    expect(box().value).toBe("Car:BlueForester:Gas");
+  });
+
+  it("Backspace removes the filled-in part and does not fill it again", async () => {
+    render(TargetCombo, { value: "", newKind: "expense" });
+    await type("Car:B");
+    await type("Car:B", "deleteContentBackward");
+    expect(box().value).toBe("Car:B");
+    expect(listed()).toContain("+ Create new expense category “Car:B”");
+  });
+
+  it("the top level fills in; the list still shows accounts typed for", async () => {
+    render(TargetCombo, { value: "", newKind: "expense" });
+    await type("Ch");
+    expect(box().value).toBe("Charity");
+    expect(listed()).toEqual(["Charity", "[Checking]"]);
+    await type("C");
+    expect(box().value).toBe("C"); // Car, Charity
   });
 });

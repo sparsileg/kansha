@@ -3,6 +3,7 @@ import {
   availableColumns,
   defaultViews,
   moveItem,
+  nextSort,
   orderedAccounts,
   parseViews,
   serializeViews,
@@ -18,12 +19,12 @@ describe("investment views", () => {
     expect(s.views.map((v) => v.name)).toEqual(["Default", "Custom 2", "Custom 3", "Custom 4", "Custom 5"]);
   });
 
-  it("shows every column but Cost Basis at first", () => {
+  it("shows every column but Cost Basis and Gain/Loss % at first", () => {
     const v = defaultViews().views[0];
     expect(v.columns).toEqual([
       "ticker", "price", "shares", "market_value", "gain", "day_gain", "day_percent",
     ]);
-    expect(availableColumns(v.columns)).toEqual(["cost_basis"]);
+    expect(availableColumns(v.columns)).toEqual(["cost_basis", "gain_percent"]);
   });
 
   it("round-trips, and unreadable text gives the defaults", () => {
@@ -40,6 +41,35 @@ describe("investment views", () => {
     const s = parseViews(JSON.stringify({ views: [{ showClosed: true }, { showClosed: "yes" }, {}] }));
     expect(s.views.map((v) => v.showClosed).slice(0, 4)).toEqual([true, false, false, false]);
     expect(parseViews(serializeViews(s)).views[0].showClosed).toBe(true);
+  });
+
+  it("keeps a sort per view; anything unreadable sorts by Name ascending", () => {
+    const s = parseViews(
+      JSON.stringify({
+        views: [
+          { sort: { by: "gain_percent", desc: true } },
+          { sort: { by: "bogus", desc: true } },
+          { sort: "name" },
+          { sort: { by: "name", desc: "yes" } },
+        ],
+      }),
+    );
+    expect(s.views.map((v) => v.sort)).toEqual([
+      { by: "gain_percent", desc: true },
+      { by: "name", desc: false },
+      { by: "name", desc: false },
+      { by: "name", desc: false },
+      { by: "name", desc: false },
+    ]);
+    expect(parseViews(serializeViews(s)).views[0].sort).toEqual({ by: "gain_percent", desc: true });
+  });
+
+  it("a new column sorts ascending; the same one again reverses", () => {
+    const asc = nextSort({ by: "name", desc: false }, "gain_percent");
+    expect(asc).toEqual({ by: "gain_percent", desc: false });
+    const desc = nextSort(asc, "gain_percent");
+    expect(desc).toEqual({ by: "gain_percent", desc: true });
+    expect(nextSort(desc, "gain_percent")).toEqual(asc);
   });
 
   it("drops unknown or repeated columns and blank names", () => {

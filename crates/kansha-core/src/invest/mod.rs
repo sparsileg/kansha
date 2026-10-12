@@ -39,8 +39,8 @@ mod true_up;
 
 pub use period::{AccountPeriod, Track, account_period, combined};
 pub use portfolio::{
-    Portfolio, PortfolioAccount, PortfolioLot, PortfolioPosition, PortfolioSale, PortfolioTotals,
-    portfolio,
+    Portfolio, PortfolioAccount, PortfolioColumn, PortfolioLot, PortfolioPosition, PortfolioSale,
+    PortfolioSort, PortfolioTotals, portfolio, sort_portfolio,
 };
 pub use reads::{
     Allocation, AllocationRow, Holdings, IncomeReport, IncomeRow, InvRegister, InvRegisterRow,

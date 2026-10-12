@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { call, commands } from "../api";
-  import { displayDate, parseDate } from "../format/date";
+  import { completeDate, displayDate, parseDate } from "../format/date";
   import {
     blockNonAmountChar,
     formatMoney,
@@ -119,7 +119,7 @@
     <div class="panel">
       <label>
         Date
-        <input aria-label="Date" bind:value={dateText} />
+        <input aria-label="Date" bind:value={dateText} onblur={() => (dateText = completeDate(dateText, listsState.today))} />
       </label>
       <label>
         Amount

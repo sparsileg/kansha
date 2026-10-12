@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { datePattern, displayDate, parseDate } from "../format/date";
+  import { completeDate, datePattern, displayDate, parseDate } from "../format/date";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import type { Cleared } from "../types/bindings";
@@ -27,8 +27,8 @@
 </script>
 
 <div class="filters" role="search" aria-label="Register filters">
-  <label>From <input class="date" class:bad={fromBad} bind:value={from} placeholder={datePattern()} onchange={() => setDate("date_from", from)} /></label>
-  <label>To <input class="date" class:bad={toBad} bind:value={to} placeholder={datePattern()} onchange={() => setDate("date_to", to)} /></label>
+  <label>From <input class="date" class:bad={fromBad} bind:value={from} placeholder={datePattern()} onchange={() => setDate("date_from", (from = completeDate(from, listsState.today)))} /></label>
+  <label>To <input class="date" class:bad={toBad} bind:value={to} placeholder={datePattern()} onchange={() => setDate("date_to", (to = completeDate(to, listsState.today)))} /></label>
   <label>
     Payee
     <select value={registerState.filters.payee ?? ""} onchange={(e) => registerState.setFilters({ payee: num(e.currentTarget.value) })}>

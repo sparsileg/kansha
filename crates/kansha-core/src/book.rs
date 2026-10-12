@@ -15,7 +15,8 @@ use serde::Serialize;
 use crate::backup;
 use crate::date::Clock;
 use crate::error::{Error, Result};
-use crate::persistence::Db;
+use crate::newbook;
+use crate::persistence::{Db, Origin};
 use crate::security::{DbKey, KeyFile, Passphrase, write_atomic};
 
 /// Longest book name.
@@ -276,6 +277,28 @@ fn install(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Resul
 /// First-run setup, new database (SECU-080): a key pair for the backup
 /// passphrase, a random database key, and an empty encrypted database.
 pub fn create(files: &BookFiles, passphrase: &Passphrase, clock: &dyn Clock) -> Result<OpenBook> {
+    create_with(files, passphrase, clock, Contents::Empty)
+}
+
+/// What a new book starts with (UI-085).
+#[derive(Clone, Copy)]
+pub enum Contents<'a> {
+    /// The built-in categories only.
+    Empty,
+    /// The built-in categories and the Standard list (P-06).
+    Standard,
+    /// A copy of the open book `Db` without its transactions.
+    Copy(&'a Db, &'a newbook::CopyOptions),
+}
+
+/// A new book, as [`create`], starting with `contents` (UI-085). Nothing
+/// is left behind if it cannot be made; a copy's source is only read.
+pub fn create_with(
+    files: &BookFiles,
+    passphrase: &Passphrase,
+    clock: &dyn Clock,
+    contents: Contents<'_>,
+) -> Result<OpenBook> {
     expect_state(files, BookState::New)?;
     if files.key.exists() {
         return Err(Error::Invalid(format!(
@@ -285,8 +308,28 @@ pub fn create(files: &BookFiles, passphrase: &Passphrase, clock: &dyn Clock) -> 
     }
     remove_if_present(&files.db)?;
     let (key_file, key) = KeyFile::create(passphrase)?;
-    let empty = Db::open_in_memory(clock)?;
-    install(files, &empty, &key, &key_file)?;
+    match contents {
+        Contents::Empty | Contents::Standard => {
+            let mut fresh = Db::open_in_memory(clock)?;
+            if let Contents::Standard = contents {
+                fresh.write(clock, Origin::System, newbook::add_standard_categories)?;
+            }
+            install(files, &fresh, &key, &key_file)?;
+        }
+        Contents::Copy(source, opts) => {
+            stage(files, source, &key, &key_file)?;
+            let staged = sidecar(&files.db, ".new");
+            let prepared = Db::open_keyed(&staged, &key)
+                .and_then(|mut db| newbook::prepare_copy(&mut db, clock, opts));
+            if let Err(e) = prepared {
+                remove_if_present(&staged)?;
+                remove_journals(&staged)?;
+                remove_if_present(&sidecar(&files.key, ".new"))?;
+                return Err(e);
+            }
+            commit(files)?;
+        }
+    }
     Ok(OpenBook {
         db: Db::open_keyed(&files.db, &key)?,
         key_file,

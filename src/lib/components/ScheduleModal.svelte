@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { datePattern } from "../format/date";
+  import { completeDate, datePattern } from "../format/date";
   import { untrack } from "svelte";
   import { call, commands } from "../api";
   import { blockNonSplitAmountChar, sanitizeSplitAmountInput } from "../format/money";
@@ -262,7 +262,7 @@
         {/if}
         <label>
           {editing ? "Next due on or after" : "First due on or after"}
-          <input bind:value={d.start} placeholder={datePattern()} />
+          <input bind:value={d.start} placeholder={datePattern()} onblur={() => (d.start = completeDate(d.start, listsState.today))} />
         </label>
       </div>
       <!-- A weekend rule (REC-050) is no longer offered; one already
@@ -277,7 +277,7 @@
           </select>
         </label>
         {#if d.endKind === "on_date"}
-          <label>End date <input bind:value={d.endDate} placeholder={datePattern()} /></label>
+          <label>End date <input bind:value={d.endDate} placeholder={datePattern()} onblur={() => (d.endDate = completeDate(d.endDate, listsState.today))} /></label>
         {:else if d.endKind === "after_count"}
           <label># left <input inputmode="numeric" bind:value={d.count} /></label>
         {/if}

@@ -8,8 +8,16 @@
 //! change needs a price dated exactly on the date and an earlier one to
 //! compare with; without both it is left out (`None`), so a weekend or
 //! future date shows no day change.
+//!
+//! Gain/Loss % is gain ÷ cost basis, blank without a price or with no
+//! basis. `sort_portfolio` orders equities, lots, and sales by a column
+//! (POS-040); accounts keep the view's order.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::str::FromStr;
+
+use rust_decimal::Decimal;
 
 use rusqlite::Connection;
 use serde::Serialize;
@@ -22,6 +30,7 @@ use crate::error::{Error, Result};
 use crate::money::{Money, Price, Quantity, extended_value};
 use crate::persistence::{invest as repo, securities};
 use crate::securities::SecurityId;
+use crate::text_enum::text_enum;
 
 /// One open lot on the overview.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -33,6 +42,8 @@ pub struct PortfolioLot {
     pub basis: Money,
     pub market_value: Option<Money>,
     pub gain: Option<Money>,
+    /// Gain ÷ basis, in percent.
+    pub gain_percent: Option<String>,
     pub day_gain: Option<Money>,
 }
 
@@ -49,6 +60,8 @@ pub struct PortfolioSale {
     pub proceeds: Money,
     /// Realized gain.
     pub gain: Money,
+    /// Realized gain ÷ basis, in percent.
+    pub gain_percent: Option<String>,
     pub term: Term,
 }
 
@@ -68,6 +81,8 @@ pub struct PortfolioPosition {
     pub stale: bool,
     pub market_value: Option<Money>,
     pub gain: Option<Money>,
+    /// Gain ÷ basis, in percent.
+    pub gain_percent: Option<String>,
     pub day_gain: Option<Money>,
     /// The price's change since the previous price, in percent.
     pub day_percent: Option<String>,
@@ -86,6 +101,8 @@ pub struct PortfolioTotals {
     pub market_value: Money,
     /// Σ gain of the priced positions.
     pub gain: Money,
+    /// Gain ÷ the basis of the priced positions, in percent.
+    pub gain_percent: Option<String>,
     /// `None` when no position has a day change.
     pub day_gain: Option<Money>,
     /// Day gain ÷ the value of those positions the day before.
@@ -117,6 +134,8 @@ pub struct Portfolio {
 #[derive(Default)]
 struct Sums {
     basis: Money,
+    /// Basis of the positions with a price.
+    priced_basis: Money,
     market_value: Money,
     gain: Money,
     day_gain: Option<Money>,
@@ -133,6 +152,7 @@ fn add(a: Money, b: Money) -> Result<Money> {
 impl Sums {
     fn merge(&mut self, o: &Sums) -> Result<()> {
         self.basis = add(self.basis, o.basis)?;
+        self.priced_basis = add(self.priced_basis, o.priced_basis)?;
         self.market_value = add(self.market_value, o.market_value)?;
         self.gain = add(self.gain, o.gain)?;
         if let Some(d) = o.day_gain {
@@ -149,6 +169,7 @@ impl Sums {
             basis: self.basis,
             market_value: self.market_value,
             gain: self.gain,
+            gain_percent: gain_percent(self.gain, self.priced_basis),
             day_gain: self.day_gain,
             day_percent: self
                 .day_gain
@@ -157,6 +178,11 @@ impl Sums {
             stale_prices: self.stale,
         }
     }
+}
+
+/// Gain ÷ basis in percent; `None` with no basis.
+fn gain_percent(gain: Money, basis: Money) -> Option<String> {
+    ratio_percent(gain.to_decimal(), basis.to_decimal())
 }
 
 /// A price's change on `as_of`: (change, percent). `None` without a price
@@ -228,6 +254,7 @@ pub fn portfolio(
                         basis: x.basis,
                         proceeds: x.proceeds,
                         gain: x.gain,
+                        gain_percent: gain_percent(x.gain, x.basis),
                         term: x.term,
                     });
                 }
@@ -262,12 +289,14 @@ pub fn portfolio(
                     .ok_or(Error::Overflow("position shares"))?;
                 basis = add(basis, l.open_basis)?;
                 let market_value = value(l.open_quantity)?;
+                let gain = market_value.and_then(|mv| mv.checked_sub(l.open_basis));
                 lots.push(PortfolioLot {
                     lot: l.lot.id,
                     acquired: l.lot.acquired,
                     shares: l.open_quantity,
                     basis: l.open_basis,
-                    gain: market_value.and_then(|mv| mv.checked_sub(l.open_basis)),
+                    gain,
+                    gain_percent: gain.and_then(|g| gain_percent(g, l.open_basis)),
                     day_gain: day(l.open_quantity)?,
                     market_value,
                 });
@@ -285,6 +314,7 @@ pub fn portfolio(
                     stale: false,
                     market_value: Some(Money::ZERO),
                     gain: None,
+                    gain_percent: None,
                     day_gain: None,
                     day_percent: None,
                     lots,
@@ -304,6 +334,7 @@ pub fn portfolio(
             if let Some(mv) = market_value {
                 one.market_value = mv;
                 one.gain = gain.unwrap_or(Money::ZERO);
+                one.priced_basis = basis;
             }
             if let (Some(d), Some(mv)) = (day_gain, market_value) {
                 one.day_gain = Some(d);
@@ -321,6 +352,7 @@ pub fn portfolio(
                 stale: one.stale,
                 market_value,
                 gain,
+                gain_percent: gain.and_then(|g| gain_percent(g, basis)),
                 day_gain,
                 day_percent: change.map(|c| c.1),
                 lots,
@@ -343,4 +375,106 @@ pub fn portfolio(
         accounts: out,
         total: all.totals(),
     })
+}
+
+text_enum! {
+    /// A column of the Investments screen to sort by (POS-040).
+    pub enum PortfolioColumn {
+        /// Equities by name, lots by acquisition, sales by sale date:
+        /// the default order.
+        Name = "name",
+        Ticker = "ticker",
+        Price = "price",
+        Shares = "shares",
+        CostBasis = "cost_basis",
+        /// Sales: proceeds.
+        MarketValue = "market_value",
+        Gain = "gain",
+        GainPercent = "gain_percent",
+        DayGain = "day_gain",
+        DayPercent = "day_percent",
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct PortfolioSort {
+    pub by: PortfolioColumn,
+    pub desc: bool,
+}
+
+/// What a row sorts on in one column.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Key {
+    Text(String),
+    Num(Decimal),
+    Date(Date, i64),
+}
+
+fn num(m: Money) -> Option<Key> {
+    Some(Key::Num(m.to_decimal()))
+}
+
+fn pct(p: Option<&String>) -> Option<Key> {
+    p.and_then(|t| Decimal::from_str(t).ok()).map(Key::Num)
+}
+
+/// Stable sort by `key`; blanks last either way, ties keep their order.
+fn order<T>(items: &mut Vec<T>, desc: bool, key: impl Fn(&T) -> Option<Key>) {
+    let mut keyed: Vec<(Option<Key>, usize)> =
+        items.iter().enumerate().map(|(i, x)| (key(x), i)).collect();
+    keyed.sort_by(|(a, i), (b, j)| {
+        let by_key = match (a, b) {
+            (Some(a), Some(b)) if desc => b.cmp(a),
+            (Some(a), Some(b)) => a.cmp(b),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        };
+        by_key.then(i.cmp(j))
+    });
+    let mut old: Vec<Option<T>> = std::mem::take(items).into_iter().map(Some).collect();
+    *items = keyed.iter().filter_map(|(_, i)| old[*i].take()).collect();
+}
+
+/// Order each account's equities, and each equity's lots and sales, by
+/// `sort` (POS-040). Totals and the account order do not change.
+pub fn sort_portfolio(pf: &mut Portfolio, sort: PortfolioSort) {
+    use PortfolioColumn as C;
+    let (by, desc) = (sort.by, sort.desc);
+    for a in &mut pf.accounts {
+        order(&mut a.positions, desc, |p| match by {
+            C::Name => Some(Key::Text(p.name.to_lowercase())),
+            C::Ticker => p.ticker.as_ref().map(|t| Key::Text(t.to_lowercase())),
+            C::Price => p.price.map(|x| Key::Num(x.to_decimal())),
+            C::Shares => Some(Key::Num(p.shares.to_decimal())),
+            C::CostBasis => num(p.basis),
+            C::MarketValue => p.market_value.and_then(num),
+            C::Gain => p.gain.and_then(num),
+            C::GainPercent => pct(p.gain_percent.as_ref()),
+            C::DayGain => p.day_gain.and_then(num),
+            C::DayPercent => pct(p.day_percent.as_ref()),
+        });
+        for p in &mut a.positions {
+            order(&mut p.lots, desc, |l| match by {
+                C::Name => Some(Key::Date(l.acquired, l.lot.0)),
+                C::Shares => Some(Key::Num(l.shares.to_decimal())),
+                C::CostBasis => num(l.basis),
+                C::MarketValue => l.market_value.and_then(num),
+                C::Gain => l.gain.and_then(num),
+                C::GainPercent => pct(l.gain_percent.as_ref()),
+                C::DayGain => l.day_gain.and_then(num),
+                C::Ticker | C::Price | C::DayPercent => None,
+            });
+            order(&mut p.sales, desc, |x| match by {
+                C::Name => Some(Key::Date(x.sold, x.lot.0)),
+                C::Shares => Some(Key::Num(x.shares.to_decimal())),
+                C::CostBasis => num(x.basis),
+                C::MarketValue => num(x.proceeds),
+                C::Gain => num(x.gain),
+                C::GainPercent => pct(x.gain_percent.as_ref()),
+                C::Ticker | C::Price | C::DayGain | C::DayPercent => None,
+            });
+        }
+    }
 }

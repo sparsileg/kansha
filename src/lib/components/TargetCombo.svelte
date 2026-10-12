@@ -2,7 +2,7 @@
   import { tick } from "svelte";
   import { call, commands } from "../api";
   import { SPLIT, type TargetValue } from "../register/draft";
-  import { matchTargets, newCategoryPath, type TargetOption } from "../register/match";
+  import { completeSegment, matchTargets, newCategoryPath, type TargetOption } from "../register/match";
   import { confirmState } from "../state/confirm.svelte";
   import { listsState } from "../state/lists.svelte";
   import type { AccountId } from "../types/bindings";
@@ -12,6 +12,11 @@
    * Typing filters categories and accounts together; Up/Down move; Tab or
    * Enter (while the list is open) take the highlighted one; Esc closes
    * the list. With the list closed, Enter belongs to the form (save).
+   *
+   * When one category name fits the path level being typed, the rest of
+   * it is filled in and selected ("Car:B" → "Car:BlueForester"): typing
+   * goes on over it, ":" keeps it and starts the next level, Backspace
+   * or Delete removes it.
    *
    * With `newKind` set, text that names no category or account can be
    * created (after a confirmation): "Fuel", or "Charity:Fast Offering"
@@ -63,6 +68,8 @@
     options.find((o) => o.value === v)?.label ?? "";
 
   let text = $state("");
+  /** What the user typed, without a filled-in completion; the list filters on it. */
+  let query = $state("");
   let open = $state(false);
   let active = $state(0);
   let typing = $state(false);
@@ -70,7 +77,7 @@
   let pos = $state({ left: 0, top: 0, width: 0, up: false });
   const listId = `tc-${Math.random().toString(36).slice(2)}`;
 
-  const matches = $derived(matchTargets(options, typing ? text : ""));
+  const matches = $derived(matchTargets(options, typing ? query : ""));
   /** The path a "Create" row would make, while typing text that is new. */
   const toCreate = $derived(newKind && typing ? newCategoryPath(options, text) : null);
   const rowCount = $derived(matches.length + (toCreate ? 1 : 0));
@@ -108,10 +115,21 @@
     }
   }
 
-  function oninput() {
+  function oninput(e: Event) {
     typing = true;
     active = 0;
     createError = null;
+    query = text;
+    // Deleting removes a completion; it does not bring it back.
+    const deleting = (e as InputEvent).inputType?.startsWith("delete") ?? false;
+    const done = deleting ? null : completeSegment(options, text);
+    if (done) {
+      text = done.text;
+      const at = matches.findIndex((m) => m.value === done.value);
+      if (at >= 0) active = at;
+      const from = query.length;
+      void tick().then(() => input?.setSelectionRange(from, done.text.length));
+    }
     if (text.trim() === "") {
       // An emptied box clears the choice.
       if (value !== "") {
@@ -158,7 +176,11 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const filled = typing && text !== query && input.selectionStart === query.length && input.selectionEnd === text.length;
+    if (e.key === ":" && filled) {
+      // ":" keeps the filled-in name and goes on to the next level.
+      input.setSelectionRange(text.length, text.length);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!open) {
         show();

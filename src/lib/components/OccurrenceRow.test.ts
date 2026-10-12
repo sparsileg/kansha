@@ -129,6 +129,16 @@ describe("OccurrenceRow", () => {
     await waitFor(() => expect(override).toHaveBeenCalledWith(1, "2026-10-01", null, "-125.00"));
   });
 
+  it("a short date in Edit… gets its year on leaving the field", async () => {
+    listsState.today = "2026-09-24";
+    render(OccurrenceRow, { view: view() });
+    await fireEvent.click(screen.getByRole("button", { name: "Edit…" }));
+    const date = screen.getByLabelText("Date") as HTMLInputElement;
+    await fireEvent.input(date, { target: { value: "10/7" } });
+    await fireEvent.blur(date);
+    expect(date.value).toBe("10/07/2026");
+  });
+
   it("Skip calls skip", async () => {
     render(OccurrenceRow, { view: view() });
     await fireEvent.click(screen.getByRole("button", { name: "Skip" }));

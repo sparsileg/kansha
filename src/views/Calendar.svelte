@@ -35,8 +35,11 @@
   });
   const balanceByDay = $derived(new Map(balances.map((b) => [b.date, b.balance])));
   const keyOf = (v: CalItem) => v.key;
-  /** An investment account's balance is not projected. */
-  const investmentSelected = $derived(account !== "" && listsState.account(Number(account))?.investment != null);
+  /** Spending accounts only (CAL-040): the projected balance is theirs. */
+  const SPENDING = new Set(["checking", "savings", "cash", "credit_card"]);
+  const spendingAccounts = $derived(
+    listsState.accounts.filter((a) => a.status === "open" && SPENDING.has(a.account_type)),
+  );
 
   async function load() {
     const mine = ++seq;
@@ -48,7 +51,7 @@
       const [occ, txns, proj] = await Promise.all([
         call(commands.calendarOccurrences(from, to, filter, showDone)),
         showDone ? call(commands.calendarTransactions(from, to, filter)) : Promise.resolve([] as CalendarTxn[]),
-        projection && account !== "" && !investmentSelected
+        projection && account !== ""
           ? call(commands.calendarProjection(Number(account), from, to))
           : Promise.resolve([] as DayBalance[]),
       ]);
@@ -87,24 +90,31 @@
 </script>
 
 <section class="cal">
+  <!-- Account and its projection left, month centered, Show entered right. -->
   <header>
-    <button type="button" aria-label="Previous month" onclick={() => (month = addMonths(month, -1))}>‹</button>
-    <strong class="label">{monthLabel(month)}</strong>
-    <button type="button" aria-label="Next month" onclick={() => (month = addMonths(month, 1))}>›</button>
-    <button type="button" onclick={() => (month = monthStart(listsState.today))}>Today</button>
-    <label>
-      Account
+    <div class="left">
+      <!-- "All accounts" says what the list is; no label word. -->
       <select bind:value={account} aria-label="Calendar account">
         <option value="">All accounts</option>
-        {#each listsState.accounts.filter((a) => a.status === "open") as a (a.id)}
+        {#each spendingAccounts as a (a.id)}
           <option value={String(a.id)}>{a.name}</option>
         {/each}
       </select>
-    </label>
-    <label><input type="checkbox" bind:checked={showDone} /> Show entered transactions</label>
-    <label title={investmentSelected ? "An investment account's balance is not projected" : "Choose an account first"}>
-      <input type="checkbox" bind:checked={projection} disabled={account === "" || investmentSelected} /> Projected balance
-    </label>
+      <label title={account === "" ? "Choose an account first" : undefined}>
+        <input type="checkbox" bind:checked={projection} disabled={account === ""} /> Projected balance
+      </label>
+    </div>
+    <div class="month">
+      <span class="picker">
+        <button type="button" aria-label="Previous month" onclick={() => (month = addMonths(month, -1))}>‹</button>
+        <strong class="label"><span class="sizer" aria-hidden="true">September 0000</span><span>{monthLabel(month)}</span></strong>
+        <button type="button" aria-label="Next month" onclick={() => (month = addMonths(month, 1))}>›</button>
+      </span>
+      <button type="button" onclick={() => (month = monthStart(listsState.today))}>Today</button>
+    </div>
+    <div class="right">
+      <label><input type="checkbox" bind:checked={showDone} /> Show entered transactions</label>
+    </div>
   </header>
   {#if error}<p class="err">{error}</p>{/if}
 
@@ -178,15 +188,45 @@
     min-height: 0;
     flex: 1;
   }
+  /* Equal side columns keep the month centered; a side that needs more
+     room takes it, and the month moves off center rather than the side
+     wrapping. */
   header {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+  }
+  .left,
+  .month,
+  .right {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 0.75rem;
     align-items: center;
   }
+  /* Columns fill their cells (no justify-self): a shrink-to-fit flex
+     row wraps early in WebKitGTK. */
+  .right {
+    justify-content: flex-end;
+  }
+  /* Arrows hug the month. The label is as wide as the longest one,
+     "September yyyy" (a hidden copy in the same cell), so the arrows
+     do not move from month to month. */
+  .picker {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+  }
   .label {
-    min-width: 9rem;
+    display: inline-grid;
     text-align: center;
+  }
+  .label > span {
+    grid-area: 1 / 1;
+  }
+  .sizer {
+    visibility: hidden;
   }
   /* The month is a sheet (base.css): its edge is the outer border; the
      cells draw the lines between them. */
@@ -225,8 +265,10 @@
     overflow: hidden;
     font-size: var(--fs-register);
   }
-  .day.other {
-    opacity: 0.45;
+  /* Days of the next or last month are dimmed, all but the projected
+     balance. A filter, so it stacks with a chip's own opacity. */
+  .day.other > :not(.proj) {
+    filter: opacity(0.45);
   }
   .day.today {
     background: var(--today-bg);

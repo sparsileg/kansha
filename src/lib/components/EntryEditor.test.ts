@@ -89,6 +89,17 @@ describe("EntryEditor keyboard entry (REG-030)", () => {
     expect(date.value).toBe("09/24/2026");
   });
 
+  it("a short date gets its year on leaving the field; bad text is kept", async () => {
+    render(EntryEditor, { account: 1 });
+    const date = field("Date");
+    await fireEvent.input(date, { target: { value: "3/5" } });
+    await fireEvent.blur(date);
+    expect(date.value).toBe("03/05/2026");
+    await fireEvent.input(date, { target: { value: "3/45" } });
+    await fireEvent.blur(date);
+    expect(date.value).toBe("3/45");
+  });
+
   it("Enter saves a payment and resets for the next entry", async () => {
     render(EntryEditor, { account: 1 });
     await fireEvent.input(field("Payee"), { target: { value: "Shell" } });

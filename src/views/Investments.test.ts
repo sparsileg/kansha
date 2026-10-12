@@ -94,7 +94,7 @@ describe("Investments view", () => {
     render(Investments);
     await waitFor(() => expect(screen.getByText("Brokerage")).toBeTruthy());
     await fireEvent.click(screen.getByRole("button", { name: "Collapse Brokerage" }));
-    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/ [▲▼⇅]$/, ""));
     expect(heads).toEqual([
       "Name", "Ticker Symbol", "Quote/Price", "Shares", "Market Value", "Gain/Loss",
       "Day Gain/Loss", "Price Day Change (%)",
@@ -103,7 +103,7 @@ describe("Investments view", () => {
     expect(screen.getByText("Totals:")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: /View/ })).toBeTruthy();
     expect((screen.getByLabelText("As of") as HTMLInputElement).value).toBe("06/30/2026");
-    expect(invPortfolio).toHaveBeenCalledWith([2], null, "2026-06-30", false);
+    expect(invPortfolio).toHaveBeenCalledWith([2], null, "2026-06-30", false, { by: "name", desc: false });
   });
 
   it("an account starts expanded once; a collapse is kept while the app runs", async () => {
@@ -143,7 +143,7 @@ describe("Investments view", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Next month" }));
     expect(screen.getByText("July 2026")).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: "07/04/2026" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-07-04", false));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-07-04", false, { by: "name", desc: false }));
     expect((screen.getByLabelText("As of") as HTMLInputElement).value).toBe("07/04/2026");
   });
 
@@ -158,7 +158,7 @@ describe("Investments view", () => {
     await fireEvent.click(within(dlg).getByRole("button", { name: "Move Up" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const heads = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/ [▲▼⇅]$/, ""));
     expect(heads.at(-2)).toBe("Cost Basis");
     expect(heads.at(-1)).toBe("Price Day Change (%)");
     expect(screen.getByRole("option", { name: "Mine" })).toBeTruthy();
@@ -191,7 +191,7 @@ describe("Investments view", () => {
     await fireEvent.click(within(dlg).getByRole("tab", { name: "Securities" }));
     await fireEvent.click(within(dlg).getByRole("checkbox", { name: /Total Stock Market/ }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "OK" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], [], "2026-06-30", false));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], [], "2026-06-30", false, { by: "name", desc: false }));
   });
 
   it("the gear's Show closed lots asks Rust for sales, and shows it is on", async () => {
@@ -199,11 +199,11 @@ describe("Investments view", () => {
     await screen.findByText("Brokerage");
     await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "Show closed lots" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true, { by: "name", desc: false }));
     await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
     expect(screen.getByRole("menuitem", { name: "✓ Show closed lots" })).toBeTruthy();
     await fireEvent.click(screen.getByRole("menuitem", { name: "✓ Show closed lots" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false, { by: "name", desc: false }));
   });
 
   it("Show closed lots is kept per view: another view starts without it", async () => {
@@ -211,12 +211,37 @@ describe("Investments view", () => {
     await screen.findByText("Brokerage");
     await fireEvent.click(screen.getByRole("button", { name: "Investments options" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "Show closed lots" }));
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true, { by: "name", desc: false }));
     expect(investViewState.views[0].showClosed).toBe(true);
     investViewState.select(1);
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false, { by: "name", desc: false }));
     investViewState.select(0);
-    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true));
+    await waitFor(() => expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", true, { by: "name", desc: false }));
+  });
+
+  it("a heading sorts by its column; again reverses; kept per view (POS-040)", async () => {
+    render(Investments);
+    await screen.findByText("Brokerage");
+    const name = screen.getByRole("columnheader", { name: "Name" });
+    expect(name.getAttribute("aria-sort")).toBe("ascending");
+    const gain = () => screen.getByRole("columnheader", { name: "Gain/Loss" });
+    expect(gain().textContent).toBe("Gain/Loss ⇅");
+    await fireEvent.click(screen.getByRole("button", { name: "Gain/Loss" }));
+    await waitFor(() =>
+      expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false, { by: "gain", desc: false }),
+    );
+    expect(gain().getAttribute("aria-sort")).toBe("ascending");
+    await fireEvent.click(screen.getByRole("button", { name: "Gain/Loss" }));
+    await waitFor(() =>
+      expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false, { by: "gain", desc: true }),
+    );
+    expect(gain().textContent).toBe("Gain/Loss ▼");
+    expect(gain().getAttribute("aria-sort")).toBe("descending");
+    expect(investViewState.views[0].sort).toEqual({ by: "gain", desc: true });
+    investViewState.select(1);
+    await waitFor(() =>
+      expect(invPortfolio).toHaveBeenLastCalledWith([2], null, "2026-06-30", false, { by: "name", desc: false }),
+    );
   });
 
   it("clicking a security opens its details", async () => {

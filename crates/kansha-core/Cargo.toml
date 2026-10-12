@@ -20,6 +20,8 @@ getrandom = "=0.2.17"
 flate2 = "=1.1.10"
 # SHA-256 of import files (MIG-170); already built for `age`.
 sha2 = "=0.10.9"
+# The Standard categories list (UI-085, P-06).
+toml.workspace = true
 
 [features]
 # Derive `specta::Type` on the types that cross IPC (D-120). Enabled by
@@ -31,7 +33,6 @@ specta = ["dep:specta"]
 insta = "1"
 proptest.workspace = true
 tempfile.workspace = true
-toml.workspace = true
 
 [lints]
 workspace = true

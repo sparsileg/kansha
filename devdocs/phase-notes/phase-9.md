@@ -994,3 +994,64 @@ or # left), Remind days, and Mode share a `.row` line. The weekend
 rule (REC-050) control is gone; `form.ts` still carries
 `weekendRule`, so a new schedule saves "none" and an edited one keeps
 what it had. The engine's weekend shifting is unchanged.
+
+## New book contents (UI-085, spec 0.7.52–0.7.53, 2026-10-11)
+
+Files: `crates/kansha-core/data/standard-categories.toml` (P-06, 87
+categories), `src/newbook.rs` (`NewBookContents`, `CopyOptions`,
+`CopyBalances`, `add_standard_categories`, `prepare_copy`),
+`src/persistence/newbook.rs` (bulk clears, audit log cleared with its
+triggers put back), `book::create_with` + `book::Contents`,
+`ledger::create_carried` (reconciled without a reconciliation, as
+MIG-090). `toml` moved from dev to normal dependency. Commands
+`book_new`, `book_setup` gain `contents`. UI: `NewBookModal` Start
+with / Balances / Copy closed accounts; `StartScreen` Start with.
+
+Decisions: a copy is the open book exported (`stage`) to the new
+file, then pruned in place before the files are committed, so new
+tables are copied by default; a failure removes the staged files.
+Carry balances are read before the prune; investment accounts carry
+security-less cash only. Dropped closed accounts go through
+`accounts::delete` (saved reports updated) after their schedules
+(`schedules::delete`).
+
+Tests: `tests/integration/new_book.rs` (7), `standard_categories.rs`
+(2), `NewBookModal.test.ts` (5), `App.smoke.test.ts` (Standard start).
+
+Known gaps: spending cards and insight cards keep a dropped account's
+ID (#6); a carried investment cash entry is not reconciled; no
+progress shown while a large book is copied.
+
+## Gain/Loss % and column sort (POS-040, spec 0.7.54, 2026-10-11)
+
+Files: `invest/portfolio.rs` (`gain_percent` on lot, sale, position,
+totals; `PortfolioColumn`, `PortfolioSort`, `sort_portfolio`);
+`inv_portfolio` takes `sort`; `invest/views.ts` (`gain_percent`
+column, `ViewDef.sort`, `nextSort`, `DEFAULT_SORT`); `rows.ts`;
+`investview.svelte.ts` (`sortBy`); `Investments.svelte` (sortable
+headings, as in the reports).
+
+Decisions: Gain/Loss % is not in a new view's default columns (like
+Cost Basis); totals divide by the basis of priced equities only. Rust
+sorts after building the overview; accounts keep the view's order.
+Blanks last both ways; ties keep the default order. The sort is kept
+in each view's stored JSON (no schema change).
+
+Tests: `invest.rs` (`portfolio_sorts_by_a_column`,
+`portfolio_gain_percent_leaves_out_unpriced_and_zero_basis`, gain %
+asserts in three portfolio tests), `views.test.ts`, `rows.test.ts`,
+`Investments.test.ts`.
+
+## Calendar bar and account list (CAL-040, spec 0.7.55, 2026-10-11)
+
+`Calendar.svelte`: bar is a three-column grid (Account and Projected
+balance left; month, arrows, Today centered; Show entered right).
+Side columns are `minmax(max-content, 1fr)`: a wide account name moves
+the month off center instead of wrapping. The "Account" label word
+went. A drawn (appearance: none) select was tried and reverted:
+WebKitGTK's own is already only ~28px over its longest option; the
+open list is a native popup in the desktop font. The month label is as
+wide as a hidden "September 0000", so the arrows stay put. The
+Account list holds only open checking, savings, cash, and credit card
+accounts; the investment check on Projected balance went with it.
+Test: `Calendar.test.ts` (account list).

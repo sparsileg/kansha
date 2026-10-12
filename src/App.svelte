@@ -189,7 +189,7 @@
       <AccountPanel />
     {/if}
     <main>
-      {#if listsState.isEmptyBook}
+      {#if listsState.isEmptyBook && !win && viewState.current === "insights"}
         <EmptyBook />
       {:else if win}
         {#key win.id}

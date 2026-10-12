@@ -1,6 +1,9 @@
 // Named views of the Investments screen (the "View:" list): which columns
 // show and in what order, which accounts and in what order, which
-// securities. Pure logic; storage is in state/investview.svelte.ts.
+// securities, and the sort. Pure logic; storage is in
+// state/investview.svelte.ts.
+
+import type { PortfolioColumn, PortfolioSort } from "../types/bindings";
 
 export type ColumnId =
   | "ticker"
@@ -9,6 +12,7 @@ export type ColumnId =
   | "cost_basis"
   | "market_value"
   | "gain"
+  | "gain_percent"
   | "day_gain"
   | "day_percent";
 
@@ -20,13 +24,25 @@ export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: "cost_basis", label: "Cost Basis" },
   { id: "market_value", label: "Market Value" },
   { id: "gain", label: "Gain/Loss" },
+  { id: "gain_percent", label: "Gain/Loss %" },
   { id: "day_gain", label: "Day Gain/Loss" },
   { id: "day_percent", label: "Price Day Change (%)" },
 ];
 
 export const columnLabel = (id: ColumnId): string => COLUMNS.find((c) => c.id === id)?.label ?? id;
 
-export const DEFAULT_COLUMNS: ColumnId[] = COLUMNS.map((c) => c.id).filter((id) => id !== "cost_basis");
+export const DEFAULT_COLUMNS: ColumnId[] = COLUMNS.map((c) => c.id).filter(
+  (id) => id !== "cost_basis" && id !== "gain_percent",
+);
+
+/** The default order: equities by name, lots by date. */
+export const DEFAULT_SORT: PortfolioSort = { by: "name", desc: false };
+
+const SORT_COLUMNS = new Set<string>(["name", ...COLUMNS.map((c) => c.id)]);
+
+/** Sort by `by`: ascending first, then the other way on each click. */
+export const nextSort = (cur: PortfolioSort, by: PortfolioColumn): PortfolioSort =>
+  cur.by === by ? { by, desc: !cur.desc } : { by, desc: false };
 
 export const VIEW_COUNT = 5;
 
@@ -40,6 +56,8 @@ export interface ViewDef {
   hiddenSecurities: number[];
   /** Show each lot's sales and the securities sold out (POS-040). */
   showClosed: boolean;
+  /** Order of equities, lots, and sales (POS-040). */
+  sort: PortfolioSort;
 }
 
 export interface ViewsState {
@@ -57,6 +75,7 @@ export function defaultView(slot: number): ViewDef {
     hiddenAccounts: [],
     hiddenSecurities: [],
     showClosed: false,
+    sort: { ...DEFAULT_SORT },
   };
 }
 
@@ -65,6 +84,13 @@ export function defaultViews(): ViewsState {
 }
 
 const isIds = (v: unknown): v is number[] => Array.isArray(v) && v.every((n) => Number.isInteger(n));
+
+function cleanSort(v: unknown): PortfolioSort {
+  if (typeof v !== "object" || v === null) return { ...DEFAULT_SORT };
+  const o = v as Record<string, unknown>;
+  if (typeof o.by !== "string" || !SORT_COLUMNS.has(o.by)) return { ...DEFAULT_SORT };
+  return { by: o.by as PortfolioColumn, desc: o.desc === true };
+}
 
 function cleanView(v: unknown, slot: number): ViewDef {
   const base = defaultView(slot);
@@ -81,6 +107,7 @@ function cleanView(v: unknown, slot: number): ViewDef {
     hiddenAccounts: isIds(o.hiddenAccounts) ? o.hiddenAccounts : [],
     hiddenSecurities: isIds(o.hiddenSecurities) ? o.hiddenSecurities : [],
     showClosed: o.showClosed === true,
+    sort: cleanSort(o.sort),
   };
 }
 

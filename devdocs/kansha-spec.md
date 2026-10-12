@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.50 (draft) |
+| **Document version** | 0.7.55 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-07 |
+| **Last updated** | 2026-10-11 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -284,7 +284,17 @@ had a combined column.
   row.
 - **REG-030** [1.0][R] Inline entry and editing at the bottom of the
   register, keyboard-driven: Tab moves between fields; Enter saves;
-  Esc cancels; `+`/`-` adjusts date; `t` sets today.
+  Esc cancels; `+`/`-` adjusts date; `t` sets today. A short date
+  ("3/5") is written out in full, year from today, on leaving the
+  field (0.7.51); so are schedule start and end dates, an occurrence
+  date, and the filter From/To. Text that is not a date is left as
+  typed. In the Category field, when exactly one category name fits
+  the path level being typed, the rest of it is filled in and
+  selected (0.7.51): "Car:B" shows "Car:BlueForester" when Car has one
+  child starting with B. Typing goes on over it, `:` keeps it and
+  starts the next level, Backspace or Delete removes it. Top level
+  too; accounts and split are not filled in. Register lines, split
+  lines, and the schedule form alike.
 - **REG-035** [1.0][R] **Amount sums** (0.7.50). The Payment and
   Deposit fields and split line amounts take a sum: numbers joined by
   `+`, `-`, `*`, `/` ("2.99+3.39"). `*` and `/` go before `+` and
@@ -480,7 +490,14 @@ common patterns.
   Schedule set apart. Edit opens an entered or register transaction in
   its register, otherwise its schedule. The month fills the window's
   width and height; there is no day panel beside it (0.6.2).
-- **CAL-040** [1.0][R] Filter the calendar by account(s).
+- **CAL-040** [1.0][R] Filter the calendar by account(s). The Account
+  list offers All accounts and the open spending accounts: Checking,
+  Savings, Cash, and Credit Card (0.7.55); scheduled items of other
+  accounts show under All accounts. The bar has the account list (no
+  label word) and Projected balance (CAL-050) on the left, the month
+  with its arrows (and Today) centered, and Show entered transactions
+  on the right; a side too wide for its half moves the month off
+  center rather than wrapping.
 - **CAL-050** [1.0][R] Optional projected daily balance for a selected
   account, based on current balance plus scheduled items.
 - **CAL-060** [Later][R] Week and agenda (list) views.
@@ -746,33 +763,42 @@ its edge (cash in and out and register transfers, or with linked cash
 every trade's cash); shares moved without cash count at market
 value. The rest of an account (its cash, or with linked cash its other
 income and fees) is its own row, so the rows add up to the account.
-- **POS-040** [1.0][S] The Investments screen replaces per-account
-  tabs. It lists the chosen investment accounts as collapsible rows;
-  under each, its current equities, then its cash; under each equity,
-  its open lots. Columns: Name (always), Ticker Symbol, Quote/Price,
-  Shares, Cost Basis, Market Value, Gain/Loss, Day Gain/Loss, Price
-  Day Change (%). An account row, collapsed or expanded, shows rolled-up
-  Cost Basis, Market Value (cash included), Gain/Loss, Day Gain/Loss,
-  and Day % (0.7.13); a collapsed equity shows every column it has
-  data for; an expanded equity shows its lots instead; Totals close the
-  list. An as-of date (default
-  today) sets the valuation; a date with no price uses the latest
-  earlier price, and the day columns are blank unless a price is dated
-  exactly that day and an earlier one exists. Five named views
-  (Default, Custom 2 to Custom 5, renamable) keep the columns and
-  their order, the accounts and their order, and the equities shown;
-  Reset View restores a view. A gear at the end of the screen's bar
-  opens a menu: Customize (the view dialog; its tabs are Columns,
-  Accounts, and Securities) and Show closed lots, which each view
-  keeps for itself. With
-  Show closed lots, each sale from a lot shows under its equity after
-  the open lots, even when only part of the lot was sold (the rest
-  stays an open lot): sale and acquisition dates, shares, cost basis,
-  proceeds, and realized gain; equities sold out show with no shares.
-  They change no total. An investment account opens as a
-  register like a checking account's; typing in its empty line opens
-  the entry dialog. Income, Performance, and realized gains move to
-  the reports (Phase 7).
+- **POS-040** [1.0][S] The Investments screen replaces per-account tabs.
+  It lists the chosen investment accounts as collapsible rows; under
+  each, its current equities, then its cash; under each equity, its open
+  lots. Columns: Name (always), Ticker Symbol, Quote/Price, Shares, Cost
+  Basis, Market Value, Gain/Loss, Gain/Loss % (0.7.54), Day Gain/Loss,
+  Price Day Change (%). Gain/Loss % is gain ÷ cost basis, two places,
+  half-even; on an account row and Totals it counts only priced equities
+  (cash and equities with no price are left out); on a sale it is
+  realized gain ÷ basis; it is blank with no price or a basis of zero or
+  less. An account row, collapsed or expanded, shows rolled-up Cost
+  Basis, Market Value (cash included), Gain/Loss, Gain/Loss %, Day
+  Gain/Loss, and Day % (0.7.13); a collapsed equity shows every column
+  it has data for; an expanded equity shows its lots instead; Totals
+  close the list. An as-of date (default today) sets the valuation; a
+  date with no price uses the latest earlier price, and the day columns
+  are blank unless a price is dated exactly that day and an earlier one
+  exists. Five named views (Default, Custom 2 to Custom 5, renamable)
+  keep the columns and their order, the accounts and their order, the
+  equities shown, and the sort; Reset View restores a view. A column
+  heading sorts by that column, ascending, then descending on a second
+  click (▲/▼; ⇅ on the others) (0.7.54): equities within each account,
+  lots and sales within each equity; accounts keep the view's order.
+  Name ascending is the default (equities by name, lots by acquisition
+  date, sales by sale date); blanks go last either way and ties keep the
+  default order; Ticker sorts lots and sales in the default order, and a
+  sale sorts by proceeds under Market Value. A gear at the end of the
+  screen's bar opens a menu: Customize (the view dialog; its tabs are
+  Columns, Accounts, and Securities) and Show closed lots, which each
+  view keeps for itself. With Show closed lots, each sale from a lot
+  shows under its equity after the open lots, even when only part of the
+  lot was sold (the rest stays an open lot): sale and acquisition dates,
+  shares, cost basis, proceeds, and realized gain; equities sold out
+  show with no shares. They change no total. An investment account opens
+  as a register like a checking account's; typing in its empty line
+  opens the entry dialog. Income, Performance, and realized gains move
+  to the reports (Phase 7).
 - **POS-050** [1.0][R] Share balance per security must equal the sum
   of open lot quantities at all times (integrity invariant; see
   INT-030).
@@ -1631,7 +1657,10 @@ platform has one.
     a book that will be filled by import (MIG-020).
   - **Standard categories**: the built-in categories plus a
     predefined household category list, with tax-related flags and
-    tax lines set (P-06).
+    tax lines set (P-06). The list is the data file
+    `crates/kansha-core/data/standard-categories.toml` (0.7.52): one
+    line per category with its path, kind, tax-related flag, and tax
+    line by form and line; built-in categories are not repeated.
   - **Copy of this book** (only when a book is open): a refresh of
     the open book. Everything is copied except transactions:
     accounts, categories with their tax lines and flags, payees and
@@ -1653,6 +1682,15 @@ platform has one.
   new book's audit log starts empty. The first-run form and "Create
   a new book…" on the passphrase and missing-key screens offer Empty
   and Standard categories only (no book is open to copy).
+
+  Built (0.7.53). Empty is chosen unless another start is picked;
+  closed accounts are copied unless unticked. A copy also leaves out
+  reconciliations, imports, schedule occurrences (each schedule keeps
+  its next due date), and the old book's backup records. A closed
+  account an open account links to (an investment account's cash, an
+  asset's loan) is kept. A carried balance is one Opening Balance
+  entry per account with money, dated the carry date; an investment
+  account's carried cash is a Cash In or Cash Out, not reconciled.
 
 #### 14.2 Settings
 
@@ -2651,7 +2689,7 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | P-03 | ~~Source for seeding investment lots~~ Settled 0.6: full QIF history, trued up to the broker's cost-basis CSV (MIG-110, MIG-115) | Check each brokerage's CSV layout when MIG-115 is built |
 | P-04 | ~~Whether Quicken scheduled transactions can be exported~~ Settled 0.7.2: re-entered by hand (MIG-150 closed) | — |
 | P-05 | ~~Whether QIF exports from Quicken 2013 include categories, tags, securities, and prices in usable form~~ Settled 0.6: the whole-file export does; per-account ones do not (§11.1) | — |
-| P-06 | The Standard categories list for a new book (UI-085): names, hierarchy, tax-related flags, tax lines | Stan and Claude draft it together |
+| P-06 | ~~The Standard categories list for a new book (UI-085): names, hierarchy, tax-related flags, tax lines~~ Settled 0.7.52: `crates/kansha-core/data/standard-categories.toml`, 87 categories drafted from Stan's book without personal names, with Quicken's default US list merged in | — |
 
 ---
 
@@ -2722,6 +2760,11 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.55 | 2026-10-11 | CAL-040: the Calendar's Account list offers only open Checking, Savings, Cash, and Credit Card accounts (money market, investment, loan, and other accounts left out), so a chosen account always has a projected balance (CAL-050); the bar puts the account list (no label word) and Projected balance left, the month centered (off center only when a side needs the room), Show entered transactions right. No schema change. No API change. |
+| 0.7.54 | 2026-10-11 | POS-040: Gain/Loss % column (gain ÷ cost basis; totals count priced equities only; sales use realized gain), not in a new view's columns; a heading sorts equities, lots, and sales by its column, ascending then descending, kept per view. No schema change. **API change:** `inv_portfolio` takes `sort` (`PortfolioSort`, `PortfolioColumn`); `PortfolioLot`, `PortfolioSale`, `PortfolioPosition`, and `PortfolioTotals` gain `gain_percent`. |
+| 0.7.53 | 2026-10-11 | UI-085 built: File > New… starts Empty, with Standard categories, or as a copy of the open book (balances Zero or Carry on a date, closed accounts copied or dropped); the start screen offers Empty and Standard. Details of the copy added to UI-085. No schema change. **API change:** `book_new` and `book_setup` gain `contents` (`NewBookContents`). |
+| 0.7.52 | 2026-10-11 | P-06 settled: the Standard categories list (UI-085) is the data file `crates/kansha-core/data/standard-categories.toml`, 87 categories with kinds, tax-related flags, and tax lines; built-in categories not repeated. Tax refunds are an income category (Tax Refund:Federal, Tax Refund:State). Applying it is still to be built with UI-085. No API or schema change. |
+| 0.7.51 | 2026-10-10 | REG-030: a short date is written out in full (year from today) on leaving the register Date, schedule start/end, occurrence date, and filter From/To fields. The Category field fills in the one category name that fits the path level being typed, Quicken style. No API or schema change. |
 | 0.7.50 | 2026-10-10 | REG-035 (new): amount sums with `+ - * /` in register Payment, Deposit, and split amounts; `=`, leaving the field, or Enter works them out in Rust, rounded half-even; negative Payment/Deposit is an error. No schema change. **API change:** new command `amount_eval`. |
 | 0.7.49 | 2026-10-07 | RPT-190: Cash flow is an option on Income/Expense by Category and by Payee: a TRANSFERS section lists money moved to or from accounts not chosen; transfers between chosen accounts are left out. D-90 decided. No schema change (saved reports without the option read as off). **API change:** `ReportSettings` gains `cash_flow`. |
 | 0.7.48 | 2026-10-07 | RPT-120 (Account balances/status) moves to [Later]: Net Worth (RPT-110) with Interval None and chosen accounts covers it (D-90). RPT-200 (Transaction report) moves to [Later]: Itemized Categories and Payees (RPT-205) and the search box (UI-070) cover it. No API or schema change. |

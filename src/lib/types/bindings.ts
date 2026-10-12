@@ -24,10 +24,12 @@ export const commands = {
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
 	/**
 	 *  First-run setup (SECU-080), or a new book beside a locked one: a new
-	 *  book named `name` (in `folder`, or the current book's folder), or the unencrypted prototype database
-	 *  converted under its own name; then the backup folder is stored in it.
+	 *  book named `name` (in `folder`, or the current book's folder) holding
+	 *  `contents` (Empty or Standard, UI-085), or the unencrypted prototype
+	 *  database converted under its own name; then the backup folder is
+	 *  stored in it.
 	 */
-	bookSetup: (passphrase: string, backupFolder: string | null, name: string, folder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder, name, folder })),
+	bookSetup: (passphrase: string, backupFolder: string | null, name: string, folder: string | null, contents: NewBookContents) => typedError<null, IpcError>(__TAURI_INVOKE("book_setup", { passphrase, backupFolder, name, folder, contents })),
 	/**
 	 *  Unlock the book with the backup passphrase (SECU-020). A book from an
 	 *  older Kansha is backed up, then migrated (BAK-020).
@@ -86,11 +88,13 @@ export const commands = {
 	/**  The recent books, most recent first (SET-070). */
 	bookRecent: () => __TAURI_INVOKE<RecentBook[]>("book_recent"),
 	/**
-	 *  File > New: create the book `name` in `folder` with its passphrase
-	 *  and backup folder, then close the current book (backed up) and open
-	 *  the new one. Nothing is closed if the new book cannot be made.
+	 *  File > New: create the book `name` in `folder` with its passphrase,
+	 *  backup folder, and `contents` (UI-085: empty, Standard categories, or
+	 *  a copy of the open book), then close the current book (backed up)
+	 *  and open the new one. Nothing is closed if the new book cannot be
+	 *  made.
 	 */
-	bookNew: (folder: string, name: string, passphrase: string, backupFolder: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("book_new", { folder, name, passphrase, backupFolder })),
+	bookNew: (folder: string, name: string, passphrase: string, backupFolder: string | null, contents: NewBookContents) => typedError<null, IpcError>(__TAURI_INVOKE("book_new", { folder, name, passphrase, backupFolder, contents })),
 	/**
 	 *  File > Open and the recent list: close the current book (backed up)
 	 *  and point at the book whose database is `path`. The start screen then
@@ -453,10 +457,14 @@ export const commands = {
 	 *  The investments overview on `as_of` (today when left out): `accounts`
 	 *  in the order given, their positions and lots, day changes, and totals;
 	 *  `securities` limits it to those (all when left out); `closed` adds
-	 *  each lot's sales and the securities sold out (POS-010, POS-040,
+	 *  each lot's sales and the securities sold out; `sort` orders
+	 *  equities, lots, and sales by a column (POS-010, POS-040,
 	 *  LOT-150).
 	 */
-	invPortfolio: (accounts: AccountId[], securities: SecurityId[] | null, asOf: string | null, closed: boolean) => typedError<Portfolio, IpcError>(__TAURI_INVOKE("inv_portfolio", { accounts, securities, asOf, closed })),
+	invPortfolio: (accounts: AccountId[], securities: SecurityId[] | null, asOf: string | null, closed: boolean, sort: {
+	by: PortfolioColumn,
+	desc: boolean,
+} | null) => typedError<Portfolio, IpcError>(__TAURI_INVOKE("inv_portfolio", { accounts, securities, asOf, closed, sort })),
 	/**  Check a lot-seeding CSV without writing anything. */
 	lotSeedPreview: (text: string, date: string) => typedError<SeedPreview, IpcError>(__TAURI_INVOKE("lot_seed_preview", { text, date })),
 	/**
@@ -1173,6 +1181,27 @@ export type ConversionTax = {
 	/**  Paid from the converting account's cash. */
 	withheld_federal: string,
 	withheld_state: string,
+};
+
+/**  Each copied account's starting balance. */
+export type CopyBalances = 
+/**  Every account opens at 0. */
+{ kind: "zero" } | 
+/**
+ *  Each account's balance on `as_of` becomes its opening balance on
+ *  that date, reconciled. An investment account carries its cash
+ *  only; holdings are seeded again (MIG-120).
+ */
+{ kind: "carry"; as_of: string };
+
+/**  Choices for a copy of the open book (UI-085). */
+export type CopyOptions = {
+	balances: CopyBalances,
+	/**
+	 *  Closed accounts are copied; when `false` they are dropped, with
+	 *  the schedules that use them.
+	 */
+	closed_accounts: boolean,
 };
 
 /**  What sits on the other side of a register row. */
@@ -1961,6 +1990,17 @@ export type MmfMode =
 /**  Part of the account's cash balance. */
 "cash";
 
+/**  How File > New starts the book (UI-085). */
+export type NewBookContents = 
+/**  The built-in categories only. */
+{ kind: "empty" } | 
+/**  The built-in categories and the Standard list. */
+{ kind: "standard" } | 
+/**  The open book without its transactions. */
+{
+	kind: "copy",
+} & CopyOptions;
+
 /**
  *  A problem a check found and what to do about it, shown as the
  *  message, the items (": a, b, and 3 more."), then the remedy.
@@ -2127,6 +2167,16 @@ export type PortfolioAccount = {
 	totals: PortfolioTotals,
 };
 
+/**  A column of the Investments screen to sort by (POS-040). */
+export type PortfolioColumn = 
+/**
+ *  Equities by name, lots by acquisition, sales by sale date:
+ *  the default order.
+ */
+"name" | "ticker" | "price" | "shares" | "cost_basis" | 
+/**  Sales: proceeds. */
+"market_value" | "gain" | "gain_percent" | "day_gain" | "day_percent";
+
 /**  One open lot on the overview. */
 export type PortfolioLot = {
 	lot: LotId,
@@ -2135,6 +2185,8 @@ export type PortfolioLot = {
 	basis: string,
 	market_value: string | null,
 	gain: string | null,
+	/**  Gain ÷ basis, in percent. */
+	gain_percent: string | null,
 	day_gain: string | null,
 };
 
@@ -2152,6 +2204,8 @@ export type PortfolioPosition = {
 	stale: boolean,
 	market_value: string | null,
 	gain: string | null,
+	/**  Gain ÷ basis, in percent. */
+	gain_percent: string | null,
 	day_gain: string | null,
 	/**  The price's change since the previous price, in percent. */
 	day_percent: string | null,
@@ -2174,7 +2228,14 @@ export type PortfolioSale = {
 	proceeds: string,
 	/**  Realized gain. */
 	gain: string,
+	/**  Realized gain ÷ basis, in percent. */
+	gain_percent: string | null,
 	term: Term,
+};
+
+export type PortfolioSort = {
+	by: PortfolioColumn,
+	desc: boolean,
 };
 
 /**  Rolled-up figures for an account or for everything shown. */
@@ -2184,6 +2245,8 @@ export type PortfolioTotals = {
 	market_value: string,
 	/**  Σ gain of the priced positions. */
 	gain: string,
+	/**  Gain ÷ the basis of the priced positions, in percent. */
+	gain_percent: string | null,
 	/**  `None` when no position has a day change. */
 	day_gain: string | null,
 	/**  Day gain ÷ the value of those positions the day before. */

@@ -61,3 +61,40 @@ export function newCategoryPath(
 }
 
 const plainLabel = (label: string) => label.toLowerCase().replace(/[[\]]/g, "");
+
+/**
+ * Quicken-style completion of the path level being typed: when the text
+ * before the last ":" names an existing category path and exactly one
+ * name below it starts with the rest, the text with that name filled in
+ * ("Car:B" → "Car:BlueForester"), plus the option it now names (null if
+ * that path is not listed). The top level works the same way ("Ca" →
+ * "Car"). Accounts and split take no part. Null when no name or more
+ * than one fits, or the name is already whole.
+ */
+export function completeSegment(
+  options: TargetOption[],
+  text: string,
+): { text: string; value: string | null } | null {
+  const t = text.trimStart();
+  if (t.startsWith("[") || t.startsWith("--")) return null;
+  const cut = text.lastIndexOf(":");
+  const parent = cut < 0 ? [] : text.slice(0, cut).split(":").map((x) => x.trim().toLowerCase());
+  if (parent.some((x) => x === "")) return null;
+  const rest = text.slice(cut + 1).trimStart().toLowerCase();
+  if (rest === "") return null;
+  const names = new Map<string, string>();
+  for (const o of options) {
+    if (!o.value.startsWith("c:")) continue;
+    const segs = o.label.split(":").map((x) => x.trim());
+    if (segs.length <= parent.length) continue;
+    if (!parent.every((p, i) => segs[i].toLowerCase() === p)) continue;
+    const name = segs[parent.length];
+    if (name.toLowerCase().startsWith(rest)) names.set(name.toLowerCase(), name);
+  }
+  if (names.size !== 1) return null;
+  const [name] = names.values();
+  if (name.length === rest.length) return null;
+  const key = [...parent, name.toLowerCase()].join(":");
+  const hit = options.find((o) => o.value.startsWith("c:") && plainLabel(o.label) === key);
+  return { text: text + name.slice(rest.length), value: hit?.value ?? null };
+}

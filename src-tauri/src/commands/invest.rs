@@ -5,7 +5,7 @@ use kansha_core::accounts::AccountId;
 use kansha_core::backup::BackupKind;
 use kansha_core::invest::{
     self, Allocation, Holdings, IncomeReport, InvAction, InvInput, InvRegister, InvTxn, LotView,
-    Performance, Portfolio, RealizedGain, SeedPreview, TrueUpPreview,
+    Performance, Portfolio, PortfolioSort, RealizedGain, SeedPreview, TrueUpPreview,
 };
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
@@ -323,7 +323,8 @@ pub fn inv_performance(state: State<'_, AppState>, account: AccountId) -> CmdRes
 /// The investments overview on `as_of` (today when left out): `accounts`
 /// in the order given, their positions and lots, day changes, and totals;
 /// `securities` limits it to those (all when left out); `closed` adds
-/// each lot's sales and the securities sold out (POS-010, POS-040,
+/// each lot's sales and the securities sold out; `sort` orders
+/// equities, lots, and sales by a column (POS-010, POS-040,
 /// LOT-150).
 #[tauri::command]
 #[specta::specta]
@@ -333,15 +334,20 @@ pub fn inv_portfolio(
     securities: Option<Vec<SecurityId>>,
     as_of: Option<Date>,
     closed: bool,
+    sort: Option<PortfolioSort>,
 ) -> CmdResult<Portfolio> {
     state.read(|db, today| {
-        invest::portfolio(
+        let mut pf = invest::portfolio(
             db.conn(),
             &accounts,
             securities.as_deref(),
             as_of.unwrap_or(today),
             closed,
-        )
+        )?;
+        if let Some(s) = sort {
+            invest::sort_portfolio(&mut pf, s);
+        }
+        Ok(pf)
     })
 }
 

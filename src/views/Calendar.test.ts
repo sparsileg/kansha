@@ -61,6 +61,30 @@ beforeEach(() => {
   posted = [];
 });
 
+describe("Calendar bar", () => {
+  it("lists only open spending accounts: checking, savings, cash, credit cards (CAL-040)", async () => {
+    const acct = (id: number, name: string, account_type: string, status = "open") => ({ id, name, account_type, status });
+    listsState.accounts = [
+      acct(1, "Checking", "checking"),
+      acct(2, "Savings", "savings"),
+      acct(3, "Wallet", "cash"),
+      acct(4, "Visa", "credit_card"),
+      acct(5, "MM", "money_market"),
+      acct(6, "Brokerage", "brokerage"),
+      acct(7, "Mortgage", "loan"),
+      acct(8, "Old Card", "credit_card", "closed"),
+    ] as never;
+    render(Calendar);
+    const select = screen.getByRole("combobox", { name: "Calendar account" });
+    const names = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(names).toEqual(["All accounts", "Checking", "Savings", "Wallet", "Visa"]);
+    const box = screen.getByRole("checkbox", { name: "Projected balance" }) as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    await fireEvent.change(select, { target: { value: "4" } });
+    await waitFor(() => expect(box.disabled).toBe(false));
+  });
+});
+
 describe("Calendar day with more than three items", () => {
   it("shows three chips and +2 more; selecting the day shows all five", async () => {
     render(Calendar);

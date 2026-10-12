@@ -5,8 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use kansha_core::backup::{self, BackupKind, Comparison, Manifest};
-use kansha_core::book::{self, BookFiles, BookState};
+use kansha_core::book::{self, BookFiles, BookState, Contents};
 use kansha_core::integrity::IntegrityReport;
+use kansha_core::newbook::NewBookContents;
 use kansha_core::security::Passphrase;
 use kansha_core::settings::{self, BackupStatus, Settings};
 use kansha_core::{Clock, Origin, Timestamp};
@@ -85,8 +86,10 @@ fn check_folder(folder: Option<&str>) -> CmdResult<Option<String>> {
 }
 
 /// First-run setup (SECU-080), or a new book beside a locked one: a new
-/// book named `name` (in `folder`, or the current book's folder), or the unencrypted prototype database
-/// converted under its own name; then the backup folder is stored in it.
+/// book named `name` (in `folder`, or the current book's folder) holding
+/// `contents` (Empty or Standard, UI-085), or the unencrypted prototype
+/// database converted under its own name; then the backup folder is
+/// stored in it.
 #[tauri::command]
 #[specta::specta]
 pub fn book_setup(
@@ -95,8 +98,16 @@ pub fn book_setup(
     backup_folder: Option<String>,
     name: String,
     folder: Option<String>,
+    contents: NewBookContents,
 ) -> CmdResult<()> {
     let backups = check_folder(backup_folder.as_deref())?;
+    let contents = match contents {
+        NewBookContents::Empty => Contents::Empty,
+        NewBookContents::Standard => Contents::Standard,
+        NewBookContents::Copy(_) => {
+            return Err(IpcError::invalid("no book is open to copy"));
+        }
+    };
     let mut guard = state.book()?;
     if guard.is_some() {
         return Err(kansha_core::Error::Invalid("a book is already open".into()).into());
@@ -119,7 +130,7 @@ pub fn book_setup(
                 ))
                 .into());
             }
-            let open = book::create(&files, &pass, state.clock())?;
+            let open = book::create_with(&files, &pass, state.clock(), contents)?;
             state.set_files(files);
             open
         }
@@ -498,9 +509,11 @@ pub fn book_recent(state: State<'_, AppState>) -> Vec<RecentBook> {
         .collect()
 }
 
-/// File > New: create the book `name` in `folder` with its passphrase
-/// and backup folder, then close the current book (backed up) and open
-/// the new one. Nothing is closed if the new book cannot be made.
+/// File > New: create the book `name` in `folder` with its passphrase,
+/// backup folder, and `contents` (UI-085: empty, Standard categories, or
+/// a copy of the open book), then close the current book (backed up)
+/// and open the new one. Nothing is closed if the new book cannot be
+/// made.
 #[tauri::command]
 #[specta::specta]
 pub async fn book_new(
@@ -509,6 +522,7 @@ pub async fn book_new(
     name: String,
     passphrase: String,
     backup_folder: Option<String>,
+    contents: NewBookContents,
 ) -> CmdResult<()> {
     let backups = check_folder(backup_folder.as_deref())?;
     let place = check_folder(Some(&folder))?
@@ -521,7 +535,23 @@ pub async fn book_new(
             files.db.display()
         )));
     }
-    let mut open = book::create(&files, &Passphrase::new(passphrase), state.clock())?;
+    let pass = Passphrase::new(passphrase);
+    let mut open = match &contents {
+        NewBookContents::Empty => book::create_with(&files, &pass, state.clock(), Contents::Empty)?,
+        NewBookContents::Standard => {
+            book::create_with(&files, &pass, state.clock(), Contents::Standard)?
+        }
+        NewBookContents::Copy(opts) => {
+            let guard = state.book()?;
+            let source = guard.as_ref().ok_or_else(locked)?;
+            book::create_with(
+                &files,
+                &pass,
+                state.clock(),
+                Contents::Copy(&source.db, opts),
+            )?
+        }
+    };
     set_backup_folder(&state, &mut open, backups)?;
     state.close_book();
     state.set_files(files);
