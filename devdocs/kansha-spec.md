@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.81 (draft) |
+| **Document version** | 0.7.85 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
@@ -1711,7 +1711,9 @@ platform has one.
   Undoing a change to a reconciled transaction asks first. Deleting a
   transaction entered from a schedule cannot be undone (it gives the
   occurrence back, REC-160). A Find/Replace (REG-170) is one change:
-  one Undo puts back every transaction it changed.
+  one Undo puts back every transaction it changed. Approving an entry
+  from the review list (CLI-040) is a change too: Undo removes the
+  transaction and puts the entry back as pending.
 - **UI-070** [1.0][R] Search box in the navigation bar: finds
   transactions by payee, category, memo, note, check number, account
   name, or amount, across all accounts or (from a register) in that
@@ -1919,10 +1921,13 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
 
   - Split lines are indented under their entry, each an amount, a
     category, and an optional memo; they must add up to the entry's
-    amount.
-  - Dates in a file are written out (`2026-10-12`). On the command
-    line `today`, `yesterday`, and the book's date format are also
-    accepted.
+    amount. One split line per entry may leave out its amount: it
+    takes the rest (the entry's amount less the other lines), so a
+    receipt is entered as total, tax, items, and a last category.
+  - Dates are written out (`2026-10-12`). `kansha add` and `kansha
+    run` also take `today`, `yesterday`, and the book's date format;
+    they write dates out before the inbox, so the app and files from
+    phones see only `2026-10-12`.
   - Amounts are read as text straight into cents, never through a
     float. A negative amount is a refund.
   - A name with spaces is quoted. `#` starts a comment; blank lines
@@ -1937,14 +1942,32 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
   - `id` is a unique ID (UUID) made when the entry is made. An entry
     without one gets one from Kansha.
 - **CLI-030** [1.0][S] Ways in (D-160):
+  - `kansha add` with no entry asks for one field by field: date
+    (Enter for today), payee, amount, account, category or `split`,
+    then split lines until nothing is left, then memo. Each answer is
+    checked as it is given (names against the names copy, below); a
+    wrong one is asked again with the close matches. After each split
+    line the amount left is shown; a line with only a category takes
+    the rest. Tab completes account and category names from the names
+    copy. Nothing is kept in a history file.
   - `kansha add <entry>` and `kansha run <file>`, started from a
     command line, check the format, write the entries to the book's
     inbox folder (`<book>-inbox/`, beside the book), and exit. They
     open neither the book nor a window, and need no passphrase or
     key. The book is the one named with `--book <path>`, else the
     last one opened.
+  - They check category and account names against the names copy
+    beside the book (`<book>-names.txt`, CLI-080) when it is there:
+    case is ignored; a unique last part resolves (`Groceries` is
+    `Food:Groceries` when no other category ends in `Groceries`);
+    the entry is saved with the names as spelled in the book. A name
+    that matches nothing, or more than one, is an error listing the
+    close matches, and nothing from the command or file is saved.
+    With no copy, names are not checked and the answer says so.
+    Review checks every name against the book either way (CLI-040).
   - File > Import entries… in the app does the same for a file
-    chosen there (a file saved from email, Signal, or a chat app).
+    chosen there (a file saved from email, Signal, or a chat app),
+    checking names against the book itself.
   - The window and its sign-in are unchanged. No background (tray)
     mode.
 - **CLI-040** [1.0][S] Everything entered this way is **unverified**
@@ -1953,8 +1976,16 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
   is opened, and when its window gets focus, Kansha reads the inbox
   and lists the entries for review, with their sender. Each is
   approved (it becomes an ordinary transaction), edited and approved,
-  or rejected; name errors are fixed there. Review can be put off; the
+  or rejected; name errors are fixed there. A plain entry is edited in
+  its review row; a split is edited after approval: Approve and open
+  approves it and opens it in the register. Review can be put off; the
   list stays until it is empty.
+  - Undo (UI-060) undoes an approval: the transaction is removed and
+    the entry is back in the list as pending.
+  - The review list opens by itself when the book opens with entries
+    pending. Entries that arrive while the window is open do not open
+    it; the count in File > Review entries… (n) and a status bar note
+    change instead.
   - A file is accepted whole or not at all; every bad line is
     reported by its line number.
   - An entry whose `id` was seen before is skipped, so sending a file
@@ -1967,15 +1998,18 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
 - **CLI-060** [1.0][R] On by default: no key is stored and nothing
   reaches the ledger without approval. Known exposure: entry files are
   plain text until read, in the inbox and in whatever app carried
-  them (email is not end-to-end encrypted). Encrypted entry files are
-  [Later].
+  them (email is not end-to-end encrypted); the names copy beside the
+  book (CLI-080) is plain text too, holding category and account
+  names only. Encrypted entry files are [Later].
 - **CLI-070** [1.0][R] Each accepted file or command is audited with
   its source (`cli`, `file`), sender, and time received; approval and
   rejection are audited too.
 - **CLI-080** [1.0][S] File > Export names for phones… writes a
   `kansha-names 1` file: the expense categories (with subcategories)
   and the open spending accounts. No payees. One file for every
-  phone.
+  phone. Kansha also keeps a copy beside the book,
+  `<book>-names.txt`, written each time the book closes and at each
+  export, for the command line's name check (CLI-030).
 - **CLI-090** [Later][S] Phone app: a separate project, not specified
   here. It reads `kansha-names 1`, records entries (memo and splits
   included), and shares `kansha-entries 1` files through the phone's
@@ -2941,6 +2975,10 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.85 | 2026-10-12 | CLI-040, UI-060: Undo undoes approving a reviewed entry (transaction removed, entry pending again). CLI-040: the review list opens by itself only when the book opens with entries pending; entries arriving while the window is open change the File > Review entries… (n) count and a status bar note. No schema change. No API change. |
+| 0.7.84 | 2026-10-12 | CLI-020: `kansha run` also takes `today`, `yesterday`, and the book's date format, as `kansha add` does; both write dates out as `2026-10-12` before the inbox. CLI-040: a plain entry is edited in its review row; a split is edited after approval (Approve and open opens it in the register). No schema change. No API change. |
+| 0.7.83 | 2026-10-12 | CLI-020: one split line per entry may leave out its amount and takes the rest (total, tax, items, last category). CLI-030: `kansha add` with no entry asks field by field, checks each answer at once against the names copy, shows the amount left after each split line, completes names with Tab, and keeps no history file. No schema change. No API change. |
+| 0.7.82 | 2026-10-12 | CLI-030: `kansha add` and `kansha run` check category and account names against a plain-text names copy beside the book (`<book>-names.txt`): case ignored, a unique last part resolves, an unknown or ambiguous name is an error listing close matches and saves nothing; with no copy, names are not checked and the answer says so; review still checks against the book. CLI-080: the copy is written each time the book closes and at each Export names for phones…. CLI-060 lists the copy as known plain-text exposure (names only). No schema change. No API change. |
 | 0.7.81 | 2026-10-12 | §14.3 rewritten as Command line and file entry, CLI-010 … CLI-090, now [1.0] (CLI-090 phone app [Later], a stub): spending entries only, splits and refunds included, in the `kansha-entries 1` format; `kansha add` / `kansha run` and File > Import entries… write to an inbox beside the book with no key; entries are reviewed outside the ledger before they count; IDs stop a file being entered twice; File > Export names for phones… writes `kansha-names 1` (expense categories and spending accounts). D-150 withdrawn (no secret file); D-160, D-170, D-180 decided. MIG-200 matching covers approved entries. No schema change. No API change. |
 | 0.7.80 | 2026-10-12 | RPT-205: a new Itemized Categories or Itemized Payees report starts with Transfers off (was on); Customize turns them on. Saved reports keep their choice (one saved without it still includes them). The tax reports keep counting transfers mapped to a tax line (an IRA distribution, CAT-050). No schema or API change. |
 | 0.7.79 | 2026-10-12 | ACCT-030: a new Donor Advised Fund account defaults to Tax-Exempt (was Taxable), so its income and grants stay out of the tax reports; the deduction is the contribution into it. Existing accounts keep their setting (change it in Edit account details…). No schema or API change. |
