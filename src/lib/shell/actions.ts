@@ -45,9 +45,6 @@ export function runAction(id: string): void {
       case "file.rename":
         dialogState.renameBook = true;
         break;
-      case "file.find_replace":
-        dialogState.findReplace = true;
-        break;
       case "file.backup":
         void backUpNow();
         break;
@@ -72,6 +69,9 @@ export function runAction(id: string): void {
         break;
       case "edit.find":
         focusSearch(document);
+        break;
+      case "edit.find_replace":
+        dialogState.findReplace = true;
         break;
       case "edit.settings":
         dialogState.settings = true;

@@ -16,7 +16,7 @@ class DialogState {
   about = $state(false);
   /** File > New… (a named book). */
   newBook = $state(false);
-  /** File > Find/Replace… (REG-170). */
+  /** Edit > Find/Replace… (REG-170). */
   findReplace = $state(false);
   /** File > Rename Book…. */
   renameBook = $state(false);

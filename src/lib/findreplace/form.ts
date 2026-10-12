@@ -1,4 +1,4 @@
-// File > Find/Replace (REG-170): the window's choices, its Find rows as a
+// Edit > Find/Replace (REG-170): the window's choices, its Find rows as a
 // query, row keys for the checkboxes, and what Replace All says. Matching
 // and replacing happen in Rust.
 
@@ -19,7 +19,7 @@ export const FIELDS: { value: FindField; label: string }[] = [
   { value: "amount", label: "Amount" },
   { value: "category", label: "Category" },
   { value: "check_num", label: "Check #" },
-  { value: "cleared", label: "Cleared Status" },
+  { value: "cleared", label: "Cleared status" },
   { value: "date", label: "Date" },
   { value: "memo", label: "Memo" },
   { value: "payee", label: "Payee" },

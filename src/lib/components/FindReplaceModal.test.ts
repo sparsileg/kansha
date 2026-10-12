@@ -83,10 +83,10 @@ async function findNetflix() {
   await screen.findByText("Visa");
 }
 
-describe("File > Find/Replace (REG-170)", () => {
+describe("Edit > Find/Replace (REG-170)", () => {
   it("the File menu item opens it", () => {
     dialogState.findReplace = false;
-    runAction("file.find_replace");
+    runAction("edit.find_replace");
     expect(dialogState.findReplace).toBe(true);
     dialogState.findReplace = false;
   });
@@ -112,8 +112,8 @@ describe("File > Find/Replace (REG-170)", () => {
   it("Add Row adds query rows with one Or/And for all of them", async () => {
     render(FindReplaceModal, { onclose: () => {} });
     expect(screen.queryByLabelText("Join rows")).toBeNull();
-    await fireEvent.click(screen.getByText("Add Row"));
-    await fireEvent.click(screen.getByText("Add Row"));
+    await fireEvent.click(screen.getByText("Add row"));
+    await fireEvent.click(screen.getByText("Add row"));
     expect(screen.getByLabelText("Find value 3")).toBeTruthy();
     expect(screen.getAllByLabelText("Join rows")).toHaveLength(1);
     await fireEvent.change(screen.getByLabelText("Join rows"), { target: { value: "and" } });
@@ -132,7 +132,7 @@ describe("File > Find/Replace (REG-170)", () => {
     await fireEvent.click(boxes[0]);
     expect(screen.getByText(/1 of 2 rows checked/)).toBeTruthy();
     await fireEvent.input(screen.getByLabelText("Replace with"), { target: { value: "Subscription" } });
-    await fireEvent.click(screen.getByText("Replace All"));
+    await fireEvent.click(screen.getByText("Replace all"));
     expect(await screen.findByText("Changed 1 transaction.")).toBeTruthy();
     expect(replaces).toEqual([
       { rows: [{ txn: 2, account: 4, line: null }], spec: { field: "tag", with: "Subscription" }, confirmed: false },
@@ -141,12 +141,12 @@ describe("File > Find/Replace (REG-170)", () => {
 
   it("Clear All unchecks every row and Replace All is off", async () => {
     await findNetflix();
-    await fireEvent.click(screen.getByText("Clear All"));
+    await fireEvent.click(screen.getByText("Clear all"));
     const boxes = screen.getAllByRole("checkbox", { name: /^Select / }) as HTMLInputElement[];
     expect(boxes.some((b) => b.checked)).toBe(false);
-    expect((screen.getByText("Replace All") as HTMLButtonElement).disabled).toBe(true);
-    await fireEvent.click(screen.getByText("Select All"));
-    expect((screen.getByText("Replace All") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("Replace all") as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(screen.getByText("Select all"));
+    expect((screen.getByText("Replace all") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("asks once for the batch, then replaces confirmed", async () => {
@@ -154,7 +154,7 @@ describe("File > Find/Replace (REG-170)", () => {
     const ask = vi.spyOn(confirmState, "ask").mockResolvedValue(true);
     await findNetflix();
     await fireEvent.input(screen.getByLabelText("Replace with"), { target: { value: "Streaming" } });
-    await fireEvent.click(screen.getByText("Replace All"));
+    await fireEvent.click(screen.getByText("Replace all"));
     expect(await screen.findByText("Changed 2 transactions.")).toBeTruthy();
     expect(ask).toHaveBeenCalledTimes(1);
     expect(replaces.map((r) => r.confirmed)).toEqual([false, true]);
@@ -165,7 +165,7 @@ describe("File > Find/Replace (REG-170)", () => {
     await findNetflix();
     await fireEvent.change(screen.getByLabelText("Replace field"), { target: { value: "date" } });
     await fireEvent.input(screen.getByLabelText("Replace with"), { target: { value: "6/15/2026" } });
-    await fireEvent.click(screen.getByText("Replace All"));
+    await fireEvent.click(screen.getByText("Replace all"));
     await screen.findByText("Changed 2 transactions.");
     expect(replaces[0].spec).toEqual({ field: "date", with: "2026-06-15" });
   });

@@ -39,7 +39,7 @@ date = "2026-02-01"
 account = "Checking"
 amount = "-1200.00"
 category = "Rent"
-expect_error = "voided transaction cannot be edited"
+expect_error = "void transaction cannot be edited"
 
 [expect.balances]
 "Checking" = "1000.00"

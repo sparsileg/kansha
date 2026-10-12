@@ -13,7 +13,7 @@ const register = {
       other_account: null, other_category: null, incoming: false, future: false,
     },
     {
-      txn_id: 11, date: "2026-02-01", settle_date: null, action: "transfer_shares", action_label: "Transfer In",
+      txn_id: 11, date: "2026-02-01", settle_date: null, action: "transfer_shares", action_label: "Transfer in",
       security: 1, security_label: "VTI", quantity: "5", price: null, commission: "0.00",
       split: null, amount: "0.00", cash_balance: "7995.00", memo: "", cleared: null,
       other_account: 3, other_category: null, incoming: true, future: false,
@@ -121,7 +121,7 @@ describe("Investment account register (INV-030)", () => {
     render(InvestmentAccount, { account });
     await waitFor(() => expect(screen.getByText("-2,005.00")).toBeTruthy());
     expect(screen.getAllByText("7,995.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("Transfer In")).toBeTruthy();
+    expect(screen.getByText("Transfer in")).toBeTruthy();
     expect(screen.getByText(/from IRA/)).toBeTruthy();
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.queryByRole("button", { name: "New transaction…" })).toBeNull();

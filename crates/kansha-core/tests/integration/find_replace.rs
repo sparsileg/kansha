@@ -1,4 +1,4 @@
-//! File > Find/Replace (REG-170): find register rows by field and
+//! Edit > Find/Replace (REG-170): find register rows by field and
 //! comparison, joined by And or Or, optionally within splits; Replace
 //! All on the checked rows, audited, balanced, one undo for the batch.
 
@@ -1119,4 +1119,94 @@ fn undo_leaves_out_transactions_the_replace_did_not_change() {
         })
         .unwrap();
     assert!(unchanged.is_none());
+}
+
+/// Replace and keep its undo, with what it created.
+fn replace_undoable(
+    book: &mut Book,
+    rows: &[FoundKey],
+    field: FindField,
+    with: &str,
+) -> undo::Undo {
+    let mut ids: Vec<TxnId> = rows.iter().map(|k| k.txn).collect();
+    ids.sort();
+    ids.dedup();
+    let spec = ReplaceSpec {
+        field,
+        with: with.into(),
+    };
+    book.write(|tx| {
+        let b = undo::before_many(tx.conn(), &ids)?;
+        let (_, created) = ledger::replace_tracked(tx, rows, &spec, true)?;
+        Ok(undo::after_many(tx.conn(), b, "Replace All")?.map(|u| u.with_created(created)))
+    })
+    .unwrap()
+    .expect("undoable")
+}
+
+#[test]
+fn undo_deletes_the_tag_payee_and_categories_replace_created() {
+    let mut fx = fx();
+    let r = find_one(
+        &fx.book,
+        cond(FindField::Payee, FindComparison::Contains, "netflix"),
+    );
+    let rows = keys(&r);
+    let tag = replace_undoable(&mut fx.book, &rows, FindField::Tag, "Subscription");
+    let sub = fx.book.find_tag("Subscription").unwrap();
+    assert_eq!(tag.created(), &[undo::Created::Tag(sub)]);
+    fx.book.write(|tx| undo::apply(tx, &tag, false)).unwrap();
+    assert!(fx.book.find_tag("Subscription").is_none());
+    let h = audit::history(fx.book.conn(), AuditEntity::Tag, sub.0).unwrap();
+    assert_eq!(h.last().unwrap().action, AuditAction::Delete);
+
+    // Two levels: the child goes before its parent.
+    let cat = replace_undoable(&mut fx.book, &rows, FindField::Category, "Fun:Streaming");
+    assert_eq!(cat.created().len(), 2);
+    fx.book.write(|tx| undo::apply(tx, &cat, false)).unwrap();
+    assert!(fx.book.find_category("Fun").unwrap().is_none());
+    assert!(
+        fx.book
+            .txn(fx.t1)
+            .unwrap()
+            .postings
+            .iter()
+            .any(|p| p.target == Target::Category(fx.fun))
+    );
+
+    let payee = replace_undoable(&mut fx.book, &rows, FindField::Payee, "Netflix");
+    assert_eq!(payee.created().len(), 1);
+    fx.book.write(|tx| undo::apply(tx, &payee, false)).unwrap();
+    assert!(
+        payees::find_by_name(fx.book.conn(), "Netflix")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        payees::find_by_name(fx.book.conn(), "Netflix.com")
+            .unwrap()
+            .is_some()
+    );
+    clean(&fx.book);
+}
+
+#[test]
+fn undo_keeps_a_tag_or_category_that_already_existed() {
+    let mut fx = fx();
+    let r = find_one(
+        &fx.book,
+        cond(FindField::Payee, FindComparison::Contains, "netflix"),
+    );
+    let rows = keys(&r);
+    let u = replace_undoable(&mut fx.book, &rows, FindField::Tag, "trip");
+    assert!(u.created().is_empty());
+    fx.book.write(|tx| undo::apply(tx, &u, false)).unwrap();
+    assert!(fx.book.find_tag("Trip").is_some());
+    // A new child under an existing parent: only the child is created.
+    let u = replace_undoable(&mut fx.book, &rows, FindField::Category, "Food:Snacks");
+    assert_eq!(u.created().len(), 1);
+    fx.book.write(|tx| undo::apply(tx, &u, false)).unwrap();
+    assert!(fx.book.find_category("Food:Snacks").unwrap().is_none());
+    assert_eq!(fx.book.find_category("Food").unwrap(), Some(fx.food));
+    clean(&fx.book);
 }

@@ -366,7 +366,8 @@ pub struct ReportSettings {
     /// Net worth: list accounts whose balances are all zero.
     #[serde(default)]
     pub show_zero: bool,
-    /// Itemized reports: include transfers between accounts.
+    /// Itemized reports: include transfers between accounts (off for a
+    /// new one, 0.7.80). A report saved without it includes them.
     #[serde(default = "yes")]
     pub transfers: bool,
     /// Itemized reports: tag sets as the outer groups (TAG-030).
@@ -473,7 +474,9 @@ impl ReportSettings {
             totals_only: false,
             totals_on_heading: None,
             show_zero: false,
-            transfers: true,
+            // Itemized reports start without transfers between accounts;
+            // the tax reports need them (an IRA distribution, CAT-050).
+            transfers: !matches!(kind, K::ItemizedCategories | K::ItemizedPayees),
             by_tag: false,
             cash_flow: false,
             accounts: None,

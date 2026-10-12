@@ -127,7 +127,7 @@ describe("AccountBar", () => {
   it("the panel ends with Net Worth from Rust", async () => {
     listsState.netWorth = "-1234.50";
     render(AccountPanel);
-    const foot = screen.getByText("Net Worth").parentElement!;
+    const foot = screen.getByText("Net worth").parentElement!;
     expect(foot.textContent).toContain("-1,234.50");
     listsState.netWorth = null;
   });
@@ -136,7 +136,7 @@ describe("AccountBar", () => {
     bookSettings.value = { ...bookSettings.value, account_bar_cents: false };
     listsState.netWorth = "-1235.00";
     render(AccountPanel);
-    const foot = screen.getByText("Net Worth").parentElement!;
+    const foot = screen.getByText("Net worth").parentElement!;
     expect(foot.textContent).toContain("-1,235");
     expect(foot.textContent).not.toContain(".00");
     listsState.netWorth = null;

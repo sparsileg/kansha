@@ -27,6 +27,7 @@ use crate::money::Money;
 use crate::persistence::{Tx, accounts, categories, ledger as repo, payees, tags};
 use crate::settings::{self, DateFormat};
 use crate::text_enum::text_enum;
+use crate::undo::Created;
 
 text_enum! {
     /// What a Find row looks at, and what Replace changes (REG-170).
@@ -563,8 +564,50 @@ pub fn replace(
     spec: &ReplaceSpec,
     confirmed: bool,
 ) -> Result<ReplaceResult> {
+    replace_tracked(tx, rows, spec, confirmed).map(|(r, _)| r)
+}
+
+/// [`replace`], also returning the tags, payees, and categories it
+/// created, in the order made, for undo.
+pub fn replace_tracked(
+    tx: &Tx<'_>,
+    rows: &[FoundKey],
+    spec: &ReplaceSpec,
+    confirmed: bool,
+) -> Result<(ReplaceResult, Vec<Created>)> {
+    let before = list_ids(tx.conn())?;
+    let result = replace_rows(tx, rows, spec, confirmed)?;
+    let created = list_ids(tx.conn())?
+        .into_iter()
+        .filter(|c| !before.contains(c))
+        .collect();
+    Ok((result, created))
+}
+
+/// Every tag, payee, and category, by kind then ID (creation order).
+fn list_ids(conn: &Connection) -> Result<Vec<Created>> {
+    let mut out: Vec<Created> = categories::list(conn)?
+        .into_iter()
+        .map(|c| Created::Category(c.id))
+        .collect();
+    out.extend(
+        payees::list(conn)?
+            .into_iter()
+            .map(|p| Created::Payee(p.id)),
+    );
+    out.extend(tags::list(conn)?.into_iter().map(|t| Created::Tag(t.id)));
+    out.sort();
+    Ok(out)
+}
+
+fn replace_rows(
+    tx: &Tx<'_>,
+    rows: &[FoundKey],
+    spec: &ReplaceSpec,
+    confirmed: bool,
+) -> Result<ReplaceResult> {
     if rows.is_empty() {
-        return Err(Error::Invalid("No rows are checked.".into()));
+        return Err(Error::Invalid("no rows are checked".into()));
     }
     if !confirmed && let Some(ask) = replace_confirmation(tx.conn(), rows, spec)? {
         return Err(Error::ConfirmationRequired(ask));
@@ -646,7 +689,7 @@ fn read_with(tx: &Tx<'_>, spec: &ReplaceSpec) -> Result<With> {
     let text = spec.with.trim();
     let required = |what: &str| {
         if text.is_empty() {
-            Err(Error::Invalid(format!("Type the {what} to replace with.")))
+            Err(Error::Invalid(format!("type the {what} to replace with")))
         } else {
             Ok(())
         }
@@ -714,7 +757,7 @@ fn apply(
         .position(|p| p.target == Target::Account(key.account) && p.security.is_none())
         .ok_or_else(|| {
             Error::Invalid(format!(
-                "transaction {} has no posting to account {}",
+                "transaction {} has no line in account {}",
                 key.txn.0, key.account.0
             ))
         })?;

@@ -52,7 +52,7 @@ type = "set_cleared"
 ref = "power"
 account = "Savings"
 cleared = "cleared"
-expect_error = "has no posting to account"
+expect_error = "has no line in account"
 
 [expect.cleared_balances]
 "Checking" = "-80.00"

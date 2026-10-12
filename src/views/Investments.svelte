@@ -75,7 +75,7 @@
       {#each st.views as v, i (i)}<option value={String(i)}>{v.name}</option>{/each}
     </select>
     <DatePicker value={st.asOf || listsState.today} today={listsState.today} label="As of" onchange={(iso) => (st.asOf = iso)} />
-    <button type="button" disabled={downloading} onclick={() => void download()}>Download Prices</button>
+    <button type="button" disabled={downloading} onclick={() => void download()}>Download prices</button>
     <span class="grow"></span>
     <GearButton label="Investments options" onclick={openMenu} />
   </div>

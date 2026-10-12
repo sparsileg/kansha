@@ -3,10 +3,12 @@
   import { call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import { formatMoney, splitPaymentDeposit } from "../format/money";
+  import { amountLabels } from "../register/columns";
   import { moveSelection, rowKeyAction } from "../register/keys";
   import { bookSettings } from "../state/booksettings.svelte";
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
+  import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import { viewState } from "../state/view.svelte";
   import type { RegisterRow, RegisterSort } from "../types/bindings";
@@ -121,18 +123,19 @@
     return rows[i - 1].future !== rows[i].future;
   }
 
-  const cols: [string, RegisterSort | null][] = [
+  const labels = $derived(amountLabels(listsState.accountById.get(account)));
+  const cols: [string, RegisterSort | null][] = $derived([
     ["Date", "date"],
     ["Num", "check_num"],
     ["Payee", "payee"],
-    ["Payment", "amount"],
-    ["Deposit", "amount"],
+    [labels.out, "amount"],
+    [labels.in, "amount"],
     ["Category", "category"],
     ["Tag", null],
     ["Memo", "memo"],
     ["Clr", "cleared"],
     ["Balance", "balance"],
-  ];
+  ]);
 
   function arrow(col: RegisterSort | null): string {
     if (col === null || registerState.sort !== col) return "";

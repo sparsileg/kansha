@@ -102,6 +102,7 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - **Focus (NFR-080):** one app-wide look for every field, dropdown, and keyboard-focused button: the theme's focus background and text color plus a ring drawn inside the edge. A focused field's selected text keeps the focus text color. Do not add per-component focus styles.
 - **Fixed window:** the window itself never scrolls. The shell (`.app`) is pinned to it (`position: fixed; inset: 0`); a view that can outgrow its space scrolls inside its own area (`min-height: 0` plus `overflow: auto` on the flex child). Do not size anything with `100vh`.
 - **Select on focus:** every text field selects its contents on focus, installed once on `document` by `App.svelte` (`src/lib/ui/selectOnFocus.ts`). Do not add it per field.
+- **Wording:** every label is in sentence case ("Clear all", "Security details", "Transaction type"): buttons, dialog titles, headings, field labels, options, context menus, tabs, tooltips, and placeholders. Title Case stays only where Quicken has it: the menu bar, report names, and report and portfolio column headings. Acronyms and names keep their capitals ("Export CSV", "Net Worth report"). `src/lib/labelCase.test.ts` checks every label; add a deliberate exception to its lists with the reason. UI messages are sentences with a full stop ("Enter a valid date."); engine messages are lower case without one, say "line" (not "posting") and "cannot" (not "can't").
 
 ## 7. Testing
 

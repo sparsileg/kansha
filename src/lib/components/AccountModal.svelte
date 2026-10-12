@@ -102,7 +102,7 @@
     if (openingDate.trim()) {
       od = parseDate(openingDate, today);
       if (od === null) {
-        error = "Opening date is not a valid date.";
+        error = "Enter a valid opening date.";
         return;
       }
     }

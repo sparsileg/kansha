@@ -1,7 +1,7 @@
 //! New book contents (UI-085): Empty, Standard categories, and Copy of
 //! this book with balances zeroed or carried.
 
-use kansha_core::accounts::{AccountId, AccountType};
+use kansha_core::accounts::{AccountId, AccountStatus, AccountType};
 use kansha_core::book::{self, BookFiles, Contents};
 use kansha_core::categories::CategoryKind;
 use kansha_core::integrity;
@@ -259,14 +259,16 @@ fn copy_carries_each_balance_on_the_date_reconciled() {
     assert_eq!(ledger::balance(conn, src.card, None).unwrap(), m("-250.55"));
     // Emptied before closing: nothing to carry.
     assert_eq!(ledger::balance(conn, src.old, None).unwrap(), Money::ZERO);
-    // Only the brokerage's cash carries: 5000.00 − 2000.00; no holdings.
+    // The brokerage's cash carries, 5000.00 − 2000.00, and its lot.
     assert_eq!(
         kansha_core::persistence::invest::cash_balance(conn, src.brk, None).unwrap(),
         m("3000.00")
     );
-    assert_eq!(count(db, "lot"), 0);
-    // One opening entry per account with money: checking, card, brokerage.
-    assert_eq!(count(db, "txn"), 3);
+    assert_eq!(ledger::balance(conn, src.brk, None).unwrap(), m("5000.00"));
+    assert_eq!(count(db, "lot"), 1);
+    // One opening entry per account with money (checking, card,
+    // brokerage), and one per lot.
+    assert_eq!(count(db, "txn"), 4);
     let txns = ledger::register(conn, src.chk).unwrap();
     assert_eq!(txns.len(), 1);
     assert_eq!(txns[0].date, date("2026-05-31"));
@@ -278,6 +280,28 @@ fn copy_carries_each_balance_on_the_date_reconciled() {
         );
     }
     assert!(integrity::check(conn).unwrap().is_clean());
+}
+
+#[test]
+fn a_closed_account_with_a_balance_on_the_carry_date_carries_it() {
+    // Old Savings held 300.00 until 2026-03-10 and was closed later.
+    for closed_accounts in [true, false] {
+        let mut src = source();
+        copy(
+            &mut src,
+            &CopyOptions {
+                balances: CopyBalances::Carry {
+                    as_of: date("2026-02-28"),
+                },
+                closed_accounts,
+            },
+        );
+        let conn = src.book.conn();
+        let old = accounts::get(conn, src.old).unwrap();
+        assert_eq!(old.status, AccountStatus::Closed);
+        assert_eq!(ledger::balance(conn, src.old, None).unwrap(), m("300.00"));
+        assert!(integrity::check(conn).unwrap().is_clean());
+    }
 }
 
 #[test]
@@ -355,7 +379,7 @@ fn a_copied_book_is_a_new_encrypted_book_and_the_source_is_untouched() {
         Contents::Copy(src.book.db(), &opts),
     )
     .unwrap();
-    assert_eq!(count(&open.db, "txn"), 3);
+    assert_eq!(count(&open.db, "txn"), 4);
     assert_eq!(accounts::list(open.db.conn()).unwrap().len(), 3);
     drop(open);
     // The copy opens with its own passphrase.

@@ -456,3 +456,39 @@ fn credit_card_reconciles_in_statement_sign() {
     assert_eq!(history[0].items_total, m("200.00"));
     assert!(integrity::check(f.book.conn()).unwrap().is_clean());
 }
+
+/// A credit card's interest is a finance charge, as in Quicken (RCN-020);
+/// a bank account's is interest.
+#[test]
+fn a_credit_cards_interest_is_entered_as_a_finance_charge() {
+    let mut f = fx();
+    let visa = f.book.account("Visa", AccountType::CreditCard).unwrap();
+    let (chk, food, salary) = (f.chk, f.food, f.salary);
+    let memo = |f: &Fx| -> String {
+        f.book
+            .conn()
+            .query_row("SELECT memo FROM txn ORDER BY id DESC LIMIT 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap()
+    };
+    let start = |f: &mut Fx, account, category| {
+        let input = StartInput {
+            account,
+            statement_date: date("2026-01-31"),
+            statement_balance: m("0.00"),
+            interest: Some(StatementItem {
+                date: date("2026-01-31"),
+                amount: m("4.50"),
+                category,
+            }),
+            service_charge: None,
+        };
+        f.book.write(|tx| reconcile::start(tx, &input)).unwrap();
+    };
+    start(&mut f, visa, food);
+    assert_eq!(memo(&f), "Finance charge");
+    assert_eq!(f.book.balance(visa).unwrap(), m("-4.50"));
+    start(&mut f, chk, salary);
+    assert_eq!(memo(&f), "Interest");
+}

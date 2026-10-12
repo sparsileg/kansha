@@ -156,12 +156,12 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
     if let Some(n) = f.average_of {
         if !(1..=AVERAGE_MAX).contains(&n) {
             return Err(Error::Invalid(format!(
-                "the number of payments to average must be between 1 and {AVERAGE_MAX}"
+                "the number of amounts to average must be between 1 and {AVERAGE_MAX}"
             )));
         }
         if f.amount_type != AmountType::Estimated {
             return Err(Error::Invalid(
-                "only an estimated amount can be the average of past payments".into(),
+                "only an estimated amount can be the average of past amounts".into(),
             ));
         }
         if f.mode != EntryMode::Remind {
@@ -173,7 +173,7 @@ fn validate_fields(conn: &Connection, f: &ScheduleFields, creating: bool) -> Res
         }
         if f.lines.len() != 1 {
             return Err(Error::Invalid(
-                "a split's amount can't be the average of past payments".into(),
+                "a split's amount cannot be the average of past amounts".into(),
             ));
         }
     }
@@ -342,14 +342,14 @@ pub fn update(tx: &Tx<'_>, id: ScheduleId, fields: &ScheduleFields) -> Result<Sc
 /// The average of `amounts`, rounded half to even; 0.00 for none.
 fn average(amounts: &[Money]) -> Result<Money> {
     let Ok(count) = i64::try_from(amounts.len()) else {
-        return Err(Error::Overflow("payments to average"));
+        return Err(Error::Overflow("amounts to average"));
     };
     if count == 0 {
         return Ok(Money::ZERO);
     }
     let total = amounts.iter().try_fold(Money::ZERO, |acc, a| {
         acc.checked_add(*a)
-            .ok_or(Error::Overflow("payments to average"))
+            .ok_or(Error::Overflow("amounts to average"))
     })?;
     Ok(Money::from_cents(mul_div(total.cents(), 1, count)?))
 }
@@ -507,7 +507,7 @@ fn build_entry(
     let amount = explicit.unwrap_or(template);
     if amount != template && f.lines.len() != 1 {
         return Err(Error::Invalid(
-            "the amount of a split can't be changed here; enter it, then edit the split".into(),
+            "the amount of a split cannot be changed here; enter it, then edit the split".into(),
         ));
     }
     let date = edits
@@ -753,7 +753,7 @@ pub fn set_override(
     }
     if amount.is_some() && s.fields.lines.len() != 1 {
         return Err(Error::Invalid(
-            "the amount of a split can't be changed for one occurrence".into(),
+            "the amount of a split cannot be changed for one occurrence".into(),
         ));
     }
     check_direction(&s, amount)?;

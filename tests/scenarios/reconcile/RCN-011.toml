@@ -80,7 +80,7 @@ account = "Checking"
 statement_date = "2026-01-31"
 statement_balance = "0.00"
 interest = { date = "2026-01-31", amount = "0.00", category = "Salary" }
-expect_error = "greater than zero"
+expect_error = "must be more than zero"
 
 [[actions]]
 type = "reconcile_start"
@@ -106,7 +106,7 @@ expect_error = "is void"
 type = "reconcile_check"
 account = "Checking"
 refs = ["elsewhere"]
-expect_error = "no posting to this account"
+expect_error = "no line in this account"
 
 [[actions]]
 type = "reconcile_check"

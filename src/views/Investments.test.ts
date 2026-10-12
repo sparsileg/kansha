@@ -78,7 +78,7 @@ describe("Investments view", () => {
     await screen.findByText("Brokerage");
     expect(screen.queryByRole("button", { name: "Customize" })).toBeNull();
     invPortfolio.mockClear();
-    await fireEvent.click(screen.getByRole("button", { name: "Download Prices" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Download prices" }));
     await waitFor(() => expect(pricesDownload).toHaveBeenCalledWith("2026-06-12"));
     await waitFor(() => expect(invPortfolio).toHaveBeenCalled());
   });
@@ -86,7 +86,7 @@ describe("Investments view", () => {
   it("with no date chosen, downloads for today", async () => {
     render(Investments);
     await screen.findByText("Brokerage");
-    await fireEvent.click(screen.getByRole("button", { name: "Download Prices" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Download prices" }));
     await waitFor(() => expect(pricesDownload).toHaveBeenLastCalledWith("2026-06-30"));
   });
 
@@ -154,8 +154,8 @@ describe("Investments view", () => {
     const dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.input(within(dlg).getByLabelText("Name of view"), { target: { value: "Mine" } });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Cost Basis" }));
-    await fireEvent.click(within(dlg).getByRole("button", { name: "Add>>" }));
-    await fireEvent.click(within(dlg).getByRole("button", { name: "Move Up" }));
+    await fireEvent.click(within(dlg).getByRole("button", { name: "Add ›" }));
+    await fireEvent.click(within(dlg).getByRole("button", { name: "Move up" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const heads = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/ [▲▼⇅]$/, ""));
@@ -170,14 +170,14 @@ describe("Investments view", () => {
     await customize();
     let dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Ticker Symbol" }));
-    await fireEvent.click(within(dlg).getByRole("button", { name: "<<Remove" }));
+    await fireEvent.click(within(dlg).getByRole("button", { name: "‹ Remove" }));
     await fireEvent.click(within(dlg).getByRole("button", { name: "Cancel" }));
     expect(screen.getAllByRole("columnheader")).toHaveLength(8);
     await customize();
     dlg = screen.getByRole("dialog", { name: "Customize view" });
     await fireEvent.click(within(dlg).getByRole("button", { name: "Ticker Symbol" }));
-    await fireEvent.click(within(dlg).getByRole("button", { name: "<<Remove" }));
-    await fireEvent.click(within(dlg).getByRole("button", { name: "Reset View" }));
+    await fireEvent.click(within(dlg).getByRole("button", { name: "‹ Remove" }));
+    await fireEvent.click(within(dlg).getByRole("button", { name: "Reset view" }));
     expect(within(dlg).getAllByRole("button", { name: "Ticker Symbol" })).toHaveLength(1);
     await fireEvent.click(within(dlg).getByRole("button", { name: "OK" }));
     expect(screen.getAllByRole("columnheader")).toHaveLength(8);
@@ -248,7 +248,7 @@ describe("Investments view", () => {
     render(Investments);
     await screen.findByText("Brokerage");
     await fireEvent.click(screen.getByRole("button", { name: "Total Stock Market" }));
-    const dlg = await screen.findByRole("dialog", { name: "Security Details" });
+    const dlg = await screen.findByRole("dialog", { name: "Security details" });
     expect((within(dlg).getByRole("combobox", { name: "Security" }) as HTMLSelectElement).value).toBe("1");
   });
 });

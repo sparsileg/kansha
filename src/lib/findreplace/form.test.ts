@@ -9,7 +9,7 @@ describe("Find/Replace choices (REG-170)", () => {
       "Amount",
       "Category",
       "Check #",
-      "Cleared Status",
+      "Cleared status",
       "Date",
       "Memo",
       "Payee",

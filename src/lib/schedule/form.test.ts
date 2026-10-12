@@ -24,6 +24,7 @@ describe("buildFields", () => {
     expect(r.fields.lines[0].amount).toBe("0.00");
     d.averageOf = "0";
     expect(buildFields(d, TODAY)).toEqual({ ok: false, error: "Enter how many payments to average (1 to 99)." });
+    expect(buildFields(d, TODAY, "charges")).toEqual({ ok: false, error: "Enter how many charges to average (1 to 99)." });
     d.averageOf = "6";
     d.mode = "auto";
     expect(buildFields(d, TODAY)).toEqual({ ok: false, error: "An average is confirmed each time it is entered; choose Remind me." });

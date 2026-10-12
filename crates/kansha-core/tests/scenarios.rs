@@ -655,7 +655,7 @@ struct InvRegisterExpect {
 #[serde(deny_unknown_fields)]
 struct InvRowExpect {
     date: String,
-    /// The Action column ("Buy", "Transfer In", ...).
+    /// The Action column ("Buy", "Transfer in", ...).
     action: String,
     amount: String,
     /// "none" with linked cash.

@@ -3,6 +3,7 @@
   import { untrack } from "svelte";
   import { call, commands } from "../api";
   import { blockNonSplitAmountChar, sanitizeSplitAmountInput } from "../format/money";
+  import { amountLabels } from "../register/columns";
   import {
     PRESETS,
     WEEKDAYS,
@@ -52,6 +53,10 @@
   /** Already averaging: its amount is the current average. */
   const wasAveraging = init.fields?.average_of != null;
   const mainAccount = $derived(d.account === "" ? undefined : Number(d.account));
+  /** The type list's names for the main account's two directions. */
+  const labels = $derived(amountLabels(mainAccount === undefined ? undefined : listsState.account(mainAccount)));
+  /** What an averaged amount averages, named for the type: "payments", "charges", … */
+  const past = $derived(d.direction === "deposit" ? labels.ins : labels.outs);
   /** Investment accounts take cash in or out, never a split, and not with linked cash (INV-300). */
   const schedulable = (a: Account) => a.investment === null || a.investment.cash_mode !== "linked";
   /** Accounts most used by existing schedules first. */
@@ -82,7 +87,7 @@
   }
 
   async function save() {
-    const built = buildFields(d, listsState.today);
+    const built = buildFields(d, listsState.today, past);
     if (!built.ok) {
       error = built.error;
       return;
@@ -151,10 +156,10 @@
         <input bind:value={d.memo} />
       </label>
       <label>
-        Transaction Type
+        Transaction type
         <select bind:value={d.direction}>
-          <option value="payment">Payment</option>
-          <option value="deposit">Deposit</option>
+          <option value="payment">{labels.out}</option>
+          <option value="deposit">{labels.in}</option>
         </select>
       </label>
     </div>
@@ -166,15 +171,15 @@
           Amount
           <select bind:value={d.amountKind}>
             <option value="fixed">Fixed</option>
-            <option value="average" disabled={!canAverage(d)}>Average of past payments</option>
+            <option value="average" disabled={!canAverage(d)}>Average of past {past}</option>
             {#if typedEstimate}<option value="estimate">Estimate (confirm each time)</option>{/if}
           </select>
         </label>
         {#if averaging}
           <span class="average">
             of the last
-            <input class="count" inputmode="numeric" aria-label="Payments to average" bind:value={d.averageOf} />
-            payments; 0.00 until the first
+            <input class="count" inputmode="numeric" aria-label={`${past[0].toUpperCase()}${past.slice(1)} to average`} bind:value={d.averageOf} />
+            {past}; 0.00 until the first
           </span>
         {/if}
       </div>
@@ -191,7 +196,7 @@
             value={averaging && !wasAveraging ? "" : line.amount}
             placeholder={averaging ? "Average" : undefined}
             readonly={averaging}
-            title={averaging ? "The average of past payments, set on save" : undefined}
+            title={averaging ? `The average of past ${past}, set on save` : undefined}
             onbeforeinput={blockNonSplitAmountChar}
             oninput={(e) => onAmount(line, e)}
           />

@@ -7,7 +7,7 @@ const update = vi.hoisted(() => vi.fn());
 const priceSet = vi.hoisted(() => vi.fn());
 const priceDelete = vi.hoisted(() => vi.fn());
 const asked = vi.hoisted(() => vi.fn());
-const chart = { dates: ["2026-01-02", "2026-06-30"], labels: [], series: [{ name: "Market Value", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [], zero: 0, x_unit: "month" };
+const chart = { dates: ["2026-01-02", "2026-06-30"], labels: [], series: [{ name: "Market value", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [], zero: 0, x_unit: "month" };
 const sec = (id: number, name: string, ticker: string | null) => ({
   id, name, ticker, security_type: "mutual_fund", asset_class: "us_equity", cusip: null,
   default_lot_method: null, hidden: false, notes: "", created_at: "",
@@ -50,7 +50,7 @@ beforeEach(async () => {
 });
 
 describe("Security Details: Update Prices", () => {
-  const card = () => screen.getByRole("article", { name: "Update Prices" });
+  const card = () => screen.getByRole("article", { name: "Update prices" });
 
   it("lists prices newest first with New, Edit, and Delete", async () => {
     render(SecurityDetailsModal, { security: 1, onclose: () => {} });
@@ -99,10 +99,10 @@ describe("Security Details: Update Prices", () => {
   });
 });
 
-describe("Security Details", () => {
+describe("Security details", () => {
   it("shows the security clicked: its card, transactions, and a year's market value", async () => {
     render(SecurityDetailsModal, { security: 1, onclose: () => {} });
-    const dlg = screen.getByRole("dialog", { name: "Security Details" });
+    const dlg = screen.getByRole("dialog", { name: "Security details" });
     expect((within(dlg).getByRole("combobox", { name: "Security" }) as HTMLSelectElement).value).toBe("1");
     const info = within(dlg).getByRole("article", { name: "Security" });
     expect(info.textContent).toContain("VTSAX");

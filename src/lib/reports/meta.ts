@@ -331,19 +331,22 @@ export const MENU_REPORTS: Record<string, ReportKind> = {
   "reports.compare_payee": "compare_payee",
 };
 
-/** Add or remove one id from a filter. `null` stands for `base` (what
- * the report includes with no filter); when `base` is everything, a
- * choice of every id becomes `null` again, so new accounts or categories
- * are included later too. */
+/** Add or remove ids from a filter: one, or a category with its
+ * subcategories. `null` stands for `base` (what the report includes with
+ * no filter); when `base` is everything, a choice of every id becomes
+ * `null` again, so new accounts or categories are included later too. */
 export function toggleFilter<T>(
   filter: T[] | null,
   base: T[],
   all: T[],
-  id: T,
+  ids: T | T[],
   on: boolean,
 ): T[] | null {
   const current = filter ?? base;
-  const next = on ? (current.includes(id) ? current : [...current, id]) : current.filter((x) => x !== id);
+  const list = Array.isArray(ids) ? ids : [ids];
+  const next = on
+    ? [...current, ...list.filter((x) => !current.includes(x))]
+    : current.filter((x) => !list.includes(x));
   const baseIsAll = all.every((x) => base.includes(x));
   return baseIsAll && all.every((x) => next.includes(x)) ? null : next;
 }

@@ -143,7 +143,7 @@ rows = [
 [[expect.inv_register]]
 account = "Brokerage"
 rows = [
-    { date = "2025-01-02", action = "Cash In", amount = "5000.00" },
+    { date = "2025-01-02", action = "Cash in", amount = "5000.00" },
     { date = "2025-01-10", action = "Buy", amount = "-1000.00" },
     { date = "2025-02-10", action = "Buy", amount = "-600.00" },
     { date = "2025-03-10", action = "Buy", amount = "-100.00" },

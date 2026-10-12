@@ -94,6 +94,33 @@ describe("Reconcile view", () => {
     expect(boxes.map((b) => b.checked)).toEqual([true, true, false, false]);
   });
 
+  it("names the lists as Quicken does: checks for a bank, charges for a card", () => {
+    reconcileState.session = session("500.00");
+    render(Reconcile);
+    const heads = () => screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(heads()).toEqual(expect.arrayContaining(["Payments and checks", "Deposits"]));
+    expect(screen.getByText(/Checked payments and checks/)).toBeTruthy();
+    cleanup();
+    listsState.accounts = [{ id: 1, name: "Visa", status: "open", account_type: "credit_card" }] as never;
+    render(Reconcile);
+    expect(heads()).toEqual(expect.arrayContaining(["Charges and cash advances", "Payments and credits"]));
+  });
+
+  it("names a cash account's lists Amounts spent and Amounts received", () => {
+    listsState.accounts = [{ id: 1, name: "Wallet", status: "open", account_type: "cash", investment: null }] as never;
+    reconcileState.session = session("500.00");
+    render(Reconcile);
+    const heads = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(heads).toEqual(expect.arrayContaining(["Amounts spent", "Amounts received"]));
+    expect(screen.getByText(/Checked amounts spent/)).toBeTruthy();
+  });
+
+  it("calls a card's interest Finance charges", () => {
+    listsState.accounts = [{ id: 1, name: "Visa", status: "open", account_type: "credit_card" }] as never;
+    render(Reconcile);
+    expect(screen.getByText(/Finance charges/)).toBeTruthy();
+  });
+
   it("focusing a field selects what is in it, to type over", () => {
     // App.svelte installs this for the whole app.
     const stop = selectOnFocus(document);

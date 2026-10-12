@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 
-const calls = vi.hoisted(() => ({ list: [] as string[], passphrase: "" }));
+const calls = vi.hoisted(() => ({ list: [] as string[], passphrase: "", book: null as string | null }));
 
 vi.mock("../../api", async (orig) => {
   const real = await orig<typeof import("../../api")>();
@@ -12,7 +12,7 @@ vi.mock("../../api", async (orig) => {
     commands: {
       pickBackupFile: () => Promise.resolve("/b/kansha-backup-2026-09-28T10-00-00Z-close.zip"),
       backupManifest: () =>
-        ok({ format: 1, created_at: "2026-09-28T10:00:00Z", app_version: "0.1.0", schema_version: 4, kind: "close" }),
+        ok({ format: 1, created_at: "2026-09-28T10:00:00Z", app_version: "0.1.0", schema_version: 4, kind: "close", book: calls.book }),
       restoreOpen: (_: string, p: string) => {
         calls.passphrase = p;
         calls.list.push("open");
@@ -20,7 +20,7 @@ vi.mock("../../api", async (orig) => {
           return Promise.resolve({ status: "error" as const, error: { kind: "wrong_passphrase" as const, message: "the passphrase is not correct" } });
         }
         return ok({
-          manifest: { format: 1, created_at: "2026-09-28T10:00:00Z", app_version: "0.1.0", schema_version: 4, kind: "close" },
+          manifest: { format: 1, created_at: "2026-09-28T10:00:00Z", app_version: "0.1.0", schema_version: 4, kind: "close", book: calls.book },
           integrity: { issues: [] },
           comparison: {
             backup_created_at: "2026-09-28T10:00:00Z",
@@ -48,10 +48,20 @@ vi.mock("../../api", async (orig) => {
 });
 
 import RestoreModal from "./RestoreModal.svelte";
+import { bookState } from "../../state/book.svelte";
 
 beforeEach(() => {
   cleanup();
   calls.list = [];
+  calls.book = null;
+  bookState.status = {
+    state: "locked",
+    open: true,
+    name: "copycarrytransactions",
+    db_path: "/b/copycarrytransactions.db",
+    folder: "/b",
+    downloads: "/home/u/Downloads",
+  };
 });
 
 async function openBackup(passphrase: string) {
@@ -89,6 +99,42 @@ describe("Restore window (BAK-070, BAK-075)", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await vi.waitFor(() => expect(done).toHaveBeenCalled());
     expect(calls.list).toEqual(["open", "open", "apply"]);
+  });
+
+  it("another book's backup warns, and replaces only once ticked", async () => {
+    calls.book = "barton2026";
+    const done = vi.fn();
+    render(RestoreModal, { onclose: vi.fn(), ondone: done });
+    await fireEvent.click(screen.getByRole("button", { name: "Choose backup file…" }));
+    const warning = await screen.findByText(/You are restoring a backup of the book barton2026/);
+    const text = warning.textContent?.replace(/\s+/g, " ");
+    expect(text).toContain("replaces the data of the book copycarrytransactions, which keeps its name");
+    expect(text).toContain("open barton2026 first (File > Open…), then restore this backup");
+    expect(warning.classList.contains("danger")).toBe(true);
+
+    await fireEvent.input(screen.getByLabelText(/Passphrase this backup was made with/), { target: { value: "right" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Open backup" }));
+    await screen.findByText("Only in the backup");
+    // Still warned after comparing; the button names what it replaces.
+    expect(screen.getByText(/You are restoring a backup of the book barton2026/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+    const replace = screen.getByRole("button", { name: "Replace copycarrytransactions" }) as HTMLButtonElement;
+    expect(replace.disabled).toBe(true);
+    await fireEvent.click(screen.getByLabelText("Replace copycarrytransactions with barton2026's data"));
+    expect(replace.disabled).toBe(false);
+    await fireEvent.click(replace);
+    await vi.waitFor(() => expect(done).toHaveBeenCalled());
+    expect(calls.list).toEqual(["open", "apply"]);
+  });
+
+  it("the same book's backup has no warning or tick box", async () => {
+    calls.book = "copycarrytransactions";
+    render(RestoreModal, { onclose: vi.fn(), ondone: vi.fn() });
+    await openBackup("right");
+    await screen.findByText("Only in the backup");
+    expect(screen.queryByText(/You are restoring a backup/)).toBeNull();
+    expect(screen.queryByLabelText(/with .*'s data/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Restore" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("Cancel after comparing drops the opened backup", async () => {

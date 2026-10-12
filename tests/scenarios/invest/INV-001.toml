@@ -114,7 +114,7 @@ rows = [
 [[expect.inv_register]]
 account = "Brokerage"
 rows = [
-    { date = "2025-01-02", action = "Cash In", amount = "10000.00", cash_balance = "10000.00", ref = "fund" },
+    { date = "2025-01-02", action = "Cash in", amount = "10000.00", cash_balance = "10000.00", ref = "fund" },
     { date = "2025-01-10", action = "Buy", amount = "-2005.00", cash_balance = "7995.00", security = "VTI", quantity = "10" },
     { date = "2025-06-01", action = "Buy", amount = "-2505.00", cash_balance = "5490.00" },
     { date = "2026-03-01", action = "Sell", amount = "4495.00", cash_balance = "9985.00", ref = "sell" },

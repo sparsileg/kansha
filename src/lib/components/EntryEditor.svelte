@@ -9,6 +9,7 @@
     isZeroMoney,
     sanitizeSumInput,
   } from "../format/money";
+  import { amountLabels } from "../register/columns";
   import {
     SPLIT,
     applyQuickFill,
@@ -48,6 +49,7 @@
     split?: boolean;
     ondone?: (saved: boolean) => void;
   } = $props();
+  const labels = $derived(amountLabels(listsState.accountById.get(account)));
 
   let d = $state<Draft>(newDraft(listsState.today));
   let error = $state<string | null>(null);
@@ -252,7 +254,7 @@
     try {
       const r = await call(commands.amountEval(text));
       if (r.startsWith("-") && !isZeroMoney(r)) {
-        error = `${field === "payment" ? "Payment" : "Deposit"} ${text.trim()} = ${formatMoney(r)}: it cannot be negative.`;
+        error = `${field === "payment" ? labels.out : labels.in} ${text.trim()} = ${formatMoney(r)}: it cannot be negative.`;
         return false;
       }
       if (d[field] === text) d = setAmountField(d, field, formatMoney(r));
@@ -390,7 +392,7 @@
     const settled = await settleSums();
     busy = false;
     if (!settled) return;
-    const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today);
+    const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today, labels);
     if (!built.ok) {
       error = built.error;
       return;
@@ -496,8 +498,8 @@
     <input class="c-num" aria-label="Num" placeholder="Num" bind:value={d.check_num} />
     <input class="c-payee" aria-label="Payee" placeholder="Payee" list={listId} autocomplete="off" bind:value={d.payee} oninput={onPayeeInput} onchange={onPayeeChange} onkeydown={onPayeeKey} />
     <datalist id={listId}>{#each suggestions as p (p.id)}<option value={p.name}></option>{/each}</datalist>
-    <input class="c-pay num" aria-label="Payment" placeholder="Payment" inputmode="decimal" value={d.payment} onbeforeinput={sumKey(() => settleAmount("payment"))} oninput={amountField("payment")} onblur={() => void settleAmount("payment")} />
-    <input class="c-dep num" aria-label="Deposit" placeholder="Deposit" inputmode="decimal" value={d.deposit} onbeforeinput={sumKey(() => settleAmount("deposit"))} oninput={amountField("deposit")} onblur={() => void settleAmount("deposit")} />
+    <input class="c-pay num" aria-label={labels.out} placeholder={labels.out} inputmode="decimal" value={d.payment} onbeforeinput={sumKey(() => settleAmount("payment"))} oninput={amountField("payment")} onblur={() => void settleAmount("payment")} />
+    <input class="c-dep num" aria-label={labels.in} placeholder={labels.in} inputmode="decimal" value={d.deposit} onbeforeinput={sumKey(() => settleAmount("deposit"))} oninput={amountField("deposit")} onblur={() => void settleAmount("deposit")} />
     <div class="c-cat">
       <TargetCombo bind:value={d.category} excludeAccount={account} allowSplit placeholder="Category" newKind={newKind} onchange={onCategoryChange} />
     </div>
@@ -523,7 +525,7 @@
   {#snippet splitPanel()}
     <div class="split" role="group" aria-label="Split lines">
       <div class="split-title">
-        Split of {d.payment.trim() ? `payment ${d.payment}` : d.deposit.trim() ? `deposit ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Type a part going the other way (a paycheck deduction) with a leading -; each new line offers what is left.
+        Split of {d.payment.trim() ? `${labels.out.toLowerCase()} ${d.payment}` : d.deposit.trim() ? `${labels.in.toLowerCase()} ${d.deposit}` : "the total above"}: give each part a category or transfer account and an amount. Type a part going the other way (a paycheck deduction) with a leading -; each new line offers what is left.
       </div>
       <div class="split-line split-head" aria-hidden="true">
         <span>Category or transfer account</span><span class="num">Amount</span><span>Tag</span><span>Memo</span><span title="Cleared in the other account (transfer lines)">Clr</span><span></span>

@@ -119,11 +119,11 @@ rows = [
 [[expect.inv_register]]
 account = "Brokerage"
 rows = [
-    { date = "2026-01-02", action = "Cash In", amount = "10000.00", cash_balance = "10000.00" },
+    { date = "2026-01-02", action = "Cash in", amount = "10000.00", cash_balance = "10000.00" },
     { date = "2026-01-10", action = "Buy", amount = "-3000.00", cash_balance = "7000.00" },
     { date = "2026-01-20", action = "Split", amount = "0.00", cash_balance = "7000.00" },
     { date = "2026-01-25", action = "Dividend", amount = "12.34", cash_balance = "7012.34" },
     { date = "2026-01-31", action = "Interest", amount = "2.50", cash_balance = "7014.84" },
-    { date = "2026-01-31", action = "Misc Expense", amount = "-5.00", cash_balance = "7009.84" },
+    { date = "2026-01-31", action = "Misc expense", amount = "-5.00", cash_balance = "7009.84" },
     { date = "2026-02-05", action = "Dividend", amount = "1.00", cash_balance = "7010.84" },
 ]

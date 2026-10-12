@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStart, emptyStartForm, isReconcilable } from "./form";
+import { buildStart, reconcileLabels, emptyStartForm, isReconcilable } from "./form";
 
 const TODAY = "2026-04-10";
 const form = (over: Partial<ReturnType<typeof emptyStartForm>> = {}) => ({
@@ -59,13 +59,36 @@ describe("buildStart", () => {
     expect(buildStart(7, form({ balance: "" }), TODAY)).toMatchObject({ ok: false });
     expect(
       buildStart(7, form({ interest: { date: "", amount: "1.234", category: 3 } }), TODAY),
-    ).toEqual({ ok: false, error: "Interest: enter an amount like 12.34." });
+    ).toEqual({ ok: false, error: "Interest: enter an amount, like 1,234.56." });
     expect(
       buildStart(7, form({ service: { date: "", amount: "5", category: null } }), TODAY),
     ).toEqual({ ok: false, error: "Service charge: choose a category." });
     expect(
       buildStart(7, form({ service: { date: "13/45", amount: "5", category: 4 } }), TODAY),
-    ).toEqual({ ok: false, error: "Service charge: enter a date like 03/31/2026." });
+    ).toEqual({ ok: false, error: "Service charge: enter a date, like 03/31/2026." });
+    expect(
+      buildStart(7, form({ interest: { date: "", amount: "1.234", category: 3 } }), TODAY, "Finance charge"),
+    ).toEqual({ ok: false, error: "Finance charge: enter an amount, like 1,234.56." });
+  });
+});
+
+describe("reconcileLabels", () => {
+  const acct = (account_type: string, investment: object | null = null) => ({ account_type, investment }) as never;
+  const lists = (a: never) => {
+    const l = reconcileLabels(a);
+    return [l.outs, l.ins, l.interest, l.interestItem];
+  };
+  it("names the lists and interest box for each account, as Quicken does", () => {
+    expect(lists(acct("checking"))).toEqual(["Payments and checks", "Deposits", "Interest earned", "Interest"]);
+    expect(lists(acct("savings"))).toEqual(["Payments and checks", "Deposits", "Interest earned", "Interest"]);
+    expect(lists(acct("credit_card"))).toEqual([
+      "Charges and cash advances",
+      "Payments and credits",
+      "Finance charges",
+      "Finance charge",
+    ]);
+    expect(lists(acct("cash"))).toEqual(["Amounts spent", "Amounts received", "Interest earned", "Interest"]);
+    expect(lists(acct("brokerage", { cash_mode: "internal" }))).toEqual(["Cash out", "Cash in", "Interest earned", "Interest"]);
   });
 });
 

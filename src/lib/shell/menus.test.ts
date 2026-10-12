@@ -9,12 +9,12 @@ describe("menu definitions", () => {
   it("has the agreed menus in order", () => {
     expect(MENUS.map((m) => m.label)).toEqual(["File", "Edit", "Tools", "Reports", "Help"]);
     expect(MENUS[0].items.map((i) => i.label)).toEqual([
-      "New…", "Open…", "Recent", "Rename Book…", "Find/Replace…", "Back Up Now", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
+      "New…", "Open…", "Recent", "Rename Book…", "Back Up Now", "Restore…", "Import…", "Export…", "Integrity Check", "Exit",
     ]);
     expect(MENUS[2].items.map((i) => i.label)).toEqual([
       "Accounts", "Calendar", "Reminders", "Investments", "Insights", "Memorized Payees", "Categories", "Tags", "Securities", "Import Prices…", "Reconcile",
     ]);
-    expect(MENUS[1].items.map((i) => i.label)).toEqual(["Undo (Ctrl+Z)", "Find (Ctrl+F)", "Settings…", "Navigation Bar…", "Renaming…"]);
+    expect(MENUS[1].items.map((i) => i.label)).toEqual(["Undo (Ctrl+Z)", "Find (Ctrl+F)", "Find/Replace…", "Settings…", "Navigation Bar…", "Renaming…"]);
     expect(MENUS[3].items.map((i) => i.label)).toEqual(["Saved Reports", "Investing", "Net Worth", "Spending", "Comparison", "Tax"]);
     const sub = (label: string) => MENUS[3].items.find((i) => i.label === label)?.items?.map((i) => i.label);
     expect(sub("Saved Reports")).toEqual(["Manage Saved Reports…"]);
@@ -69,7 +69,7 @@ describe("menu definitions", () => {
 
   it("what works today is not greyed", () => {
     const on = (id: string) => items.find((i) => i.id === id)?.disabled;
-    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.investments", "tools.payees", "tools.categories", "tools.tags", "tools.securities", "tools.import_prices", "tools.download_prices", "edit.undo", "edit.find", "file.find_replace", "reports.saved", "reports.net_worth", "reports.tax_summary"]) {
+    for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.investments", "tools.payees", "tools.categories", "tools.tags", "tools.securities", "tools.import_prices", "tools.download_prices", "edit.undo", "edit.find", "edit.find_replace", "reports.saved", "reports.net_worth", "reports.tax_summary"]) {
       expect(on(id), id).toBeUndefined();
     }
   });

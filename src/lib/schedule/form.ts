@@ -212,8 +212,9 @@ function whole(s: string, min: number, max: number): number | null {
   return n >= min && n <= max ? n : null;
 }
 
-/** Parse the draft into `ScheduleFields`, or say what is wrong. */
-export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
+/** Parse the draft into `ScheduleFields`, or say what is wrong. `past`
+ * names what an average averages for the account ("charges", …). */
+export function buildFields(d: ScheduleDraft, today: string, past = "payments"): BuiltSchedule {
   const account = whole(d.account, 1, Number.MAX_SAFE_INTEGER);
   if (account === null) return fail("Choose an account.");
   const start = parseDate(d.start, today);
@@ -226,7 +227,7 @@ export function buildFields(d: ScheduleDraft, today: string): BuiltSchedule {
     if (d.lines.length !== 1) return fail("An average needs a single category or transfer; remove the split.");
     if (d.mode !== "remind") return fail("An average is confirmed each time it is entered; choose Remind me.");
     averageOf = whole(d.averageOf, 1, 99);
-    if (averageOf === null) return fail("Enter how many payments to average (1 to 99).");
+    if (averageOf === null) return fail(`Enter how many ${past} to average (1 to 99).`);
   }
   const lines = [];
   for (const [i, l] of d.lines.entries()) {

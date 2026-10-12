@@ -81,6 +81,15 @@ class ListsState {
     return names.join(":");
   }
 
+  /** The category and every subcategory under it, at any depth. */
+  withSubcategories(id: CategoryId): CategoryId[] {
+    const out = [id];
+    for (let i = 0; i < out.length; i++) {
+      for (const c of this.categories) if (c.parent === out[i]) out.push(c.id);
+    }
+    return out;
+  }
+
   async loadAll(): Promise<void> {
     try {
       const [today, accounts, balances, categories, tags, payees, taxLines, insights, spendingCards] = await Promise.all([

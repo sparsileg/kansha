@@ -197,7 +197,7 @@ pub fn security_chart(
         values.push(v);
     }
     let name = match kind {
-        SecurityChartKind::MarketValue => "Market Value",
+        SecurityChartKind::MarketValue => "Market value",
         SecurityChartKind::PriceHistory => "Price",
     };
     let series = vec![(name.into(), SeriesStyle::Line, values)];

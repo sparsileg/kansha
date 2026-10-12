@@ -16,6 +16,8 @@
   let passphrase = $state("");
   let preview = $state<RestorePreview | null>(null);
   let onlyDiffering = $state(false);
+  /** Ticked to replace this book with another book's backup. */
+  let replaceOk = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
 
@@ -79,10 +81,22 @@
   const shown = $derived(onlyDiffering ? both.filter((r) => r.differs) : both);
   const differing = $derived(preview?.comparison.rows.filter((r) => r.differs).length ?? 0);
 
+  const current = $derived(bookState.status?.name ?? "");
+
   /** Mark a differing figure with a symbol and bold, never by color alone. */
   const differs = (r: ComparisonRow, f: (s: NonNullable<ComparisonRow["backup"]>) => string | number) =>
     r.backup && r.current && f(r.backup) !== f(r.current);
 </script>
+
+{#snippet otherBookWarning()}
+  {#if otherBook}
+    <p class="danger" role="alert">
+      ⚠ You are restoring a backup of the book {otherBook}. Restoring it replaces the data of the book
+      {current}, which keeps its name. To get {otherBook} back instead, open {otherBook} first (File &gt; Open…),
+      then restore this backup.
+    </p>
+  {/if}
+{/snippet}
 
 <Modal title="Restore from backup" wide onclose={cancel}>
   {#if !preview}
@@ -104,12 +118,7 @@
           <tr><th>Schema version</th><td>{manifest.schema_version}</td></tr>
         </tbody>
       </table>
-      {#if otherBook}
-        <p role="alert">
-          <strong>This is a backup of the book {otherBook}.</strong> Restoring it replaces the data of
-          {bookState.status?.name}; the book keeps the name {bookState.status?.name}.
-        </p>
-      {/if}
+      {@render otherBookWarning()}
       <form onsubmit={open}>
         <label>
           Passphrase this backup was made with
@@ -192,11 +201,19 @@
     <p class="note">
       After restoring, the passphrase this backup was made with opens the book.
     </p>
+    {@render otherBookWarning()}
+    {#if otherBook}
+      <label class="confirm">
+        <input type="checkbox" bind:checked={replaceOk} /> Replace {current} with {otherBook}'s data
+      </label>
+    {/if}
   {/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}
   <div class="buttons">
     {#if preview}
-      <button type="button" onclick={restore} disabled={busy}>{busy ? "Restoring…" : "Restore"}</button>
+      <button type="button" onclick={restore} disabled={busy || (otherBook !== null && !replaceOk)}>
+        {busy ? "Restoring…" : otherBook ? `Replace ${current}` : "Restore"}
+      </button>
     {/if}
     <button type="button" onclick={cancel} disabled={busy}>Cancel</button>
   </div>
@@ -267,6 +284,29 @@
   }
   .note {
     opacity: 0.8;
+  }
+  /* Another book's backup: boxed and bold, not by color; it pulses three
+     times as it appears, then stays still. */
+  .danger {
+    border: 3px solid var(--fg);
+    padding: 0.5rem 0.75rem;
+    font-weight: bold;
+    animation: pulse 0.8s ease-in-out 3;
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.15;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .danger {
+      animation: none;
+    }
+  }
+  .confirm {
+    display: block;
+    font-weight: bold;
+    margin-top: 0.5rem;
   }
   .buttons {
     display: flex;

@@ -49,8 +49,8 @@ pub use reads::{
 };
 pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};
-pub(crate) use service::create_with_source;
 pub use service::{create, delete, trade_amount, update};
+pub(crate) use service::{create_carried, create_with_source};
 pub use true_up::{
     TrueUpLine, TrueUpLot, TrueUpPreview, TrueUpReplay, TrueUpStatus, parse_true_up,
     preview_true_up, true_up,
@@ -274,24 +274,24 @@ impl InvAction {
             InvAction::Sell => "Sell",
             InvAction::Dividend => "Dividend",
             InvAction::Interest => "Interest",
-            InvAction::ReinvestDividend => "Reinvest Div",
+            InvAction::ReinvestDividend => "Reinvest div",
             InvAction::ReinvestCgShort => "Reinvest ST CG",
             InvAction::ReinvestCgLong => "Reinvest LT CG",
-            InvAction::CgDistShort => "ST Cap Gain",
-            InvAction::CgDistLong => "LT Cap Gain",
-            InvAction::ReturnOfCapital => "Return of Capital",
+            InvAction::CgDistShort => "ST cap gain",
+            InvAction::CgDistLong => "LT cap gain",
+            InvAction::ReturnOfCapital => "Return of capital",
             InvAction::Split => "Split",
-            InvAction::TransferShares => "Transfer Shares",
-            InvAction::SharesAdded => "Shares Added",
-            InvAction::SharesRemoved => "Shares Removed",
-            InvAction::CashIn => "Cash In",
-            InvAction::CashOut => "Cash Out",
+            InvAction::TransferShares => "Transfer shares",
+            InvAction::SharesAdded => "Shares added",
+            InvAction::SharesRemoved => "Shares removed",
+            InvAction::CashIn => "Cash in",
+            InvAction::CashOut => "Cash out",
             InvAction::Fee => "Fee",
-            InvAction::TaxWithholding => "Tax Withheld",
-            InvAction::MiscIncome => "Misc Income",
-            InvAction::MiscExpense => "Misc Expense",
-            InvAction::TrueUp => "Lot True-up",
-            InvAction::RothConversion => "Roth Conversion",
+            InvAction::TaxWithholding => "Tax withheld",
+            InvAction::MiscIncome => "Misc income",
+            InvAction::MiscExpense => "Misc expense",
+            InvAction::TrueUp => "Lot true-up",
+            InvAction::RothConversion => "Roth conversion",
         }
     }
 }

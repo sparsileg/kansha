@@ -26,7 +26,7 @@ mod warnings;
 pub use find::{
     FindComparison, FindCondition, FindField, FindJoin, FindPosting, FindQuery, FindResult,
     FindSort, FoundKey, FoundRow, ReplaceResult, ReplaceSpec, cleared_name, find, replace,
-    replace_confirmation,
+    replace_confirmation, replace_tracked,
 };
 
 pub use service::{
@@ -340,7 +340,7 @@ impl Entry {
     pub fn from_txn(txn: &Txn, account: AccountId) -> Result<Entry> {
         let main = txn.posting_for(account).ok_or_else(|| {
             Error::Invalid(format!(
-                "transaction {} has no posting to account {}",
+                "transaction {} has no line in account {}",
                 txn.id.0, account.0
             ))
         })?;

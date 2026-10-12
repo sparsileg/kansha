@@ -72,7 +72,7 @@
     <div class="list"><AccountList /></div>
     <!-- Net worth today, from Rust (ACCT-240). -->
     <footer>
-      <span>Net Worth</span>
+      <span>Net worth</span>
       <span class="num" class:neg={listsState.netWorth?.startsWith("-")}>
         {listsState.netWorth === null
           ? "—"

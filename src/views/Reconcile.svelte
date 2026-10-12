@@ -3,7 +3,7 @@
   import { dateExample, datePattern, displayDate, parseDate } from "../lib/format/date";
   import { formatMoney, isZeroMoney, parseMoney, splitPaymentDeposit } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
-  import { buildStart, emptyStartForm, isReconcilable } from "../lib/reconcile/form";
+  import { buildStart, emptyStartForm, isReconcilable, reconcileLabels } from "../lib/reconcile/form";
   import { listsState } from "../lib/state/lists.svelte";
   import { reconcileState } from "../lib/state/reconcile.svelte";
   import type { Item, OpeningCheck, ReconciliationId } from "../lib/types/bindings";
@@ -15,6 +15,7 @@
     reconcileState.accountId === null ? undefined : listsState.account(reconcileState.accountId),
   );
   const isCard = $derived(account?.account_type === "credit_card");
+  const names = $derived(reconcileLabels(account));
   const session = $derived(reconcileState.session);
 
   /** Categories to pick from, by path. */
@@ -44,7 +45,7 @@
   async function start(e: SubmitEvent) {
     e.preventDefault();
     if (account === undefined) return;
-    const r = buildStart(account.id, form, listsState.today);
+    const r = buildStart(account.id, form, listsState.today, names.interestItem);
     if (!r.ok) {
       formError = r.error;
       return;
@@ -218,9 +219,9 @@
       </form>
       <dl>
         <dt>Opening balance</dt><dd><AccountBalance amount={session.opening} /></dd>
-        <dt>Checked {isCard ? "charges" : "payments"} ({session.checked_payment_count})</dt>
+        <dt>Checked {names.checkedOut} ({session.checked_payment_count})</dt>
         <dd><AccountBalance amount={session.checked_payments} /></dd>
-        <dt>Checked {isCard ? "payments and credits" : "deposits"} ({session.checked_deposit_count})</dt>
+        <dt>Checked {names.checkedIn} ({session.checked_deposit_count})</dt>
         <dd><AccountBalance amount={session.checked_deposits} /></dd>
         <dt>Cleared balance</dt><dd><AccountBalance amount={session.cleared_balance} /></dd>
         <dt>Statement ending balance</dt><dd><AccountBalance amount={rec.statement_balance} /></dd>
@@ -251,8 +252,8 @@
     </div>
 
     <div class="cols">
-      {@render itemTable(isCard ? "Charges and cash advances" : "Payments", session.payments)}
-      {@render itemTable(isCard ? "Payments and credits" : "Deposits", session.deposits)}
+      {@render itemTable(names.outs, session.payments)}
+      {@render itemTable(names.ins, session.deposits)}
     </div>
   {:else}
     {@const oc = reconcileState.opening}
@@ -270,7 +271,7 @@
       </label>
       {#if isCard}<p class="dim">Enter the balance you owe as the statement shows it.</p>{/if}
       <fieldset>
-        <legend>{isCard ? "Finance charge" : "Interest earned"} (optional)</legend>
+        <legend>{names.interest} (optional)</legend>
         <label>Amount <input bind:value={form.interest.amount} size="10" class="num" /></label>
         <label>Date <input bind:value={form.interest.date} size="10" placeholder="statement date" /></label>
         <label>

@@ -17,7 +17,8 @@ Tauri v2 + Rust core + Svelte 5 (Vite, not SvelteKit). SQLite via rusqlite
 
 - Caveman style: short sentences, essential words only, no intro, no
   praise, no filler. Answer, not explanation, unless asked.
-- Count Stan's messages per session; announce at 15 and at 20.
+- Keep a careful count of Stan's messages per session; report at 15
+  and at 20. In Claude Code, skip this: no message count at all.
 - State assumptions before code that depends on them.
 - Out-of-scope ideas → "Deferred" list at end of reply.
 

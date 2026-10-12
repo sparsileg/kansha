@@ -180,9 +180,11 @@
     return (f ?? base(t)).includes(id);
   }
 
+  /** Ticking or unticking a category does the same to its subcategories. */
   function set(t: FilterTab, id: number, on: boolean) {
     const all = items(t).map((i) => i.id);
-    draft[field(t)] = toggleFilter(draft[field(t)] ?? null, base(t), all, id, on);
+    const ids = t === "categories" ? listsState.withSubcategories(id) : id;
+    draft[field(t)] = toggleFilter(draft[field(t)] ?? null, base(t), all, ids, on);
   }
 
   function selectAll(t: FilterTab) {
@@ -331,7 +333,7 @@
                 <li><label class="check"><input type="checkbox" checked={!(draft.hidden_columns ?? []).includes(c.id)} onchange={(e) => setColumn(c.id, e.currentTarget.checked)} /> {c.label}</label></li>
               {/each}
             </ul>
-            <button type="button" onclick={() => (draft.hidden_columns = [])}>Reset Columns</button>
+            <button type="button" onclick={() => (draft.hidden_columns = [])}>Reset columns</button>
           </fieldset>
         {/if}
       </div>
@@ -359,8 +361,8 @@
           </div>
         </div>
         <div class="side">
-          <button type="button" onclick={() => selectAll(tab as FilterTab)}>Select All</button>
-          <button type="button" onclick={() => clearAll(tab as FilterTab)}>Clear All</button>
+          <button type="button" onclick={() => selectAll(tab as FilterTab)}>Select all</button>
+          <button type="button" onclick={() => clearAll(tab as FilterTab)}>Clear all</button>
           {#if tab === "accounts" && draft.kind === "capital_gains"}
             <p class="hint">With no change here, taxable investment accounts are included.</p>
           {/if}

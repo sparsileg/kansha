@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.60 (draft) |
+| **Document version** | 0.7.80 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-11 |
+| **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -118,6 +118,8 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   Taxable, Tax-Deferred, or Tax-Exempt, defaulted by type:
   - Traditional IRA, 401(k) → Tax-Deferred
   - Roth IRA, HSA (qualified use) → Tax-Exempt
+  - Donor Advised Fund → Tax-Exempt (0.7.79): its income and grants
+    are not the donor's for tax; the deduction is the contribution
   - All others → Taxable
 
   > **Correction to original notes:** the draft listed Roth IRA as
@@ -172,8 +174,8 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   list; a gear at its end opens Arrange accounts: every section with
   its accounts, each moved up or down within its section or to
   another, stored on Save (an account's place is its `sort_order`).
-  The list ends with "Net Worth" and today's net worth (as CARD-010).
-  With "Show cents in Account Bar balances" off (SET-080; default on),
+  The list ends with "Net worth" and today's net worth (as CARD-010).
+  With "Show cents in account bar balances" off (SET-080; default on),
   account balances, section totals, and net worth there are whole
   dollars, each rounded half-even in Rust from exact cents, so a total
   can differ from the sum of the rounded lines.
@@ -284,6 +286,13 @@ Payee, Payment/Charge, Deposit [R], Category, Tag, Memo, Clr, Balance.
 Quicken), which reduces sign errors during entry. The entry row has
 both fields; typing an amount in one clears the other. Stan's draft
 had a combined column.
+> The two columns are named for the account as in Quicken (0.7.65,
+0.7.70): a credit card's Charge and Payment; a cash account's Spend
+and Receive; a loan's or other liability's Increase and Decrease; an
+other asset's Decrease and Increase; others Payment and Deposit. The
+entry row and its messages use the same names, and the schedule
+dialog's Transaction type names them so for its account (an
+investment account's: Cash out and Cash in).
 - **REG-020** [1.0][R] Running balance is computed in date order
   (tie-broken by entry order) and reflects all transactions up to that
   row.
@@ -359,47 +368,48 @@ had a combined column.
   of the transaction, split lines included, is in the top-level
   Uncategorized category (default on). A line with no category at all
   is still refused.
-- **REG-170** [1.0][R] **Find/Replace** (0.7.60). File >
-  Find/Replace… finds register rows and changes one field on the rows
-  the user checks.
+- **REG-170** [1.0][R] **Find/Replace** (0.7.60). Edit >
+  Find/Replace… (0.7.62; was File) finds register rows and changes one
+  field on the rows the user checks.
   - **Find:** a row of field, comparison, and value, then Find and Add
-    Row. Fields: Amount, Category, Check #, Cleared Status, Date,
+    Row. Fields: Amount, Category, Check #, Cleared status, Date,
     Memo, Payee, Tag. Comparisons: Contains, Exactly, Starts with,
     Ends with, Greater, Greater or equal, Less, Less or equal; all
-    apply to every field. Add Row adds a row below, with a remove (×)
+    apply to every field. Add row adds a row below, with a remove (×)
     button; after the second row one Or/And choice joins all rows. A
     blank value leaves its row out. Text ignores case; Greater and
     Less on text are alphabetical. Amount is signed (a payment is
     negative) and Date is a date for Exactly, Greater, and Less; for
     Contains, Starts with, and Ends with both are the text the
     register shows. A check number compares as a number when both
-    sides are whole numbers. Cleared Status compares its name
+    sides are whole numbers. Cleared status compares its name
     (Unmarked, Cleared, Reconciled). Tag matches when any one of a
     row's tags does; a row with none is blank.
   - **Found:** one row per transaction per account register (a
     transfer shows in both), newest first, any column sorts. Columns:
     Select, Date, Account, Num, Payee, Category, Tag, Memo, Clr,
-    Amount. Every row starts checked; Select All, Clear All. "Show
+    Amount. Every row starts checked; Select all, Clear all. "Show
     matches within splits" (default on) adds each line of a split as
     a row of its own, matched on its category, memo, amount, and
     tags. "Found in N transactions". Voided transactions and any
     transaction touching an investment account are never found.
-  - **Replace:** field (the same eight), With, Replace All. Tag adds
+  - **Replace:** field (the same eight), With, Replace all. Tag adds
     the tag; the row's other tags stay. A new tag, payee, or category
     name is created (a new category is income when the line brings
     money in, else expense). Category changes a split line row's
     line, or every category line of a split; a transfer line is never
     changed. Amount changes only a transaction with one category
-    line; splits and transfers are skipped. Cleared Status sets
+    line; splits and transfers are skipped. Cleared status sets
     Unmarked or Cleared, never Reconciled. Memo on a split line row
     is the line's memo. A blank With clears Memo, Check #, or Payee.
-  - Replace All asks once for the batch when the date changes or any
+  - Replace all asks once for the batch when the date changes or any
     checked transaction is reconciled (TXN-050). It takes a bulk
     backup first (BAK-020), saves every change in one write, one
     audit entry per changed transaction, and says how many changed,
     already had the value, or were skipped (split, transfer, closed
     account, voided). One Undo puts every changed transaction back
-    (UI-060); new tags, payees, and categories stay.
+    (UI-060) and deletes the tags, payees, and categories the replace
+    created (0.7.61).
 
 ### 8. Scheduled and Recurring Transactions (REC) and Calendar (CAL)
 
@@ -449,7 +459,9 @@ common patterns.
 - **REC-065** [1.0][R] An estimated amount may be the average of the
   schedule's last N payments (N 1 to 99, default 3; 0.7.43). The
   schedule dialog's Amount choice "Average of past payments … of the
-  last N payments" (0.7.44) is for a one-line, Remind schedule (Split
+  last N payments" (0.7.44; "payments" is the transaction type's
+  name for the account, as in REG-010: charges, deposits,
+  increases, amounts spent; 0.7.68) is for a one-line, Remind schedule (Split
   and automatic entry are then unavailable); its amount field shows
   the average and is not typed. Only payments this schedule entered
   count (REC-160), latest by occurrence first, in the schedule's
@@ -514,7 +526,11 @@ common patterns.
 - **REC-300** [1.0][S] List columns: Date Due, Payee, Amount, Account,
   Method, Frequency ("How often"), Remind Days, # Left, End Date,
   Mode. Method is the transaction type, Payment or Deposit, transfers
-  included (0.7.3).
+  included (0.7.3); named for the schedule's account as in the
+  schedule dialog (0.7.67, REG-010; 0.7.70): Charge or Payment for a
+  credit card, Spend or Receive for cash, Increase or Decrease for a
+  loan or other liability, Decrease or Increase for an other asset,
+  Cash out or Cash in for an investment account.
 
 #### 8.4 Calendar
 
@@ -557,7 +573,12 @@ common patterns.
      interest earned and service charges, which are created as
      transactions.
   2. Display uncleared and cleared transactions up to the statement
-     date, split into payments and deposits.
+     date, split into payments and deposits, named as in Quicken
+     (0.7.70): Payments and checks, Deposits; on a credit card,
+     Charges and cash advances, Payments and credits, and its
+     interest is Finance charges, entered with the memo Finance
+     charge (0.7.71); on a cash account, Amounts spent and Amounts
+     received; on an investment account, Cash out and Cash in.
   3. User checks off items; the app shows the running cleared balance
      and the difference from the statement.
   4. **Finish** is enabled only when the difference is zero; on
@@ -593,11 +614,11 @@ common patterns.
   referenced by any transaction.
 - **SEC-050** [Later][R] Multiple asset-class allocations per security
   (e.g., a balanced fund that is 60% equity/40% bond).
-- **SEC-060** [1.0][R] **Security Details**: clicking a security on the
+- **SEC-060** [1.0][R] **Security details**: clicking a security on the
   Investments screen opens a window with a dropdown of every security,
   set to the one clicked, and three cards: the security's name, ticker,
-  and type, with Edit; a graph of Market Value (shares held in every
-  account × the price on each price date) or Price History over Week,
+  and type, with Edit; a graph of Market value (shares held in every
+  account × the price on each price date) or Price history over Week,
   Month, Three Months, Year to Date, Year, 2 Years, 5 Years, or Custom
   (two dates); and its transactions in every account. The graph's
   "Fit graph to data" box (on to start) sizes the money axis to the
@@ -620,7 +641,7 @@ common patterns.
   replaced. Quicken's QIF price history is read only by the Quicken
   import (MIG-140).
 - **PRC-040** [1.0][S] Download a price for every security that is
-  not hidden and has a ticker (Download Prices, beside Customize on the
+  not hidden and has a ticker (Download prices, beside Customize on the
   Investments screen), for the screen's As of date: the latest price
   when that date is today, else the close of the last trading day on
   or before it (0.5.2). Each price is dated the market day it belongs
@@ -725,7 +746,7 @@ common patterns.
   federal and state withheld lines. The Tax Summary by Category lists
   the taxable part under INCOME, as Roth conversion [Roth IRA name]
   (0.7.28).
-  The registers show Roth Conversion in the IRA and Conversion In in
+  The registers show Roth conversion in the IRA and Conversion in in
   the Roth IRA.
 
 #### 10.4 Cash handling
@@ -827,7 +848,7 @@ income and fees) is its own row, so the rows add up to the account.
   are blank unless a price is dated exactly that day and an earlier one
   exists. Five named views (Default, Custom 2 to Custom 5, renamable)
   keep the columns and their order, the accounts and their order, the
-  equities shown, and the sort; Reset View restores a view. A column
+  equities shown, and the sort; Reset view restores a view. A column
   heading sorts by that column, ascending, then descending on a second
   click (▲/▼; ⇅ on the others) (0.7.54): equities within each account,
   lots and sales within each equity; accounts keep the view's order.
@@ -1027,13 +1048,15 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   and rerun. Every report has one Customize dialog: date range, a
   Display tab (title, grouping, show options, columns with Reset
   Columns), and a tab per filter (Accounts, Categories, Payees,
-  Securities, Tags as the report uses them), each with Select All and
-  Clear All. Closing a report whose settings changed since it was
-  opened or last saved asks whether to save it. Merging or deleting
-  an account, category, payee, security, or tag updates saved
-  reports' filters: a merged record's ID becomes the survivor's, a
-  deleted one is dropped, and a filter left empty becomes no filter
-  (0.4.1). Display option **Totals on group heading**: a group's
+  Securities, Tags as the report uses them), each with Select all and
+  Clear all. Ticking or unticking a category on a Categories tab does
+  the same to its subcategories, which can then be changed one by one
+  (0.7.78; a spending card's too). Closing a report whose settings
+  changed since it was opened or last saved asks whether to save it.
+  Merging or deleting an account, category, payee, security, or tag
+  updates saved reports' filters: a merged record's ID becomes the
+  survivor's, a deleted one is dropped, and a filter left empty
+  becomes no filter (0.4.1). Display option **Totals on group heading**: a group's
   totals sit on its heading line and no closing "Total …" line
   follows; CSV export does the same. On by default for Tax Schedule,
   Tax Summary, Itemized Categories, and Itemized Payees (0.7.11), off
@@ -1183,7 +1206,9 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   on their heading lines; the overall total stays at the end.
   Subtotal by: Category (Payee) or Tag, then category (payee): one
   section per tag set (TAG-030) holding INCOME, EXPENSES, and
-  TRANSFERS as above (0.7.59).
+  TRANSFERS as above (0.7.59). A new one starts with Transfers off;
+  Customize turns them on, and a saved report keeps its choice
+  (0.7.80). The tax reports always count mapped transfers (CAT-050).
 - **RPT-210** [1.0][S] **Current Spending vs. Average Spending** by
   Category and by Payee (Reports > Comparison, 0.7.32): spending in the
   date range against the average spending of the periods before. The bar
@@ -1514,7 +1539,12 @@ platform has one.
   opens it. A backup from a newer schema is refused (§21); one from an
   older schema is migrated on opening. A backup of another book (by
   its manifest) is shown as such before it replaces this book's data;
-  the book keeps its name (0.5). Restore and setup's conversion
+  the book keeps its name (0.5). The warning (0.7.77) is boxed and
+  bold, pulses three times as it appears (not with reduced motion),
+  says the book keeps its name, and says to open the other book first
+  to get it back instead; the Restore button reads "Replace" and the
+  book's name, and is enabled only once "Replace this book with the
+  other book's data" is ticked. Restore and setup's conversion
   write the new database and key file beside the old ones, then rename
   them into place, database first; at startup a swap a crash
   interrupted is finished (only the key file left to rename) or undone
@@ -1725,14 +1755,29 @@ platform has one.
     memorized payees, tags, securities and prices, schedules and
     reminders, budgets, saved reports, insights and cards, the
     navigation bar, and the book's settings. The user picks
-    **Balances**: *Zero* (every account opens at 0) or *Carry* (each
-    account's balance on a date the user picks, today by default,
-    becomes its opening balance on that date, reconciled). The user
-    picks whether closed accounts are copied or dropped; schedules
-    and reminders that use a dropped account are dropped with it.
-    Investment accounts are copied without holdings or lots; with
-    Carry, only their cash balance carries, and holdings are seeded
-    again (MIG-120).
+    **Balances**: *Zero* (every account opens at 0), *Carry each
+    balance* (each account's balance on the carry date, by default the
+    last day of the previous year (0.7.75), becomes its opening
+    balance on that date, reconciled), or
+    *Carry, and keep transactions after the carry date* (0.7.63, a
+    year-end copy: as Carry, and every transaction dated after the
+    carry date is copied too). The carry date is on its own line under
+    the Carry choice made; with Zero there is none (0.7.74). The
+    user picks whether closed accounts are copied or dropped;
+    schedules and reminders that use a dropped account are dropped
+    with it. With Zero, investment accounts are copied without
+    holdings or lots. With either Carry (0.7.63), an investment
+    account carries its cash and each lot open on the carry date:
+    its open shares and basis (after earlier sales, splits, returns
+    of capital, and transfers) as Shares added dated the carry date,
+    keeping the lot's acquired date, so short and long term stay
+    right; its memo is "Opening Balance, acquired" and that date
+    (0.7.64). Lots in tax-deferred and tax-exempt accounts carry as lots
+    too (no collapse to totals, MIG-130). A lot sold whole before the
+    date does not carry; nor do realized gains before it. Each choice
+    in Start with and Balances has a tooltip saying what it copies
+    and, last, when to choose it (0.7.75); the Carry tooltips say to
+    enter the last day of the year being closed.
 
   Built-in categories are in every new book. Per-computer settings
   (SET-070) are not in a book and are not copied. The passphrase and
@@ -1746,9 +1791,28 @@ platform has one.
   reconciliations, imports, schedule occurrences (each schedule keeps
   its next due date), and the old book's backup records. A closed
   account an open account links to (an investment account's cash, an
-  asset's loan) is kept. A carried balance is one Opening Balance
-  entry per account with money, dated the carry date; an investment
-  account's carried cash is a Cash In or Cash Out, not reconciled.
+  asset's loan) is kept. With either Carry, so is a closed account
+  with money or shares on the carry date: it stays closed, and its
+  balance and lots carry (0.7.76). A carried balance is one Opening
+  Balance entry per account with money, dated the carry date, in a
+  closed account too; an investment account's carried cash is a Cash
+  in or Cash out, not reconciled.
+
+  Year-end copy (0.7.63). Transactions dated on or before the carry
+  date go, with their lot records and tags; later ones are kept with
+  their IDs, tags, splits, cleared status, and import batches. A
+  later sale, transfer, split, return of capital, or average-cost
+  change of a carried lot points at the lot carried in its place, so
+  every account's balance and every holding (shares, basis) match the
+  old book on every date from the carry date on, and realized gains
+  after it are the same. Lots bought or transferred in after the date
+  are kept as they are. Reconciliations with a statement date after
+  the carry date are kept; a later entry in an earlier statement stays
+  reconciled without it. Schedule occurrences due after the date are
+  kept (each schedule keeps its next due date). A closed account a
+  kept transaction is in is copied even when closed accounts are
+  dropped. The audit log starts with the opening entries. On the last
+  day with transactions it is the same as Carry.
 
 #### 14.2 Settings
 
@@ -1792,7 +1856,7 @@ platform has one.
   Data, Investments, Register, Notifications, Backups) over one card
   showing that category's settings, with OK and Cancel below on the
   right. Edits are kept until OK. Interface: date format, first day of
-  week, startup view, account list side, show cents in Account Bar
+  week, startup view, account list side, show cents in account bar
   balances (ACCT-240). Data: integrity check at
   startup, Due soon look-ahead days. Investments: stale price days,
   lot method, price download. Register: REG-070, REG-100 … REG-120.
@@ -2406,7 +2470,7 @@ Modeling choices that affect other sections:
   reconciles that cash (RCN-010); holdings are never listed; statement
   interest and fees become investment transactions (Interest, Fee, or
   misc income or expense for other categories). Lot seeding (MIG-120)
-  is one import batch: each CSV row becomes a Shares Added transaction
+  is one import batch: each CSV row becomes a Shares added transaction
   on the seeding date whose lot keeps its original acquisition
   date. A lot true-up (MIG-115, 0.7) is an exception to date order:
   it may come before later disposals of its holding, which are taken
@@ -2470,18 +2534,18 @@ Modeling choices that affect other sections:
   (only the investments engine posts to an investment account). The
   dropped side's cleared status goes onto the kept transaction's
   posting. A banking transfer into an investment account with no
-  record on that side becomes a Cash In or Cash Out there. Cash moved
+  record on that side becomes a Cash in or Cash out there. Cash moved
   between two investment accounts has no one-transaction form: each
   side posts against Opening Balance, with a note. Two lines of one
   entry to the same account merge. Investment actions: `Buy`, `Sell`,
   `Div`, `IntInc`, `CGLong`/`CGMid` (long), `CGShort`, `ReinvDiv`,
-  `ReinvLg`/`ReinvMd`, `ReinvSh`, `ShrsIn` (Shares Added, basis `T` or
+  `ReinvLg`/`ReinvMd`, `ReinvSh`, `ShrsIn` (Shares added, basis `T` or
   shares × price, dated the trade date), `ShrsOut`, `StkSplit` (`Q` new
   shares per 10 old), `RtrnCap`, `MiscInc`/`MiscExp` (their `L`
   category, else the built-in one), `MargInt` (misc expense), `XIn`,
-  `XOut`, `ContribX`, `WithdrwX`, `Cash` (Cash In/Out against its `L`,
+  `XOut`, `ContribX`, `WithdrwX`, `Cash` (Cash in/out against its `L`,
   else misc income/expense); an `X` action adds its transfer as a Cash
-  In before it (buys, expenses) or a Cash Out after it (sales, income),
+  in before it (buys, expenses) or a Cash out after it (sales, income),
   for `$` (else `T`); `ReinvInt` is Interest then Buy; income with no
   security is misc income in the action's built-in category, except
   `Div`, which stays a dividend paid by the cash (0.7.8);
@@ -2820,6 +2884,26 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.80 | 2026-10-12 | RPT-205: a new Itemized Categories or Itemized Payees report starts with Transfers off (was on); Customize turns them on. Saved reports keep their choice (one saved without it still includes them). The tax reports keep counting transfers mapped to a tax line (an IRA distribution, CAT-050). No schema or API change. |
+| 0.7.79 | 2026-10-12 | ACCT-030: a new Donor Advised Fund account defaults to Tax-Exempt (was Taxable), so its income and grants stay out of the tax reports; the deduction is the contribution into it. Existing accounts keep their setting (change it in Edit account details…). No schema or API change. |
+| 0.7.78 | 2026-10-12 | RPT-020: on a Categories tab (a report's Customize, a spending card's Customize…), ticking or unticking a category does the same to its subcategories at every depth; each can then be changed on its own. No schema or API change. |
+| 0.7.77 | 2026-10-12 | BAK-070: restoring another book's backup is easy to mistake for getting that book back, but it replaces the open book's data under the open book's name. The warning is now boxed and bold, pulses three times as it appears (not with reduced motion), and says to open the other book first (File > Open…) to restore it instead; the Restore button reads "Replace" and the open book's name, and is enabled only once a box confirming the replacement is ticked. No schema or API change. |
+| 0.7.76 | 2026-10-12 | UI-085 fix: Carry stopped with "account … is closed; reopen it to change its transactions" when a closed account had a balance on the carry date, and the copy's files were removed. The carried Opening Balance entry now goes into a closed account, which stays closed. With either Carry and closed accounts dropped, a closed account with money or shares on the carry date is now kept, so its balance carries (it was dropped, and its balance lost). No schema or API change. |
+| 0.7.75 | 2026-10-12 | UI-085: the carry date defaults to the last day of the previous year (was today), for both Carry choices. Each Start with and Balances tooltip ends with when to choose it (Standard: start fresh by hand with a category list you can update; Copy: a new book for a new year, or a practice book; Zero: a practice book or a fresh start; Carry: at year end, from balances alone; Carry and keep: once the new year has begun), and the Carry tooltips say to enter the last day of the year being closed; Copy closed accounts says to turn it off to leave long-closed accounts behind. No schema or API change. |
+| 0.7.74 | 2026-10-12 | UI-085: the carry date is on its own line ("Carry date:") under the Carry choice made, and gone with Zero; the choices read Carry each balance and Carry, and keep transactions after the carry date, in the dialog and the spec alike; Year-End Copy is written "year-end copy". The spec names investment actions in sentence case as the register does (0.7.71): Shares added, Cash in, Cash out, Roth conversion, Conversion in (INV-070, UI-085, and the lot CSV and QIF import notes). No schema or API change. |
+| 0.7.73 | 2026-10-12 | Wording check, part two. CONVENTIONS §6 Wording covers every label (dialog titles, headings, field labels, options, context menus, tabs, tooltips, placeholders), keeps Title Case for the menu bar, report names, and report and portfolio column headings (as Quicken), and is checked by `src/lib/labelCase.test.ts`. Labels changed to match: REG-170 field Cleared status; the schedule dialog's Transaction type; SEC-060 graph choices Market value and Price history (and the graph's series name); ACCT-240 the list's Net worth line and the Assets & debt section name; SET-080 "Show cents in account bar balances"; the undo label Replace all. No schema or API change. |
+| 0.7.72 | 2026-10-12 | Wording check. CONVENTIONS §6 gains a Wording rule: buttons, dialog titles, headings, and context menus in sentence case (menu bar stays Title Case), checked for buttons by a test; UI messages are sentences, engine messages lower case. Buttons and titles changed to match (Clear all, Select all, Replace all, Add row, Reset view, Download prices, Security details, Manage saved reports, Find and replace, Edit account details…, and others); Customize view's Add/Remove match the other pickers (Add ›, ‹ Remove). Invalid entries say "Enter a valid …". Engine messages say "line" not "posting", "void" not "voided", "cannot" not "can't", "more than zero" (the reconcile statement-item message, 0.7.71); in-progress reconcile says "resume or abandon it"; reconcile amount examples read "like 1,234.56". REG-170, SEC-060, PRC-040, POS-040, and RPT-020 text updated. No schema or API change. |
+| 0.7.71 | 2026-10-12 | Second nomenclature check. RCN-020: a cash account's reconcile lists are Amounts spent and Amounts received, an investment account's Cash out and Cash in; a credit card's interest is entered with the memo Finance charge (was Interest), and the form's messages say Finance charge. The engine's statement-item message names finance charges. INV-030: the investment register's Action names are in sentence case like the rest of the app (Cash in, Shares added, Transfer in, Roth conversion, …). No schema or API change. |
+| 0.7.70 | 2026-10-12 | Quicken nomenclature check. REG-010, REC-300, REC-065: a loan or other liability names its directions Increase and Decrease (0.7.69 had Increase and Payment); a cash account Spend and Receive (was Payment and Deposit). The entry row's "not both" and "valid amount" messages use the account's names. RCN-020: a bank account's payments list is Payments and checks; a credit card's interest box is Finance charges. No schema or API change. |
+| 0.7.69 | 2026-10-12 | REG-010, REC-300, REC-065: as in Quicken, a loan or other liability names its two directions Increase and Payment (was Charge and Payment), an other asset Decrease and Increase (was Payment and Deposit); credit cards keep Charge and Payment. Applies to the register, the schedule dialog and list, and the average choice. The engine's average errors say "amounts" instead of "payments". No schema or API change. |
+| 0.7.68 | 2026-10-12 | REC-065: the schedule dialog's "Average of past payments" names the transaction type for the account and type chosen: payments, deposits, charges, cash outs, cash ins (with "of the last N …", its tooltip, and the message when N is missing). No schema or API change. |
+| 0.7.67 | 2026-10-12 | REC-300: the schedule list's Method names the transaction type for the schedule's account, as the schedule dialog does: Charge or Payment for a credit card, loan, or other liability; Cash out or Cash in for an investment account. No schema or API change. |
+| 0.7.66 | 2026-10-12 | REG-010: loan and other liability registers label their amount columns Charge and Payment too. The schedule dialog's Transaction Type names its two choices for the chosen account: Payment/Deposit, Charge/Payment for a liability, Cash out/Cash in for an investment account (stored values unchanged). No schema or API change. |
+| 0.7.65 | 2026-10-12 | REG-010: a credit card register labels its amount columns Charge and Payment (was Payment and Deposit), in the grid header, entry row, and amount messages. No schema or API change. |
+| 0.7.64 | 2026-10-12 | UI-085: a carried lot's Shares Added memo names its acquired date ("Opening Balance, acquired 2019-03-04"), as the register shows the carry date. A Zero or Carry copy of a book with imports no longer fails a foreign key (the audit log named its import batches). No schema or API change. |
+| 0.7.63 | 2026-10-12 | UI-085: a copy with Carry carries each investment lot open on the carry date (open shares and basis as Shares Added on that date, original acquired date kept; closes #14). New Balances choice *Carry and keep later transactions* (Year-End Copy, closes #15): transactions after the carry date are kept, later lot events point at the carried lots, reconciliations and occurrences after the date stay, a closed account with a kept transaction stays. Tooltips on every Start with and Balances choice. NFR-040: `just perf` times the investment register (2,500 rows) and a Year-End Copy of the large book (closes #12). No schema change. **API change:** `CopyBalances` gains `carry_keep`. |
+| 0.7.62 | 2026-10-11 | REG-170: Find/Replace… moves from the File menu to the Edit menu, after Find. No schema change. No API change. |
+| 0.7.61 | 2026-10-11 | REG-170: undoing a Replace All also deletes the tags, payees, and categories it created. No schema change. No API change. |
 | 0.7.60 | 2026-10-11 | New REG-170 Find/Replace (closes #17): File > Find/Replace… finds register rows by field (Amount, Category, Check #, Cleared Status, Date, Memo, Payee, Tag) and comparison, several rows joined by one Or/And, optionally within splits; Replace All sets one field on the checked rows, one confirmation for a date change or reconciled rows, bulk backup first, audited. UI-060: one Undo puts back a whole Replace All. BAK-020: Find/Replace is a bulk operation. No schema change. **API change:** new commands `find_transactions`, `replace_transactions`; new types `FindQuery`, `FindCondition`, `FindField`, `FindComparison`, `FindJoin`, `FindSort`, `FindResult`, `FoundRow`, `FoundKey`, `ReplaceSpec`, `ReplaceResult`. |
 | 0.7.59 | 2026-10-11 | TAG-030: one rule for a line with several tags: its tag set ("Trip, Work") is its group, in Tax Summary, the comparison reports (was the first tag by name), and the itemized reports. RPT-205: Itemized Categories and Itemized Payees can subtotal by Tag, then category (payee). §23 missing list updated. No schema change. **API change:** `ReportSettings` gains `by_tag`. |
 | 0.7.58 | 2026-10-11 | UI-050: the shortcuts are Ctrl+N, Ctrl+Z, and Ctrl+F only; Ctrl+F (new, Edit > Find) puts the cursor in the Search box. §23 missing list updated. No schema change. No API change. |

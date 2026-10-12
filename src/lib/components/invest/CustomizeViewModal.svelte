@@ -109,8 +109,8 @@
           </ul>
         </div>
         <div class="mid">
-          <button type="button" onclick={add} disabled={left === null}>Add&gt;&gt;</button>
-          <button type="button" onclick={remove} disabled={right === null}>&lt;&lt;Remove</button>
+          <button type="button" onclick={add} disabled={left === null}>Add ›</button>
+          <button type="button" onclick={remove} disabled={right === null}>‹ Remove</button>
         </div>
         <div>
           <div class="cap" id="shown-cap">Displayed columns (Name always shows)</div>
@@ -122,8 +122,8 @@
             {/each}
           </ul>
           <div class="move">
-            <button type="button" onclick={() => moveColumn(-1)} disabled={right === null || draft.columns.indexOf(right) === 0}>Move Up</button>
-            <button type="button" onclick={() => moveColumn(1)} disabled={right === null || draft.columns.indexOf(right) === draft.columns.length - 1}>Move Down</button>
+            <button type="button" onclick={() => moveColumn(-1)} disabled={right === null || draft.columns.indexOf(right) === 0}>Move up</button>
+            <button type="button" onclick={() => moveColumn(1)} disabled={right === null || draft.columns.indexOf(right) === draft.columns.length - 1}>Move down</button>
           </div>
         </div>
       </div>
@@ -143,8 +143,8 @@
         {/each}
       </ul>
       <div class="move">
-        <button type="button" onclick={() => moveAccount(-1)} disabled={account === null || accounts.indexOf(account) === 0}>Move Up</button>
-        <button type="button" onclick={() => moveAccount(1)} disabled={account === null || accounts.indexOf(account) === accounts.length - 1}>Move Down</button>
+        <button type="button" onclick={() => moveAccount(-1)} disabled={account === null || accounts.indexOf(account) === 0}>Move up</button>
+        <button type="button" onclick={() => moveAccount(1)} disabled={account === null || accounts.indexOf(account) === accounts.length - 1}>Move down</button>
       </div>
     {:else}
       <p class="hint">Checked securities show.</p>
@@ -163,7 +163,7 @@
     {/if}
 
     <div class="buttons">
-      <button type="button" onclick={reset}>Reset View</button>
+      <button type="button" onclick={reset}>Reset view</button>
       <span class="grow"></span>
       <button type="button" onclick={onclose}>Cancel</button>
       <button type="submit">OK</button>

@@ -33,7 +33,7 @@ pub fn search_transactions(
     state.read(|db, _| ledger::search(db.conn(), &query))
 }
 
-/// File > Find/Replace: rows matching the Find rows (REG-170).
+/// Edit > Find/Replace: rows matching the Find rows (REG-170).
 #[tauri::command]
 #[specta::specta]
 pub fn find_transactions(state: State<'_, AppState>, query: FindQuery) -> CmdResult<FindResult> {
@@ -43,7 +43,8 @@ pub fn find_transactions(state: State<'_, AppState>, query: FindQuery) -> CmdRes
 /// Replace All on the checked rows (REG-170). A new date, or reconciled
 /// transactions among them, fails with `confirmation_required` until
 /// `confirmed` (one question for the batch). A bulk backup comes first;
-/// one Undo puts every changed transaction back.
+/// one Undo puts every changed transaction back and deletes
+/// the tags, payees, and categories it created.
 #[tauri::command]
 #[specta::specta]
 pub fn replace_transactions(
@@ -65,8 +66,8 @@ pub fn replace_transactions(
     let mut txns: Vec<TxnId> = rows.iter().map(|k| k.txn).collect();
     txns.sort();
     txns.dedup();
-    state.write_undoable_many(&txns, "Replace All", |tx| {
-        ledger::replace(tx, &rows, &spec, true)
+    state.write_undoable_many(&txns, "Replace all", |tx| {
+        ledger::replace_tracked(tx, &rows, &spec, true)
     })
 }
 

@@ -121,7 +121,7 @@
           </select>
         </label>
         <label>
-          <span>Show cents in Account Bar balances</span>
+          <span>Show cents in account bar balances</span>
           <input type="checkbox" bind:checked={s.account_bar_cents} />
         </label>
         <label>

@@ -40,7 +40,7 @@ export const SECTIONS: Section[] = [
   { id: "credit", label: "Credit", groups: ["credit"] },
   { id: "investments", label: "Investments", groups: ["investments"] },
   { id: "retirement", label: "Retirement", groups: ["retirement"] },
-  { id: "assets_debt", label: "Assets & Debt", groups: ["assets", "liabilities"] },
+  { id: "assets_debt", label: "Assets & debt", groups: ["assets", "liabilities"] },
   { id: "other", label: "Other", groups: ["other"] },
 ];
 

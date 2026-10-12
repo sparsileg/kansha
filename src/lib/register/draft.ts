@@ -251,6 +251,12 @@ export type Built =
   | { ok: true; entry: Entry; payeeName: string }
   | { ok: false; error: string };
 
+/** "a payment", "an increase": a label as a lowercase noun with its article. */
+function article(label: string): string {
+  const w = label.toLowerCase();
+  return `${/^[aeiou]/.test(w) ? "an" : "a"} ${w}`;
+}
+
 /**
  * Turn the draft into an `Entry`. Split remainder is checked by the
  * caller through `split_remainder`; everything else is checked here.
@@ -259,17 +265,18 @@ export function buildEntry(
   d: Draft,
   account: AccountId,
   today: string,
+  labels: { out: string; in: string } = { out: "Payment", in: "Deposit" },
 ): Built {
   const date = parseDate(d.date, today);
-  if (date === null) return { ok: false, error: "Date is not valid." };
+  if (date === null) return { ok: false, error: "Enter a valid date." };
   const amount = draftTotal(d);
   if (amount === null) {
     return {
       ok: false,
       error:
         d.payment.trim() && d.deposit.trim()
-          ? "Enter a payment or a deposit, not both."
-          : "Enter a valid payment or deposit amount.",
+          ? `Enter ${article(labels.out)} or ${article(labels.in)}, not both.`
+          : `Enter a valid ${labels.out.toLowerCase()} or ${labels.in.toLowerCase()} amount.`,
     };
   }
   if (d.category === "") {
@@ -305,7 +312,7 @@ export function buildEntry(
     }
   } else {
     const target = parseTargetValue(d.category);
-    if (target === null) return { ok: false, error: "Category is not valid." };
+    if (target === null) return { ok: false, error: "Enter a valid category." };
     lines = [
       {
         target,

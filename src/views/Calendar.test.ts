@@ -117,7 +117,7 @@ describe("Calendar day with more than three items", () => {
       .getAllByRole("button")
       .map((b) => b.textContent?.trim())
       .filter((n) => n !== "×"); // the dialog's own close box
-    expect(names).toEqual(["New Schedule", "Enter", "Edit", "Skip", "Close"]);
+    expect(names).toEqual(["New schedule", "Enter", "Edit", "Skip", "Close"]);
     // Payee 2 is not its schedule's next one: Enter and Skip are off.
     expect((within(dialog).getByRole("button", { name: "Enter" }) as HTMLButtonElement).disabled).toBe(true);
     await fireEvent.click(options[0]);
@@ -136,7 +136,7 @@ describe("Calendar day with more than three items", () => {
     const dialog = await screen.findByRole("dialog");
     const options = await within(dialog).findAllByRole("option");
     expect(options[0].getAttribute("aria-selected")).toBe("true");
-    await fireEvent.click(within(dialog).getByRole("button", { name: "New Schedule" }));
+    await fireEvent.click(within(dialog).getByRole("button", { name: "New schedule" }));
     expect(dialogState.schedule).toEqual({ id: null, fields: null, start: "2026-09-24" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     // The keyboard opens it too.

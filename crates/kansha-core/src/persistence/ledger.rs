@@ -760,7 +760,7 @@ pub fn set_cleared(tx: &Tx<'_>, id: TxnId, account: AccountId, cleared: Cleared)
     )?;
     if changed == 0 {
         return Err(Error::Invalid(format!(
-            "transaction {} has no posting to account {}",
+            "transaction {} has no line in account {}",
             id.0, account.0
         )));
     }

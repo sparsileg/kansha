@@ -211,7 +211,7 @@
   const accountName = (a: number) => listsState.account(a)?.name ?? `#${a}`;
 </script>
 
-<Modal title="Security Details" fit {onclose}>
+<Modal title="Security details" fit {onclose}>
   <label class="pick">
     <select aria-label="Security" value={String(id)} onchange={(e) => pick(Number(e.currentTarget.value))}>
       {#each investState.securities.filter((x) => !x.hidden || x.id === id) as x (x.id)}
@@ -252,7 +252,7 @@
     </article>
 
     <article class="card sheet" aria-labelledby="sd-prices">
-      <header><h2 id="sd-prices">Update Prices</h2></header>
+      <header><h2 id="sd-prices">Update prices</h2></header>
       <div class="body">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="scroll prices" onkeydown={onPriceKey}>
@@ -326,8 +326,8 @@
       <header>
         <h2 id="sd-graph">Graph</h2>
         <select aria-label="Graph of" bind:value={kind}>
-          <option value="market_value">Market Value</option>
-          <option value="price_history">Price History</option>
+          <option value="market_value">Market value</option>
+          <option value="price_history">Price history</option>
         </select>
         <select aria-label="Interval" bind:value={span}>
           {#each SPANS as [v, label] (v)}<option value={v}>{label}</option>{/each}

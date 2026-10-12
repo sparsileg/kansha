@@ -82,9 +82,11 @@
     return items(tab).filter((i) => (showHidden || !i.hidden) && (!text || i.label.toLowerCase().includes(text)));
   });
 
+  /** Ticking or unticking a category does the same to its subcategories. */
   function set(id: number, on: boolean) {
     const cur = draft[tab];
-    draft[tab] = on ? (cur.includes(id) ? cur : [...cur, id]) : cur.filter((x) => x !== id);
+    const ids = tab === "categories" ? listsState.withSubcategories(id) : [id];
+    draft[tab] = on ? [...cur, ...ids.filter((x) => !cur.includes(x))] : cur.filter((x) => !ids.includes(x));
   }
 
   async function save(e: Event) {
@@ -134,8 +136,8 @@
         </div>
       </div>
       <div class="side">
-        <button type="button" onclick={() => (draft[tab] = items(tab).map((i) => i.id))}>Select All</button>
-        <button type="button" onclick={() => (draft[tab] = [])}>Clear All</button>
+        <button type="button" onclick={() => (draft[tab] = items(tab).map((i) => i.id))}>Select all</button>
+        <button type="button" onclick={() => (draft[tab] = [])}>Clear all</button>
       </div>
     </div>
     {#if error}<p class="err" role="alert">{error}</p>{/if}

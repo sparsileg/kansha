@@ -1612,7 +1612,7 @@ fn schedule_input_checks() {
         .book
         .write(|tx| schedule::set_override(tx, split, date("2026-07-01"), None, Some(m("-1.00"))))
         .unwrap_err();
-    assert!(e.to_string().contains("split can't be changed"), "{e}");
+    assert!(e.to_string().contains("split cannot be changed"), "{e}");
 
     // Projection: a forward window of at most ten years, not for an
     // investment account.

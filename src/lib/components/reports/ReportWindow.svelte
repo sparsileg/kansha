@@ -289,7 +289,7 @@
         {#each inst.periods as c (c.from)}<option value={c.from}>{c.label}</option>{/each}
       </select>
     {/if}
-    {#if st.range.preset === "custom"}<button type="button" onclick={openCustom}>Change Dates…</button>{/if}
+    {#if st.range.preset === "custom"}<button type="button" onclick={openCustom}>Change dates…</button>{/if}
     {#if REPORTS[st.kind].compare}
       <label>
         Compare to:
@@ -339,10 +339,10 @@
     {/if}
     <button type="button" onclick={() => (customizing = true)}>Customize…</button>
     <button type="button" onclick={() => startSave("save")}>{inst.saved ? "Save" : "Save…"}</button>
-    {#if inst.saved}<button type="button" onclick={() => startSave("as")}>Save As…</button>{/if}
+    {#if inst.saved}<button type="button" onclick={() => startSave("as")}>Save as…</button>{/if}
     <span class="sep"></span>
-    <button type="button" onclick={() => inst.expandAll()}>Expand All</button>
-    <button type="button" onclick={() => inst.collapseAll()}>Collapse All</button>
+    <button type="button" onclick={() => inst.expandAll()}>Expand all</button>
+    <button type="button" onclick={() => inst.collapseAll()}>Collapse all</button>
     <span class="sep"></span>
     <button type="button" onclick={exportCsv} disabled={!report}>Export CSV</button>
     <button type="button" onclick={() => (pdfOpen = true)} disabled={!report}>Save PDF…</button>
@@ -372,7 +372,7 @@
           <div class="fold no-print">
             <button type="button" aria-expanded={!inst.hideGraph} onclick={() => (inst.hideGraph = !inst.hideGraph)}>
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d={inst.hideGraph ? DOWN : UP} /></svg>
-              {inst.hideGraph ? "Open Graph" : "Hide Graph"}
+              {inst.hideGraph ? "Open graph" : "Hide graph"}
             </button>
           </div>
           {#if !inst.hideGraph}<ReportChart chart={report.chart} />{/if}
@@ -381,7 +381,7 @@
         <div class="fold no-print">
           <button type="button" aria-expanded={!inst.hideTable} onclick={() => (inst.hideTable = !inst.hideTable)}>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d={inst.hideTable ? DOWN : UP} /></svg>
-            {inst.hideTable ? "Open Report" : "Hide Report"}
+            {inst.hideTable ? "Open report" : "Hide report"}
           </button>
         </div>
       {/if}

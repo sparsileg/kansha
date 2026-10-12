@@ -117,6 +117,19 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
         &mut failures,
     );
 
+    // Investment register (NFR-040): an account with a few thousand
+    // buys, sales, dividends, reinvestments, and interest.
+    let (trading, inv_rows) = trading_account(&mut db, &clock, today);
+    let t = Instant::now();
+    let reg = kansha_core::invest::register(db.conn(), trading, today).unwrap();
+    check(
+        &format!("investment register, {inv_rows} rows"),
+        t.elapsed(),
+        1000,
+        &mut failures,
+    );
+    assert_eq!(reg.rows.len(), inv_rows);
+
     // Reports (NFR-040).
     let custom = |from: &str, to: &str| DateRange {
         preset: DatePreset::Custom,
@@ -230,9 +243,109 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     );
     assert!(report.is_clean());
 
+    // Year-End Copy (UI-085): ten years carried, ten kept. Last, as it
+    // turns this book into the copy.
+    let t = Instant::now();
+    kansha_core::newbook::prepare_copy(
+        &mut db,
+        &clock,
+        &kansha_core::newbook::CopyOptions {
+            balances: kansha_core::newbook::CopyBalances::CarryKeep {
+                as_of: date("2016-06-30"),
+            },
+            closed_accounts: true,
+        },
+    )
+    .unwrap();
+    check(
+        "year-end copy, keep 10 years",
+        t.elapsed(),
+        5000,
+        &mut failures,
+    );
+
     assert!(
         failures.is_empty(),
         "NFR-040 misses:\n{}",
         failures.join("\n")
     );
+}
+
+/// A brokerage with a few thousand transactions over the six years to
+/// `today`, every other day: buys of the sample's VTI, with dividends,
+/// FIFO sales, reinvestments, and interest between. Returns the account
+/// and its register row count.
+fn trading_account(
+    db: &mut Db,
+    clock: &FixedClock,
+    today: kansha_core::Date,
+) -> (AccountId, usize) {
+    use chrono::Days;
+    use kansha_core::accounts::{AccountFields, AccountType};
+    use kansha_core::invest::{self, InvAction, InvInput};
+    use kansha_core::ledger::Target;
+    use kansha_core::persistence::{accounts, categories, securities};
+    use kansha_core::{Money, Price, Quantity};
+
+    db.write(clock, Origin::System, |tx| {
+        let account =
+            accounts::insert(tx, &AccountFields::new("Trading", AccountType::Brokerage))?.id;
+        let vti = securities::find_by_label(tx.conn(), "VTI")?
+            .expect("the sample has VTI")
+            .id;
+        let opening = categories::system(
+            tx.conn(),
+            kansha_core::categories::SystemCategory::OpeningBalance,
+        )?
+        .id;
+        let start = today.naive() - Days::new(2 * 1200);
+        let day = |n: u64| kansha_core::Date::from_naive(start + Days::new(2 * n));
+        let mut rows = 0;
+        let mut post = |i: &InvInput| -> kansha_core::Result<()> {
+            invest::create(tx, i)?;
+            rows += 1;
+            Ok(())
+        };
+        let mut cash = InvInput::new(account, InvAction::CashIn, day(0));
+        cash.amount = Some(Money::from_cents(500_000_000));
+        cash.counterpart = Some(Target::Category(opening));
+        post(&cash)?;
+        for n in 1..1200 {
+            let on = day(n);
+            let price = Price::from_raw(200_000_000 + (n as i64 % 50) * 1_000_000);
+            let input = |action| {
+                let mut i = InvInput::new(account, action, on);
+                i.security = Some(vti);
+                i
+            };
+            let mut buy = input(InvAction::Buy);
+            buy.quantity = Some(Quantity::from_raw(10_000_000));
+            buy.price = Some(price);
+            post(&buy)?;
+            if n % 2 == 0 {
+                let mut d = input(InvAction::Dividend);
+                d.amount = Some(Money::from_cents(1_250));
+                post(&d)?;
+            }
+            if n % 3 == 0 {
+                let mut s = input(InvAction::Sell);
+                s.quantity = Some(Quantity::from_raw(5_000_000));
+                s.price = Some(price);
+                post(&s)?;
+            }
+            if n % 5 == 0 {
+                let mut r = input(InvAction::ReinvestDividend);
+                r.quantity = Some(Quantity::from_raw(100_000));
+                r.price = Some(price);
+                post(&r)?;
+            }
+            if n % 15 == 0 {
+                let mut i = InvInput::new(account, InvAction::Interest, on);
+                i.amount = Some(Money::from_cents(375));
+                post(&i)?;
+            }
+        }
+        Ok((account, rows))
+    })
+    .unwrap()
 }

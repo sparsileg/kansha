@@ -37,15 +37,17 @@ pub(crate) fn create_with_source(tx: &Tx<'_>, source: TxnSource, input: &TxnInpu
         input,
         None,
         matches!(source, TxnSource::Import { .. }),
+        false,
     )?;
     repo::insert(tx, source, input)
 }
 
 /// A copied book's opening balance (UI-085): stored reconciled without a
-/// reconciliation, as an imported reconciled entry is (MIG-090).
+/// reconciliation, as an imported reconciled entry is (MIG-090); in a
+/// closed account too.
 pub(crate) fn create_carried(tx: &Tx<'_>, entry: &Entry) -> Result<Txn> {
     let input = entry.to_input()?;
-    validate(tx.conn(), &input, None, true)?;
+    validate(tx.conn(), &input, None, true, true)?;
     repo::insert(tx, TxnSource::System, &input)
 }
 
@@ -60,13 +62,11 @@ pub fn create_entry(tx: &Tx<'_>, entry: &Entry) -> Result<Txn> {
 pub fn update(tx: &Tx<'_>, id: TxnId, input: &TxnInput, confirmed: bool) -> Result<Txn> {
     let before = repo::get(tx.conn(), id)?;
     if before.status == TxnStatus::Void {
-        return Err(Error::Invalid(
-            "a voided transaction cannot be edited".into(),
-        ));
+        return Err(Error::Invalid("a void transaction cannot be edited".into()));
     }
     check_changeable(tx.conn(), &before, confirmed)?;
     let importing = matches!(tx.origin(), Origin::Import(_));
-    validate(tx.conn(), input, Some(&before), importing)?;
+    validate(tx.conn(), input, Some(&before), importing, false)?;
     let after = repo::update(tx, id, input)?;
     // One a schedule entered moves its average (REC-065).
     crate::schedule::txn_changed(tx, id)?;
@@ -121,7 +121,7 @@ pub fn set_cleared(
     let before = repo::get(tx.conn(), id)?;
     let posting = before.posting_for(account).ok_or_else(|| {
         Error::Invalid(format!(
-            "transaction {} has no posting to account {}",
+            "transaction {} has no line in account {}",
             id.0, account.0
         ))
     })?;
@@ -163,7 +163,7 @@ pub fn close_account(
     }
     if crate::persistence::reconcile::find_open(tx.conn(), account)?.is_some() {
         return Err(Error::Invalid(format!(
-            "account {:?} has a reconciliation in progress; finish or abandon it first",
+            "account {:?} has a reconciliation in progress; resume or abandon it first",
             acct.fields.name
         )));
     }
@@ -242,22 +242,24 @@ fn check_account_open(conn: &Connection, account: AccountId) -> Result<Account> 
 ///   investment account (the investments engine owns those, Phase 6);
 /// - category postings are unmarked;
 /// - `Reconciled` only on an import, or where the account's posting was
-///   already reconciled before this edit.
+///   already reconciled before this edit;
+/// - a new book's carried opening balance may be in a closed account.
 fn validate(
     conn: &Connection,
     input: &TxnInput,
     before: Option<&Txn>,
     importing: bool,
+    carried: bool,
 ) -> Result<()> {
     if input.postings.is_empty() {
         return Err(Error::Invalid(
-            "a transaction needs at least one posting".into(),
+            "a transaction needs at least one line".into(),
         ));
     }
     let total = checked_sum(input.postings.iter().map(|p| p.amount))?;
     if !total.is_zero() {
         return Err(Error::Invalid(format!(
-            "postings do not balance: they sum to {total}"
+            "the lines do not balance: they sum to {total}"
         )));
     }
     let mut seen = HashSet::new();
@@ -275,7 +277,11 @@ fn validate(
                         a.0
                     )));
                 }
-                let acct = check_account_open(conn, a)?;
+                let acct = if carried {
+                    accounts::get(conn, a)?
+                } else {
+                    check_account_open(conn, a)?
+                };
                 if acct.fields.account_type.is_investment() {
                     return Err(Error::Invalid(format!(
                         "{:?} is an investment account; use the investment register",
@@ -303,7 +309,7 @@ fn validate(
     }
     if seen.is_empty() {
         return Err(Error::Invalid(
-            "a transaction needs a posting to at least one account".into(),
+            "a transaction needs a line in at least one account".into(),
         ));
     }
     Ok(())

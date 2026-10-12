@@ -252,18 +252,19 @@ impl AppState {
     }
 
     /// A change to several existing transactions at once, undone as one
-    /// (Find/Replace, REG-170). Replaces any earlier undo; when it
-    /// changed none, there is nothing to undo.
+    /// (Find/Replace, REG-170). `f` also returns the tags, payees, and
+    /// categories it created, which undo deletes. Replaces any earlier
+    /// undo; when it changed none, there is nothing to undo.
     pub fn write_undoable_many<T>(
         &self,
         txns: &[TxnId],
         label: &str,
-        f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<T>,
+        f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<(T, Vec<undo::Created>)>,
     ) -> CmdResult<T> {
         let (out, u) = self.write(|tx| {
             let befores = undo::before_many(tx.conn(), txns)?;
-            let out = f(tx)?;
-            let u = undo::after_many(tx.conn(), befores, label)?;
+            let (out, created) = f(tx)?;
+            let u = undo::after_many(tx.conn(), befores, label)?.map(|u| u.with_created(created));
             Ok((out, u))
         })?;
         if let Ok(mut slot) = self.undo.lock() {

@@ -80,6 +80,17 @@ describe("RegisterGrid", () => {
     expect(screen.getByText("1,234.50")).toBeTruthy();
   });
 
+  it("labels a loan's amount columns Increase and Decrease", async () => {
+    listsState.accounts = [{ id: 1, name: "Mortgage", account_type: "loan", status: "open", investment: null }] as never;
+    render(RegisterGrid, { account: 1 });
+    const head = document.querySelector(".register")!.textContent!;
+    expect(head).toContain("Increase");
+    expect(head).not.toContain("Deposit");
+    expect(screen.getAllByLabelText("Increase").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Decrease").length).toBeGreaterThan(0);
+    listsState.accounts = [];
+  });
+
   it("draws one today line where future rows end (REG-070)", () => {
     render(RegisterGrid, { account: 1 });
     const lines = document.querySelectorAll(".today");

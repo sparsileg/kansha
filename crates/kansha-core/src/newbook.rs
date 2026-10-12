@@ -1,14 +1,16 @@
 //! What a new book starts with (UI-085): the built-in categories only,
 //! the Standard categories list too (P-06), or a copy of the open book
-//! without its transactions, balances zeroed or carried.
+//! without its transactions, balances zeroed or carried, or carried with
+//! the later transactions kept (Year-End Copy).
 
 use serde::{Deserialize, Serialize};
 
 use crate::accounts::{Account, AccountId};
 use crate::categories::{CategoryKind, SystemCategory};
 use crate::error::{Error, Result};
-use crate::invest::{InvAction, InvInput};
+use crate::invest::{InvAction, InvInput, LotId};
 use crate::ledger::{self, Cleared, Entry, Target};
+use crate::persistence::invest::OpenLotRow;
 use crate::persistence::{self, Db, Origin, Tx, accounts, categories, reports, schedules};
 use crate::{Clock, Date, Money};
 
@@ -46,9 +48,24 @@ pub enum CopyBalances {
     /// Every account opens at 0.
     Zero,
     /// Each account's balance on `as_of` becomes its opening balance on
-    /// that date, reconciled. An investment account carries its cash
-    /// only; holdings are seeded again (MIG-120).
+    /// that date, reconciled. An investment account carries its cash and
+    /// each lot open on that date: its open shares and basis, added that
+    /// date, keeping the lot's acquired date.
     Carry { as_of: Date },
+    /// As `Carry`, and the transactions dated after `as_of` are kept
+    /// (Year-End Copy); a later sale of a carried lot sells the lot
+    /// carried in its place.
+    CarryKeep { as_of: Date },
+}
+
+impl CopyBalances {
+    /// The carry date, if balances carry.
+    pub fn as_of(self) -> Option<Date> {
+        match self {
+            CopyBalances::Zero => None,
+            CopyBalances::Carry { as_of } | CopyBalances::CarryKeep { as_of } => Some(as_of),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -101,29 +118,45 @@ pub fn add_standard_categories(tx: &Tx<'_>) -> Result<usize> {
 }
 
 /// Turn `db`, a fresh copy of the open book, into the new book (UI-085):
-/// transactions, lots, reconciliations, imports, occurrences, the audit
-/// log, and the backup records go; closed accounts too unless kept; then
-/// each account opens at 0 or at its balance on the carry date.
+/// transactions (or, keeping later ones, those dated by the carry date),
+/// lots, reconciliations, imports, occurrences, the audit log, and the
+/// backup records go; closed accounts too unless kept (one a kept
+/// transaction is in stays); then each account opens at 0 or at its
+/// balance on the carry date, with its open lots.
 pub fn prepare_copy(db: &mut Db, clock: &dyn Clock, opts: &CopyOptions) -> Result<()> {
     db.write(clock, Origin::System, |tx| {
         let all = accounts::list(tx.conn())?;
-        let carry = match opts.balances {
-            CopyBalances::Zero => Vec::new(),
-            CopyBalances::Carry { as_of } => balances_on(tx, &all, as_of)?,
+        let as_of = opts.balances.as_of();
+        let keep = matches!(opts.balances, CopyBalances::CarryKeep { .. });
+        let (carry, lots) = match as_of {
+            None => (Vec::new(), Vec::new()),
+            Some(d) => (
+                balances_on(tx, &all, d)?,
+                persistence::invest::open_lots(tx.conn(), None, None, d)?,
+            ),
         };
-        persistence::newbook::clear_history(tx)?;
+        match opts.balances {
+            CopyBalances::CarryKeep { as_of } => {
+                persistence::newbook::clear_history_through(tx, as_of)?
+            }
+            _ => persistence::newbook::clear_history(tx)?,
+        }
         let dropped = if opts.closed_accounts {
             Vec::new()
         } else {
-            drop_closed(tx, &all)?
+            // A closed account with money or shares on the carry date
+            // stays, so its balance carries.
+            let holding: Vec<AccountId> = carry
+                .iter()
+                .filter(|(_, _, amount)| !amount.is_zero())
+                .map(|(id, _, _)| *id)
+                .chain(lots.iter().map(|l| l.lot.account))
+                .collect();
+            drop_closed(tx, &all, &holding)?
         };
-        let opening = match opts.balances {
-            CopyBalances::Zero => None,
-            CopyBalances::Carry { as_of } => Some(as_of),
-        };
-        persistence::newbook::set_opening_dates(tx, opening)?;
+        persistence::newbook::set_opening_dates(tx, as_of, keep)?;
         persistence::newbook::clear_book_records(tx, &dropped)?;
-        if let CopyBalances::Carry { as_of } = opts.balances {
+        if let Some(as_of) = as_of {
             let opening = categories::system(tx.conn(), SystemCategory::OpeningBalance)?.id;
             for (account, investment, amount) in carry {
                 if amount.is_zero() || dropped.contains(&account) {
@@ -131,9 +164,31 @@ pub fn prepare_copy(db: &mut Db, clock: &dyn Clock, opts: &CopyOptions) -> Resul
                 }
                 open_at(tx, account, investment, as_of, amount, opening)?;
             }
+            for lot in &lots {
+                if dropped.contains(&lot.lot.account) {
+                    continue;
+                }
+                let new = carry_lot(tx, lot, as_of)?;
+                if keep {
+                    persistence::newbook::repoint_lot(tx, lot.lot.id, new)?;
+                }
+            }
         }
         Ok(())
     })
+}
+
+/// Add `lot`'s open shares and basis on `as_of` as shares added that
+/// date, keeping its acquired date, which the memo shows; the new lot.
+fn carry_lot(tx: &Tx<'_>, lot: &OpenLotRow, as_of: Date) -> Result<LotId> {
+    let mut i = InvInput::new(lot.lot.account, InvAction::SharesAdded, as_of);
+    i.security = Some(lot.lot.security);
+    i.quantity = Some(lot.open_quantity);
+    i.amount = Some(lot.open_basis);
+    i.acquired = Some(lot.lot.acquired);
+    i.memo = format!("Opening Balance, acquired {}", lot.lot.acquired);
+    let t = crate::invest::create_carried(tx, &i)?;
+    persistence::newbook::lot_of(tx, t.txn.id)
 }
 
 /// Each account's balance on `as_of`, with whether it is an investment
@@ -154,13 +209,19 @@ fn balances_on(tx: &Tx<'_>, all: &[Account], as_of: Date) -> Result<Vec<(Account
 
 /// Delete the closed accounts and the schedules that use them; the IDs
 /// deleted. A closed account another account still links to (an
-/// investment account's cash, an asset's loan) is kept.
-fn drop_closed(tx: &Tx<'_>, all: &[Account]) -> Result<Vec<AccountId>> {
-    let closed: Vec<AccountId> = all
-        .iter()
-        .filter(|a| a.status == crate::accounts::AccountStatus::Closed)
-        .map(|a| a.id)
-        .collect();
+/// investment account's cash, an asset's loan), one in `holding` (with
+/// money or shares on the carry date), or one a kept transaction is in,
+/// is kept.
+fn drop_closed(tx: &Tx<'_>, all: &[Account], holding: &[AccountId]) -> Result<Vec<AccountId>> {
+    let mut closed = Vec::new();
+    for a in all {
+        if a.status == crate::accounts::AccountStatus::Closed
+            && !holding.contains(&a.id)
+            && !persistence::newbook::has_history(tx, a.id)?
+        {
+            closed.push(a.id);
+        }
+    }
     let uses = |s: &crate::schedule::Schedule, id: AccountId| {
         s.fields.account == id
             || s.fields
@@ -234,7 +295,7 @@ fn open_at(
         i.amount = Some(amount);
         i.counterpart = Some(Target::Category(opening));
         i.memo = "Opening Balance".into();
-        crate::invest::create(tx, &i)?;
+        crate::invest::create_carried(tx, &i)?;
     } else {
         let mut entry = Entry::new(account, date, amount).line(Target::Category(opening), amount);
         entry.memo = "Opening Balance".into();

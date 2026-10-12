@@ -36,7 +36,7 @@ pub struct InvRegisterRow {
     pub date: Date,
     pub settle_date: Option<Date>,
     pub action: InvAction,
-    /// For display: "Buy", "Reinvest Div", ... ("Transfer In" for shares
+    /// For display: "Buy", "Reinvest div", ... ("Transfer in" for shares
     /// arriving from another account).
     pub action_label: String,
     pub security: Option<SecurityId>,
@@ -166,11 +166,11 @@ pub fn register(conn: &Connection, account: AccountId, today: Date) -> Result<In
             settle_date: t.settle_date,
             action: t.action,
             action_label: if incoming && t.action == InvAction::RothConversion {
-                "Conversion In".into()
+                "Conversion in".into()
             } else if incoming {
-                "Transfer In".into()
+                "Transfer in".into()
             } else if t.action == InvAction::TransferShares {
-                "Transfer Out".into()
+                "Transfer out".into()
             } else {
                 t.action.label().into()
             },

@@ -32,7 +32,7 @@
         x={menu.x}
         y={menu.y}
         onclose={() => (menu = null)}
-        items={[{ label: "Edit Account Details…", action: () => dialogState.editAccount(account) }]}
+        items={[{ label: "Edit account details…", action: () => dialogState.editAccount(account) }]}
       />
     {/if}
     {#if account.investment}

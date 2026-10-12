@@ -140,17 +140,17 @@ rows = [
 [[expect.inv_register]]
 account = "Old Brokerage"
 rows = [
-    { date = "2023-05-01", action = "Cash In", amount = "3000.00" },
+    { date = "2023-05-01", action = "Cash in", amount = "3000.00" },
     { date = "2023-05-01", action = "Buy", amount = "-1000.00" },
     { date = "2024-05-01", action = "Buy", amount = "-1500.00" },
-    { date = "2025-01-15", action = "Transfer Out", amount = "0.00", quantity = "15", cash_balance = "500.00", ref = "move" },
+    { date = "2025-01-15", action = "Transfer out", amount = "0.00", quantity = "15", cash_balance = "500.00", ref = "move" },
 ]
 
 [[expect.inv_register]]
 account = "New Brokerage"
 rows = [
-    { date = "2023-05-01", action = "Cash In", amount = "1000.00" },
+    { date = "2023-05-01", action = "Cash in", amount = "1000.00" },
     { date = "2024-01-01", action = "Buy", amount = "-700.00" },
-    { date = "2025-01-15", action = "Transfer In", amount = "0.00", quantity = "15", cash_balance = "300.00", ref = "move" },
+    { date = "2025-01-15", action = "Transfer in", amount = "0.00", quantity = "15", cash_balance = "300.00", ref = "move" },
     { date = "2025-03-01", action = "Sell", amount = "2400.00", cash_balance = "2700.00" },
 ]

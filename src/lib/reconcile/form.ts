@@ -41,10 +41,10 @@ function item(
 ): StatementItem | null | string {
   if (f.amount.trim() === "") return null;
   const amount = parseMoney(f.amount);
-  if (amount === null) return `${label}: enter an amount like 12.34.`;
+  if (amount === null) return `${label}: enter an amount, like 1,234.56.`;
   if (f.category === null) return `${label}: choose a category.`;
   const date = f.date.trim() === "" ? statementDate : parseDate(f.date, today);
-  if (date === null) return `${label}: enter a date like ${dateExample()}.`;
+  if (date === null) return `${label}: enter a date, like ${dateExample()}.`;
   return { date, amount, category: f.category };
 }
 
@@ -52,6 +52,7 @@ export function buildStart(
   account: AccountId,
   form: StartForm,
   today: string,
+  interestLabel = "Interest",
 ): StartResult {
   const statementDate = parseDate(form.statementDate, today);
   if (statementDate === null) {
@@ -61,7 +62,7 @@ export function buildStart(
   if (balance === null) {
     return { ok: false, error: "Enter the statement ending balance, like 1,234.56." };
   }
-  const interest = item("Interest", form.interest, statementDate, today);
+  const interest = item(interestLabel, form.interest, statementDate, today);
   if (typeof interest === "string") return { ok: false, error: interest };
   const service = item("Service charge", form.service, statementDate, today);
   if (typeof service === "string") return { ok: false, error: service };
@@ -85,3 +86,37 @@ const RECONCILABLE = new Set(["checking", "savings", "cash", "money_market", "cr
 
 export const isReconcilable = (a: Pick<Account, "account_type" | "investment">): boolean =>
   RECONCILABLE.has(a.account_type) || a.investment?.cash_mode === "internal";
+
+/** The reconcile lists' and interest box's names for an account, as in
+ * Quicken (RCN-020): a bank's Payments and checks and Deposits; a
+ * credit card's Charges and cash advances, Payments and credits, and
+ * Finance charges; a cash account's Amounts spent and received; an
+ * investment account's Cash out and Cash in. `checkedOut` and
+ * `checkedIn` follow "Checked" in the summary. */
+export type ReconcileLabels = {
+  outs: string;
+  ins: string;
+  checkedOut: string;
+  checkedIn: string;
+  interest: string;
+  /** Names the interest item in messages ("Finance charge: …"). */
+  interestItem: string;
+};
+
+export function reconcileLabels(a: Pick<Account, "account_type" | "investment"> | undefined): ReconcileLabels {
+  if (a?.account_type === "credit_card")
+    return {
+      outs: "Charges and cash advances",
+      ins: "Payments and credits",
+      checkedOut: "charges",
+      checkedIn: "payments and credits",
+      interest: "Finance charges",
+      interestItem: "Finance charge",
+    };
+  const bank = { interest: "Interest earned", interestItem: "Interest" };
+  if (a?.account_type === "cash")
+    return { ...bank, outs: "Amounts spent", ins: "Amounts received", checkedOut: "amounts spent", checkedIn: "amounts received" };
+  if (a?.investment != null)
+    return { ...bank, outs: "Cash out", ins: "Cash in", checkedOut: "cash out", checkedIn: "cash in" };
+  return { ...bank, outs: "Payments and checks", ins: "Deposits", checkedOut: "payments and checks", checkedIn: "deposits" };
+}

@@ -182,7 +182,7 @@
     </div>
   {/if}
   <div class="buttons">
-    <button type="button" onclick={newSchedule}>New Schedule</button>
+    <button type="button" onclick={newSchedule}>New schedule</button>
     <span class="gap" aria-hidden="true"></span>
     <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={enter}>Enter</button>
     <button type="button" disabled={!sel || busy} title={sel ? "" : why} onclick={() => void edit()}>Edit</button>
@@ -243,7 +243,7 @@
     gap: 0.5rem;
     align-items: center;
   }
-  /* "New Schedule" on the left, apart from the four on the right. */
+  /* "New schedule" on the left, apart from the four on the right. */
   .gap {
     flex: 1;
     min-width: 2rem;

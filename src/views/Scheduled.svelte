@@ -1,6 +1,7 @@
 <script lang="ts">
   import { displayDate } from "../lib/format/date";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
+  import { amountLabels } from "../lib/register/columns";
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { scheduleState } from "../lib/state/schedule.svelte";
@@ -8,8 +9,11 @@
 
   const modeLabel = (r: ScheduleRow) =>
     r.schedule.fields.mode === "auto" ? "Auto" : "Remind";
-  const method = (r: ScheduleRow) =>
-    r.schedule.fields.direction === "deposit" ? "Deposit" : "Payment";
+  /** The transaction type, named for the account (REC-300). */
+  const method = (r: ScheduleRow) => {
+    const labels = amountLabels(listsState.account(r.schedule.fields.account));
+    return r.schedule.fields.direction === "deposit" ? labels.in : labels.out;
+  };
 </script>
 
 <section class="reminders">

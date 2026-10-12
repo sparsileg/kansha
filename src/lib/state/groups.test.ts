@@ -37,7 +37,7 @@ describe("groupAccounts", () => {
 
   it("shows six sections; Assets & Debt holds assets and liabilities; Other holds HSAs", () => {
     expect(SECTIONS.map((x) => x.label)).toEqual([
-      "Banking", "Credit", "Investments", "Retirement", "Assets & Debt", "Other",
+      "Banking", "Credit", "Investments", "Retirement", "Assets & debt", "Other",
     ]);
     const g = groupAccounts(
       [
@@ -48,7 +48,7 @@ describe("groupAccounts", () => {
       false,
     );
     expect(g.map((x) => [x.label, x.accounts.map((a) => a.name)])).toEqual([
-      ["Assets & Debt", ["Mortgage", "House"]],
+      ["Assets & debt", ["Mortgage", "House"]],
       ["Other", ["HSA"]],
     ]);
   });

@@ -74,6 +74,13 @@ pub(crate) fn source(tx: &Tx<'_>) -> Result<TxnSource> {
     })
 }
 
+/// Create a new book's opening cash or carried lot (UI-085), in a closed
+/// account too.
+pub(crate) fn create_carried(tx: &Tx<'_>, input: &InvInput) -> Result<InvTxn> {
+    let plan = plan_with(tx.conn(), input, None, true)?;
+    repo::insert(tx, TxnSource::System, &plan)
+}
+
 /// Create an investment transaction with an explicit source: a schedule's
 /// cash in or cash out (REC-110).
 pub(crate) fn create_with_source(
@@ -515,8 +522,19 @@ fn sub(a: Money, b: Money) -> Result<Money> {
 /// `editing` is the stored transaction, whose lot records have already
 /// been removed.
 pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>) -> Result<Plan> {
+    plan_with(conn, input, editing, false)
+}
+
+/// [`plan`]; `carried` allows a closed account (a new book's opening
+/// cash and lots, UI-085).
+fn plan_with(
+    conn: &Connection,
+    input: &InvInput,
+    editing: Option<&InvTxn>,
+    carried: bool,
+) -> Result<Plan> {
     let acct = investment_account(conn, input.account)?;
-    if acct.status == AccountStatus::Closed {
+    if acct.status == AccountStatus::Closed && !carried {
         return Err(Error::Invalid(format!(
             "account {:?} is closed",
             acct.fields.name
@@ -619,7 +637,10 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
     };
 
     let this = editing.map(|t| t.txn.id);
+    // A carried lot takes the place of one already in the holding's
+    // history, whose later events then point at it (UI-085).
     if action.affects_lots()
+        && !carried
         && let Some(s) = &security
     {
         let mut held = vec![(a, s.id)];
@@ -833,7 +854,7 @@ pub(crate) fn plan(conn: &Connection, input: &InvInput, editing: Option<&InvTxn>
         }
         InvAction::TrueUp => {
             return Err(Error::Invalid(
-                "a lot true-up is made from the broker's lot list (True Up Lots)".into(),
+                "a lot true-up is made from the broker's lot list (True up lots)".into(),
             ));
         }
         // INV-070: the value converted reaches the Roth IRA; the tax

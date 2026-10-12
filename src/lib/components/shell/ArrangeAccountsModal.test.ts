@@ -31,7 +31,7 @@ describe("Arrange accounts", () => {
   it("shows all six sections, moves within and between them, and saves runs by group", async () => {
     const onclose = vi.fn();
     render(ArrangeAccountsModal, { onclose });
-    for (const h of ["Banking", "Credit", "Investments", "Retirement", "Assets & Debt", "Other"]) {
+    for (const h of ["Banking", "Credit", "Investments", "Retirement", "Assets & debt", "Other"]) {
       expect(screen.getByRole("heading", { name: h })).toBeTruthy();
     }
     await fireEvent.click(screen.getByRole("button", { name: "Move Checking down" }));

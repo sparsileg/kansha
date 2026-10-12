@@ -9,6 +9,7 @@
 mod attention;
 mod backup;
 mod compare;
+mod copy_carry;
 mod encryption;
 mod find_replace;
 mod fixture;

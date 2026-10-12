@@ -1,5 +1,5 @@
 <script lang="ts">
-  // File > Find/Replace (REG-170): Find rows (field, comparison, value),
+  // Edit > Find/Replace (REG-170): Find rows (field, comparison, value),
   // joined by one And/Or; the Found list with a checkbox per row; Replace
   // All sets one field on the checked rows. Rust matches and replaces.
   import { call, commands, DECLINED, withConfirmation } from "../api";
@@ -156,7 +156,7 @@
   const checkedCount = $derived(found ? found.filter((r) => checked.has(keyId(r.key))).length : 0);
 </script>
 
-<Modal title="Find and Replace" fit {onclose}>
+<Modal title="Find and replace" fit {onclose}>
   <datalist id="fr-categories">
     {#each listsState.categories as c (c.id)}<option value={listsState.categoryPath(c.id)}></option>{/each}
   </datalist>
@@ -193,7 +193,7 @@
         {/if}
         {#if i === 0}
           <button type="button" class="primary" onclick={() => void find()} disabled={searching}>Find</button>
-          <button type="button" onclick={addRow}>Add Row</button>
+          <button type="button" onclick={addRow}>Add row</button>
         {:else}
           <button type="button" aria-label="Remove row {i + 1}" title="Remove row" onclick={() => removeRow(i)}>×</button>
           {#if i === 1}
@@ -251,8 +251,8 @@
       {#if found !== null && found.length === 0}<p class="empty">Nothing found.</p>{/if}
     </div>
     <div class="found-bar">
-      <button type="button" onclick={() => selectAll(true)} disabled={!found?.length}>Select All</button>
-      <button type="button" onclick={() => selectAll(false)} disabled={!found?.length}>Clear All</button>
+      <button type="button" onclick={() => selectAll(true)} disabled={!found?.length}>Select all</button>
+      <button type="button" onclick={() => selectAll(false)} disabled={!found?.length}>Clear all</button>
       <label><input type="checkbox" checked={withinSplits} onchange={(e) => setWithinSplits(e.currentTarget.checked)} /> Show matches within splits</label>
       <span class="count">
         {#if found !== null}Found in {txnCount} transaction{txnCount === 1 ? "" : "s"}{#if found.length > 0}; {checkedCount} of {found.length} rows checked{/if}{/if}
@@ -274,7 +274,7 @@
       {:else}
         <input type="text" aria-label="Replace with" list={listFor(replaceField)} bind:value={replaceWith} />
       {/if}
-      <button type="button" onclick={() => void replaceAll()} disabled={replacing || !checkedCount}>Replace All</button>
+      <button type="button" onclick={() => void replaceAll()} disabled={replacing || !checkedCount}>Replace all</button>
     </div>
   </fieldset>
 

@@ -150,7 +150,9 @@ impl AccountType {
     pub const fn default_tax_treatment(self) -> TaxTreatment {
         match self {
             AccountType::TraditionalIra | AccountType::Retirement401k => TaxTreatment::TaxDeferred,
-            AccountType::RothIra | AccountType::Hsa => TaxTreatment::TaxExempt,
+            AccountType::RothIra | AccountType::Hsa | AccountType::DonorAdvisedFund => {
+                TaxTreatment::TaxExempt
+            }
             _ => TaxTreatment::Taxable,
         }
     }
@@ -328,6 +330,11 @@ mod tests {
         assert_eq!(
             AccountType::Checking.default_tax_treatment(),
             TaxTreatment::Taxable
+        );
+        // Its income and grants are not the donor's for tax.
+        assert_eq!(
+            AccountType::DonorAdvisedFund.default_tax_treatment(),
+            TaxTreatment::TaxExempt
         );
         assert_eq!(AccountType::Loan.default_group(), AccountGroup::Liabilities);
         assert_eq!(AccountType::Hsa.default_group(), AccountGroup::Other);

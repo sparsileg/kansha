@@ -204,7 +204,9 @@ fn run(fx: &Fx, s: &ReportSettings) -> Report {
 #[test]
 fn itemized_categories_groups_income_expenses_and_transfers() {
     let fx = fixture();
-    let r = run(&fx, &settings(ReportKind::ItemizedCategories));
+    let mut s = settings(ReportKind::ItemizedCategories);
+    s.transfers = true;
+    let r = run(&fx, &s);
     let ids: Vec<&str> = r.columns.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(
         ids,
@@ -243,11 +245,11 @@ fn itemized_categories_groups_income_expenses_and_transfers() {
 # TRANSFERS |  |  |  |  |  |  |  | 0.00
   + Checking |  |  |  |  |  |  |  | -4500.00
     -  | 2026-03-01 | Savings |  |  |  |  |  | 500.00
-    -  | 2026-04-01 | IRA | Cash Out |  |  |  |  | -5000.00
+    -  | 2026-04-01 | IRA | Cash out |  |  |  |  | -5000.00
   + Savings |  |  |  |  |  |  |  | -500.00
     -  | 2026-03-01 | Checking |  |  |  |  |  | -500.00
   + IRA |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash Out |  |  |  |  | 5000.00
+    -  | 2026-04-01 | Checking | Cash out |  |  |  |  | 5000.00
 = OVERALL TOTAL |  |  |  |  |  |  |  | 2140.00"
     );
 }
@@ -695,7 +697,7 @@ fn tax_schedule_by_form_and_line_with_schedule_d() {
     -  | 2026-01-15 | Checking |  |  | Employer |  | Salary |  | 3000.00
 # 1099-R |  |  |  |  |  |  |  |  | 5000.00
   + Total IRA taxable distrib. |  |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash Out |  |  |  | [IRA] |  | 5000.00"
+    -  | 2026-04-01 | Checking | Cash out |  |  |  | [IRA] |  | 5000.00"
     );
 }
 
@@ -738,7 +740,7 @@ fn tax_summary_lists_tax_related_categories_and_mapped_transfers() {
       -  | 2026-03-15 | Checking |  |  | County |  | Tax:Real Estate | Schedule A:Real estate taxes |  | -1200.00
 # TRANSFERS |  |  |  |  |  |  |  |  |  | 5000.00
   + IRA |  |  |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash Out |  |  |  | [IRA] | 1099-R:Total IRA taxable distrib. |  | 5000.00
+    -  | 2026-04-01 | Checking | Cash out |  |  |  | [IRA] | 1099-R:Total IRA taxable distrib. |  | 5000.00
 = OVERALL TOTAL |  |  |  |  |  |  |  |  |  | 7350.00"
     );
 }
@@ -916,7 +918,7 @@ fn shares_given_to_charity_are_a_deduction_at_market_value_not_a_sale() {
     let schedule = text(&run(&fx, &settings(ReportKind::TaxSchedule)));
     assert!(
         schedule.contains(
-            "  + Non-cash charity contributions |  |  |  |  |  |  |  |  | -300.00\n    -  | 2026-06-01 | Brokerage | Shares Removed"
+            "  + Non-cash charity contributions |  |  |  |  |  |  |  |  | -300.00\n    -  | 2026-06-01 | Brokerage | Shares removed"
         ),
         "{schedule}"
     );
@@ -1230,6 +1232,17 @@ fn merges_and_deletes_update_saved_report_filters() {
 }
 
 #[test]
+fn transfers_start_off_in_itemized_reports_and_on_in_tax_reports() {
+    for kind in [ReportKind::ItemizedCategories, ReportKind::ItemizedPayees] {
+        assert!(!ReportSettings::defaults(kind).transfers, "{kind:?}");
+    }
+    // An IRA distribution reaches 1099-R as a transfer (CAT-050).
+    for kind in [ReportKind::TaxSummary, ReportKind::TaxSchedule] {
+        assert!(ReportSettings::defaults(kind).transfers, "{kind:?}");
+    }
+}
+
+#[test]
 fn settings_saved_by_an_older_version_still_load() {
     let json = r#"{"kind":"net_worth","title":"NW","range":{"preset":"year_to_date","from":null,"to":null}}"#;
     let s: ReportSettings = serde_json::from_str(json).unwrap();
@@ -1540,6 +1553,7 @@ fn every_report_runs_on_the_sample_book_and_balances() {
                 from: None,
                 to: None,
             },
+            transfers: true,
             ..ReportSettings::defaults(ReportKind::ItemizedCategories)
         },
         today,
@@ -1584,6 +1598,7 @@ fn a_split_lists_its_categories_under_the_account_it_was_entered_in() {
         .unwrap();
     let run_for = |kind, account| {
         let mut s = settings(kind);
+        s.transfers = true;
         s.accounts = Some(vec![account]);
         reports::run(b.conn(), &s, date("2026-06-30")).unwrap()
     };
@@ -1630,6 +1645,7 @@ fn linked_cash_trades_are_transfers_between_the_two_accounts() {
     b.invest(&div).unwrap();
     let run_for = |kind, accounts: Option<Vec<AccountId>>| {
         let mut s = settings(kind);
+        s.transfers = true;
         s.accounts = accounts;
         reports::run(b.conn(), &s, date("2026-06-30")).unwrap()
     };

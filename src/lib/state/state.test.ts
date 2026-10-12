@@ -165,3 +165,16 @@ describe("registerState", () => {
     expect(c.accountBalances).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("withSubcategories", () => {
+  const cat = (id: number, parent: number | null) => ({
+    id, parent, kind: "expense" as const, name: `C${id}`, system: null, tax_related: false,
+    tax_line: null, hidden: false, created_at: "",
+  });
+  it("is the category and every subcategory under it, at any depth", () => {
+    listsState.categories = [cat(1, null), cat(2, 1), cat(3, 2), cat(4, null), cat(5, 1)];
+    expect(listsState.withSubcategories(1)).toEqual([1, 2, 5, 3]);
+    expect(listsState.withSubcategories(2)).toEqual([2, 3]);
+    expect(listsState.withSubcategories(4)).toEqual([4]);
+  });
+});

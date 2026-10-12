@@ -3,7 +3,8 @@
 //! Covers creating, editing, voiding, and deleting a transaction and
 //! changing its cleared status, in banking and investment registers; one
 //! level. Find/Replace (REG-170) changes several transactions as one
-//! change, undone together. Around the change the caller takes [`before`] and then
+//! change, undone together; tags, payees, and categories it created
+//! are deleted again. Around the change the caller takes [`before`] and then
 //! [`after`], which returns an [`Undo`]. [`apply`] puts the transaction's
 //! rows back exactly as they were (same IDs, links, and lots) and records
 //! the reversal in the audit log, like any change.
@@ -18,11 +19,12 @@
 
 use rusqlite::Connection;
 
+use crate::categories::{CategoryId, PayeeId, TagId};
 use crate::error::{Error, Result};
 use crate::ledger::TxnId;
 use crate::persistence::audit::{self, AuditAction, AuditEntity};
 use crate::persistence::undo::{self as rows, TxnRows};
-use crate::persistence::{Tx, invest as inv_repo, ledger as ledger_repo};
+use crate::persistence::{Tx, categories, invest as inv_repo, ledger as ledger_repo, payees, tags};
 
 /// A transaction's state before a change.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +47,18 @@ pub struct Undo {
     label: String,
     /// At least one; the first is the one [`Undo::txn`] names.
     items: Vec<Item>,
+    /// In the order they were made.
+    created: Vec<Created>,
     mark: i64,
+}
+
+/// A tag, payee, or category the change created; undoing it deletes
+/// it again (Find/Replace, REG-170).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Created {
+    Category(CategoryId),
+    Payee(PayeeId),
+    Tag(TagId),
 }
 
 /// One transaction's rows before and after the change.
@@ -74,6 +87,17 @@ impl Undo {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// The tags, payees, and categories the change created, in the order
+    /// made; undoing deletes them, newest first.
+    pub fn with_created(mut self, created: Vec<Created>) -> Undo {
+        self.created = created;
+        self
+    }
+
+    pub fn created(&self) -> &[Created] {
+        &self.created
     }
 }
 
@@ -134,6 +158,7 @@ pub fn after_many(
     Ok(Some(Undo {
         label: label.to_string(),
         items,
+        created: Vec::new(),
         mark: rows::audit_mark(conn)?,
     }))
 }
@@ -183,6 +208,16 @@ pub fn apply(tx: &Tx<'_>, u: &Undo, confirmed: bool) -> Result<()> {
     }
     for i in &u.items {
         restore_one(tx, i)?;
+    }
+    // Nothing uses them now: the transactions are back as they were and
+    // nothing else has changed since. A child category goes before its
+    // parent.
+    for c in u.created.iter().rev() {
+        match *c {
+            Created::Category(id) => categories::delete(tx, id)?,
+            Created::Payee(id) => payees::delete(tx, id)?,
+            Created::Tag(id) => tags::delete(tx, id)?,
+        }
     }
     Ok(())
 }

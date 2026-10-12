@@ -65,13 +65,14 @@ pub fn start(tx: &Tx<'_>, input: &StartInput) -> Result<Reconciliation> {
     let sign = Sign::of(conn, input.account)?;
 
     if let Some(item) = &input.interest {
-        // Interest earned raises an asset; on a liability it is a charge.
-        let amount = if liability {
-            negate(item.amount)?
+        // Interest earned raises an asset; on a liability it is a finance
+        // charge, named so as in Quicken.
+        let (amount, memo) = if liability {
+            (negate(item.amount)?, "Finance charge")
         } else {
-            item.amount
+            (item.amount, "Interest")
         };
-        statement_txn(tx, input.account, item, amount, "Interest")?;
+        statement_txn(tx, input.account, item, amount, memo)?;
     }
     if let Some(item) = &input.service_charge {
         statement_txn(
@@ -95,7 +96,7 @@ pub fn start(tx: &Tx<'_>, input: &StartInput) -> Result<Reconciliation> {
 fn check_statement_item(item: &StatementItem, statement_date: Date) -> Result<()> {
     if item.amount.is_negative() || item.amount.is_zero() {
         return Err(Error::Invalid(
-            "interest and service charge amounts must be greater than zero".into(),
+            "interest, finance charge, and service charge amounts must be more than zero".into(),
         ));
     }
     if item.date > statement_date {
@@ -201,7 +202,7 @@ pub fn set_checked(tx: &Tx<'_>, id: ReconciliationId, txns: &[TxnId], checked: b
         let txn = ledger::get(tx.conn(), txn_id)?;
         let posting = txn.posting_for(rec.account).ok_or_else(|| {
             Error::Invalid(format!(
-                "transaction {} has no posting to this account",
+                "transaction {} has no line in this account",
                 txn_id.0
             ))
         })?;

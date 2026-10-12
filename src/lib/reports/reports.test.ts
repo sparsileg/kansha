@@ -164,6 +164,12 @@ describe("toggleFilter", () => {
     expect(toggleFilter(null, [1], all, 2, true)).toEqual([1, 2]);
     expect(toggleFilter([1, 2], [1], all, 3, true)).toEqual([1, 2, 3]);
   });
+  it("a category with its subcategories goes in or out together", () => {
+    const four = [1, 2, 3, 4];
+    expect(toggleFilter([4], four, four, [1, 2], true)).toEqual([4, 1, 2]);
+    expect(toggleFilter([4, 2], four, four, [1, 2, 3], true)).toBeNull();
+    expect(toggleFilter(null, four, four, [1, 2], false)).toEqual([3, 4]);
+  });
 });
 
 describe("report cells", () => {

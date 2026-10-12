@@ -228,13 +228,14 @@ export const commands = {
 	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
 	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
 	txnSetCleared: (txn: TxnId, account: AccountId, cleared: Cleared, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_set_cleared", { txn, account, cleared, confirmed })),
-	/**  File > Find/Replace: rows matching the Find rows (REG-170). */
+	/**  Edit > Find/Replace: rows matching the Find rows (REG-170). */
 	findTransactions: (query: FindQuery) => typedError<FindResult, IpcError>(__TAURI_INVOKE("find_transactions", { query })),
 	/**
 	 *  Replace All on the checked rows (REG-170). A new date, or reconciled
 	 *  transactions among them, fails with `confirmation_required` until
 	 *  `confirmed` (one question for the batch). A bulk backup comes first;
-	 *  one Undo puts every changed transaction back.
+	 *  one Undo puts every changed transaction back and deletes
+	 *  the tags, payees, and categories it created.
 	 */
 	replaceTransactions: (rows: FoundKey[], spec: ReplaceSpec, confirmed: boolean) => typedError<ReplaceResult, IpcError>(__TAURI_INVOKE("replace_transactions", { rows, spec, confirmed })),
 	/**
@@ -1199,10 +1200,17 @@ export type CopyBalances =
 { kind: "zero" } | 
 /**
  *  Each account's balance on `as_of` becomes its opening balance on
- *  that date, reconciled. An investment account carries its cash
- *  only; holdings are seeded again (MIG-120).
+ *  that date, reconciled. An investment account carries its cash and
+ *  each lot open on that date: its open shares and basis, added that
+ *  date, keeping the lot's acquired date.
  */
-{ kind: "carry"; as_of: string };
+{ kind: "carry"; as_of: string } | 
+/**
+ *  As `Carry`, and the transactions dated after `as_of` are kept
+ *  (Year-End Copy); a later sale of a carried lot sells the lot
+ *  carried in its place.
+ */
+{ kind: "carry_keep"; as_of: string };
 
 /**  Choices for a copy of the open book (UI-085). */
 export type CopyOptions = {
@@ -1861,7 +1869,7 @@ export type InvRegisterRow = {
 	settle_date: string | null,
 	action: InvAction,
 	/**
-	 *  For display: "Buy", "Reinvest Div", ... ("Transfer In" for shares
+	 *  For display: "Buy", "Reinvest div", ... ("Transfer in" for shares
 	 *  arriving from another account).
 	 */
 	action_label: string,
@@ -2736,7 +2744,10 @@ export type ReportSettings = {
 	totals_on_heading?: boolean | null,
 	/**  Net worth: list accounts whose balances are all zero. */
 	show_zero?: boolean,
-	/**  Itemized reports: include transfers between accounts. */
+	/**
+	 *  Itemized reports: include transfers between accounts (off for a
+	 *  new one, 0.7.80). A report saved without it includes them.
+	 */
 	transfers?: boolean,
 	/**  Itemized reports: tag sets as the outer groups (TAG-030). */
 	by_tag?: boolean,

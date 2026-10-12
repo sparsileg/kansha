@@ -352,7 +352,8 @@ fn void_zeroes_amounts_and_keeps_originals_in_audit() {
 
     let e = Entry::from_txn(&v, chk).unwrap();
     assert!(
-        err_text(book.write(|tx| ledger::update_entry(tx, t.id, &e, false))).contains("voided")
+        err_text(book.write(|tx| ledger::update_entry(tx, t.id, &e, false)))
+            .contains("void transaction")
     );
     assert!(err_text(book.write(|tx| ledger::void(tx, t.id, false))).contains("already void"));
     book.write(|tx| ledger::delete(tx, t.id, false)).unwrap();

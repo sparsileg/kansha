@@ -130,13 +130,13 @@ fn a_cash_conversion_moves_the_value_and_pays_the_tax_withheld() {
     let r = invest::register(b.conn(), roth, today).unwrap();
     let row = r.rows.last().unwrap();
     assert!(row.incoming);
-    assert_eq!(row.action_label, "Conversion In");
+    assert_eq!(row.action_label, "Conversion in");
     assert_eq!(row.amount, m("10000.00"));
     assert_eq!(row.other_account, Some(ira));
     assert_eq!(r.cash, Some(m("10000.00")));
     let r = invest::register(b.conn(), ira, today).unwrap();
     let row = r.rows.last().unwrap();
-    assert_eq!(row.action_label, "Roth Conversion");
+    assert_eq!(row.action_label, "Roth conversion");
     assert_eq!(row.amount, m("-11500.00"));
     assert_eq!(row.other_account, Some(roth));
     assert!(integrity::check(b.conn()).unwrap().is_clean());
@@ -172,7 +172,7 @@ fn a_conversion_in_kind_moves_shares_out_at_basis_and_in_at_market_value() {
     let row = r.rows.last().unwrap();
     assert_eq!(
         (row.action_label.as_str(), row.quantity),
-        ("Conversion In", Some(q("40")))
+        ("Conversion in", Some(q("40")))
     );
     assert_eq!(row.amount, Money::ZERO);
     assert!(integrity::check(b.conn()).unwrap().is_clean());

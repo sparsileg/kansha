@@ -132,7 +132,7 @@ describe("Report window", () => {
     expect(screen.queryByText("Total LONG TERM")).toBeNull();
     expect(screen.queryByText("Vanguard Cons Discretionary")).toBeNull();
     expect(screen.getAllByText("11,237.14")).toHaveLength(2);
-    await fireEvent.click(screen.getByRole("button", { name: "Expand All" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     expect(screen.getByText("Total LONG TERM")).toBeTruthy();
   });
 
@@ -213,7 +213,7 @@ describe("Report window", () => {
         expect.objectContaining({ range: { preset: "custom", from: "2025-03-01", to: "2025-06-30" } }),
       ),
     );
-    expect(screen.getByRole("button", { name: "Change Dates…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change dates…" })).toBeTruthy();
   });
 });
 
@@ -508,19 +508,19 @@ describe("Report windows", () => {
     const graph = await screen.findByRole("img");
     expect(graph.closest(".no-print")).not.toBeNull();
     expect(screen.getByRole("table").closest(".no-print")).toBeNull();
-    await fireEvent.click(await screen.findByRole("button", { name: "Hide Graph" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Hide graph" }));
     expect(screen.queryByRole("img")).toBeNull();
-    expect(screen.getByRole("button", { name: "Open Graph" })).toBeTruthy();
-    await fireEvent.click(screen.getByRole("button", { name: "Hide Report" }));
+    expect(screen.getByRole("button", { name: "Open graph" })).toBeTruthy();
+    await fireEvent.click(screen.getByRole("button", { name: "Hide report" }));
     expect(screen.queryByRole("table")).toBeNull();
-    await fireEvent.click(screen.getByRole("button", { name: "Open Report" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Open report" }));
     expect(screen.getByRole("table")).toBeTruthy();
   });
 
   it("no fold buttons without a graph", async () => {
     show();
     await screen.findByRole("table");
-    expect(screen.queryByRole("button", { name: "Hide Report" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide report" })).toBeNull();
   });
 
   it("closing an unchanged report does not ask", async () => {

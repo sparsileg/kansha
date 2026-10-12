@@ -61,15 +61,27 @@ describe("buildEntry", () => {
   });
 
   it.each([
-    [{ date: "13/45/2026", payment: "1" }, "Date"],
+    [{ date: "13/45/2026", payment: "1" }, "Enter a valid date."],
     [{ payment: "" }, "amount"],
-    [{ payment: "1", deposit: "2" }, "not both"],
+    [{ payment: "1", deposit: "2" }, "Enter a payment or a deposit, not both."],
+    [{ payment: "abc" }, "Enter a valid payment or deposit amount."],
     [{ payment: "abc" }, "amount"],
     [{ payment: "1", category: "" }, "category"],
   ])("rejects %j", (patch, text) => {
     const r = buildEntry({ ...base(), ...patch }, 1, today);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain(text);
+  });
+});
+
+describe("entry messages name the account's columns", () => {
+  it("says charge and payment on a credit card, increase and decrease on a loan", () => {
+    const card = buildEntry({ ...base(), payment: "1", deposit: "2" }, 1, today, { out: "Charge", in: "Payment" });
+    expect(!card.ok && card.error).toBe("Enter a charge or a payment, not both.");
+    const loan = buildEntry({ ...base(), payment: "x" }, 1, today, { out: "Increase", in: "Decrease" });
+    expect(!loan.ok && loan.error).toBe("Enter a valid increase or decrease amount.");
+    const both = buildEntry({ ...base(), payment: "1", deposit: "2" }, 1, today, { out: "Increase", in: "Decrease" });
+    expect(!both.ok && both.error).toBe("Enter an increase or a decrease, not both.");
   });
 });
 

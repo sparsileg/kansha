@@ -47,6 +47,42 @@ describe("ScheduleModal", () => {
     expect(names).toEqual(["(choose)", "Checking", "Brokerage 448"]);
   });
 
+  it("names the transaction types for the chosen account", async () => {
+    listsState.today = "2026-09-24";
+    const acct = (id: number, name: string, account_type: string, investment: unknown = null) =>
+      ({ id, name, status: "open", account_type, investment }) as never;
+    listsState.accounts = [
+      acct(1, "Checking", "checking"),
+      acct(2, "Visa", "credit_card"),
+      acct(3, "Mortgage", "loan"),
+      acct(4, "Brokerage", "brokerage", { cash_mode: "internal", linked_cash_account: null }),
+      acct(5, "House", "other_asset"),
+      acct(6, "Wallet", "cash"),
+    ];
+    render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
+    const type = screen.getByLabelText("Transaction type") as HTMLSelectElement;
+    const names = () => Array.from(type.options).map((o) => o.textContent);
+    expect(names()).toEqual(["Payment", "Deposit"]);
+    const account = screen.getByLabelText("Account");
+    const average = () => (screen.getByLabelText("Amount") as HTMLSelectElement).options[1].textContent;
+    for (const [id, want, avg] of [
+      ["1", ["Payment", "Deposit"], "Average of past payments"],
+      ["2", ["Charge", "Payment"], "Average of past charges"],
+      ["3", ["Increase", "Decrease"], "Average of past increases"],
+      ["5", ["Decrease", "Increase"], "Average of past decreases"],
+      ["4", ["Cash out", "Cash in"], "Average of past cash outs"],
+      ["6", ["Spend", "Receive"], "Average of past amounts spent"],
+    ] as const) {
+      await fireEvent.change(account, { target: { value: id } });
+      expect(names()).toEqual(want);
+      expect(average()).toBe(avg);
+    }
+    // The other type: a deposit to checking averages past deposits.
+    await fireEvent.change(account, { target: { value: "1" } });
+    await fireEvent.change(type, { target: { value: "deposit" } });
+    expect(average()).toBe("Average of past deposits");
+  });
+
   it("the amount is fixed or the average of past payments (REC-065)", async () => {
     render(ScheduleModal, { id: null, fields: null, start: "2026-10-01" });
     expect(screen.queryByLabelText("Amount is an estimate (confirm each time)")).toBeNull();

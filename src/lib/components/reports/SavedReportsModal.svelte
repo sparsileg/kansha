@@ -109,7 +109,7 @@
   const isPicked = (kind: Pick["kind"], id: number) => picked?.kind === kind && picked.id === id;
 </script>
 
-<Modal title="Manage Saved Reports" wide {onclose}>
+<Modal title="Manage saved reports" wide {onclose}>
   <div class="body">
     <div class="buttons">
       <button type="button" disabled={!report} onclick={() => report && onopen(report)}>Open</button>
