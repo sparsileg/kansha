@@ -34,6 +34,11 @@ export const MENUS: Menu[] = [
       { id: "file.backup", label: "Back Up Now", divider: true },
       { id: "file.restore", label: "Restore…" },
       { id: "file.import", label: "Import…", divider: true },
+      // Entries from the command line and phones (CLI-030 … CLI-080). The
+      // count of entries waiting is filled in (App.svelte).
+      { id: "file.import_entries", label: "Import Entries…" },
+      { id: "file.review_entries", label: "Review Entries…" },
+      { id: "file.export_names", label: "Export Names for Phones…" },
       { id: "file.export", label: "Export…", disabled: later("export") },
       { id: "file.integrity", label: "Integrity Check", divider: true },
       { id: "file.exit", label: "Exit", divider: true },

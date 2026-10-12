@@ -12,7 +12,10 @@ use crate::invest::LotId;
 use crate::ledger::TxnId;
 
 /// Tables holding the book's history, children first.
-const HISTORY: [&str; 10] = [
+const HISTORY: [&str; 13] = [
+    "pending_split",
+    "pending_entry",
+    "entry_file",
     "posting_tag",
     "lot_disposal",
     "lot_adjustment",
@@ -27,7 +30,8 @@ const HISTORY: [&str; 10] = [
 
 /// Delete every transaction and what hangs on one: postings, tags on
 /// postings, investment details, lots and their disposals and
-/// adjustments, schedule occurrences, reconciliations, import batches.
+/// adjustments, schedule occurrences, reconciliations, import batches,
+/// and entries received from the command line or files (CLI-040).
 ///
 /// Foreign keys are checked at commit: the audit log names import
 /// batches until [`clear_book_records`] empties it.
@@ -57,6 +61,10 @@ pub fn clear_history_through(tx: &Tx<'_>, as_of: Date) -> Result<()> {
     let conn = tx.conn();
     conn.pragma_update(None, "defer_foreign_keys", true)?;
     const OLD: &str = "SELECT id FROM txn WHERE txn_date <= :d";
+    // The new book starts with no entries to review (CLI-040).
+    for table in ["pending_split", "pending_entry", "entry_file"] {
+        conn.execute(&format!("DELETE FROM {table}"), [])?;
+    }
     for sql in [
         format!(
             "DELETE FROM posting_tag WHERE posting_id IN

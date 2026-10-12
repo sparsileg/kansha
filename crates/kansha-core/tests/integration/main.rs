@@ -11,6 +11,7 @@ mod backup;
 mod compare;
 mod copy_carry;
 mod encryption;
+mod entries;
 mod find_replace;
 mod fixture;
 mod import;

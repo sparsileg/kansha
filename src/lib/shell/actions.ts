@@ -9,6 +9,7 @@ import { listsState } from "../state/lists.svelte";
 import { scheduleState } from "../state/schedule.svelte";
 import { MENU_REPORTS } from "../reports/meta";
 import { dialogState } from "../state/dialogs.svelte";
+import { entriesState } from "../state/entries.svelte";
 import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
 import { statusState, type StatusKind } from "../state/status.svelte";
@@ -53,6 +54,15 @@ export function runAction(id: string): void {
         break;
       case "file.import":
         dialogState.qifImport = true;
+        break;
+      case "file.import_entries":
+        void entriesState.importFile();
+        break;
+      case "file.export_names":
+        void exportNames();
+        break;
+      case "file.review_entries":
+        dialogState.reviewEntries = true;
         break;
       case "file.integrity":
         dialogState.integrityReport = null;
@@ -143,9 +153,21 @@ export async function backUpNow(): Promise<void> {
   }
 }
 
+/** File > Export Names for Phones… (CLI-080): Rust asks where and writes
+ * the file, and the copy beside the book. */
+export async function exportNames(): Promise<void> {
+  try {
+    const path = await call(commands.namesExport());
+    if (path !== null) statusState.show(`Saved the names to ${path}.`);
+  } catch (e) {
+    statusState.show(`The names were not saved: ${e instanceof Error ? e.message : String(e)}`, "alert");
+  }
+}
+
 /** Edit > Undo and Ctrl+Z (UI-060): undo the last register change, then
  * refresh what shows it. The status bar says what happened. */
 export async function undoLast(): Promise<void> {
+  entriesState.reopenAfter = null;
   try {
     const label = await call(commands.undoStatus());
     if (label === null) {
@@ -161,6 +183,8 @@ export async function undoLast(): Promise<void> {
   await Promise.all([
     scheduleState.changed(),
     investState.accountId !== null ? investState.refresh() : listsState.loadBalances(),
+    // An undone approval puts entries back in the review list (CLI-040).
+    dialogState.reviewEntries ? entriesState.load() : entriesState.refreshCount(),
   ]);
 }
 

@@ -325,7 +325,7 @@ pub fn archive_folder(book_folder: &Path, book: &str) -> PathBuf {
 
 /// Encrypt `bytes` into the archive: `<stamp>-<file name>.age`, never
 /// overwriting a file already there.
-fn write_archive(
+pub(crate) fn write_archive(
     a: &ArchiveTarget,
     file_name: &str,
     bytes: &[u8],

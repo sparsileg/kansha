@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.85 (draft) |
+| **Document version** | 0.7.89 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
@@ -1921,9 +1921,7 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
 
   - Split lines are indented under their entry, each an amount, a
     category, and an optional memo; they must add up to the entry's
-    amount. One split line per entry may leave out its amount: it
-    takes the rest (the entry's amount less the other lines), so a
-    receipt is entered as total, tax, items, and a last category.
+    amount. Every split line has its amount.
   - Dates are written out (`2026-10-12`). `kansha add` and `kansha
     run` also take `today`, `yesterday`, and the book's date format;
     they write dates out before the inbox, so the app and files from
@@ -1946,10 +1944,11 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
     (Enter for today), payee, amount, account, category or `split`,
     then split lines until nothing is left, then memo. Each answer is
     checked as it is given (names against the names copy, below); a
-    wrong one is asked again with the close matches. After each split
-    line the amount left is shown; a line with only a category takes
-    the rest. Tab completes account and category names from the names
-    copy. Nothing is kept in a history file.
+    wrong one is asked again with the close matches. A split line is
+    its amount and category at once, or the amount alone, after which
+    its category is asked; after each line the amount left is shown.
+    Tab completes account and category names from the names copy.
+    Nothing is kept in a history file.
   - `kansha add <entry>` and `kansha run <file>`, started from a
     command line, check the format, write the entries to the book's
     inbox folder (`<book>-inbox/`, beside the book), and exit. They
@@ -1973,13 +1972,23 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
 - **CLI-040** [1.0][S] Everything entered this way is **unverified**
   and lives in a pending table outside the ledger (D-180): it changes
   no balance, register, report, reconciliation, or lot. When the book
-  is opened, and when its window gets focus, Kansha reads the inbox
-  and lists the entries for review, with their sender. Each is
+  is opened, when files arrive in the inbox (Kansha watches it while
+  the book is open), and when its window gets focus, Kansha reads the
+  inbox and lists the entries for review, with their sender. Each is
   approved (it becomes an ordinary transaction), edited and approved,
   or rejected; name errors are fixed there. A plain entry is edited in
   its review row; a split is edited after approval: Approve and open
-  approves it and opens it in the register. Review can be put off; the
-  list stays until it is empty.
+  approves it and opens it in the register for editing with its split
+  lines showing. When that edit ends (saved or not), the review list
+  opens again if entries are still pending; leaving the register or
+  Undo first cancels this. Review can be put off; the list stays until
+  it is empty.
+  - The list puts the focus on the first ready entry's Approve (or
+    Approve and open), and moves it on after each approval or
+    rejection; with none ready, on the first entry's Edit. Account and
+    category boxes in the review row complete names as the register's
+    Category box does (REG-030). With no entries left, Later becomes
+    Close and takes the focus.
   - Undo (UI-060) undoes an approval: the transaction is removed and
     the entry is back in the list as pending.
   - The review list opens by itself when the book opens with entries
@@ -2975,6 +2984,10 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.89 | 2026-10-12 | CLI-040: Kansha watches the open book's inbox and reads it when files arrive, so the status bar note and count change without a click in the window; reading on focus stays. No schema change. No API change. |
+| 0.7.88 | 2026-10-12 | CLI-020: every split line has its amount; the line that took the rest is withdrawn (files and `kansha add`). CLI-030: in `kansha add` a split line is its amount and category at once, or the amount alone, after which its category is asked. `kansha help` says to quote names with spaces. No schema change. No API change. |
+| 0.7.87 | 2026-10-12 | CLI-040: the review list focuses the first ready entry's Approve and moves on after each approval or rejection; account and category boxes in the review row complete names as REG-030 does; with no entries left, Later becomes Close. No schema change. No API change. |
+| 0.7.86 | 2026-10-12 | CLI-040: Approve and open opens the split for editing with its lines showing; when that edit ends the review list opens again if entries are still pending. No schema change. No API change. |
 | 0.7.85 | 2026-10-12 | CLI-040, UI-060: Undo undoes approving a reviewed entry (transaction removed, entry pending again). CLI-040: the review list opens by itself only when the book opens with entries pending; entries arriving while the window is open change the File > Review entries… (n) count and a status bar note. No schema change. No API change. |
 | 0.7.84 | 2026-10-12 | CLI-020: `kansha run` also takes `today`, `yesterday`, and the book's date format, as `kansha add` does; both write dates out as `2026-10-12` before the inbox. CLI-040: a plain entry is edited in its review row; a split is edited after approval (Approve and open opens it in the register). No schema change. No API change. |
 | 0.7.83 | 2026-10-12 | CLI-020: one split line per entry may leave out its amount and takes the rest (total, tax, items, last category). CLI-030: `kansha add` with no entry asks field by field, checks each answer at once against the names copy, shows the amount left after each split line, completes names with Tab, and keeps no history file. No schema change. No API change. |

@@ -6,6 +6,7 @@ use kansha_core::accounts::{AccountFields, AccountType, LotMethod};
 use kansha_core::categories::{CategoryFields, CategoryKind};
 use kansha_core::ledger::{Cleared, TxnStatus};
 use kansha_core::persistence::audit::{AuditAction, AuditEntity};
+use kansha_core::persistence::entries::{EntrySource, PendingStatus};
 use kansha_core::persistence::{accounts, categories};
 use kansha_core::reconcile::ReconStatus;
 use kansha_core::{Db, Error, Origin};
@@ -338,6 +339,31 @@ fn every_reconciliation_status_is_accepted_by_the_schema() {
                 params![acct, s, T, finished],
             )
             .unwrap_or_else(|err| panic!("{s}: {err}"));
+    }
+}
+
+#[test]
+fn every_pending_entry_enum_value_is_accepted_by_the_schema() {
+    let db = db();
+    for (i, s) in EntrySource::ALL.iter().enumerate() {
+        db.conn()
+            .execute(
+                "INSERT INTO entry_file (id, file_name, sha256, source, received_at, entry_count)
+                 VALUES (?1, 'a.txt', printf('%064d', 0), ?2, ?3, 1)",
+                params![i as i64 + 1, s, T],
+            )
+            .unwrap_or_else(|err| panic!("{s}: {err}"));
+    }
+    for (i, st) in PendingStatus::ALL.iter().enumerate() {
+        let decided = (*st != PendingStatus::Pending).then_some(T);
+        db.conn()
+            .execute(
+                "INSERT INTO pending_entry (file_id, line_no, uid, txn_date, payee, amount,
+                     account_name, status, decided_at)
+                 VALUES (1, 2, printf('%036d', ?1), '2026-01-01', 'P', 1, 'C', ?2, ?3)",
+                params![i as i64, st, decided],
+            )
+            .unwrap_or_else(|err| panic!("{st}: {err}"));
     }
 }
 

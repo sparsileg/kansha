@@ -297,6 +297,20 @@ describe("mixed-sign splits (TXN-020)", () => {
     ],
   };
 
+  it("an opened split scrolls into view with its lines drawn", async () => {
+    const seen: boolean[] = [];
+    const spy = vi.fn(function (this: HTMLElement) {
+      seen.push(this.querySelector('[aria-label="Split 2 amount"]') !== null);
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { value: spy, configurable: true });
+    c.entryGet.mockImplementation(() => ok(paycheck));
+    registerState.editSplit = true;
+    render(EntryEditor, { account: 1, txn: 7, split: true, ondone: vi.fn() });
+    await waitFor(() => expect(field("Split 2 amount").value).toBe("-500.00"));
+    await waitFor(() => expect(seen).toContain(true));
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
   it("an edit shows the opposite line with '-' and saves it unchanged", async () => {
     c.entryGet.mockImplementation(() => ok(paycheck));
     c.entryUpdate.mockImplementation(() => ok(null));

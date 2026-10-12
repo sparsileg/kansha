@@ -7,7 +7,8 @@
 //! never worth refusing to start over.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +20,33 @@ pub const FONT_SIZES: std::ops::RangeInclusive<i64> = 10..=24;
 
 /// Recent books remembered.
 const RECENT_MAX: usize = 8;
+
+/// The app's identifier (`tauri.conf.json`); names its folder in the OS
+/// configuration folder.
+pub const APP_ID: &str = "tools.astryx.kansha";
+
+/// The config file where the desktop app keeps it, found without Tauri
+/// (the command line, CLI-030): `$XDG_CONFIG_HOME` or `~/.config` on
+/// Linux, `%APPDATA%` on Windows, `~/Library/Application Support` on
+/// macOS, then `tools.astryx.kansha/config.json`.
+pub fn default_path() -> Option<PathBuf> {
+    config_path_from(|k| std::env::var_os(k))
+}
+
+fn config_path_from(env: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    let set = |k: &str| env(k).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let dir = if cfg!(windows) {
+        set("APPDATA")?
+    } else if cfg!(target_os = "macos") {
+        set("HOME")?.join("Library/Application Support")
+    } else {
+        match set("XDG_CONFIG_HOME").filter(|p| p.is_absolute()) {
+            Some(d) => d,
+            None => set("HOME")?.join(".config"),
+        }
+    };
+    Some(dir.join(APP_ID).join("config.json"))
+}
 
 /// What the main window shows: the start page (the passphrase screen)
 /// or the working window (a book open, setup, restore). Each has its
@@ -199,6 +227,36 @@ impl LocalConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn config_path_follows_xdg_then_home() {
+        let env = |xdg: Option<&'static str>| {
+            move |k: &str| match k {
+                "XDG_CONFIG_HOME" => xdg.map(OsString::from),
+                "HOME" => Some(OsString::from("/home/stan")),
+                _ => None,
+            }
+        };
+        assert_eq!(
+            config_path_from(env(None)),
+            Some(PathBuf::from(
+                "/home/stan/.config/tools.astryx.kansha/config.json"
+            ))
+        );
+        assert_eq!(
+            config_path_from(env(Some("/xdg"))),
+            Some(PathBuf::from("/xdg/tools.astryx.kansha/config.json"))
+        );
+        // A relative XDG_CONFIG_HOME is ignored, as the spec says.
+        assert_eq!(
+            config_path_from(env(Some("rel"))),
+            Some(PathBuf::from(
+                "/home/stan/.config/tools.astryx.kansha/config.json"
+            ))
+        );
+        assert_eq!(config_path_from(|_| None), None);
+    }
 
     #[test]
     fn missing_or_damaged_file_gives_defaults() {

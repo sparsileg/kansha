@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { call, commands, withConfirmation } from "../api";
   import { displayDate } from "../format/date";
   import { formatMoney, splitPaymentDeposit } from "../format/money";
@@ -8,6 +8,7 @@
   import { bookSettings } from "../state/booksettings.svelte";
   import { confirmState } from "../state/confirm.svelte";
   import { dialogState } from "../state/dialogs.svelte";
+  import { entriesState } from "../state/entries.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
   import { viewState } from "../state/view.svelte";
@@ -74,7 +75,11 @@
     if (!rowsEl) return;
     const i = rows.findIndex((r) => r.txn_id === id);
     if (i < 0) return;
-    const el = document.getElementById(`row-${id}`);
+    // The row being edited is its entry form, often taller (split lines).
+    const el =
+      registerState.editing === id
+        ? rowsEl.querySelector<HTMLElement>("form.entry.editing")
+        : document.getElementById(`row-${id}`);
     const top = el ? el.offsetTop : i * rowH;
     const bottom = top + (el ? el.offsetHeight : rowH);
     if (bottom > rowsEl.scrollTop + rowsEl.clientHeight) {
@@ -147,8 +152,14 @@
    * (Quicken style); after the last row, to the new-entry row. Focus goes
    * back to the grid so the arrow and Enter keys keep working.
    */
+  // Leaving the register cancels Approve and open's return to the list.
+  onDestroy(() => {
+    entriesState.reopenAfter = null;
+  });
+
   async function afterEdit(txn: number, saved: boolean) {
     registerState.editing = null;
+    void entriesState.editEnded(txn);
     registerState.selected = txn;
     if (saved) {
       const i = rows.findIndex((x) => x.txn_id === txn);

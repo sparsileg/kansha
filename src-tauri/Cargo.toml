@@ -31,12 +31,22 @@ thiserror.workspace = true
 # MSRV 1.85 when chosen. The core parses the reply; only this shell
 # touches the network (SECU-070).
 ureq = "=2.12.1"
+# `kansha add` asks field by field with Tab completion (CLI-030); no
+# default features, so no history file: no entry is ever written to one.
+rustyline = { version = "=18.0.1", default-features = false }
+# Watches the open book's inbox so entries from the command line show
+# without a click in the window (CLI-040). Book folders are on a fixed
+# drive, where file events are reliable.
+notify = "=8.2.0"
 
 # Saving PDFs with the orientation set in code (RPT-050); the same
 # versions Tauri's wry already uses.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 webkit2gtk = "2.0"
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -12,6 +12,7 @@ pub mod calc;
 pub mod categories;
 pub mod csv;
 pub mod date;
+pub mod entries;
 pub mod error;
 pub mod import;
 pub mod insights;

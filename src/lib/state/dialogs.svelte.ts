@@ -32,6 +32,8 @@ class DialogState {
   priceImport = $state(false);
   /** File > Import… (Quicken QIF, MIG). */
   qifImport = $state(false);
+  /** File > Review Entries… (CLI-040). */
+  reviewEntries = $state(false);
   /** The Navigation Bar dialog (which buttons, in what order). */
   navbar = $state(false);
   /** Due, overdue, and auto-entered items (REC-130, REC-070). */

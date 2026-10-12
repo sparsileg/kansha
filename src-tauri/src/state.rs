@@ -9,6 +9,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
+use crate::inbox_watch::InboxWatch;
 use kansha_core::backup::{self, BackupKind, BackupTimer};
 use kansha_core::book::{BookFiles, OpenBook};
 use kansha_core::import::Staged;
@@ -105,6 +106,8 @@ pub struct AppState {
     session: Mutex<Option<Session>>,
     /// A Quicken file read and waiting to be imported (MIG-040).
     pending_import: Mutex<Option<Staged>>,
+    /// The watch on the open book's inbox (CLI-040).
+    inbox_watch: Mutex<Option<InboxWatch>>,
     /// The book's files: the open book's, or the one the passphrase
     /// screen or setup is for. Changes when another book is opened.
     files: Mutex<BookFiles>,
@@ -133,6 +136,7 @@ impl AppState {
             integrity: Mutex::new(None),
             session: Mutex::new(None),
             pending_import: Mutex::new(None),
+            inbox_watch: Mutex::new(None),
             files: Mutex::new(files),
             config_path,
             downloads,
@@ -191,6 +195,13 @@ impl AppState {
     pub fn note_import(&self) {
         self.note_change();
         self.forget_session();
+    }
+
+    /// Entries were received for review: written to the book, so a timed
+    /// backup will be due, and the last change can no longer be undone
+    /// (its audit mark has moved).
+    pub fn note_received(&self) {
+        self.note_change();
     }
 
     /// Run `f` with the open book; `locked` when there is none.
@@ -267,6 +278,19 @@ impl AppState {
             let u = undo::after_many(tx.conn(), befores, label)?.map(|u| u.with_created(created));
             Ok((out, u))
         })?;
+        if let Ok(mut slot) = self.undo.lock() {
+            *slot = u;
+        }
+        Ok(out)
+    }
+
+    /// A change that builds its own undo (approving reviewed entries,
+    /// CLI-040). Replaces any earlier undo.
+    pub fn write_with_undo<T>(
+        &self,
+        f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<(T, Option<Undo>)>,
+    ) -> CmdResult<T> {
+        let (out, u) = self.write(f)?;
         if let Ok(mut slot) = self.undo.lock() {
             *slot = u;
         }
@@ -421,14 +445,32 @@ impl AppState {
         Ok(done)
     }
 
+    /// Watch `folder`, the open book's inbox, unless it is watched
+    /// already; `changed` runs when files arrive (CLI-040).
+    pub fn watch_inbox(&self, folder: PathBuf, changed: impl Fn() + Send + 'static) {
+        let Ok(mut guard) = self.inbox_watch.lock() else {
+            return;
+        };
+        if guard.as_ref().is_none_or(|w| w.folder() != folder) {
+            *guard = InboxWatch::start(folder, changed);
+        }
+    }
+
     /// Back up and close the book, if one is open (on exit, BAK-020).
-    /// Failures are reported on stderr: there is no window left to show
-    /// them in.
+    /// First the names copy beside it is brought up to date, for the
+    /// command line's name check (CLI-080). Failures are reported on
+    /// stderr: there is no window left to show them in.
     pub fn close_book(&self) {
-        let name = self.files().name();
+        let files = self.files();
+        let name = files.name();
         let Ok(mut guard) = self.book.lock() else {
             return;
         };
+        if let Some(b) = guard.as_ref()
+            && let Err(e) = kansha_core::entries::sidecar::write_names_copy(b.db.conn(), &files)
+        {
+            eprintln!("could not write the names copy: {e}");
+        }
         if let Some(b) = guard.as_mut()
             && let Err(e) = backup::back_up(
                 &mut b.db,
@@ -444,6 +486,9 @@ impl AppState {
         }
         *guard = None;
         drop(guard);
+        if let Ok(mut w) = self.inbox_watch.lock() {
+            *w = None;
+        }
         self.forget_session();
         self.set_session(None);
     }

@@ -9,6 +9,7 @@
   import AccountModal from "./lib/components/AccountModal.svelte";
   import ConfirmDialog from "./lib/components/ConfirmDialog.svelte";
   import DueDialog from "./lib/components/DueDialog.svelte";
+  import ReviewEntries from "./lib/components/entries/ReviewEntries.svelte";
   import HistoryModal from "./lib/components/HistoryModal.svelte";
   import AboutModal from "./lib/components/AboutModal.svelte";
   import PriceImportModal from "./lib/components/invest/PriceImportModal.svelte";
@@ -45,6 +46,7 @@
   import { commands } from "./lib/api";
   import type { RecentBook } from "./lib/types/bindings";
   import { dialogState } from "./lib/state/dialogs.svelte";
+  import { entriesState, reviewLabel } from "./lib/state/entries.svelte";
   import { listsState } from "./lib/state/lists.svelte";
   import { REPORT_WINDOW, reportState } from "./lib/state/reports.svelte";
   import { settingsState } from "./lib/state/settings.svelte";
@@ -66,6 +68,37 @@
   onMount(() => selectOnFocus(document));
   onMount(() => installUndoKey(document, () => void undoLast()));
   onMount(() => installFindKey(document));
+  // Entries from the command line wait in the book's inbox: read it
+  // when files arrive (the app watches it) and whenever the window gets
+  // focus (CLI-040).
+  onMount(() => {
+    let stop: (() => void) | undefined;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) =>
+        getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+          if (focused && bookState.open && started) void entriesState.readInbox();
+        }),
+      )
+      .then((un) => (stop = un))
+      .catch(() => {
+        /* not running inside Tauri */
+      });
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("inbox-changed", () => {
+          if (bookState.open && started) void entriesState.readInbox();
+        }),
+      )
+      .then((un) => (unlisten = un))
+      .catch(() => {
+        /* not running inside Tauri */
+      });
+    return () => {
+      stop?.();
+      unlisten?.();
+    };
+  });
   // The close box asks to save changed reports, like File > Exit.
   onMount(() => void guardWindowClose());
 
@@ -84,6 +117,7 @@
   });
   function fill(i: MenuItem): MenuItem {
     if (i.id === "file.recent") return { ...i, items: recentItems(recent) };
+    if (i.id === "file.review_entries") return { ...i, label: reviewLabel(entriesState.count) };
     if (i.id === "reports.saved_menu" && i.items)
       return { ...i, items: savedReportItems(reportState.folders, reportState.savedList, i.items[i.items.length - 1]) };
     return i;
@@ -153,6 +187,7 @@
   {#if dialogState.qifImport}<ImportModal onclose={() => (dialogState.qifImport = false)} />{/if}
   {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
+  {#if dialogState.reviewEntries}<ReviewEntries />{/if}
   {#if dialogState.schedule !== undefined}
     {#key dialogState.schedule.id ?? `new-${dialogState.schedule.start}`}
       <ScheduleModal

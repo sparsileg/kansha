@@ -31,6 +31,7 @@ text_enum! {
         ReportFolder = "report_folder",
         Insight = "insight",
         SpendingCard = "spending_card",
+        PendingEntry = "pending_entry",
     }
 }
 

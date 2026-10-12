@@ -5,6 +5,7 @@
 import { call, commands } from "../api";
 import { bookSettings } from "../state/booksettings.svelte";
 import { dialogState } from "../state/dialogs.svelte";
+import { entriesState } from "../state/entries.svelte";
 import { investViewState } from "../state/investview.svelte";
 import { listsState } from "../state/lists.svelte";
 import { scheduleState } from "../state/schedule.svelte";
@@ -23,6 +24,7 @@ export async function startBook(): Promise<void> {
   if (viewState.untouched) await openStartup();
   if (bookSettings.value.integrity_at_startup) await autoIntegrityCheck();
   await scheduleState.startup();
+  await entriesState.startup();
   startTimedBackups();
 }
 

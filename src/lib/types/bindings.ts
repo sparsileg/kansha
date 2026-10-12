@@ -490,6 +490,41 @@ export const commands = {
 	 *  made first); later sales choose their lots again.
 	 */
 	trueUp: (account: AccountId, security: SecurityId, date: string, text: string, memo: string) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("true_up", { account, security, date, text, memo })),
+	/**
+	 *  Entries waiting for review, oldest first, names checked against the
+	 *  book; with the names a fix may choose from.
+	 */
+	entriesPending: () => typedError<PendingList, IpcError>(__TAURI_INVOKE("entries_pending")),
+	/**  How many entries wait for review (the File menu's count). */
+	entriesCount: () => typedError<number, IpcError>(__TAURI_INVOKE("entries_count")),
+	/**  Change a pending entry before approving it. */
+	entriesEdit: (id: number, edit: EntryEdit) => typedError<PendingView, IpcError>(__TAURI_INVOKE("entries_edit", { id, edit })),
+	/**
+	 *  Approve entries into ordinary transactions; Edit > Undo takes them
+	 *  back (UI-060).
+	 */
+	entriesApprove: (ids: number[]) => typedError<Approved, IpcError>(__TAURI_INVOKE("entries_approve", { ids })),
+	/**  Set entries aside; they never reach the ledger. */
+	entriesReject: (ids: number[]) => typedError<null, IpcError>(__TAURI_INVOKE("entries_reject", { ids })),
+	/**
+	 *  File > Export names for phones… (CLI-080): save the book's account
+	 *  and category names as `kansha-names 1`; the copy beside the book is
+	 *  written too. Returns the saved file's path, `None` when cancelled.
+	 */
+	namesExport: () => typedError<string | null, IpcError>(__TAURI_INVOKE("names_export")),
+	/**
+	 *  Read the book's inbox (`<book>-inbox/`): on opening the book, when
+	 *  the window gets focus, and when told files arrived (CLI-040). The
+	 *  first read starts the watch that sends `inbox-changed`.
+	 */
+	entriesInboxRead: () => typedError<InboxReport, IpcError>(__TAURI_INVOKE("entries_inbox_read")),
+	/**  Choose a file of entries (File > Import entries…). */
+	pickEntriesFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_entries_file", { start }),
+	/**
+	 *  Receive a chosen file of entries for review (File > Import
+	 *  entries…); the file stays where it is.
+	 */
+	entriesImport: (path: string) => typedError<InboxReport, IpcError>(__TAURI_INVOKE("entries_import", { path })),
 	/**  Choose a QIF file. */
 	pickImportFile: (start: string | null) => __TAURI_INVOKE<string | null>("pick_import_file", { start }),
 	/**  Read and stage a file; its preview with the default mapping. */
@@ -778,6 +813,14 @@ export type Appearance = {
 	font_size: number | null,
 };
 
+/**  What [`approve`] did. */
+export type Approved = {
+	/**  The new transactions, in the order of the entries given. */
+	txns: TxnId[],
+	/**  The account of the first one, to open it in its register. */
+	account: AccountId | null,
+};
+
 /**  Asset class for allocation (SEC-010, POS-020). */
 export type AssetClass = "us_equity" | "intl_equity" | "bond" | "cash" | "real_estate" | "commodity" | "other";
 
@@ -810,7 +853,7 @@ export type AttentionCheck = {
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card" | "pending_entry";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -1392,6 +1435,22 @@ export type Entry = {
 };
 
 /**
+ *  A change to a pending entry made in review. A split's amount is not
+ *  changed here (approve and open it to change its lines).
+ */
+export type EntryEdit = {
+	date: string,
+	payee: string,
+	amount: string,
+	account: string,
+	/**  Plain entries only. */
+	category: string | null,
+	memo: string,
+	/**  A split's category names, one per line in order. */
+	split_categories: string[],
+};
+
+/**
  *  One line on the other side of an entry: a category or a transfer
  *  account (TXN-020).
  */
@@ -1410,6 +1469,13 @@ export type EntryLine = {
  *  date and flagged for review (REC-070).
  */
 export type EntryMode = "remind" | "auto";
+
+/**  How a file of entries came in. */
+export type EntrySource = 
+/**  `kansha add` or `kansha run`, through the inbox. */
+"cli" | 
+/**  File > Import entries…, or a file dropped in the inbox. */
+"file";
 
 /**  Something to confirm before an entry is saved. */
 export type EntryWarning = 
@@ -1747,6 +1813,12 @@ export type ImportResult = {
 	accounts: AccountResult[],
 };
 
+/**  What reading files did. */
+export type InboxReport = {
+	received: Received[],
+	refused: Refused[],
+};
+
 /**  Income by security, with totals. */
 export type IncomeReport = {
 	rows: IncomeRow[],
@@ -1980,6 +2052,12 @@ export type LatestCheck = {
 	error: string | null,
 };
 
+/**  A problem on one line of a file; line 0 is the file as a whole. */
+export type LineError = {
+	line: number,
+	message: string,
+};
+
 /**  A lot as recorded at acquisition (LOT-010). */
 export type Lot = {
 	id: LotId,
@@ -2079,6 +2157,15 @@ export type MmfMode =
 "security" | 
 /**  Part of the account's cash balance. */
 "cash";
+
+/**  A name as given, and as found in the book. */
+export type NameCheck = {
+	given: string,
+	/**  The book's spelling; `None` when it did not resolve. */
+	resolved: string | null,
+	/**  Why not, with close matches. */
+	error: string | null,
+};
 
 /**  How File > New starts the book (UI-085). */
 export type NewBookContents = 
@@ -2202,6 +2289,35 @@ export type PayeeFields = {
 
 /**  Row ID of a payee. */
 export type PayeeId = number;
+
+/**  The review list with the names a fix may choose from. */
+export type PendingList = {
+	entries: PendingView[],
+	/**  Open spending accounts, as spelled in the book. */
+	accounts: string[],
+	/**  Visible expense categories, full paths. */
+	categories: string[],
+};
+
+/**  A pending entry for review, its names checked against the book. */
+export type PendingView = {
+	id: number,
+	sender: string,
+	source: EntrySource,
+	file_name: string,
+	received_at: string,
+	date: string,
+	payee: string,
+	/**  What was spent; negative for a refund. */
+	amount: string,
+	account: NameCheck,
+	/**  `None` for a split. */
+	category: NameCheck | null,
+	splits: SplitView[],
+	memo: string,
+	/**  Every name resolved: it can be approved as it is. */
+	ready: boolean,
+};
 
 /**
  *  Simple performance of one security in an account, or the account's
@@ -2461,6 +2577,15 @@ export type RealizedGain = {
 	taxable: boolean,
 };
 
+/**  What [`receive`] did. */
+export type Received = {
+	file_name: string,
+	/**  Entries added for review. */
+	added: number,
+	/**  Entries skipped: their id was received before. */
+	skipped: number,
+};
+
 /**  A book on the recent list (File menu). */
 export type RecentBook = {
 	name: string,
@@ -2516,6 +2641,12 @@ export type Recurrence = {
 	week_of_month: number | null,
 	start_date: string,
 	weekend_rule: WeekendRule,
+};
+
+/**  A file that could not be received: every bad line. */
+export type Refused = {
+	file_name: string,
+	errors: LineError[],
 };
 
 /**  A page of register rows. */
@@ -3208,6 +3339,13 @@ export type SpendingCardId = number;
 export type SplitRatio = {
 	new: number,
 	old: number,
+};
+
+/**  A split line for review. */
+export type SplitView = {
+	amount: string,
+	category: NameCheck,
+	memo: string,
 };
 
 /**  What starting a reconciliation needs (RCN-020 step 1). */

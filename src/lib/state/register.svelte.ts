@@ -18,6 +18,7 @@ import type {
   RegisterSort,
   RegisterSummary,
 } from "../types/bindings";
+import { entriesState } from "./entries.svelte";
 import { listsState } from "./lists.svelte";
 
 /** The user-editable filters (REG-040); everything in the query but the
@@ -88,6 +89,7 @@ class RegisterState {
 
   /** Switch account: filters reset; opens date-ascending at the bottom. */
   async open(account: AccountId): Promise<void> {
+    entriesState.reopenAfter = null;
     this.accountId = account;
     this.filters = emptyFilters();
     this.sort = "date";
@@ -111,6 +113,7 @@ class RegisterState {
   }
 
   close(): void {
+    entriesState.reopenAfter = null;
     this.#seq++;
     this.accountId = null;
     this.page = null;

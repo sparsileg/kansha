@@ -16,6 +16,7 @@ const TABLES: &[&str] = &[
     "account",
     "audit_log",
     "category",
+    "entry_file",
     "import_batch",
     "insight",
     "investment_txn",
@@ -23,6 +24,8 @@ const TABLES: &[&str] = &[
     "lot_adjustment",
     "lot_disposal",
     "payee",
+    "pending_entry",
+    "pending_split",
     "posting",
     "posting_tag",
     "price",
@@ -1194,4 +1197,56 @@ fn migration_0018_makes_estimates_average_their_last_three_payments() {
     assert_eq!(got(5), (Some(3), 0));
     assert_eq!(got(6), (None, -2500));
     assert_eq!(got(7), (None, -2600));
+}
+
+#[test]
+fn migration_0019_adds_pending_entries_and_keeps_the_audit_log() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 18).unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+                 VALUES ('2026-01-01T00:00:00Z', 'txn', 1, 'create', '{}', 'ui')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    assert_eq!(count(&db, "audit_log"), 1);
+    c.execute_batch(
+        "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+             VALUES ('2026-01-01T00:00:00Z', 'pending_entry', 1, 'create', '{}', 'system');
+         INSERT INTO entry_file (file_name, sha256, source, received_at, entry_count)
+             VALUES ('a.txt', printf('%064d', 0), 'cli', '2026-01-01T00:00:00Z', 1);
+         INSERT INTO pending_entry (file_id, line_no, uid, txn_date, payee, amount,
+                 account_name, category_name)
+             VALUES (1, 2, '1b4e28ba-2fa1-4d2a-9c3e-0f6a8b7c5d21', '2026-01-01', 'Shell',
+                 4520, 'Checking', 'Auto');",
+    )
+    .unwrap();
+    // Still append-only.
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+    // An id is received once.
+    assert!(
+        c.execute(
+            "INSERT INTO pending_entry (file_id, line_no, uid, txn_date, payee, amount,
+                 account_name)
+             VALUES (1, 3, '1b4e28ba-2fa1-4d2a-9c3e-0f6a8b7c5d21', '2026-01-01', 'X', 1, 'C')",
+            [],
+        )
+        .is_err()
+    );
+    // Decided needs a time; only an approved entry has a transaction.
+    assert!(
+        c.execute("UPDATE pending_entry SET status = 'approved'", [])
+            .is_err()
+    );
+    assert!(
+        c.execute(
+            "UPDATE pending_entry SET status = 'rejected', txn_id = NULL,
+                 decided_at = '2026-01-02T00:00:00Z'",
+            [],
+        )
+        .is_ok()
+    );
 }

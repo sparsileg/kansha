@@ -107,13 +107,21 @@
       registerState.editSplit = false;
       if (wantSplit && !error && !isSplit) {
         await startSplit();
+        await revealForm();
         return;
       }
     }
     dateInput?.focus();
     dateInput?.select();
-    if (txn !== null) formEl?.scrollIntoView?.({ block: "nearest" });
+    if (txn !== null) await revealForm();
   });
+
+  /** Scroll the whole edit row into view once its lines are drawn: a
+   * split near the end of the register grows below the window. */
+  async function revealForm() {
+    await tick();
+    formEl?.scrollIntoView?.({ block: "nearest" });
+  }
 
   // Live split remainder from Rust (TXN-020); latest answer wins.
   $effect(() => {

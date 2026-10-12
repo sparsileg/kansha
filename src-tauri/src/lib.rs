@@ -16,7 +16,9 @@ use tauri_specta::{Builder, collect_commands};
 
 use crate::state::AppState;
 
+mod cli;
 mod commands;
+mod inbox_watch;
 mod state;
 mod window;
 
@@ -164,6 +166,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::invest::lot_seed,
             commands::invest::true_up_preview,
             commands::invest::true_up,
+            commands::entries::entries_pending,
+            commands::entries::entries_count,
+            commands::entries::entries_edit,
+            commands::entries::entries_approve,
+            commands::entries::entries_reject,
+            commands::entries::names_export,
+            commands::entries::entries_inbox_read,
+            commands::entries::pick_entries_file,
+            commands::entries::entries_import,
             commands::import::pick_import_file,
             commands::import::import_open,
             commands::import::import_preview,
@@ -243,6 +254,13 @@ fn database_path(
 /// The per-computer config file (SET-070).
 fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(app.path().app_config_dir()?.join("config.json"))
+}
+
+/// The command line (CLI-030): runs a command and returns its exit code
+/// when the arguments name one (`add`, `run`, `help`); `None` when the
+/// window should start.
+pub fn cli_main() -> Option<i32> {
+    cli::main()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

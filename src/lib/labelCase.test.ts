@@ -19,6 +19,7 @@ const NAMES = new Set([
   "Monthly Avg", // spending card column, as in Quicken (CARD-060)
   "Count money moved to or from accounts not chosen on the Accounts tab", // a tab's name
   "Enter creates the tag; Esc cancels", // key names
+  "Fix the names marked ⚠ first (Edit)", // the Edit button's name
 ]);
 
 // Labels in these files are Title Case on purpose, as in Quicken.

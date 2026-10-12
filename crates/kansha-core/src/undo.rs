@@ -1,8 +1,8 @@
 //! Undo of the last register change (UI-060).
 //!
 //! Covers creating, editing, voiding, and deleting a transaction and
-//! changing its cleared status, in banking and investment registers; one
-//! level. Find/Replace (REG-170) changes several transactions as one
+//! changing its cleared status, in banking and investment registers, and
+//! approving reviewed entries (CLI-040); one level. Find/Replace (REG-170) changes several transactions as one
 //! change, undone together; tags, payees, and categories it created
 //! are deleted again. Around the change the caller takes [`before`] and then
 //! [`after`], which returns an [`Undo`]. [`apply`] puts the transaction's
@@ -49,6 +49,8 @@ pub struct Undo {
     items: Vec<Item>,
     /// In the order they were made.
     created: Vec<Created>,
+    /// Entries the change approved (CLI-040): pending again on undo.
+    pending: Vec<i64>,
     mark: i64,
 }
 
@@ -98,6 +100,13 @@ impl Undo {
 
     pub fn created(&self) -> &[Created] {
         &self.created
+    }
+
+    /// The reviewed entries the change approved; undoing puts them back
+    /// in the review list.
+    pub fn with_pending(mut self, entries: Vec<i64>) -> Undo {
+        self.pending = entries;
+        self
     }
 }
 
@@ -159,8 +168,27 @@ pub fn after_many(
         label: label.to_string(),
         items,
         created: Vec::new(),
+        pending: Vec::new(),
         mark: rows::audit_mark(conn)?,
     }))
+}
+
+/// [`after`] for transactions the change created (approving reviewed
+/// entries, CLI-040): undoing removes them.
+pub fn created_txns(conn: &Connection, txns: &[TxnId], label: &str) -> Result<Option<Undo>> {
+    let befores = txns
+        .iter()
+        .map(|id| {
+            (
+                *id,
+                Before {
+                    rows: None,
+                    scheduled: false,
+                },
+            )
+        })
+        .collect();
+    after_many(conn, befores, label)
 }
 
 /// Nothing has changed since: `u` can still be applied.
@@ -209,6 +237,7 @@ pub fn apply(tx: &Tx<'_>, u: &Undo, confirmed: bool) -> Result<()> {
     for i in &u.items {
         restore_one(tx, i)?;
     }
+    crate::entries::review::unapprove(tx, &u.pending)?;
     // Nothing uses them now: the transactions are back as they were and
     // nothing else has changed since. A child category goes before its
     // parent.
