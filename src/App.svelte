@@ -2,6 +2,7 @@
   import type { Component } from "svelte";
   import { onMount } from "svelte";
   import { selectOnFocus } from "./lib/ui/selectOnFocus";
+  import { installFindKey } from "./lib/ui/findKey";
   import { installUndoKey } from "./lib/ui/undoKey";
   import Account from "./views/Account.svelte";
   import Accounts from "./views/Accounts.svelte";
@@ -13,6 +14,7 @@
   import PriceImportModal from "./lib/components/invest/PriceImportModal.svelte";
   import ImportModal from "./lib/components/import/ImportModal.svelte";
   import IntegrityModal from "./lib/components/IntegrityModal.svelte";
+  import FindReplaceModal from "./lib/components/FindReplaceModal.svelte";
   import ScheduleModal from "./lib/components/ScheduleModal.svelte";
   import NavBarModal from "./lib/components/NavBarModal.svelte";
   import SettingsModal from "./lib/components/SettingsModal.svelte";
@@ -63,6 +65,7 @@
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
   onMount(() => installUndoKey(document, () => void undoLast()));
+  onMount(() => installFindKey(document));
   // The close box asks to save changed reports, like File > Exit.
   onMount(() => void guardWindowClose());
 
@@ -181,6 +184,7 @@
     <VerifyBackupModal start={settingsState.backupFolder} onclose={() => (dialogState.verify = false)} />
   {/if}
   {#if dialogState.newBook}<NewBookModal onclose={() => (dialogState.newBook = false)} />{/if}
+  {#if dialogState.findReplace}<FindReplaceModal onclose={() => (dialogState.findReplace = false)} />{/if}
   {#if dialogState.renameBook}<RenameBookModal onclose={() => (dialogState.renameBook = false)} />{/if}
   {#if dialogState.passphrase}<PassphraseModal onclose={() => (dialogState.passphrase = false)} />{/if}
   {#if dialogState.dbKey}<DbKeyModal onclose={() => (dialogState.dbKey = false)} />{/if}

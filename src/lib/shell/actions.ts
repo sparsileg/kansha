@@ -13,6 +13,7 @@ import { reportState } from "../state/reports.svelte";
 import { registerState } from "../state/register.svelte";
 import { statusState, type StatusKind } from "../state/status.svelte";
 import { viewState } from "../state/view.svelte";
+import { focusSearch } from "../ui/findKey";
 import { exitApp, openAccount, openInsights, openReconcile } from "./nav";
 import { openPanel } from "./panels";
 import { windowState } from "../state/windows.svelte";
@@ -44,6 +45,9 @@ export function runAction(id: string): void {
       case "file.rename":
         dialogState.renameBook = true;
         break;
+      case "file.find_replace":
+        dialogState.findReplace = true;
+        break;
       case "file.backup":
         void backUpNow();
         break;
@@ -65,6 +69,9 @@ export function runAction(id: string): void {
         break;
       case "edit.undo":
         void undoLast();
+        break;
+      case "edit.find":
+        focusSearch(document);
         break;
       case "edit.settings":
         dialogState.settings = true;

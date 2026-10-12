@@ -104,15 +104,30 @@ impl Lookups {
         self.paths.get(&id).cloned().unwrap_or_default()
     }
 
-    pub fn tag_name(&self, id: TagId) -> Option<&str> {
-        self.tags.get(&id).map(String::as_str)
-    }
-
     pub fn tag_names(&self, ids: &[TagId]) -> String {
         ids.iter()
             .filter_map(|t| self.tags.get(t).map(String::as_str))
             .collect::<Vec<_>>()
             .join(", ")
+    }
+
+    /// The tag group a line is in when a report groups by tag (TAG-030):
+    /// its tag names in order, ignoring case, joined, so the same set is
+    /// one group whatever order the tags were added in and a line with
+    /// several tags counts once. The sort key (lower case) and the
+    /// label; `None` when the line has no tag.
+    pub fn tag_group(&self, ids: &[TagId]) -> Option<(String, String)> {
+        let mut names: Vec<&str> = ids
+            .iter()
+            .filter_map(|t| self.tags.get(t).map(String::as_str))
+            .collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        names.dedup();
+        if names.is_empty() {
+            return None;
+        }
+        let label = names.join(", ");
+        Some((label.to_lowercase(), label))
     }
 
     /// A security's name (the Capital Gains and investment rows show

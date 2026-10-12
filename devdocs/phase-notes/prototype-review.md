@@ -153,11 +153,11 @@ D-40 decided; Appendix A in one order, newest first.
 
 | ID | What |
 |---|---|
-| UI-030 | Account view tabs (Register, Scheduled, Reconcile history) |
-| UI-050 | Global keyboard shortcuts (Ctrl+N in the register and Ctrl+Z only) |
+| ~~UI-030~~ | Withdrawn 2026-10-11 (spec 0.7.57): Calendar and Reconcile history cover it |
+| ~~UI-050~~ | Built 2026-10-11 (spec 0.7.58): Ctrl+N, Ctrl+Z, Ctrl+F only |
 | ~~RPT-040~~ | Built 2026-10-05: comparison reports (RPT-210, spec 0.7.32) |
 | RPT-120, RPT-190, RPT-200 | Account balances, cash flow, transaction reports (D-90) |
-| TAG-030 | Group a report by tag (filter works) |
+| ~~TAG-030~~ | Built 2026-10-11 (spec 0.7.59): itemized reports by tag; one tag-set rule |
 | ~~TEST-070~~ | Built 2026-10-04: `just trace` |
 | ~~TEST-090~~ | Built 2026-10-04: `insta` snapshots of 7 reports |
 | ~~TEST-150~~ | Built 2026-10-04: `just cov` |

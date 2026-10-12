@@ -31,6 +31,7 @@ export const MENUS: Menu[] = [
       // Filled from the recent books list (App.svelte).
       { id: "file.recent", label: "Recent", items: [] },
       { id: "file.rename", label: "Rename Book…" },
+      { id: "file.find_replace", label: "Find/Replace…", divider: true },
       { id: "file.backup", label: "Back Up Now", divider: true },
       { id: "file.restore", label: "Restore…" },
       { id: "file.import", label: "Import…", divider: true },
@@ -44,6 +45,7 @@ export const MENUS: Menu[] = [
     label: "Edit",
     items: [
       { id: "edit.undo", label: "Undo (Ctrl+Z)" },
+      { id: "edit.find", label: "Find (Ctrl+F)" },
       { id: "edit.settings", label: "Settings…", divider: true },
       { id: "edit.navbar", label: "Navigation Bar…" },
       { id: "edit.renaming", label: "Renaming…", disabled: later("to be defined") },

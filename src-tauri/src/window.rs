@@ -8,7 +8,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use kansha_core::local_config::{WindowMode, screen_key};
+use kansha_core::local_config::{WindowMode, WindowSize, screen_key};
 use tauri::{LogicalSize, Manager};
 
 use crate::state::AppState;
@@ -49,18 +49,43 @@ fn screen(window: &tauri::Window) -> Option<(String, (u32, u32))> {
     ))
 }
 
-/// Save the window's size now for what it shows. Holds the mode while
-/// saving, so a switch cannot land between reading the size and
-/// writing it.
+/// The window's size in logical pixels, measured the way `set_size`
+/// sets it. On Linux `inner_size()` is GTK's whole window, which with
+/// client-side decorations holds the shadow too, so saving it grew the
+/// window by that margin at every opening (#16); GTK's own size is the
+/// box `set_size` asks for. GTK only; call on the main thread.
+#[cfg(target_os = "linux")]
+fn size(window: &tauri::Window) -> Option<(u32, u32)> {
+    use gtk::prelude::GtkWindowExt;
+    let (width, height) = window.gtk_window().ok()?.size();
+    Some((u32::try_from(width).ok()?, u32::try_from(height).ok()?))
+}
+
+/// The window's size in logical pixels.
+#[cfg(not(target_os = "linux"))]
+fn size(window: &tauri::Window) -> Option<(u32, u32)> {
+    let size = window
+        .inner_size()
+        .ok()?
+        .to_logical::<u32>(window.scale_factor().ok()?);
+    Some((size.width, size.height))
+}
+
+/// Save the window's size now for what it shows, cut to fit the screen.
+/// Holds the mode while saving, so a switch cannot land between reading
+/// the size and writing it. Runs on the main thread (GTK).
 fn save_now(window: &tauri::Window, state: &AppState) {
     let mode = lock(&state.window.mode);
     let Some(mode) = *mode else { return };
-    let (Some((key, _)), Ok(size), Ok(scale)) =
-        (screen(window), window.inner_size(), window.scale_factor())
-    else {
+    let (Some((key, area)), Some((width, height))) = (screen(window), size(window)) else {
         return;
     };
-    let size = size.to_logical::<u32>(scale);
+    let size = WindowSize {
+        width,
+        height,
+        maximized: false,
+    }
+    .fit(mode, Some(area));
     let maximized = window.is_maximized().unwrap_or(false);
     let mut cfg = state.load_config();
     cfg.note_window(&key, mode, size.width, size.height, maximized);
@@ -103,7 +128,11 @@ pub fn resized(window: &tauri::Window, state: &AppState) {
             };
             match wait {
                 Some(d) => std::thread::sleep(d),
-                None => return save_now(&window, &state),
+                None => {
+                    let w = window.clone();
+                    let _ = window.run_on_main_thread(move || save_now(&w, &w.state::<AppState>()));
+                    return;
+                }
             }
         }
     });

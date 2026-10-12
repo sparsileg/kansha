@@ -68,7 +68,7 @@ fn book() -> Book {
         .transfer(visa)
         .save()
         .unwrap();
-    // Two tags: counted once, under Business (first by name).
+    // Two tags: counted once, in the group of both (TAG-030).
     e(&mut b, checking, "2026-09-10", "-50.00")
         .payee("Shell")
         .tag(commute)
@@ -139,7 +139,7 @@ fn last_month_against_the_last_3_months_by_category() {
 }
 
 #[test]
-fn by_payee_subtotalled_by_first_tag() {
+fn by_payee_subtotalled_by_tag_set() {
     let b = book();
     let r = run(&b, ReportKind::ComparePayee, |s| {
         s.range.preset = DatePreset::LastMonth;
@@ -149,7 +149,7 @@ fn by_payee_subtotalled_by_first_tag() {
     assert_eq!(
         text(&r),
         "\
-+ Business | 50.00 | 16.67 | 33.33
++ Business, Commute | 50.00 | 16.67 | 33.33
   - Shell | 50.00 | 16.67 | 33.33
 + Commute | 0.00 | 10.00 | -10.00
   - Shell | 0.00 | 10.00 | -10.00

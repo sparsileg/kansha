@@ -29,6 +29,8 @@ export interface ReportMeta {
   sort?: boolean;
   totalsOnly?: boolean;
   transfers?: boolean;
+  /** Itemized reports: "Subtotal by" tag around the usual groups (TAG-030). */
+  byTag?: boolean;
   /** Income and expense: count transfers to accounts not chosen (RPT-190). */
   cashFlow?: boolean;
   showZero?: boolean;
@@ -59,6 +61,7 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     sort: true,
     totalsOnly: true,
     transfers: true,
+    byTag: true,
   },
   itemized_payees: {
     kind: "itemized_payees",
@@ -67,6 +70,7 @@ export const REPORTS: Record<ReportKind, ReportMeta> = {
     sort: true,
     totalsOnly: true,
     transfers: true,
+    byTag: true,
   },
   income_expense: {
     kind: "income_expense",

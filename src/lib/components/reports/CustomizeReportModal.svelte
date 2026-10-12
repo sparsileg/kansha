@@ -279,6 +279,16 @@
               </select>
             </label>
           {/if}
+          {#if meta.byTag}
+            {@const plain = draft.kind === "itemized_payees" ? "Payee" : "Category"}
+            <label>
+              Subtotal by
+              <select value={draft.by_tag ? "tag" : "plain"} onchange={(e) => (draft.by_tag = e.currentTarget.value === "tag")}>
+                <option value="plain">{plain}</option>
+                <option value="tag">Tag, then {plain.toLowerCase()}</option>
+              </select>
+            </label>
+          {/if}
           {#if meta.interval}
             <label>
               {draft.kind === "net_worth" ? "Interval" : "Columns by"}

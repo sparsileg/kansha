@@ -2,7 +2,8 @@
 //! RPT-140, RPT-200): transactions grouped into INCOME, EXPENSES, and
 //! TRANSFERS, then by category (with subcategories) or by payee. The
 //! Tax Summary can instead group by tax line, account, payee, tag, or
-//! period, with no sections (as Quicken), or not at all.
+//! period, with no sections (as Quicken), or not at all. The itemized
+//! reports can put tag groups around the sections (TAG-030).
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -131,34 +132,10 @@ fn grouped(
         TaxGroup::Category
     };
     let mut sections = match tax_group {
-        TaxGroup::Category => {
-            let mut sections = Vec::new();
-            for section in [Section::Income, Section::Expenses, Section::Transfers] {
-                let mine: Vec<&Line> = lines.iter().filter(|l| l.section == section).collect();
-                if mine.is_empty() {
-                    continue;
-                }
-                let children = match (section, by) {
-                    (_, By::Payee) => payee_groups(mine, &details),
-                    (Section::Transfers, _) => account_groups(mine, lk, &details),
-                    // Roth conversions: income moved to another account.
-                    (Section::Income, _) => {
-                        let (moved, own): (Vec<&Line>, Vec<&Line>) = mine
-                            .into_iter()
-                            .partition(|l| matches!(l.target, Target::Transfer(_)));
-                        let mut groups = category_tree(&own, lk, &details);
-                        for mut g in account_groups(moved, lk, &details) {
-                            g.label = format!("Roth conversion [{}]", g.label);
-                            groups.push(g);
-                        }
-                        groups
-                    }
-                    _ => category_tree(&mine, lk, &details),
-                };
-                sections.push(group(RowKind::Section, section.label(), children));
-            }
-            sections
-        }
+        TaxGroup::Category if s.by_tag && by != By::TaxSummary => tag_groups(all(), lk, &|ls| {
+            sectioned(ls, by, RowKind::Group, lk, &details)
+        }),
+        TaxGroup::Category => sectioned(all(), by, RowKind::Section, lk, &details),
         TaxGroup::TaxLine => tax_line_groups(all(), lk, &details),
         TaxGroup::Payee => payee_groups(all(), &details),
         TaxGroup::None => details(all()),
@@ -178,6 +155,73 @@ fn grouped(
         sections.push(total_row("OVERALL TOTAL", width, &money, &sums));
     }
     Ok(sections)
+}
+
+/// INCOME, EXPENSES, and TRANSFERS (rows of `kind`), each by category
+/// (with subcategories) or by payee; transfers by the other account.
+fn sectioned(
+    lines: Vec<&Line>,
+    by: By,
+    kind: RowKind,
+    lk: &Lookups,
+    details: &dyn Fn(Vec<&Line>) -> Vec<Row>,
+) -> Vec<Row> {
+    let mut sections = Vec::new();
+    for section in [Section::Income, Section::Expenses, Section::Transfers] {
+        let mine: Vec<&Line> = lines
+            .iter()
+            .copied()
+            .filter(|l| l.section == section)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let children = match (section, by) {
+            (_, By::Payee) => payee_groups(mine, details),
+            (Section::Transfers, _) => account_groups(mine, lk, details),
+            // Roth conversions: income moved to another account.
+            (Section::Income, _) => {
+                let (moved, own): (Vec<&Line>, Vec<&Line>) = mine
+                    .into_iter()
+                    .partition(|l| matches!(l.target, Target::Transfer(_)));
+                let mut groups = category_tree(&own, lk, details);
+                for mut g in account_groups(moved, lk, details) {
+                    g.label = format!("Roth conversion [{}]", g.label);
+                    groups.push(g);
+                }
+                groups
+            }
+            _ => category_tree(&mine, lk, details),
+        };
+        sections.push(group(kind, section.label(), children));
+    }
+    sections
+}
+
+/// Itemized reports by tag (TAG-030): one section per tag set
+/// ([`Lookups::tag_group`]) in name order, "(No tag)" last, each holding
+/// `inner` of its lines.
+fn tag_groups<'a>(
+    lines: Vec<&'a Line>,
+    lk: &Lookups,
+    inner: &dyn Fn(Vec<&'a Line>) -> Vec<Row>,
+) -> Vec<Row> {
+    let mut groups: BTreeMap<(bool, String), (String, Vec<&Line>)> = BTreeMap::new();
+    for l in lines {
+        let (key, label) = match lk.tag_group(&l.tags) {
+            Some((key, label)) => ((false, key), label),
+            None => ((true, String::new()), "(No tag)".to_string()),
+        };
+        groups
+            .entry(key)
+            .or_insert_with(|| (label, Vec::new()))
+            .1
+            .push(l);
+    }
+    groups
+        .into_values()
+        .map(|(label, ls)| group(RowKind::Section, label, inner(ls)))
+        .collect()
 }
 
 /// Transfers by the other account, in account-list order.
@@ -222,14 +266,10 @@ fn keyed_groups(
                 lk.account_name(l.account),
                 Some(Drill::Account { account: l.account }),
             ),
-            TaxGroup::Tag => {
-                let tag = l.tag.trim();
-                if tag.is_empty() {
-                    ("1".to_string(), "(No tag)".to_string(), None)
-                } else {
-                    (format!("0{}", tag.to_lowercase()), tag.to_string(), None)
-                }
-            }
+            TaxGroup::Tag => match lk.tag_group(&l.tags) {
+                Some((key, label)) => (format!("0{key}"), label, None),
+                None => ("1".to_string(), "(No tag)".to_string(), None),
+            },
             TaxGroup::Month => (
                 format!("{:04}-{:02}", d.year(), d.month()),
                 period_label(d, Interval::Month),

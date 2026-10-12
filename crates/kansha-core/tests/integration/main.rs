@@ -10,6 +10,7 @@ mod attention;
 mod backup;
 mod compare;
 mod encryption;
+mod find_replace;
 mod fixture;
 mod import;
 mod input_checks;

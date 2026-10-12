@@ -1235,6 +1235,7 @@ fn settings_saved_by_an_older_version_still_load() {
     let s: ReportSettings = serde_json::from_str(json).unwrap();
     assert_eq!(s.interval, Interval::None);
     assert!(s.cents && s.transfers);
+    assert!(!s.by_tag);
     assert_eq!(s.accounts, None);
     assert_eq!(s.totals_on_heading, None);
 }
@@ -1651,4 +1652,107 @@ fn linked_cash_trades_are_transfers_between_the_two_accounts() {
     // Every account: the transfers cancel out.
     let r = run_for(ReportKind::ItemizedCategories, None);
     assert_eq!(overall(&r), "87.00");
+}
+
+/// Tagged June spending for TAG-030: Groceries 30 (Trip), Dining 20
+/// (Trip and Work), Dining 10 (Work and Trip, tagged the other way
+/// round). Work is made first, so its ID comes before Trip's.
+fn tagged(fx: &mut Fx) {
+    let work = fx.book.tag("Work").unwrap();
+    let trip = fx.book.tag("Trip").unwrap();
+    let groceries = fx.book.find_category("Food:Groceries").unwrap().unwrap();
+    let dining = fx.book.find_category("Food:Dining").unwrap().unwrap();
+    fx.book
+        .entry(fx.checking, date("2026-06-05"))
+        .payee("Market")
+        .amount(m("-30.00"))
+        .tag(trip)
+        .category(groceries)
+        .save()
+        .unwrap();
+    fx.book
+        .entry(fx.checking, date("2026-06-06"))
+        .payee("Diner")
+        .amount(m("-20.00"))
+        .tag(trip)
+        .tag(work)
+        .category(dining)
+        .save()
+        .unwrap();
+    fx.book
+        .entry(fx.visa, date("2026-06-07"))
+        .payee("Diner")
+        .amount(m("-10.00"))
+        .tag(work)
+        .tag(trip)
+        .category(dining)
+        .save()
+        .unwrap();
+}
+
+#[test]
+fn itemized_reports_group_by_tag_set_with_the_same_total() {
+    // TAG-030: tags are the outer groups, each holding the report's own
+    // grouping; a line with several tags is in the group of that set
+    // (names in order), so it counts once and the total is unchanged.
+    let mut fx = fixture();
+    tagged(&mut fx);
+    for kind in [ReportKind::ItemizedCategories, ReportKind::ItemizedPayees] {
+        let plain = run(&fx, &settings(kind));
+        let mut s = settings(kind);
+        s.by_tag = true;
+        let r = run(&fx, &s);
+        let top = tops(&r);
+        assert_eq!(
+            top[..2],
+            ["# Trip = -30.00", "# Trip, Work = -30.00"],
+            "{kind:?}"
+        );
+        assert!(top[2].starts_with("# (No tag) = "), "{kind:?}: {top:?}");
+        assert_eq!(top.len(), 4, "{kind:?}: {top:?}");
+        assert_eq!(top.last(), tops(&plain).last(), "{kind:?}");
+
+        // Inside a tag: the report's sections, then its groups.
+        let both = &r.rows[1];
+        assert_eq!(both.children.len(), 1, "{kind:?}");
+        assert_eq!(both.children[0].label, "EXPENSES");
+        assert_eq!(both.children[0].kind, RowKind::Group);
+        let inner: Vec<&str> = both.children[0]
+            .children
+            .iter()
+            .map(|c| c.label.as_str())
+            .collect();
+        let want: &[&str] = if kind == ReportKind::ItemizedPayees {
+            &["Diner"]
+        } else {
+            &["Food"]
+        };
+        assert_eq!(inner, want, "{kind:?}");
+    }
+}
+
+#[test]
+fn tax_summary_by_tag_groups_a_tag_set_once() {
+    // TAG-030: the same rule as the itemized reports, whatever order the
+    // tags were added in.
+    let mut fx = fixture();
+    let work = fx.book.tag("Work").unwrap();
+    let bonus = fx.book.tag("Bonus").unwrap();
+    let salary = fx.book.find_category("Salary").unwrap().unwrap();
+    for (d, tags) in [("2026-06-01", [work, bonus]), ("2026-06-02", [bonus, work])] {
+        fx.book
+            .entry(fx.checking, date(d))
+            .payee("Employer")
+            .amount(m("100.00"))
+            .tag(tags[0])
+            .tag(tags[1])
+            .category(salary)
+            .save()
+            .unwrap();
+    }
+    let mut s = settings(ReportKind::TaxSummary);
+    s.tax_group = TaxGroup::Tag;
+    let top = tops(&run(&fx, &s));
+    assert_eq!(top[0], "+ Bonus, Work = 200.00");
+    assert_eq!(top[1], "+ (No tag) = 7350.00");
 }

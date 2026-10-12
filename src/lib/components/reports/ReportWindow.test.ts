@@ -24,6 +24,7 @@ const defaults = (kind: string) => ({
   show_zero: false,
   transfers: true,
   cash_flow: false,
+  by_tag: false,
   accounts: null,
   categories: null,
   payees: null,

@@ -2,10 +2,11 @@
 
 use kansha_core::accounts::AccountId;
 use kansha_core::audit::{self, AuditEntity, AuditEntry};
+use kansha_core::backup::BackupKind;
 use kansha_core::integrity::{self, IntegrityReport, IntegrityStatus};
 use kansha_core::ledger::{
-    self, Cleared, Entry, EntryWarning, RegisterPage, RegisterQuery, RegisterSummary, SearchPage,
-    SearchQuery, TxnId,
+    self, Cleared, Entry, EntryWarning, FindQuery, FindResult, FoundKey, RegisterPage,
+    RegisterQuery, RegisterSummary, ReplaceResult, ReplaceSpec, SearchPage, SearchQuery, TxnId,
 };
 use kansha_core::persistence::payees;
 use kansha_core::{Clock, Money, Tx};
@@ -30,6 +31,43 @@ pub fn search_transactions(
     query: SearchQuery,
 ) -> CmdResult<SearchPage> {
     state.read(|db, _| ledger::search(db.conn(), &query))
+}
+
+/// File > Find/Replace: rows matching the Find rows (REG-170).
+#[tauri::command]
+#[specta::specta]
+pub fn find_transactions(state: State<'_, AppState>, query: FindQuery) -> CmdResult<FindResult> {
+    state.read(|db, _| ledger::find(db.conn(), &query))
+}
+
+/// Replace All on the checked rows (REG-170). A new date, or reconciled
+/// transactions among them, fails with `confirmation_required` until
+/// `confirmed` (one question for the batch). A bulk backup comes first;
+/// one Undo puts every changed transaction back.
+#[tauri::command]
+#[specta::specta]
+pub fn replace_transactions(
+    state: State<'_, AppState>,
+    rows: Vec<FoundKey>,
+    spec: ReplaceSpec,
+    confirmed: bool,
+) -> CmdResult<ReplaceResult> {
+    if !confirmed
+        && let Some(ask) =
+            state.read(|db, _| ledger::replace_confirmation(db.conn(), &rows, &spec))?
+    {
+        return Err(kansha_core::Error::ConfirmationRequired(ask).into());
+    }
+    if rows.is_empty() {
+        return Err(kansha_core::Error::Invalid("No rows are checked.".into()).into());
+    }
+    state.backup(BackupKind::Bulk)?;
+    let mut txns: Vec<TxnId> = rows.iter().map(|k| k.txn).collect();
+    txns.sort();
+    txns.dedup();
+    state.write_undoable_many(&txns, "Replace All", |tx| {
+        ledger::replace(tx, &rows, &spec, true)
+    })
 }
 
 /// Footer figures: current, cleared, ending, available credit (REG-060).

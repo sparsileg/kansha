@@ -16,8 +16,8 @@ use crate::categories::TagId;
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::ledger::{
-    AccountBalance, Cleared, Counterpart, Posting, PostingId, PostingInput, RegisterQuery,
-    RegisterRow, RegisterSort, SearchHit, Target, Txn, TxnId, TxnInput, TxnSource,
+    AccountBalance, Cleared, Counterpart, FindPosting, Posting, PostingId, PostingInput,
+    RegisterQuery, RegisterRow, RegisterSort, SearchHit, Target, Txn, TxnId, TxnInput, TxnSource,
 };
 use crate::money::Money;
 
@@ -502,6 +502,60 @@ pub fn search(
         },
     )?;
     Ok((rows.collect::<rusqlite::Result<Vec<_>>>()?, total))
+}
+
+/// Every posting of every normal (not void), non-investment transaction,
+/// by transaction then line, with what Find/Replace compares (REG-170).
+/// Postings to investment accounts are included; the caller leaves out
+/// their transactions.
+pub fn find_postings(conn: &Connection) -> Result<Vec<FindPosting>> {
+    let mut stmt = conn.prepare_cached(
+        "WITH RECURSIVE
+            cat_path (id, path) AS (
+                SELECT id, name FROM category WHERE parent_id IS NULL
+                UNION ALL
+                SELECT c.id, cp.path || ':' || c.name FROM category c JOIN cat_path cp ON c.parent_id = cp.id
+            ),
+            tg AS (
+                SELECT pt.posting_id, group_concat(g.name, char(31)) AS names
+                FROM posting_tag pt JOIN tag g ON g.id = pt.tag_id
+                GROUP BY pt.posting_id
+            )
+         SELECT p.txn_id, p.line_no, p.account_id, p.category_id, ifnull(cp.path, '') AS path,
+                p.amount, p.memo, p.cleared, ifnull(tg.names, '') AS tags,
+                t.txn_date, t.check_num, t.memo AS txn_memo, ifnull(py.name, '') AS payee_name
+         FROM posting p
+         JOIN txn t ON t.id = p.txn_id
+         LEFT JOIN payee py ON py.id = t.payee_id
+         LEFT JOIN cat_path cp ON cp.id = p.category_id
+         LEFT JOIN tg ON tg.posting_id = p.id
+         WHERE t.status = 'normal'
+           AND NOT EXISTS (SELECT 1 FROM investment_txn i WHERE i.txn_id = t.id)
+         ORDER BY p.txn_id, p.line_no",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        let tags: String = r.get("tags")?;
+        Ok(FindPosting {
+            txn: r.get("txn_id")?,
+            line_no: r.get("line_no")?,
+            account: r.get("account_id")?,
+            category: r.get("category_id")?,
+            path: r.get("path")?,
+            amount: r.get("amount")?,
+            memo: r.get("memo")?,
+            cleared: r.get("cleared")?,
+            tags: if tags.is_empty() {
+                Vec::new()
+            } else {
+                tags.split('\u{1f}').map(str::to_string).collect()
+            },
+            date: r.get("txn_date")?,
+            check_num: r.get("check_num")?,
+            txn_memo: r.get("txn_memo")?,
+            payee: r.get("payee_name")?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 /// Current and ending balance of every account.

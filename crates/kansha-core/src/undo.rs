@@ -2,7 +2,8 @@
 //!
 //! Covers creating, editing, voiding, and deleting a transaction and
 //! changing its cleared status, in banking and investment registers; one
-//! level. Around the change the caller takes [`before`] and then
+//! level. Find/Replace (REG-170) changes several transactions as one
+//! change, undone together. Around the change the caller takes [`before`] and then
 //! [`after`], which returns an [`Undo`]. [`apply`] puts the transaction's
 //! rows back exactly as they were (same IDs, links, and lots) and records
 //! the reversal in the audit log, like any change.
@@ -37,14 +38,22 @@ impl Before {
     }
 }
 
-/// How to reverse one change.
+/// How to reverse one change: to one transaction, or to several at
+/// once (Find/Replace, REG-170).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Undo {
-    txn: TxnId,
     label: String,
+    /// At least one; the first is the one [`Undo::txn`] names.
+    items: Vec<Item>,
+    mark: i64,
+}
+
+/// One transaction's rows before and after the change.
+#[derive(Debug, Clone, PartialEq)]
+struct Item {
+    txn: TxnId,
     before: Option<TxnRows>,
     after: TxnRows,
-    mark: i64,
 }
 
 impl Undo {
@@ -53,8 +62,18 @@ impl Undo {
         &self.label
     }
 
+    /// The (first) transaction the change was to.
     pub fn txn(&self) -> TxnId {
-        self.txn
+        self.items.first().map_or(TxnId(0), |i| i.txn)
+    }
+
+    /// How many transactions undoing puts back.
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
     }
 }
 
@@ -75,22 +94,61 @@ pub fn before(conn: &Connection, txn: Option<TxnId>) -> Result<Before> {
 /// Take after the change to `txn`, in the same database transaction.
 /// `None` when the change cannot be undone.
 pub fn after(conn: &Connection, txn: TxnId, before: Before, label: &str) -> Result<Option<Undo>> {
-    let after = rows::read(conn, txn)?;
-    if before.scheduled && !after.exists() {
+    after_many(conn, vec![(txn, before)], label)
+}
+
+/// [`before`] for each of several existing transactions changed at once.
+pub fn before_many(conn: &Connection, txns: &[TxnId]) -> Result<Vec<(TxnId, Before)>> {
+    txns.iter()
+        .map(|id| Ok((*id, before(conn, Some(*id))?)))
+        .collect()
+}
+
+/// [`after`] for a change to several transactions: one undo for all of
+/// them. Transactions the change left as they were are dropped; `None`
+/// when it changed none, or cannot be undone.
+pub fn after_many(
+    conn: &Connection,
+    befores: Vec<(TxnId, Before)>,
+    label: &str,
+) -> Result<Option<Undo>> {
+    let mut items = Vec::with_capacity(befores.len());
+    let single = befores.len() == 1;
+    for (txn, before) in befores {
+        let after = rows::read(conn, txn)?;
+        if before.scheduled && !after.exists() {
+            return Ok(None);
+        }
+        if !single && before.rows.as_ref() == Some(&after) {
+            continue;
+        }
+        items.push(Item {
+            txn,
+            before: before.rows,
+            after,
+        });
+    }
+    if items.is_empty() {
         return Ok(None);
     }
     Ok(Some(Undo {
-        txn,
         label: label.to_string(),
-        before: before.rows,
-        after,
+        items,
         mark: rows::audit_mark(conn)?,
     }))
 }
 
 /// Nothing has changed since: `u` can still be applied.
 pub fn available(conn: &Connection, u: &Undo) -> Result<bool> {
-    Ok(rows::audit_mark(conn)? == u.mark && rows::read(conn, u.txn)? == u.after)
+    if rows::audit_mark(conn)? != u.mark {
+        return Ok(false);
+    }
+    for i in &u.items {
+        if rows::read(conn, i.txn)? != i.after {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// The transaction as its audit entries show it: an investment
@@ -112,28 +170,41 @@ pub fn apply(tx: &Tx<'_>, u: &Undo, confirmed: bool) -> Result<()> {
             u.label
         )));
     }
-    let target = u.before.clone().filter(TxnRows::exists);
-    let reconciled =
-        u.after.has_reconciled() || target.as_ref().is_some_and(TxnRows::has_reconciled);
+    let reconciled = u.items.iter().any(|i| {
+        i.after.has_reconciled()
+            || i.before
+                .as_ref()
+                .is_some_and(|b| b.exists() && b.has_reconciled())
+    });
     if reconciled && !confirmed {
         return Err(Error::ConfirmationRequired(
             "Undoing this changes a reconciled transaction. Undo anyway?".into(),
         ));
     }
-    let investment = u.after.is_investment() || target.as_ref().is_some_and(TxnRows::is_investment);
-    let now = u
+    for i in &u.items {
+        restore_one(tx, i)?;
+    }
+    Ok(())
+}
+
+/// Put one transaction's rows back, with an audit entry.
+fn restore_one(tx: &Tx<'_>, i: &Item) -> Result<()> {
+    let conn = tx.conn();
+    let target = i.before.clone().filter(TxnRows::exists);
+    let investment = i.after.is_investment() || target.as_ref().is_some_and(TxnRows::is_investment);
+    let now = i
         .after
         .exists()
-        .then(|| audit_json(conn, u.txn, investment))
+        .then(|| audit_json(conn, i.txn, investment))
         .transpose()?;
-    rows::restore(tx, u.txn, target.as_ref())?;
+    rows::restore(tx, i.txn, target.as_ref())?;
     // A schedule's average follows its payment back (REC-065).
     if target.is_some() {
-        crate::schedule::txn_changed(tx, u.txn)?;
+        crate::schedule::txn_changed(tx, i.txn)?;
     }
     let then = target
         .as_ref()
-        .map(|_| audit_json(conn, u.txn, investment))
+        .map(|_| audit_json(conn, i.txn, investment))
         .transpose()?;
     let action = match (&now, &then) {
         (None, Some(_)) => AuditAction::Create,
@@ -143,7 +214,7 @@ pub fn apply(tx: &Tx<'_>, u: &Undo, confirmed: bool) -> Result<()> {
     audit::record(
         tx,
         AuditEntity::Txn,
-        u.txn.0,
+        i.txn.0,
         action,
         now.as_ref(),
         then.as_ref(),

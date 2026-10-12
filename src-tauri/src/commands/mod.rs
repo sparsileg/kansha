@@ -36,7 +36,8 @@ pub fn schema_version() -> u32 {
 }
 
 /// Show the start page or the working window at its size for this
-/// screen (SET-070).
+/// screen (SET-070). Not async, so Tauri runs it on the main thread, as
+/// reading the size from GTK needs.
 #[tauri::command]
 #[specta::specta]
 pub fn window_mode(window: tauri::Window, state: State<'_, AppState>, mode: WindowMode) {

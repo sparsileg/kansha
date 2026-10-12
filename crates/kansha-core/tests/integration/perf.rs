@@ -96,6 +96,27 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     ledger::register_query(db.conn(), &q, today).unwrap();
     check("register, text filter", t.elapsed(), 1000, &mut failures);
 
+    // Find/Replace (REG-170): reads every posting of the book.
+    let fq = ledger::FindQuery {
+        conditions: vec![ledger::FindCondition {
+            field: ledger::FindField::Payee,
+            comparison: ledger::FindComparison::Contains,
+            value: "safeway".into(),
+        }],
+        join: ledger::FindJoin::And,
+        within_splits: true,
+        sort: ledger::FindSort::Date,
+        descending: true,
+    };
+    let t = Instant::now();
+    let found = ledger::find(db.conn(), &fq).unwrap();
+    check(
+        &format!("find payee, {} rows", found.rows.len()),
+        t.elapsed(),
+        1000,
+        &mut failures,
+    );
+
     // Reports (NFR-040).
     let custom = |from: &str, to: &str| DateRange {
         preset: DatePreset::Custom,

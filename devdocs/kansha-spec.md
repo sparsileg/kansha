@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.55 (draft) |
+| **Document version** | 0.7.60 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-11 |
 | **Owner** | Stan |
@@ -241,7 +241,12 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   carry zero or more tags.
 - **TAG-020** [1.0][R] Tags can be created, renamed, merged, and
   hidden.
-- **TAG-030** [1.0][R] Reports can filter and group by tag.
+- **TAG-030** [1.0][R] Reports can filter and group by tag. Group
+  by tag: Tax Summary (RPT-140), the comparison reports (RPT-210),
+  and the itemized reports (RPT-205). A line's tag group is its set
+  of tags, names in order ignoring case ("Trip, Work"), whatever order
+  they were added in, so a line counts once and the groups add up to
+  the total; untagged lines are under "(No tag)", last (0.7.59).
 
 ### 7. Transactions and Register (TXN, REG)
 
@@ -354,6 +359,47 @@ had a combined column.
   of the transaction, split lines included, is in the top-level
   Uncategorized category (default on). A line with no category at all
   is still refused.
+- **REG-170** [1.0][R] **Find/Replace** (0.7.60). File >
+  Find/Replace… finds register rows and changes one field on the rows
+  the user checks.
+  - **Find:** a row of field, comparison, and value, then Find and Add
+    Row. Fields: Amount, Category, Check #, Cleared Status, Date,
+    Memo, Payee, Tag. Comparisons: Contains, Exactly, Starts with,
+    Ends with, Greater, Greater or equal, Less, Less or equal; all
+    apply to every field. Add Row adds a row below, with a remove (×)
+    button; after the second row one Or/And choice joins all rows. A
+    blank value leaves its row out. Text ignores case; Greater and
+    Less on text are alphabetical. Amount is signed (a payment is
+    negative) and Date is a date for Exactly, Greater, and Less; for
+    Contains, Starts with, and Ends with both are the text the
+    register shows. A check number compares as a number when both
+    sides are whole numbers. Cleared Status compares its name
+    (Unmarked, Cleared, Reconciled). Tag matches when any one of a
+    row's tags does; a row with none is blank.
+  - **Found:** one row per transaction per account register (a
+    transfer shows in both), newest first, any column sorts. Columns:
+    Select, Date, Account, Num, Payee, Category, Tag, Memo, Clr,
+    Amount. Every row starts checked; Select All, Clear All. "Show
+    matches within splits" (default on) adds each line of a split as
+    a row of its own, matched on its category, memo, amount, and
+    tags. "Found in N transactions". Voided transactions and any
+    transaction touching an investment account are never found.
+  - **Replace:** field (the same eight), With, Replace All. Tag adds
+    the tag; the row's other tags stay. A new tag, payee, or category
+    name is created (a new category is income when the line brings
+    money in, else expense). Category changes a split line row's
+    line, or every category line of a split; a transfer line is never
+    changed. Amount changes only a transaction with one category
+    line; splits and transfers are skipped. Cleared Status sets
+    Unmarked or Cleared, never Reconciled. Memo on a split line row
+    is the line's memo. A blank With clears Memo, Check #, or Payee.
+  - Replace All asks once for the batch when the date changes or any
+    checked transaction is reconciled (TXN-050). It takes a bulk
+    backup first (BAK-020), saves every change in one write, one
+    audit entry per changed transaction, and says how many changed,
+    already had the value, or were skipped (split, transfer, closed
+    account, voided). One Undo puts every changed transaction back
+    (UI-060); new tags, payees, and categories stay.
 
 ### 8. Scheduled and Recurring Transactions (REC) and Calendar (CAL)
 
@@ -1135,6 +1181,9 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   (0.7.11): INCOME, EXPENSES, and TRANSFERS are the shaded rows;
   categories, subcategories, payees, and accounts carry their totals
   on their heading lines; the overall total stays at the end.
+  Subtotal by: Category (Payee) or Tag, then category (payee): one
+  section per tag set (TAG-030) holding INCOME, EXPENSES, and
+  TRANSFERS as above (0.7.59).
 - **RPT-210** [1.0][S] **Current Spending vs. Average Spending** by
   Category and by Payee (Reports > Comparison, 0.7.32): spending in the
   date range against the average spending of the periods before. The bar
@@ -1169,7 +1218,7 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   (payee report), Tag, Account, Tax Schedule (by tax line, in form
   order; categories with no tax line under "Not tax-related"). Amounts
   are per split, so a split counts once; a split with several tags
-  counts under the first by name, "(No tag)" last. Customize has the
+  counts under its tag set (TAG-030), "(No tag)" last. Customize has the
   Accounts, Categories, and Payees tabs; Totals only, save, CSV, and PDF
   as the other reports.
 - **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
@@ -1393,7 +1442,8 @@ platform has one.
 - **BAK-010** [1.0][S] Backups are a first-class feature.
 - **BAK-020** [1.0][R] Automatic backup on application close and
   before any import, schema migration, or bulk operation (merge, batch
-  rollback); and a timed backup a few minutes after a change (BAK-045).
+  rollback, Find/Replace); and a timed backup a few minutes after a
+  change (BAK-045).
 - **BAK-030** [1.0][R] Manual "Back up now". Every backup, manual or
   automatic, is written to the backup folder chosen in Settings
   (SET-050); with none chosen, to the system Downloads folder. No
@@ -1582,9 +1632,11 @@ platform has one.
   starts at the startup screen (SET-060), with nothing to go back to
   (0.7.35), and lasts while the book is open. No keyboard or
   mouse-button shortcuts.
-- **UI-030** [1.0][S] Account-centric design: each account opens to
-  its own view with tabs appropriate to its type (banking: Register |
-  Scheduled | Reconcile history; investment: see POS-040).
+- **UI-030** **[Withdrawn]** (0.7.57) Account view tabs (banking:
+  Register | Scheduled | Reconcile history). The Calendar shows one
+  account's scheduled items with its projected balance (CAL-040,
+  CAL-050), and the Reconcile view has the account's history; tabs
+  would repeat both. An account opens to its register.
 - **UI-040** [1.0][R] Several reports can be open at once, each in a
   window that fills the view area. Windows not on top wait in a dock
   bar at the bottom of the main window, one text label each; clicking
@@ -1609,8 +1661,13 @@ platform has one.
   what *kansha* means, the app version, the schema version (the newest
   this build opens), a short description, and the address for
   suggestions and bug reports, kansha@sparsile.org, as plain text.
-- **UI-050** [1.0][R] Global keyboard shortcuts for common actions;
-  full keyboard operation of the register.
+- **UI-050** [1.0][R] Keyboard shortcuts (0.7.58), and no others for
+  now: Ctrl+N, a new transaction in the register; Ctrl+Z, Edit > Undo
+  outside a text field (UI-060); Ctrl+F, Edit > Find, which puts the
+  cursor in the navigation bar's Search box with its text selected,
+  from any view and from inside a text field (nothing happens while a
+  modal is open). Cmd stands for Ctrl on macOS. Menus show the
+  shortcut beside the item. Full keyboard operation of the register.
 - **UI-060** [1.0][R] Undo for the most recent register change in the
   current session: creating, editing, voiding, or deleting a
   transaction, or changing its cleared status, in banking and
@@ -1621,7 +1678,8 @@ platform has one.
   while nothing else has changed since; lost when the book closes.
   Undoing a change to a reconciled transaction asks first. Deleting a
   transaction entered from a schedule cannot be undone (it gives the
-  occurrence back, REC-160).
+  occurrence back, REC-160). A Find/Replace (REG-170) is one change:
+  one Undo puts back every transaction it changed.
 - **UI-070** [1.0][R] Search box in the navigation bar: finds
   transactions by payee, category, memo, note, check number, account
   name, or amount, across all accounts or (from a register) in that
@@ -1751,7 +1809,10 @@ platform has one.
   second after the user stops resizing, and on close; it is cut to
   fit a smaller screen. The window's place is not kept (Wayland does
   not let an app set it); it opens centred where the system allows
-  (0.7.41).
+  (0.7.41). The size saved is measured the way it is set (on Linux,
+  GTK's window size without the decoration shadow), so a window
+  opened and closed keeps its size, and it is cut to the screen's
+  free area before it is saved (0.7.56).
 
 #### 14.3 Command line entry (CLI)
 
@@ -2723,8 +2784,7 @@ SET, TEST, and MIG-120's lot seeding on synthetic data. Phase 9
 true-up (MIG-115), and import verification (MIG-100). Not built: the
 [1.0] items listed as missing in
 `devdocs/phase-notes/prototype-review.md`, which keep their status
-until decided (RPT-120, RPT-190, RPT-200,
-TAG-030 grouping, UI-030 tabs, UI-050, and TEST-140 while CI is
+until decided (RPT-120, RPT-190, RPT-200, and TEST-140 while CI is
 off). [Later] items are out of scope.
 
 ### 24. Phases
@@ -2760,6 +2820,11 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.60 | 2026-10-11 | New REG-170 Find/Replace (closes #17): File > Find/Replace… finds register rows by field (Amount, Category, Check #, Cleared Status, Date, Memo, Payee, Tag) and comparison, several rows joined by one Or/And, optionally within splits; Replace All sets one field on the checked rows, one confirmation for a date change or reconciled rows, bulk backup first, audited. UI-060: one Undo puts back a whole Replace All. BAK-020: Find/Replace is a bulk operation. No schema change. **API change:** new commands `find_transactions`, `replace_transactions`; new types `FindQuery`, `FindCondition`, `FindField`, `FindComparison`, `FindJoin`, `FindSort`, `FindResult`, `FoundRow`, `FoundKey`, `ReplaceSpec`, `ReplaceResult`. |
+| 0.7.59 | 2026-10-11 | TAG-030: one rule for a line with several tags: its tag set ("Trip, Work") is its group, in Tax Summary, the comparison reports (was the first tag by name), and the itemized reports. RPT-205: Itemized Categories and Itemized Payees can subtotal by Tag, then category (payee). §23 missing list updated. No schema change. **API change:** `ReportSettings` gains `by_tag`. |
+| 0.7.58 | 2026-10-11 | UI-050: the shortcuts are Ctrl+N, Ctrl+Z, and Ctrl+F only; Ctrl+F (new, Edit > Find) puts the cursor in the Search box. §23 missing list updated. No schema change. No API change. |
+| 0.7.57 | 2026-10-11 | UI-030 withdrawn (closes #9): no account view tabs; the Calendar (one account, projected balance) and the Reconcile view's history cover them. §23 missing list updated. No schema change. No API change. |
+| 0.7.56 | 2026-10-11 | SET-070: the saved window size is measured the way it is set (on Linux GTK's window size, not the whole window with its decoration shadow), so the start and working windows no longer grow at every opening (#16); a saved size is cut to the screen's free area. No schema change. No API change. |
 | 0.7.55 | 2026-10-11 | CAL-040: the Calendar's Account list offers only open Checking, Savings, Cash, and Credit Card accounts (money market, investment, loan, and other accounts left out), so a chosen account always has a projected balance (CAL-050); the bar puts the account list (no label word) and Projected balance left, the month centered (off center only when a side needs the room), Show entered transactions right. No schema change. No API change. |
 | 0.7.54 | 2026-10-11 | POS-040: Gain/Loss % column (gain ÷ cost basis; totals count priced equities only; sales use realized gain), not in a new view's columns; a heading sorts equities, lots, and sales by its column, ascending then descending, kept per view. No schema change. **API change:** `inv_portfolio` takes `sort` (`PortfolioSort`, `PortfolioColumn`); `PortfolioLot`, `PortfolioSale`, `PortfolioPosition`, and `PortfolioTotals` gain `gain_percent`. |
 | 0.7.53 | 2026-10-11 | UI-085 built: File > New… starts Empty, with Standard categories, or as a copy of the open book (balances Zero or Carry on a date, closed accounts copied or dropped); the start screen offers Empty and Standard. Details of the copy added to UI-085. No schema change. **API change:** `book_new` and `book_setup` gain `contents` (`NewBookContents`). |

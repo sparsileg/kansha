@@ -19,8 +19,15 @@
 //!
 //! All writes run inside a [`Tx`]; validation reads through `persistence`.
 
+mod find;
 mod service;
 mod warnings;
+
+pub use find::{
+    FindComparison, FindCondition, FindField, FindJoin, FindPosting, FindQuery, FindResult,
+    FindSort, FoundKey, FoundRow, ReplaceResult, ReplaceSpec, cleared_name, find, replace,
+    replace_confirmation,
+};
 
 pub use service::{
     close_account, create, create_entry, delete, memorize_payee, set_cleared, update, update_entry,

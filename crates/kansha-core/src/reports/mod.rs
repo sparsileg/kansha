@@ -369,6 +369,9 @@ pub struct ReportSettings {
     /// Itemized reports: include transfers between accounts.
     #[serde(default = "yes")]
     pub transfers: bool,
+    /// Itemized reports: tag sets as the outer groups (TAG-030).
+    #[serde(default)]
+    pub by_tag: bool,
     /// Income and expense: also count transfers to and from accounts
     /// not chosen, as cash flow does (RPT-190).
     #[serde(default)]
@@ -471,6 +474,7 @@ impl ReportSettings {
             totals_on_heading: None,
             show_zero: false,
             transfers: true,
+            by_tag: false,
             cash_flow: false,
             accounts: None,
             categories: None,

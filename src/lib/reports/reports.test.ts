@@ -252,3 +252,12 @@ describe("comparison reports (RPT-210)", () => {
     expect(values(compareGroups("compare_payee"))).toEqual(["none", "category", "tag", "account", "tax_line"]);
   });
 });
+
+describe("Subtotal by tag (TAG-030)", () => {
+  it("is offered by the itemized reports only", () => {
+    const kinds = Object.values(REPORTS)
+      .filter((m) => m.byTag)
+      .map((m) => m.kind);
+    expect(kinds).toEqual(["itemized_categories", "itemized_payees"]);
+  });
+});

@@ -353,17 +353,10 @@ fn subtotal_groups<'a>(
                     drill,
                 )
             }
-            CompareGroup::Tag => {
-                let first = l
-                    .tags
-                    .iter()
-                    .filter_map(|t| lk.tag_name(*t))
-                    .min_by_key(|n| n.to_lowercase());
-                match first {
-                    Some(n) => ((false, 0, 0, n.to_lowercase()), n.to_string(), None),
-                    None => ((true, 0, 0, String::new()), "(No tag)".into(), None),
-                }
-            }
+            CompareGroup::Tag => match lk.tag_group(&l.tags) {
+                Some((key, label)) => ((false, 0, 0, key), label, None),
+                None => ((true, 0, 0, String::new()), "(No tag)".into(), None),
+            },
             CompareGroup::Account => (
                 (false, lk.account_order(l.account) as i64, 0, String::new()),
                 lk.account_name(l.account),

@@ -18,7 +18,8 @@ export const commands = {
 	today: () => typedError<string, IpcError>(__TAURI_INVOKE("today")),
 	/**
 	 *  Show the start page or the working window at its size for this
-	 *  screen (SET-070).
+	 *  screen (SET-070). Not async, so Tauri runs it on the main thread, as
+	 *  reading the size from GTK needs.
 	 */
 	windowMode: (mode: WindowMode) => __TAURI_INVOKE<void>("window_mode", { mode }),
 	bookStatus: () => typedError<BookStatus, IpcError>(__TAURI_INVOKE("book_status")),
@@ -227,6 +228,15 @@ export const commands = {
 	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
 	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
 	txnSetCleared: (txn: TxnId, account: AccountId, cleared: Cleared, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_set_cleared", { txn, account, cleared, confirmed })),
+	/**  File > Find/Replace: rows matching the Find rows (REG-170). */
+	findTransactions: (query: FindQuery) => typedError<FindResult, IpcError>(__TAURI_INVOKE("find_transactions", { query })),
+	/**
+	 *  Replace All on the checked rows (REG-170). A new date, or reconciled
+	 *  transactions among them, fails with `confirmation_required` until
+	 *  `confirmed` (one question for the batch). A bulk backup comes first;
+	 *  one Undo puts every changed transaction back.
+	 */
+	replaceTransactions: (rows: FoundKey[], spec: ReplaceSpec, confirmed: boolean) => typedError<ReplaceResult, IpcError>(__TAURI_INVOKE("replace_transactions", { rows, spec, confirmed })),
 	/**
 	 *  What Edit > Undo would undo ("Edit", "Delete", …), or `None` when the
 	 *  last register change can no longer be undone (UI-060).
@@ -1473,11 +1483,83 @@ export type FieldChange = {
 	after: string | null,
 };
 
+/**  How a Find row compares its field with its value (REG-170). */
+export type FindComparison = "contains" | "exactly" | "starts_with" | "ends_with" | "greater" | "greater_or_equal" | "less" | "less_or_equal";
+
+/**  One Find row. A blank value leaves the row out. */
+export type FindCondition = {
+	field: FindField,
+	comparison: FindComparison,
+	/**
+	 *  As typed. An Amount for Exactly, Greater, or Less is a number
+	 *  ("-16.46"); a Date for those is ISO ("2026-03-05").
+	 */
+	value: string,
+};
+
+/**  What a Find row looks at, and what Replace changes (REG-170). */
+export type FindField = "amount" | "category" | "check_num" | "cleared" | "date" | "memo" | "payee" | "tag";
+
+/**  How several Find rows combine: one operator for all of them. */
+export type FindJoin = "and" | "or";
+
+export type FindQuery = {
+	conditions: FindCondition[],
+	join: FindJoin,
+	/**
+	 *  Show matches within splits: each line of a split is a row of its
+	 *  own, matched on its category, memo, amount, and tags.
+	 */
+	within_splits: boolean,
+	sort: FindSort,
+	descending: boolean,
+};
+
+export type FindResult = {
+	rows: FoundRow[],
+	/**  Transactions among the rows ("Found in N transactions"). */
+	txns: number,
+};
+
+/**  Found list columns that sort. Ties go newest first. */
+export type FindSort = "date" | "account" | "check_num" | "payee" | "category" | "tag" | "memo" | "cleared" | "amount";
+
 /**  An item a notice names. */
 export type Finding = {
 	message: string,
 	/**  The account to open, if any. */
 	account: AccountId | null,
+};
+
+/**
+ *  Which row: a transaction in one account's register, or one line of
+ *  its split (`line`: the posting's line number).
+ */
+export type FoundKey = {
+	txn: TxnId,
+	account: AccountId,
+	line: number | null,
+};
+
+/**  One row of the Found list. */
+export type FoundRow = {
+	key: FoundKey,
+	date: string,
+	account_name: string,
+	check_num: string,
+	payee: string,
+	/**
+	 *  A category path, `[Account]` for a transfer, `--Split--`, or
+	 *  empty; a split line's own category.
+	 */
+	category: string,
+	/**  Tag names, ", " between. */
+	tags: string,
+	memo: string,
+	/**  This account's posting. */
+	cleared: Cleared,
+	/**  This account's posting; a split line's amount, register sign. */
+	amount: string,
 };
 
 /**
@@ -2516,6 +2598,32 @@ export type RegisterSummary = {
 	available_credit: string | null,
 };
 
+/**  What Replace All did, counted by transaction. */
+export type ReplaceResult = {
+	changed: number,
+	/**  Already had the value. */
+	unchanged: number,
+	/**  Amount on a split, or a split line. */
+	skipped_split: number,
+	/**  Amount or Category on a transfer, or a row with no category line. */
+	skipped_transfer: number,
+	/**  In a closed account (ACCT-210). */
+	skipped_closed: number,
+	/**  Voided or deleted since the Find. */
+	skipped_gone: number,
+};
+
+/**  What Replace All sets on the checked rows. */
+export type ReplaceSpec = {
+	field: FindField,
+	/**
+	 *  An Amount is a number or sum (REG-035); a Date is ISO; Cleared
+	 *  is "unmarked" or "cleared". A new category, payee, or tag name
+	 *  is created.
+	 */
+	with: string,
+};
+
 /**  A finished report. */
 export type Report = {
 	kind: ReportKind,
@@ -2630,6 +2738,8 @@ export type ReportSettings = {
 	show_zero?: boolean,
 	/**  Itemized reports: include transfers between accounts. */
 	transfers?: boolean,
+	/**  Itemized reports: tag sets as the outer groups (TAG-030). */
+	by_tag?: boolean,
 	/**
 	 *  Income and expense: also count transfers to and from accounts
 	 *  not chosen, as cash flow does (RPT-190).
