@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.80 (draft) |
+| **Document version** | 0.7.81 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
@@ -1033,7 +1033,9 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   imported before.
 - **MIG-200** [Later][S] OFX/QFX/CSV import of new transactions from
   institutions, with duplicate detection and matching (shares the
-  staging area of MIG-040).
+  staging area of MIG-040). Matching also covers approved entries
+  from the command line or a phone (CLI-040), so a purchase entered
+  on the road is not entered again from the statement.
 
 ### 12. Reports and Insights (RPT, CARD, INS)
 
@@ -1878,51 +1880,106 @@ platform has one.
   opened and closed keeps its size, and it is cut to the screen's
   free area before it is saved (0.7.56).
 
-#### 14.3 Command line entry (CLI)
+#### 14.3 Command line and file entry (CLI)
 
-Under discussion; nothing here is decided. Entry through the register
-is unchanged. Open points are D-150 … D-180 (Part V).
+Spending transactions can be entered without opening the window: from
+a command line, from a file of entries, or from a phone app's file.
+None of these needs the book's key or reaches the ledger directly:
+every entry waits in a review list until approved in the app.
+Decided 2026-10-12 (D-150 … D-180, Part V).
 
-- **CLI-010** [Later][S] Kansha accepts a limited set of commands from
-  a command line. The first command adds one transaction; others may
-  follow. The register stays the main way to enter transactions.
-- **CLI-020** [Later][S] Commands use a formally defined set of words
-  (a grammar), not free English (D-170). For example:
+- **CLI-010** [1.0][S] Kansha accepts spending transactions entered
+  outside the register: one entry from a command line, a file of
+  entries, or a file shared from a phone (CLI-090). Splits are
+  allowed; a refund is a negative amount. Transfers and investment
+  transactions are not: those stay in the app. The register stays the
+  main way to enter transactions.
+- **CLI-020** [1.0][S] Entries use a defined format, not free English
+  (D-170). A file starts with `kansha-entries 1` (format and version),
+  then an optional `from "<sender>"` line naming who sent it (each
+  phone sets its own name). Each entry is one line:
 
   ```
-  kansha add today walmart 23.47 food:groceries using "double cash"
+  <date> <payee> <amount> <category | split> acct <account>
+      [memo "<text>"] [id <uuid>]
   ```
 
-  Payee, category, and account are matched by name. A name that
-  matches nothing, or more than one, is an error listing the choices;
-  nothing is guessed. Amounts are read as text into cents, never
-  through a float.
-- **CLI-030** [Later][S] Two ways to run, one or both (D-160):
-  - **One-shot:** `kansha` started from the command line, with no
-    window, opens the book with a secret read from a file only the
-    user can read (mode 0600 on Linux; an owner-only ACL on Windows),
-    runs the command, and exits. A file others can read is refused.
-  - **Background:** Kansha runs in the system tray with the book open
-    (the window may be closed) and accepts commands as text through a
-    local channel open only to the user.
-- **CLI-040** [Later][S] Everything entered through the command line
-  is **unverified**. Unverified transactions are not part of the
-  book's financial data: they change no balance, register, report,
-  reconciliation, or lot (D-180). When the book is next opened (or, in
-  the background, the window next shown), Kansha lists them for
-  review. Each is approved (it becomes an ordinary transaction),
-  edited and approved, or rejected. Review can be put off; the list
-  stays until it is empty.
-- **CLI-050** [Later][R] Commands only write. None returns balances or
-  other book data, so the command line cannot leak the book; it
-  answers only "accepted (unverified)" or the error.
-- **CLI-060** [Later][R] Off by default; a Settings switch turns it on
-  for the book. The secret file (CLI-030, one-shot) is the user's
-  choice and risk: anyone running as the user, or holding a copy of
-  the file, can open the book. Turning it on warns as SECU-030 does.
-- **CLI-070** [Later][R] Each command is audited with source `cli`,
-  the command text, and the time received; approval and rejection are
-  audited too.
+  For example:
+
+  ```
+  kansha-entries 1
+  from "Stan's phone"
+  # Ohio trip
+  2026-10-12 Shell 45.20 Auto:Fuel acct "Double Cash" memo "Ohio trip"
+  2026-10-12 Costco 182.40 split acct Checking
+    120.00 Food:Groceries
+    62.40 Household memo "paper goods"
+  2026-10-14 Costco -24.99 Household acct Checking memo "return"
+  ```
+
+  - Split lines are indented under their entry, each an amount, a
+    category, and an optional memo; they must add up to the entry's
+    amount.
+  - Dates in a file are written out (`2026-10-12`). On the command
+    line `today`, `yesterday`, and the book's date format are also
+    accepted.
+  - Amounts are read as text straight into cents, never through a
+    float. A negative amount is a refund.
+  - A name with spaces is quoted. `#` starts a comment; blank lines
+    are skipped.
+  - Payees are free text; a new payee is created when its entry is
+    approved.
+  - Categories and accounts must already exist: expense categories
+    and the open spending accounts (Checking, Savings, Cash, Credit
+    Card, as CAL-040). An unknown or ambiguous name is an error
+    listing the close matches; nothing is guessed, and no category is
+    created.
+  - `id` is a unique ID (UUID) made when the entry is made. An entry
+    without one gets one from Kansha.
+- **CLI-030** [1.0][S] Ways in (D-160):
+  - `kansha add <entry>` and `kansha run <file>`, started from a
+    command line, check the format, write the entries to the book's
+    inbox folder (`<book>-inbox/`, beside the book), and exit. They
+    open neither the book nor a window, and need no passphrase or
+    key. The book is the one named with `--book <path>`, else the
+    last one opened.
+  - File > Import entries… in the app does the same for a file
+    chosen there (a file saved from email, Signal, or a chat app).
+  - The window and its sign-in are unchanged. No background (tray)
+    mode.
+- **CLI-040** [1.0][S] Everything entered this way is **unverified**
+  and lives in a pending table outside the ledger (D-180): it changes
+  no balance, register, report, reconciliation, or lot. When the book
+  is opened, and when its window gets focus, Kansha reads the inbox
+  and lists the entries for review, with their sender. Each is
+  approved (it becomes an ordinary transaction), edited and approved,
+  or rejected; name errors are fixed there. Review can be put off; the
+  list stays until it is empty.
+  - A file is accepted whole or not at all; every bad line is
+    reported by its line number.
+  - An entry whose `id` was seen before is skipped, so sending a file
+    twice adds nothing.
+  - A file read from the inbox is kept in the import archive
+    (encrypted, as MIG-170) and removed from the inbox.
+- **CLI-050** [1.0][R] Entry only writes. Nothing returns balances or
+  other book data; the command line answers only "accepted
+  (unverified)" or the errors.
+- **CLI-060** [1.0][R] On by default: no key is stored and nothing
+  reaches the ledger without approval. Known exposure: entry files are
+  plain text until read, in the inbox and in whatever app carried
+  them (email is not end-to-end encrypted). Encrypted entry files are
+  [Later].
+- **CLI-070** [1.0][R] Each accepted file or command is audited with
+  its source (`cli`, `file`), sender, and time received; approval and
+  rejection are audited too.
+- **CLI-080** [1.0][S] File > Export names for phones… writes a
+  `kansha-names 1` file: the expense categories (with subcategories)
+  and the open spending accounts. No payees. One file for every
+  phone.
+- **CLI-090** [Later][S] Phone app: a separate project, not specified
+  here. It reads `kansha-names 1`, records entries (memo and splits
+  included), and shares `kansha-entries 1` files through the phone's
+  share menu (email, Signal, chat apps).
 
 ---
 
@@ -2800,10 +2857,10 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 | D-120 | Rust→TypeScript type generation for IPC | **Decided** | `tauri-specta` + `specta` + `specta-typescript`, pinned to `2.0.0-rc.25` (DR-03) |
 | D-130 | Prototype data | **Decided** (2026-10-05) | Synthetic data only through the prototype; ended 2026-10-01, when Stan's imported book became his production book |
 | D-140 | Chart library | **Decided** (2026-09-27) | None: hand-drawn SVG. Rust places values on the axis; the frontend only scales. Series differ by pattern and shape as well as color (red-green colorblind). |
-| D-150 | CLI one-shot secret file (CLI-030): the backup passphrase, or the database key alone | Open | Database key alone: it opens the book but not the backups or the private key |
-| D-160 | CLI modes: one-shot, background (tray), or both | Open | — |
-| D-170 | CLI grammar: words, order, date forms, defaults, splits | Open | Start with one payee, one category, one account; no splits, transfers, or investments |
-| D-180 | Where unverified CLI entries live (CLI-040) | Open | A separate pending table outside the ledger, not `txn` rows with a flag, so no report or balance can miss a filter |
+| D-150 | CLI one-shot secret file (CLI-030): the backup passphrase, or the database key alone | **Withdrawn** (2026-10-12) | No secret file and no stored key: entry writes to an inbox and needs no key (CLI-030) |
+| D-160 | CLI modes: one-shot, background (tray), or both | **Decided** (2026-10-12) | One-shot only, writing to the inbox; File > Import entries…; no tray mode (CLI-030) |
+| D-170 | CLI grammar: words, order, date forms, defaults, splits | **Decided** (2026-10-12) | `kansha-entries 1`: spending entries with splits and refunds; no transfers or investments (CLI-020) |
+| D-180 | Where unverified CLI entries live (CLI-040) | **Decided** (2026-10-12) | A pending table outside the ledger, not `txn` rows with a flag, so no report or balance can miss a filter |
 
 ### Placeholders
 
@@ -2884,6 +2941,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.81 | 2026-10-12 | §14.3 rewritten as Command line and file entry, CLI-010 … CLI-090, now [1.0] (CLI-090 phone app [Later], a stub): spending entries only, splits and refunds included, in the `kansha-entries 1` format; `kansha add` / `kansha run` and File > Import entries… write to an inbox beside the book with no key; entries are reviewed outside the ledger before they count; IDs stop a file being entered twice; File > Export names for phones… writes `kansha-names 1` (expense categories and spending accounts). D-150 withdrawn (no secret file); D-160, D-170, D-180 decided. MIG-200 matching covers approved entries. No schema change. No API change. |
 | 0.7.80 | 2026-10-12 | RPT-205: a new Itemized Categories or Itemized Payees report starts with Transfers off (was on); Customize turns them on. Saved reports keep their choice (one saved without it still includes them). The tax reports keep counting transfers mapped to a tax line (an IRA distribution, CAT-050). No schema or API change. |
 | 0.7.79 | 2026-10-12 | ACCT-030: a new Donor Advised Fund account defaults to Tax-Exempt (was Taxable), so its income and grants stay out of the tax reports; the deduction is the contribution into it. Existing accounts keep their setting (change it in Edit account details…). No schema or API change. |
 | 0.7.78 | 2026-10-12 | RPT-020: on a Categories tab (a report's Customize, a spending card's Customize…), ticking or unticking a category does the same to its subcategories at every depth; each can then be changed on its own. No schema or API change. |
