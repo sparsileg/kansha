@@ -181,7 +181,8 @@ Vitest for the dialog, the menu count, and the status bar note.
       drive it with scripted answers.
     - The terminal side is `rustyline` (MIT; approved 2026-10-12,
       pinned `=18.0.1`, `default-features = false`: no history file,
-      so no entry is ever written to one). It lives in `src-tauri`,
+      so no entry is ever written to one; `custom-bindings` on since
+      0.7.91 for `=` in amounts). It lives in `src-tauri`,
       not in `kansha-core`. Tab completes account and category names
       from the names copy.
     - Not a terminal (piped input): `kansha add` with no entry is an

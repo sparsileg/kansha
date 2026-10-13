@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.90 (draft) |
+| **Document version** | 0.7.91 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
@@ -1950,7 +1950,15 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
     its amount and category at once, or the amount alone, after which
     its category is asked; after each line the amount left is shown.
     Tab completes account and category names from the names copy.
-    Nothing is kept in a history file.
+    Nothing is kept in a history file. The amount and each split
+    line's amount take a sum as the register does (REG-035): `+ - *
+    /`, `*` and `/` first, rounded half-even once (0.7.91). `=` works
+    the sum before the cursor out at once; Enter on a sum does too,
+    and shows the total (`= 23.43`). On a split line with its
+    category, the sum has no spaces (`3.99*2 Groceries`), or is
+    worked out with `=` first. A sum that is malformed, divides by
+    zero, or comes to zero is asked again. Files and `kansha add
+    <entry>` keep plain amounts.
   - `kansha add <entry>` and `kansha run <file>`, started from a
     command line, check the format, write the entries to the book's
     inbox folder (`<book>-inbox/`, beside the book), and exit. They
@@ -2988,6 +2996,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.91 | 2026-10-12 | CLI-030: `kansha add` amount and split line questions take sums (REG-035 grammar); `=` works the sum out in place; Enter on a sum shows the total and takes it; a split line's sum before its category has no spaces. Files and `kansha add <entry>` keep plain amounts. REG-035: `$-5` reads as `-$5`. rustyline gains its `custom-bindings` feature (no version change). Issue #21. No schema change. No API change. |
 | 0.7.90 | 2026-10-12 | RPT-050: Save PDF works on Windows through WebView2's PrintToPdf: chosen orientation, backgrounds printed, no header or footer, saved to Downloads and opened (issue #13). macOS still returns an error. §16.3 R4: new Windows-only deps `webview2-com =0.38.2`, `windows-core =0.61.2` (already in the build through wry). CONVENTIONS §3: workspace lint `unsafe_code` is now `deny`, not `forbid`; the Windows PDF module alone allows `unsafe` for WebView2's COM calls. No schema change. No API change. |
 | 0.7.89 | 2026-10-12 | CLI-040: Kansha watches the open book's inbox and reads it when files arrive, so the status bar note and count change without a click in the window; reading on focus stays. No schema change. No API change. |
 | 0.7.88 | 2026-10-12 | CLI-020: every split line has its amount; the line that took the rest is withdrawn (files and `kansha add`). CLI-030: in `kansha add` a split line is its amount and category at once, or the amount alone, after which its category is asked. `kansha help` says to quote names with spaces. No schema change. No API change. |

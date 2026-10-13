@@ -10,6 +10,8 @@
 //!          or "." fraction alone; an optional leading "$"
 //! ```
 //!
+//! `"$-5"` reads as `"-$5"`.
+//!
 //! `*` and `/` bind tighter than `+` and `-`; each level works left to
 //! right. No parentheses. Numbers may have any number of decimals; the
 //! exact result (`rust_decimal`) is rounded to cents half-even once, at
@@ -59,6 +61,10 @@ fn tokenize(text: &str) -> Result<Vec<Token>> {
         } else if matches!(c, '+' | '-' | '*' | '/') {
             out.push(Token::Op(c));
             i += 1;
+        } else if c == '$' && chars.get(i + 1) == Some(&'-') {
+            // "$-5" is "-$5".
+            out.push(Token::Op('-'));
+            i += 2;
         } else if c == '$' || c.is_ascii_digit() || c == '.' {
             let start = if c == '$' { i + 1 } else { i };
             let mut end = start;
@@ -201,6 +207,9 @@ mod tests {
         assert_eq!(ok("$12.30"), "12.30");
         assert_eq!(ok("+7.1"), "7.10");
         assert_eq!(ok("-5"), "-5.00");
+        assert_eq!(ok("$-5"), "-5.00");
+        assert_eq!(ok("-$5"), "-5.00");
+        assert_eq!(ok("$-5+2"), "-3.00");
     }
 
     #[test]

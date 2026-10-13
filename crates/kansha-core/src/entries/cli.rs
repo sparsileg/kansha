@@ -18,6 +18,7 @@ use super::format::{
 use super::names::Names;
 use super::sidecar;
 use crate::book::BookFiles;
+use crate::calc;
 use crate::date::{Clock, Date};
 use crate::local_config::LocalConfig;
 use crate::money::Money;
@@ -46,6 +47,8 @@ An entry is: <date> <payee> <amount> <category or split> acct <account>
              [memo \"<text>\"] [id <uuid>]
 Dates: YYYY-MM-DD, today, yesterday, or the book's date format.
 Quote any name with spaces (acct \"Checking 083\"); quoting any word is allowed.
+Asked field by field, an amount may be a sum: 4.97+3.99, 3.99*3, 20-4.55, 10/3;
+= works it out. On a split line, write the sum without spaces (3.99*2 Food).
 ";
 
 /// The first word that makes Kansha run as a command, not a window.
@@ -58,6 +61,11 @@ pub trait Prompter {
     /// One answer to `prompt`; Tab completes from `choices`. `None` when
     /// the user quits (Ctrl+C, Ctrl+D).
     fn ask(&mut self, prompt: &str, choices: &[String]) -> Option<String>;
+    /// [`Prompter::ask`] for an amount, which may be a sum (REG-035): a
+    /// terminal works the sum out when `=` is typed ([`equals`]).
+    fn ask_sum(&mut self, prompt: &str, choices: &[String]) -> Option<String> {
+        self.ask(prompt, choices)
+    }
     /// A line of output between questions.
     fn say(&mut self, text: &str);
 }
@@ -390,7 +398,7 @@ pub fn write_inbox(folder: &Path, text: &str) -> crate::Result<PathBuf> {
 pub fn complete(line: &str, pos: usize, choices: &[String]) -> (usize, Vec<String>) {
     let head = &line[..pos.min(line.len())];
     let start = match head.split_once(' ') {
-        Some((first, _)) if format::parse_amount(first).is_ok() => {
+        Some((first, _)) if calc::eval_amount(first).is_ok() => {
             first.len() + head[first.len()..].len() - head[first.len()..].trim_start().len()
         }
         _ => 0,
@@ -412,16 +420,60 @@ impl From<Quit> for Failure {
     }
 }
 
+/// What `=` puts in place of the text before the cursor at an amount
+/// question: the sum worked out (REG-035). `None` when it is not a sum,
+/// and `=` is typed as itself.
+pub fn equals(head: &str) -> Option<String> {
+    calc::eval_amount(head).ok().map(|m| m.to_string())
+}
+
+/// An amount answer: a plain amount as in files, or a sum (REG-035),
+/// which may end in `=`. True for a sum, whose total is shown.
+fn amount_or_sum(s: &str) -> Result<(Money, bool), String> {
+    if let Ok(m) = format::parse_amount(s) {
+        return Ok((m, false));
+    }
+    let sum = s.strip_suffix('=').unwrap_or(s);
+    calc::eval_amount(sum)
+        .map(|m| (m, true))
+        .map_err(|e| format!("{e}."))
+}
+
 /// Ask until `check` accepts the answer; its error is shown and the
 /// question asked again.
 fn ask_until<T>(
     p: &mut dyn Prompter,
     prompt: &str,
     choices: &[String],
+    check: impl FnMut(&str) -> Result<T, String>,
+) -> Result<T, Quit> {
+    ask_loop(p, prompt, choices, false, check)
+}
+
+/// [`ask_until`] for an amount, which may be a sum.
+fn ask_sum_until<T>(
+    p: &mut dyn Prompter,
+    prompt: &str,
+    choices: &[String],
+    check: impl FnMut(&str) -> Result<T, String>,
+) -> Result<T, Quit> {
+    ask_loop(p, prompt, choices, true, check)
+}
+
+fn ask_loop<T>(
+    p: &mut dyn Prompter,
+    prompt: &str,
+    choices: &[String],
+    sum: bool,
     mut check: impl FnMut(&str) -> Result<T, String>,
 ) -> Result<T, Quit> {
     loop {
-        let answer = p.ask(prompt, choices).ok_or(Quit)?;
+        let answer = if sum {
+            p.ask_sum(prompt, choices)
+        } else {
+            p.ask(prompt, choices)
+        }
+        .ok_or(Quit)?;
         match check(answer.trim()) {
             Ok(v) => return Ok(v),
             Err(m) => p.say(&m),
@@ -453,10 +505,13 @@ fn interactive(p: &mut dyn Prompter, dates: Dates, copy: &Copy) -> Result<FileEn
             Ok(s.to_string())
         }
     })?;
-    let amount = ask_until(p, "Amount: ", &[], |s| match format::parse_amount(s) {
-        Ok(m) if m.is_zero() => Err("The amount is zero.".into()),
+    let (amount, sum) = ask_sum_until(p, "Amount: ", &[], |s| match amount_or_sum(s) {
+        Ok((m, _)) if m.is_zero() => Err("The amount is zero.".into()),
         other => other,
     })?;
+    if sum {
+        p.say(&format!("= {amount}"));
+    }
     let account = ask_until(p, "Account: ", &accounts, |s| {
         resolve(s, |n| names.map(|x| x.resolve_account(n)))
     })?;
@@ -517,15 +572,29 @@ fn split_lines(
         let prompt = format!("  Line {n} amount ({left} left): ");
         let first = lines.is_empty();
         let resolve_cat = |c: &str| resolve(c, |x| names.map(|v| v.resolve_category(x)));
-        let (amount, category) = ask_until(p, &prompt, categories, |s| {
+        let (amount, sum, category) = ask_sum_until(p, &prompt, categories, |s| {
             let (amount, category) = match s.split_once(' ') {
                 Some((a, rest)) => (a, Some(rest.trim())),
                 None => (s, None),
             };
-            let Ok(amount) = format::parse_amount(amount) else {
-                return Err(
-                    "Enter the amount first: <amount> <category>, or the amount alone.".into(),
-                );
+            let op = |c: char| matches!(c, '+' | '-' | '*' | '/');
+            if category.is_some_and(|c| c.starts_with(op)) || amount.ends_with(op) {
+                return Err("A sum before a category has no spaces: 3.99*2 Groceries \
+                     (or press = to work it out)."
+                    .into());
+            }
+            let (amount, sum) = match amount_or_sum(amount) {
+                Ok(a) => a,
+                Err(e)
+                    if amount.starts_with(|c: char| c.is_ascii_digit() || ".$-+".contains(c)) =>
+                {
+                    return Err(e);
+                }
+                Err(_) => {
+                    return Err(
+                        "Enter the amount first: <amount> <category>, or the amount alone.".into(),
+                    );
+                }
             };
             if amount.is_zero() {
                 return Err("A split line of zero.".into());
@@ -534,8 +603,11 @@ fn split_lines(
                 return Err("A split needs at least two lines: enter less than the total.".into());
             }
             let category = category.map(resolve_cat).transpose()?;
-            Ok((amount, category))
+            Ok((amount, sum, category))
         })?;
+        if sum {
+            p.say(&format!("  = {amount}"));
+        }
         let category = match category {
             Some(c) => c,
             None => ask_until(
@@ -886,6 +958,8 @@ yesterday Kroger 10.00 Groceries acct Checking
     struct Script {
         answers: Vec<Option<&'static str>>,
         asked: Vec<String>,
+        /// Questions asked as amounts (`=` works the sum out).
+        sums: Vec<String>,
         said: Vec<String>,
     }
 
@@ -894,6 +968,7 @@ yesterday Kroger 10.00 Groceries acct Checking
             Script {
                 answers: answers.iter().rev().copied().collect(),
                 asked: Vec::new(),
+                sums: Vec::new(),
                 said: Vec::new(),
             }
         }
@@ -903,6 +978,10 @@ yesterday Kroger 10.00 Groceries acct Checking
         fn ask(&mut self, prompt: &str, _choices: &[String]) -> Option<String> {
             self.asked.push(prompt.to_string());
             self.answers.pop().expect("an answer").map(String::from)
+        }
+        fn ask_sum(&mut self, prompt: &str, choices: &[String]) -> Option<String> {
+            self.sums.push(prompt.to_string());
+            self.ask(prompt, choices)
         }
         fn say(&mut self, text: &str) {
             self.said.push(text.to_string());
@@ -969,6 +1048,131 @@ yesterday Kroger 10.00 Groceries acct Checking
         );
     }
 
+    /// The entry `kansha add` saved after the scripted answers.
+    fn add_scripted(answers: &[Option<&'static str>]) -> (Script, FileEntry) {
+        let dir = tempfile::tempdir().unwrap();
+        let db = book(dir.path(), true);
+        let mut s = Script::new(answers);
+        let r = cli(&["add", "--book", db.to_str().unwrap()], "", Some(&mut s));
+        assert_eq!(r.code, 0, "{}", r.err);
+        let e = inbox(dir.path())[0].entries[0].clone();
+        (s, e)
+    }
+
+    #[test]
+    fn amount_takes_a_sum_and_shows_the_total() {
+        let (s, e) = add_scripted(&[
+            Some(""),
+            Some("Target"),
+            Some("4.97+"), // malformed: asked again
+            Some("5/0"),
+            Some("abc"),
+            Some("1-1"), // zero
+            Some("4.97+3.99+14.47"),
+            Some("Checking"),
+            Some("Food"),
+            Some(""),
+        ]);
+        assert_eq!(e.amount, Money::from_cents(2343));
+        assert_eq!(s.sums, vec!["Amount: "; 5]);
+        assert!(s.said.contains(&"= 23.43".to_string()));
+        assert!(s.said.contains(&"The amount is zero.".to_string()));
+        assert!(s.said.iter().any(|t| t.contains("divide by zero")));
+        assert!(s.said.iter().any(|t| t.contains("\"abc\"")));
+        assert!(s.said.iter().any(|t| t.contains("missing at the end")));
+    }
+
+    #[test]
+    fn amount_sums_minus_times_divide_and_round_half_even() {
+        let total = |a: &'static str| {
+            let (s, e) = add_scripted(&[
+                Some(""),
+                Some("Target"),
+                Some(a),
+                Some("Checking"),
+                Some("Food"),
+                Some(""),
+            ]);
+            (e.amount.to_string(), s.said)
+        };
+        assert_eq!(total("3.99*3").0, "11.97");
+        assert_eq!(total("20-4.55").0, "15.45");
+        assert_eq!(total("1/3").0, "0.33");
+        assert_eq!(total("0.125*1").0, "0.12");
+        assert_eq!(total("4.97+3.99=").0, "8.96"); // a trailing = is fine
+        assert_eq!(total("-3-2").0, "-5.00"); // a refund
+        // Plain amounts as before, with no total shown.
+        for (typed, want) in [
+            ("12.30", "12.30"),
+            ("-5", "-5.00"),
+            ("$-5", "-5.00"),
+            ("$1,234.50", "1234.50"),
+        ] {
+            let (got, said) = total(typed);
+            assert_eq!(got, want, "{typed}");
+            assert!(!said.iter().any(|t| t.starts_with("= ")), "{typed}");
+        }
+    }
+
+    #[test]
+    fn split_lines_take_sums() {
+        let (s, e) = add_scripted(&[
+            Some(""),
+            Some("Target"),
+            Some("23.43"),
+            Some("Checking"),
+            Some("split"),
+            Some("3.99 * 2 Groceries"), // spaces inside a sum: asked again
+            Some("3.99*2 Groceries"),
+            Some("20-4.55"), // amount alone: category next
+            Some("Household"),
+            Some(""),
+        ]);
+        assert!(
+            s.sums
+                .contains(&"  Line 1 amount (23.43 left): ".to_string())
+        );
+        assert!(
+            s.asked
+                .contains(&"  Line 2 amount (15.45 left): ".to_string())
+        );
+        assert!(s.said.iter().any(|t| t.contains("no spaces")));
+        assert!(s.said.contains(&"  = 7.98".to_string()));
+        assert!(s.said.contains(&"  15.45 left".to_string()));
+        let Spend::Split(lines) = &e.spend else {
+            panic!()
+        };
+        let got: Vec<(Money, &str)> = lines
+            .iter()
+            .map(|l| (l.amount, l.category.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (Money::from_cents(798), "Food:Groceries"),
+                (Money::from_cents(1545), "Household"),
+            ]
+        );
+    }
+
+    #[test]
+    fn equals_works_out_the_sum_before_the_cursor() {
+        assert_eq!(equals("4.97+3.99+14.47").as_deref(), Some("23.43"));
+        assert_eq!(equals("3.99 * 2").as_deref(), Some("7.98"));
+        assert_eq!(equals("10-4/2").as_deref(), Some("8.00"));
+        assert_eq!(equals("12.3").as_deref(), Some("12.30"));
+        assert_eq!(equals("4.97+"), None);
+        assert_eq!(equals("5/0"), None);
+        assert_eq!(equals("abc"), None);
+        assert_eq!(equals(""), None);
+    }
+
+    #[test]
+    fn files_still_take_plain_amounts_only() {
+        assert!(format::parse_amount("3.99*3").is_err());
+        assert!(format::parse_amount("4.97+3.99").is_err());
+    }
+
     #[test]
     fn quitting_saves_nothing() {
         let dir = tempfile::tempdir().unwrap();
@@ -992,6 +1196,10 @@ yesterday Kroger 10.00 Groceries acct Checking
         assert_eq!(
             complete("7.00 ho", 7, &choices),
             (5, vec!["Household".into()])
+        );
+        assert_eq!(
+            complete("3.99*3 ho", 9, &choices),
+            (7, vec!["Household".into()])
         );
         assert_eq!(
             complete("Food:G", 6, &choices),
