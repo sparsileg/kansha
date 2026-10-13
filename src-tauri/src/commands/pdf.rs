@@ -2,7 +2,8 @@
 //! through WebKitGTK's print operation with the orientation set in code:
 //! WebKitGTK's own print dialog prints blank pages in landscape (WebKitGTK
 //! 2.52), and CSS `@page { size }` is ignored. Paper printing is left to
-//! the PDF viewer.
+//! the PDF viewer. On Windows, WebView2's PrintToPdf with the same
+//! settings set in code.
 
 use serde::Deserialize;
 use specta::Type;
@@ -124,18 +125,100 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+/// The one place Kansha uses `unsafe` (CONVENTIONS §3): every WebView2
+/// COM method is an `unsafe fn` in `webview2-com`. Each call is on a
+/// live interface Tauri hands over, on the main thread, with owned
+/// arguments; nothing here dereferences a raw pointer.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+mod platform {
+    use std::path::Path;
+    use std::sync::mpsc;
+
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PRINT_ORIENTATION_LANDSCAPE, COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
+        ICoreWebView2_7, ICoreWebView2Environment6,
+    };
+    use webview2_com::PrintToPdfCompletedHandler;
+    use windows_core::{HSTRING, Interface};
+
+    use super::{CmdResult, PageOrientation, internal};
+
+    /// Print to a file through WebView2's PrintToPdf on the main thread,
+    /// and wait for it to finish.
+    pub async fn save_pdf(
+        window: &tauri::WebviewWindow,
+        orientation: PageOrientation,
+        path: &Path,
+    ) -> CmdResult<()> {
+        let file = HSTRING::from(path);
+        let (done, wait) = mpsc::channel::<Result<(), String>>();
+        window
+            .with_webview(move |wv| {
+                let fail = done.clone();
+                if let Err(e) = start(&wv, orientation, &file, done) {
+                    let _ = fail.send(Err(e.message()));
+                }
+            })
+            .map_err(|e| internal(format!("could not save the PDF: {e}")))?;
+        tauri::async_runtime::spawn_blocking(move || wait.recv())
+            .await
+            .map_err(|e| internal(format!("could not save the PDF: {e}")))?
+            .map_err(|_| internal("saving the PDF stopped without finishing".into()))?
+            .map_err(|e| internal(format!("could not save the PDF: {e}")))
+    }
+
+    /// Set up the print settings and start PrintToPdf; `done` hears how
+    /// it ended.
+    fn start(
+        wv: &tauri::webview::PlatformWebview,
+        orientation: PageOrientation,
+        file: &HSTRING,
+        done: mpsc::Sender<Result<(), String>>,
+    ) -> windows_core::Result<()> {
+        let o = match orientation {
+            PageOrientation::Portrait => COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
+            PageOrientation::Landscape => COREWEBVIEW2_PRINT_ORIENTATION_LANDSCAPE,
+        };
+        let env: ICoreWebView2Environment6 = wv.environment().cast()?;
+        // SAFETY: COM calls on live interfaces from Tauri, main thread.
+        let core: ICoreWebView2_7 = unsafe { wv.controller().CoreWebView2() }?.cast()?;
+        // SAFETY: as above; the settings object is ours until PrintToPdf.
+        let settings = unsafe { env.CreatePrintSettings() }?;
+        // SAFETY: as above. Backgrounds on and no header or footer, as
+        // WebKitGTK prints on Linux.
+        unsafe {
+            settings.SetOrientation(o)?;
+            settings.SetShouldPrintBackgrounds(true)?;
+            settings.SetShouldPrintHeaderAndFooter(false)?;
+        }
+        let handler = PrintToPdfCompletedHandler::create(Box::new(move |hr, ok| {
+            let _ = done.send(match hr {
+                Err(e) => Err(e.message()),
+                Ok(()) if !ok => Err("WebView2 did not write the file".into()),
+                Ok(()) => Ok(()),
+            });
+            Ok(())
+        }));
+        // SAFETY: as above; `file` outlives the call, which copies it.
+        unsafe { core.PrintToPdf(file, &settings, &handler) }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 mod platform {
     use std::path::Path;
 
     use super::{CmdResult, PageOrientation, internal};
 
-    /// Not built yet off Linux.
+    /// Not built yet on macOS.
     pub async fn save_pdf(
         _window: &tauri::WebviewWindow,
         _orientation: PageOrientation,
         _path: &Path,
     ) -> CmdResult<()> {
-        Err(internal("Save PDF works on Linux only for now".into()))
+        Err(internal(
+            "Save PDF works on Linux and Windows only for now".into(),
+        ))
     }
 }

@@ -45,6 +45,12 @@ notify = "=8.2.0"
 gtk = "0.18"
 webkit2gtk = "2.0"
 
+# Saving PDFs on Windows (RPT-050) through WebView2's PrintToPdf; pinned
+# to the versions Tauri's wry already uses.
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "=0.38.2"
+windows-core = "=0.61.2"
+
 [dev-dependencies]
 tempfile.workspace = true
 

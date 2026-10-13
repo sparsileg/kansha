@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.89 (draft) |
+| **Document version** | 0.7.90 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-12 |
 | **Owner** | Stan |
@@ -1108,8 +1108,10 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   paper. Kansha has no print-to-paper button: WebKitGTK prints blank
   pages in landscape through its print dialog (even with the
   orientation preset) and ignores CSS `@page` size, so Kansha sets the
-  orientation itself and prints only to a file. Save PDF works on
-  Linux only for now. On screen and on paper a report is a white page
+  orientation itself and prints only to a file. On Windows, WebView2's
+  PrintToPdf writes the file with the same settings (orientation,
+  backgrounds, no header or footer). Save PDF is not built on macOS
+  yet. On screen and on paper a report is a white page
   with dark text in every theme; its table's heading row stays in view
   while the report scrolls. A report with a graph can hide the graph
   or the table. Printing leaves the graph out and sets the report in
@@ -2226,7 +2228,9 @@ compiles against Tauri v2 and generates a matching
 - PDF export: the webview prints the page; no PDF crate. On Linux,
   WebKitGTK's print operation with the page setup set in code
   (`webkit2gtk` and `gtk` crates, the versions Tauri already uses),
-  RPT-050.
+  RPT-050. On Windows, WebView2's PrintToPdf (`webview2-com =0.38.2`,
+  `windows-core =0.61.2`, the versions wry already uses); its COM
+  calls are the one allowed `unsafe` (CONVENTIONS §3).
 - Encryption of backups and the key file: `age` crate (X25519
   recipients, scrypt-locked private key). Backup files: `zip` crate.
   No OS keyring (SECU-010). Both pinned (`=0.12.1`, `=7.2.0`, the
@@ -2984,6 +2988,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.90 | 2026-10-12 | RPT-050: Save PDF works on Windows through WebView2's PrintToPdf: chosen orientation, backgrounds printed, no header or footer, saved to Downloads and opened (issue #13). macOS still returns an error. §16.3 R4: new Windows-only deps `webview2-com =0.38.2`, `windows-core =0.61.2` (already in the build through wry). CONVENTIONS §3: workspace lint `unsafe_code` is now `deny`, not `forbid`; the Windows PDF module alone allows `unsafe` for WebView2's COM calls. No schema change. No API change. |
 | 0.7.89 | 2026-10-12 | CLI-040: Kansha watches the open book's inbox and reads it when files arrive, so the status bar note and count change without a click in the window; reading on focus stays. No schema change. No API change. |
 | 0.7.88 | 2026-10-12 | CLI-020: every split line has its amount; the line that took the rest is withdrawn (files and `kansha add`). CLI-030: in `kansha add` a split line is its amount and category at once, or the amount alone, after which its category is asked. `kansha help` says to quote names with spaces. No schema change. No API change. |
 | 0.7.87 | 2026-10-12 | CLI-040: the review list focuses the first ready entry's Approve and moves on after each approval or rejection; account and category boxes in the review row complete names as REG-030 does; with no entries left, Later becomes Close. No schema change. No API change. |

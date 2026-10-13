@@ -4,7 +4,7 @@
 |---|---|
 | **Applies to** | All Kansha work: code, tests, docs, and chat deliveries |
 | **Companion doc** | `devdocs/kansha-spec.md` |
-| **Last updated** | 2026-09-24 |
+| **Last updated** | 2026-10-12 |
 
 Rules here are binding. If this file and the spec disagree, fix one of them; do not guess.
 
@@ -62,7 +62,11 @@ Delivered as **two separate fenced blocks** (for GitKraken):
 - Modules interact only through public APIs; only `persistence` issues SQL (spec §17.2).
 - `cargo fmt` and `cargo clippy -- -D warnings` must be clean.
 - Errors: `thiserror` enums per module; no `unwrap()`/`expect()` outside tests except on invariants documented in a comment.
-- No `unsafe`.
+- No `unsafe`. One exception: the Windows Save PDF module
+  (`src-tauri/src/commands/pdf.rs`, `#[allow(unsafe_code)]`) calls
+  WebView2's COM methods, which `webview2-com` declares `unsafe fn`;
+  each call carries a `SAFETY` comment. The workspace lint is `deny`,
+  not `forbid`, so that module can allow it; nothing else may.
 
 ## 4. Money, Quantities, Prices, Dates
 

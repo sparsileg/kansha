@@ -33,7 +33,8 @@ codegen-units = 1
 opt-level = 2
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Deny, not forbid: the Windows PDF module allows it (CONVENTIONS §3).
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

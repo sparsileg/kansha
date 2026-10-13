@@ -64,7 +64,7 @@ Tauri v2 + Rust core + Svelte 5 (Vite, not SvelteKit). SQLite via rusqlite
 - Only `persistence` issues SQL. Writes via `Db::write`; audit entry in
   same transaction.
 - Never edit a released migration; add a new one. Tables STRICT.
-- No `unsafe`; no `unwrap`/`expect` outside tests except documented
+- No `unsafe` (sole exception: Windows PDF module, CONVENTIONS §3); no `unwrap`/`expect` outside tests except documented
   invariants. Let-chains allowed (MSRV 1.93).
 - Scenario TOML: amounts as strings; inline tables on one line only.
 - Every engine bug fix adds a test that fails first.
