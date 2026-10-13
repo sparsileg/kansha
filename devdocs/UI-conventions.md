@@ -1,7 +1,7 @@
 # UI Conventions and Structure
 
 - Title bar at top of window with name of app and a small logo
-- Menu bar with following options: File, Edit, Tools, Reports, Help
+- Menu bar with following options: File, Edit, Tools, Reports, Budget, Help
 - File has the following options: New, Open, Backup, Restore, Import,
   Export, Integrity Check, Exit
 - Edit has: Settings, Renaming

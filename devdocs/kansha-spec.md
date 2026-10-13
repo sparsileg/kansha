@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.93 (draft) |
+| **Document version** | 0.7.94 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-12 |
+| **Last updated** | 2026-10-13 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -1345,7 +1345,8 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   counts under its tag set (TAG-030), "(No tag)" last. Customize has the
   Accounts, Categories, and Payees tabs; Totals only, save, CSV, and PDF
   as the other reports.
-- **RPT-300** [Later][S] Budgets and budget-vs-actual reports.
+- **RPT-300** [Later][S] Budget-vs-actual reports. Budgets themselves:
+  §12.5 (BUD-010 … BUD-090).
 - **RPT-310** [1.0][R] Performance reports (TWR/IRR): Investment
   Performance (POS-030).
 
@@ -1514,6 +1515,79 @@ entries in Appendix A and migration 0014 use those IDs.
 - **INS-040** Withdrawn in 0.7.22. Was: each insight can go on the
   navigation bar as its own button. Only Insights itself can
   (INS-010).
+
+#### 12.5 Budgets (BUD)
+
+Build plan and Quicken 2013 screenshots: `devdocs/budget-plan.md`.
+
+- **BUD-010** [1.0][S] A budget has a name (unique, any case), a list
+  of income and expense categories at any level, and whole years. Each
+  of its years holds one amount per category and month (`Money`,
+  signed: a refund category may have a negative budget; missing = 0).
+  A book may hold several budgets. Kept in the book; every change is
+  audited.
+- **BUD-020** [1.0][S] Menu bar: a Budget menu after Reports, holding
+  Create Budget… and then the budgets by name (opens one). Create
+  Budget… asks the name and makes the current year with the
+  categories used in the last 12 months, each month at the
+  category's monthly average for the last calendar year (that year's
+  actual ÷ 12, whole dollars, half-even; 0 with no actual), then
+  opens the budget view.
+- **BUD-030** [1.0][S] Actual: per split posting to a category, in
+  all accounts (investment accounts included); transfers and Opening
+  Balance left out. Expense actual is spending (a refund lowers it);
+  income actual is money received; both shown positive. A budgeted
+  category's actual takes in its subcategories that are not budgeted
+  themselves. Spending in categories not in the budget goes to an
+  Everything Else row at the end of its group (actual only; ▸ lists
+  them). Balance = Budget − Actual for both kinds.
+- **BUD-040** [1.0][S] The budget view is one sheet. Its title band
+  holds the budget's name and a gear: Select categories to budget…,
+  Budget reports ▸ (Current budget, Historical budgets; disabled until
+  built, [Later]), Copy this budget… (new name; categories and every
+  year's amounts), Edit budget name…, Delete this budget… (asks
+  first; transactions untouched), Create new budget…. Under it, the
+  controls: View (Graph View, Annual View), then per view as
+  BUD-060, BUD-070. A summary band shows expenses only for the range
+  shown: SPENDING total, a bar of spending against the budget, the
+  budget total, and the amount LEFT (or OVER). Rows: Expenses group,
+  then Income group, each with its totals on its collapsible heading
+  row; the last row is Total (Income − Expenses). A row names the
+  category's path, the last name bold. The view shows whole dollars,
+  rounded half-even in Rust; entry accepts cents.
+- **BUD-050** [1.0][S] Moving to a period in a year the budget does
+  not hold asks to create it: copy this year's categories and budget
+  values, or copy only its categories (amounts 0). Last 3 months and
+  Last 6 months do not ask; months outside the budget count as 0.
+- **BUD-060** [1.0][S] Graph View. Second control: Monthly, Quarterly,
+  Yearly, Quarter to date, Year to date, Last 3 months, Last 6 months.
+  Monthly, Quarterly, and Yearly add a third control: the period with
+  ◀ ▶, the current one first. Last 3 and Last 6 months are full
+  months before the current one (as RPT-040's "Last" presets). One
+  horizontal bar per row: its full width is the period's budget, the
+  actual written in it; green while under budget, red when over (the
+  whole bar, the part past the budget lighter). Right of the bars:
+  "N left", "N over" (red), or "N under" (a negative budget, red);
+  then the period's Budget. Hovering a row makes its Budget an edit
+  box for the period: the amount is spread over the period's months,
+  the remainder to the last month.
+- **BUD-070** [1.0][S] Annual View. Second control: the year with
+  ◀ ▶. Third control: Details, Budget, Balance, Actual. Details shows
+  Budget, Actual, and Balance for past and current months, Budget
+  only for future months; the others one column per month. After the
+  current month (shaded), a To Date column; last, the year's column:
+  Balance for Details and Balance, Budget for Budget, Actual for
+  Actual. Budget cells are edited in place (Enter and Tab move as in
+  a spreadsheet). Actual figures open their transactions. Balance is
+  bold, negative in the negative color. Each month's Budget heading
+  has a ▾ menu: Copy <Month> budget to all future months in <year>,
+  to all past months in <year>, to all months in <year>. A row's
+  copy icon copies a month across the row the same three ways.
+- **BUD-080** [1.0][S] Deleting a category removes its budget amounts;
+  merging one adds them into the target's.
+- **BUD-090** [Later] Budget reports (Current budget, Historical
+  budgets); a Budget card; a category's history chart; rollover of
+  unspent balance.
 
 ### 13. Data Integrity, Audit, Backup, and Security (INT, AUD, BAK, SECU)
 
@@ -3097,6 +3171,7 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.94 | 2026-10-13 | New §12.5 Budgets (BUD-010 … BUD-090), from Stan and Quicken 2013 (`devdocs/budget-plan.md`): several named budgets by year, one amount per category and month; Budget menu with Create Budget… (categories used in the last 12 months, last year's monthly average); gear with Select categories, Copy, Edit name, Delete, Create (Budget reports [Later]); expenses-only summary band; Graph View (Monthly, Quarterly, Yearly with ◀ ▶; Quarter and Year to date; Last 3 and 6 months) with bars against the period's budget; Annual View (Details, Budget, Balance, Actual; To Date and year columns; month and row copy); Everything Else row; Total row; prompt to create a missing year. RPT-300 keeps only the reports. Requirements only; not built. Schema change and API change to come with the build. |
 | 0.7.93 | 2026-10-13 | New §5.4 Loans (LOAN-010 … LOAN-090): loan terms on a Loan/Mortgage account (type, opening date, original balance, rate history, length, compounding daily/monthly/semi-annually, seven payment frequencies, current balance, payment, Other lines, extra principal); rate per payment (1 + r/m)^(m/p) − 1; payment computed or typed; each payment split from the register balance, daily compounding by actual days (actual/365); current balance set by an Opening Balance transaction dated today; a loan-owned reminder whose line amounts are computed per occurrence; amortization table. REC-200 moves from [Later] to [1.0]. ACCT-020 no longer says balance-tracking only. D-190 decided (`rust_decimal` `maths`). Requirements only; not built. Schema change and API change to come with the build. |
 | 0.7.92 | 2026-10-12 | §21: release installers are built on GitHub. New `.github/workflows/release.yml`: a pushed `vX.Y.Z` tag fails unless it matches the version in `package.json`, `tauri.conf.json`, and `Cargo.toml`, then makes a draft release `vX.Y.Z` and attaches the `.deb` (ubuntu-22.04) and the NSIS installer (windows-latest, NASM for the vendored OpenSSL); run by hand, it builds both as workflow artifacts with no release. No tests in the workflow. Actions pinned by commit. `tauri.conf.json` drops the AppImage target. Release checklist §5 and §7: tag, push, and Publish through `/ship`. `ci.yml` stays disabled. Issue #22. No schema change. No API change. |
 | 0.7.91 | 2026-10-12 | CLI-030: `kansha add` amount and split line questions take sums (REG-035 grammar); `=` works the sum out in place; Enter on a sum shows the total and takes it; a split line's sum before its category has no spaces. Files and `kansha add <entry>` keep plain amounts. REG-035: `$-5` reads as `-$5`. rustyline gains its `custom-bindings` feature (no version change). Issue #21. No schema change. No API change. |
