@@ -157,8 +157,10 @@ refuses that book (spec §21). There is no way back except a backup.
    just build
    ```
 
-   They are in `target/release/bundle/`: the `.deb` and AppImage on
-   Kubuntu, the NSIS installer on Windows.
+   They are in `target/release/bundle/`: the `.deb` on Kubuntu, the
+   NSIS installer on Windows. These builds are for trying the
+   release on the book; the published installers come from GitHub
+   (§7).
 
 2. [ ] Install it. Help > About Kansha shows X.Y.Z.
 
@@ -180,5 +182,13 @@ refuses that book (spec §21). There is no way back except a backup.
 
 1. [ ] Release notes: what changed, any ⚠ Schema change or ⚠ API
    change, known issues, coverage, and timings.
-2. [ ] Commit, then tag vX.Y.Z in GitKraken and push the tag.
-3. [ ] Sync the spec to the Claude Project copy.
+2. [ ] Run `/ship` in Claude Code. It checks the versions, that
+   tag vX.Y.Z is new, and runs `just perf` and `just check`; then it
+   commits, tags vX.Y.Z, and pushes main and the tag (you approve the
+   push). The tag starts `.github/workflows/release.yml` on GitHub,
+   which builds the `.deb` (Ubuntu 22.04) and the NSIS installer
+   (Windows) into a draft release vX.Y.Z. A tag that does not match
+   the version files fails before building.
+3. [ ] Paste the release notes into the draft, then Publish (in the
+   `/ship` pane, or on GitHub).
+4. [ ] Sync the spec to the Claude Project copy.

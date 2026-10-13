@@ -1,0 +1,108 @@
+# Builds the installers for a release (spec §21, issue #22).
+#
+# A pushed vX.Y.Z tag makes a draft release vX.Y.Z and attaches the
+# Kubuntu .deb and the Windows NSIS installer; Stan publishes it
+# (/ship's Publish, or on GitHub). Run by hand (workflow_dispatch),
+# it builds both and keeps them as workflow artifacts, with no
+# release. Tests run locally before the tag (just perf, just check),
+# not here.
+#
+# Third-party actions are pinned by commit; the tag is in the comment.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Version check and draft release
+    runs-on: ubuntu-22.04
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Versions agree with each other and the tag
+        run: |
+          pkg=$(jq -r .version package.json)
+          tauri=$(jq -r .version src-tauri/tauri.conf.json)
+          cargo=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          echo "package.json $pkg, tauri.conf.json $tauri, Cargo.toml $cargo"
+          if [ "$pkg" != "$tauri" ] || [ "$pkg" != "$cargo" ]; then
+            echo "::error::Version files disagree"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$pkg" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not v$pkg"
+            exit 1
+          fi
+
+      # One draft for both builds, made before they start, so the two
+      # jobs cannot each make their own.
+      - name: Draft release
+        id: release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            -f name="Kansha $GITHUB_REF_NAME" \
+            -f body="" \
+            -F draft=true \
+            --jq .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: deb
+          - os: windows-latest
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # ubuntu-22.04: older glibc than Kubuntu, so the .deb installs on
+      # current and older releases.
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev
+
+      # The vendored OpenSSL builds with the runner's Perl; NASM lets it
+      # build its assembly, as on the Windows machine.
+      - uses: ilammy/setup-nasm@72793074d3c8cdda771dba85f6deafe00623038b # v1.5.2
+        if: runner.os == 'Windows'
+
+      - name: Rust from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          args: --bundles ${{ matrix.bundles }}
+          uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
