@@ -3,14 +3,15 @@ resolver = "3"
 members = ["crates/kansha-core", "src-tauri"]
 
 [workspace.package]
-version = "0.13.0"
+version = "0.14.0"
 edition = "2024"
 rust-version = "1.93"
 
 [workspace.dependencies]
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 proptest = "1"
-rust_decimal = "1"
+# `maths`: fractional powers for loan rates (D-190, LOAN-020).
+rust_decimal = { version = "1", features = ["maths"] }
 # SQLCipher build with its own OpenSSL, so Kubuntu, Windows, and CI need no
 # system crypto library (D-20, D-110). Unkeyed databases behave as plain SQLite.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled-sqlcipher-vendored-openssl", "cache", "serialize"] }

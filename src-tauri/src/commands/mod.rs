@@ -9,6 +9,7 @@ pub mod insights;
 pub mod invest;
 pub mod ledger;
 pub mod lists;
+pub mod loan;
 pub mod pdf;
 pub mod reconcile;
 pub mod reports;
@@ -19,13 +20,37 @@ use kansha_core::Date;
 use kansha_core::local_config::WindowMode;
 use tauri::State;
 
-use crate::state::{AppState, CmdResult};
+use crate::state::{AppState, CmdResult, IpcError};
 
 /// The running application version, as declared in `tauri.conf.json`.
 #[tauri::command]
 #[specta::specta]
 pub fn app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+/// The User's Guide among the app's bundled resources (UI-048);
+/// `tauri.conf.json` copies it there from `src-tauri/help/`.
+pub const GUIDE_RESOURCE: &str = "help/kansha-guide.pdf";
+
+/// Help > User's Guide (UI-048): open the bundled PDF in the PDF viewer.
+#[tauri::command]
+#[specta::specta]
+pub fn help_open_guide(app: tauri::AppHandle) -> CmdResult<()> {
+    use tauri::Manager;
+    use tauri::path::BaseDirectory;
+    use tauri_plugin_opener::OpenerExt;
+
+    let path = app
+        .path()
+        .resolve(GUIDE_RESOURCE, BaseDirectory::Resource)
+        .map_err(|e| IpcError::internal(e.to_string()))?;
+    if !path.is_file() {
+        return Err(IpcError::internal("The User's Guide is not in this build."));
+    }
+    app.opener()
+        .open_path(path.display().to_string(), None::<&str>)
+        .map_err(|e| IpcError::internal(format!("No PDF viewer opened it: {e}")))
 }
 
 /// The newest database schema version this build understands; an open
@@ -51,4 +76,26 @@ pub fn window_mode(window: tauri::Window, state: State<'_, AppState>, mode: Wind
 #[specta::specta]
 pub fn today(state: State<'_, AppState>) -> CmdResult<Date> {
     Ok(state.today())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::GUIDE_RESOURCE;
+
+    /// UI-048: the guide is in the source tree and the bundle puts it
+    /// where `help_open_guide` looks.
+    #[test]
+    fn guide_is_bundled_where_the_command_looks() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(
+            dir.join(GUIDE_RESOURCE).is_file(),
+            "build the guide: just guide"
+        );
+        let conf: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("tauri.conf.json")).unwrap())
+                .unwrap();
+        assert_eq!(conf["bundle"]["resources"][GUIDE_RESOURCE], GUIDE_RESOURCE);
+    }
 }

@@ -265,6 +265,9 @@ pub fn merge(tx: &Tx<'_>, source: PayeeId, target: PayeeId) -> Result<Merged> {
                 schedules: conn.execute(
                     "UPDATE schedule SET payee_id = ?2 WHERE payee_id = ?1",
                     [source, target],
+                )? + conn.execute(
+                    "UPDATE loan SET lender_id = ?2 WHERE lender_id = ?1",
+                    [source, target],
                 )?,
                 ..Merged::default()
             })

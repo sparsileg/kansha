@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.94 (draft) |
+| **Document version** | 0.7.96 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-13 |
 | **Owner** | Stan |
@@ -185,7 +185,7 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 A loan is a Loan/Mortgage account (ACCT-020) with stored terms. The
 register holds the real balance; the terms say how each payment
 splits into principal and interest and drive the payment reminder
-(REC-200). Built after the prototype (0.7.93).
+(REC-200). Specified 0.7.93; built 0.7.96 (migration 0020).
 
 - **LOAN-010** [1.0][S] The loan screen holds:
   - **Name** (the account's name) and **Type**: Mortgage, Auto,
@@ -204,13 +204,14 @@ splits into principal and interest and drive the payment reminder
     insurance), each a category and an amount; extra principal paid
     with each payment. The total is shown: principal and interest
     plus Other plus extra principal.
-- **LOAN-015** [1.0][R] The screen also asks for the lender (the
-  reminder's payee), the account payments come from, and the
-  interest category (any expense category; none is built in).
-  Choosing Loan/Mortgage in New Account
-  opens the loan screen; a loan's register has a Loan details button
-  that opens it again. Twice per month asks for its two days, as
-  REC-020 does.
+- **LOAN-015** [1.0][S] The screen also asks for the lender (the
+  reminder's payee, chosen or typed), the account payments come
+  from (an open checking, savings, cash, money market, or credit
+  card account), and the interest category (any expense category;
+  none is built in). Saving a new Loan/Mortgage account in New
+  Account opens the loan screen; a loan's register has a Loan
+  details… button, also on its gear menu, that opens it again.
+  Twice per month asks for its two days, as REC-020 does.
 - **LOAN-020** [1.0][S] Rate per payment. With annual rate r,
   compounding m times a year (daily 365, monthly 12, semi-annually 2)
   and p payments a year (twice per year 2, quarterly 4, every other
@@ -223,20 +224,30 @@ splits into principal and interest and drive the payment reminder
   where B is the original balance and n the original length in
   payments. Stan may type the lender's figure instead; a typed
   payment is kept and marked as typed. A rate change (LOAN-050)
-  recomputes a computed payment from the balance and payments left.
+  recomputes a computed payment from the balance before the first
+  payment at the new rate (the register's, when that payment is
+  past) and the payments left then.
 - **LOAN-030** [1.0][S] Each payment's split is worked out from the
   loan account's register balance B on the day before the payment
   date, so extra, late, or missed payments show in the next split:
   - Interest, monthly or semi-annual compounding: B·i.
   - Interest, daily compounding: B·((1 + r/365)^d − 1), where d is
     the actual number of days since the previous payment (the first
-    payment: since the opening date). 365 also in leap years [R].
+    payment: since the opening date). 365 also in leap years.
   - Interest is rounded half-even to cents. Principal is the payment
     less interest; extra principal is added to principal.
   - The last payment is the balance plus its interest when that is
-    less than the payment; the schedule then ends.
-  - When interest exceeds the payment, principal is 0 and the loan
-    screen and the reminder warn (no negative amortization) [R].
+    no more than the payment plus extra principal. Payment number n
+    (the loan's length) always pays off what is left, so the
+    rounding of the payment is settled there, as published tables
+    do. The schedule then ends.
+  - When interest exceeds the payment, the payment is the interest
+    alone, principal is 0, and the loan screen warns (no negative
+    amortization).
+  - Payments are numbered from the first one due after the opening
+    date, counting back from the next due date by the payment
+    schedule. Days are counted between nominal due dates, before
+    any weekend shift.
 - **LOAN-040** [1.0][S] The current balance: when it differs from
   the register's balance, saving asks, then adds a transaction dated
   today to Opening Balance (the built-in equity category) for the
@@ -257,8 +268,16 @@ splits into principal and interest and drive the payment reminder
   it is shown or entered; the Calendar's projections (CAL-050)
   assume each earlier payment is made on time. Its amounts and lines
   are edited only on the loan screen; dates, skip, and enter work as
-  for any schedule [R].
-- **LOAN-070** [1.0][R] The loan screen shows the amortization table
+  for any schedule. Editing it from the Reminders list or a
+  calendar day opens the loan screen; deleting it is refused. It is
+  a fixed, Remind me schedule, shown 7 days before it is due. The
+  principal and extra principal are one line, "Principal" (or
+  "Principal and extra principal"); the interest line is left out
+  when it is 0.00. After each payment is entered, skipped, or given
+  back, "# left" is set from the balance, so an extra payment
+  shortens it; once the loan is paid off the reminder ends.
+- **LOAN-070** [1.0][S] The loan screen shows, on request, the
+  amortization table
   from the current balance on: payment number, date, payment,
   principal, interest, extra principal, balance; and the payoff date
   and total interest, with and without the extra principal.
@@ -266,13 +285,15 @@ splits into principal and interest and drive the payment reminder
   results checked against published amortization tables (monthly,
   biweekly, semi-annual compounding, daily compounding with actual
   days), to the cent (TEST).
-- **LOAN-090** [1.0][R] Storage (new migration): `loan` (account,
+- **LOAN-090** [1.0][S] Storage (migration 0020): `loan` (account,
   type, opening date, original balance, original length in months,
   compounding, payment frequency and its days, typed payment or
   none, extra principal, lender, paying account, interest category,
   schedule), `loan_rate` (loan, effective date, rate × 10^6), and
   `loan_other` (loan, category, amount). A closed loan account keeps
-  its terms.
+  its terms. The loan is keyed by its account; a NULL payment is
+  computed. Changes are audited under the entity `loan`. Merging
+  categories or payees carries the loan's along.
 
 ### 6. Categories, Payees, and Tags (CAT, PAY, TAG)
 
@@ -1864,6 +1885,13 @@ platform has one.
   what *kansha* means, the app version, the schema version (the newest
   this build opens), a short description, and the address for
   suggestions and bug reports, kansha@sparsile.org, as plain text.
+- **UI-048** [1.0][S] Help > User's Guide (0.7.95), above About
+  Kansha, opens the Kansha User's Guide, a PDF bundled with the app,
+  in the system's PDF viewer. If it cannot open, the status bar says
+  why (UI-045). The guide is written in Markdown chapters under
+  `guide/chapters/` and built with `just guide` (pandoc and typst)
+  into `src-tauri/help/kansha-guide.pdf`, which is committed so the
+  release build needs neither tool.
 - **UI-050** [1.0][R] Keyboard shortcuts (0.7.58), and no others for
   now: Ctrl+N, a new transaction in the register; Ctrl+Z, Edit > Undo
   outside a text field (UI-060); Ctrl+F, Edit > Find, which puts the
@@ -3062,6 +3090,8 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
   version files, then builds the `.deb` (Ubuntu 22.04) and the NSIS
   installer (Windows) into a draft release `vX.Y.Z` that Stan
   publishes. AppImage is not built. Installers are not signed.
+- Before a release the User's Guide (UI-048) is rebuilt, so its
+  cover shows the release's version, and the PDF committed.
 
 ---
 
@@ -3171,6 +3201,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.96 | 2026-10-13 | §5.4 Loans built (LOAN-010 … LOAN-090). LOAN-015, LOAN-060, LOAN-070, LOAN-090 settled from [R] to [S] as built. LOAN-025: a rate change works the payment out from the balance before the first payment at the new rate. LOAN-030: payment number n settles the payment's rounding, as published tables do; when interest exceeds the payment it is paid alone; payments are numbered back from the next due date; days count between nominal dates. LOAN-060: editing the reminder opens the loan screen, deleting it is refused; Remind me, 7 days ahead; "# left" follows the balance. **Schema change:** migration 0020 (`loan`, `loan_rate`, `loan_other`; audit entity `loan`). **API change:** new commands `loan_get`, `loan_preview`, `loan_save`; `ScheduleRow` gains `loan`. |
+| 0.7.95 | 2026-10-13 | UI-048: Help > User's Guide, above About Kansha, opens the bundled Kansha User's Guide (`src-tauri/help/kansha-guide.pdf`, a bundle resource) in the PDF viewer; the status bar says why if it cannot. The guide's Markdown chapters are in `guide/chapters/`, built by `just guide` (pandoc, typst; layout from the Astryx guide). §21 and the release checklist §5: rebuild the guide before a release. No schema change. **API change:** new command `help_open_guide`. |
 | 0.7.94 | 2026-10-13 | New §12.5 Budgets (BUD-010 … BUD-090), from Stan and Quicken 2013 (`devdocs/budget-plan.md`): several named budgets by year, one amount per category and month; Budget menu with Create Budget… (categories used in the last 12 months, last year's monthly average); gear with Select categories, Copy, Edit name, Delete, Create (Budget reports [Later]); expenses-only summary band; Graph View (Monthly, Quarterly, Yearly with ◀ ▶; Quarter and Year to date; Last 3 and 6 months) with bars against the period's budget; Annual View (Details, Budget, Balance, Actual; To Date and year columns; month and row copy); Everything Else row; Total row; prompt to create a missing year. RPT-300 keeps only the reports. Requirements only; not built. Schema change and API change to come with the build. |
 | 0.7.93 | 2026-10-13 | New §5.4 Loans (LOAN-010 … LOAN-090): loan terms on a Loan/Mortgage account (type, opening date, original balance, rate history, length, compounding daily/monthly/semi-annually, seven payment frequencies, current balance, payment, Other lines, extra principal); rate per payment (1 + r/m)^(m/p) − 1; payment computed or typed; each payment split from the register balance, daily compounding by actual days (actual/365); current balance set by an Opening Balance transaction dated today; a loan-owned reminder whose line amounts are computed per occurrence; amortization table. REC-200 moves from [Later] to [1.0]. ACCT-020 no longer says balance-tracking only. D-190 decided (`rust_decimal` `maths`). Requirements only; not built. Schema change and API change to come with the build. |
 | 0.7.92 | 2026-10-12 | §21: release installers are built on GitHub. New `.github/workflows/release.yml`: a pushed `vX.Y.Z` tag fails unless it matches the version in `package.json`, `tauri.conf.json`, and `Cargo.toml`, then makes a draft release `vX.Y.Z` and attaches the `.deb` (ubuntu-22.04) and the NSIS installer (windows-latest, NASM for the vendored OpenSSL); run by hand, it builds both as workflow artifacts with no release. No tests in the workflow. Actions pinned by commit. `tauri.conf.json` drops the AppImage target. Release checklist §5 and §7: tag, push, and Publish through `/ship`. `ci.yml` stays disabled. Issue #22. No schema change. No API change. |

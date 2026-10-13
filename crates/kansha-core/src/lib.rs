@@ -19,6 +19,7 @@ pub mod insights;
 pub mod integrity;
 pub mod invest;
 pub mod ledger;
+pub mod loan;
 pub mod local_config;
 pub mod money;
 pub mod newbook;

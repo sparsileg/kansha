@@ -113,7 +113,8 @@
       error = "This schedule no longer exists.";
       return;
     }
-    dialogState.editSchedule(v.occ.schedule, row.schedule.fields);
+    if (row.loan !== null) dialogState.loan = row.loan;
+    else dialogState.editSchedule(v.occ.schedule, row.schedule.fields);
     onclose();
   }
 

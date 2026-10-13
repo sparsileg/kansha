@@ -25,6 +25,9 @@
   <section class="account">
     <header>
       <h1>{account.name}{account.status === "closed" ? " (closed)" : ""}</h1>
+      {#if account.account_type === "loan"}
+        <button type="button" onclick={() => (dialogState.loan = account.id)}>Loan details…</button>
+      {/if}
       <span class="gear"><GearButton label="Account options" onclick={openMenu} /></span>
     </header>
     {#if menu}
@@ -32,7 +35,12 @@
         x={menu.x}
         y={menu.y}
         onclose={() => (menu = null)}
-        items={[{ label: "Edit account details…", action: () => dialogState.editAccount(account) }]}
+        items={[
+          { label: "Edit account details…", action: () => dialogState.editAccount(account) },
+          ...(account.account_type === "loan"
+            ? [{ label: "Loan details…", action: () => (dialogState.loan = account.id) }]
+            : []),
+        ]}
       />
     {/if}
     {#if account.investment}

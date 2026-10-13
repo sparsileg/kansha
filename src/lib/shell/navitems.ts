@@ -44,6 +44,7 @@ const NAV_LABEL: Record<string, string> = {
   "reports.tax_capital_gains": "Capital Gains (tax)",
   "reports.tax_schedule": "Tax Schedule",
   "reports.tax_summary": "Tax Summary",
+  "help.guide": "User's Guide",
   "help.about": "About",
 };
 

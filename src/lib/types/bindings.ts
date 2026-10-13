@@ -11,6 +11,8 @@ export const commands = {
 	 *  book is migrated up to it.
 	 */
 	schemaVersion: () => __TAURI_INVOKE<number>("schema_version"),
+	/**  Help > User's Guide (UI-048): open the bundled PDF in the PDF viewer. */
+	helpOpenGuide: () => typedError<null, IpcError>(__TAURI_INVOKE("help_open_guide")),
 	/**
 	 *  Today's date from the app clock (financial dates never come from the
 	 *  browser).
@@ -270,6 +272,31 @@ export const commands = {
 	 *  book that already has accounts.
 	 */
 	sampleDataLoad: (seed: number) => typedError<SampleSummary, IpcError>(__TAURI_INVOKE("sample_data_load", { seed })),
+	/**
+	 *  The loan on `account` and where it stands; `None` before its terms
+	 *  are saved.
+	 */
+	loanGet: (account: AccountId) => typedError<{
+	loan: Loan,
+	/**  What the register says is owed, all transactions counted. */
+	owed: string,
+	/**  The reminder's next due date; `None` when paid off. */
+	next_due: string | null,
+	view: LoanView,
+} | null, IpcError>(__TAURI_INVOKE("loan_get", { account })),
+	/**
+	 *  The loan screen's figures for terms not yet saved: payment, next
+	 *  split, and amortization table (LOAN-070).
+	 */
+	loanPreview: (save: LoanSave) => typedError<LoanView, IpcError>(__TAURI_INVOKE("loan_preview", { save })),
+	/**
+	 *  Save the loan's terms and its payment reminder (LOAN-040, LOAN-060).
+	 *  A current balance that differs from the register asks first
+	 *  (`ConfirmationRequired`); `confirmed` adds the Opening Balance
+	 *  transaction. `lender_name` works as `payee_name` in
+	 *  `schedule_create`.
+	 */
+	loanSave: (save: LoanSave, lenderName: string | null, confirmed: boolean) => typedError<LoanSaved, IpcError>(__TAURI_INVOKE("loan_save", { save, lenderName, confirmed })),
 	/**  The Scheduled Transactions list, next due first (REC-300). */
 	scheduleList: () => typedError<ScheduleRow[], IpcError>(__TAURI_INVOKE("schedule_list")),
 	scheduleGet: (id: ScheduleId) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_get", { id })),
@@ -765,7 +792,7 @@ export type AccountType = "checking" | "savings" | "credit_card" | "cash" | "mon
 "retirement_401k" | 
 /**  Donor advised fund; holds securities, or only cash. */
 "donor_advised_fund" | "other_asset" | "other_liability" | 
-/**  Loan or mortgage; balance tracking only in 1.0. */
+/**  Loan or mortgage; may hold loan terms (LOAN, §5.4). */
 "loan";
 
 /**  A split or return of capital on one lot (LOT-120, LOT-130). */
@@ -853,7 +880,7 @@ export type AttentionCheck = {
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card" | "pending_entry";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card" | "pending_entry" | "loan";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -1223,6 +1250,9 @@ export type ComparisonRow = {
 	/**  Only in one database, or a figure differs. */
 	differs: boolean,
 };
+
+/**  How often interest compounds (LOAN-020). */
+export type Compounding = "daily" | "monthly" | "semi_annually";
 
 /**
  *  The tax side of a Roth conversion (INV-070). The distribution is the
@@ -2058,6 +2088,135 @@ export type LineError = {
 	message: string,
 };
 
+/**  A stored loan. */
+export type Loan = {
+	fields: LoanFields,
+	/**  The payment reminder the loan owns (LOAN-060). */
+	schedule: ScheduleId | null,
+};
+
+/**  A loan and where it stands now. */
+export type LoanDetails = {
+	loan: Loan,
+	/**  What the register says is owed, all transactions counted. */
+	owed: string,
+	/**  The reminder's next due date; `None` when paid off. */
+	next_due: string | null,
+	view: LoanView,
+};
+
+/**  A loan's terms as stored (LOAN-010, LOAN-015, LOAN-090). */
+export type LoanFields = {
+	/**  The Loan/Mortgage account. */
+	account: AccountId,
+	loan_type: LoanType,
+	opening_date: string,
+	/**  Positive: what was borrowed. */
+	original_balance: string,
+	length_months: number,
+	compounding: Compounding,
+	frequency: PaymentFrequency,
+	/**  Twice per month: its two days, `day1 < day2`. */
+	day1: number | null,
+	day2: number | null,
+	/**  Sorted by date; the first takes effect on the opening date. */
+	rates: LoanRate[],
+	/**
+	 *  The lender's payment (principal and interest) as typed; `None`
+	 *  works it out from the terms (LOAN-025).
+	 */
+	payment: string | null,
+	/**  Paid toward principal with each payment. */
+	extra_principal: string,
+	others: LoanOther[],
+	/**  The reminder's payee. */
+	lender: PayeeId | null,
+	/**  The account payments come from. */
+	paying_account: AccountId,
+	/**  Where interest goes (an expense category). */
+	interest_category: CategoryId,
+};
+
+/**  A fee, escrow, or insurance amount paid with each payment. */
+export type LoanOther = {
+	category: CategoryId,
+	/**  Positive: what is paid. */
+	amount: string,
+};
+
+/**  One row of the amortization table (LOAN-070). */
+export type LoanPayment = {
+	number: number,
+	date: string,
+	/**  Principal and interest. */
+	payment: string,
+	principal: string,
+	interest: string,
+	extra: string,
+	/**  Owed after it. */
+	balance: string,
+	/**  Interest was more than the payment: no principal is paid. */
+	short: boolean,
+};
+
+/**  An interest rate and the date it takes effect (LOAN-050). */
+export type LoanRate = {
+	effective: string,
+	/**  Annual, in percent. */
+	rate: string,
+};
+
+/**  What the loan screen saves (LOAN-010, LOAN-040). */
+export type LoanSave = {
+	fields: LoanFields,
+	/**  The next payment's due date. */
+	next_due: string,
+	/**
+	 *  What is owed now, positive. When it differs from the register,
+	 *  saving adds the difference to Opening Balance, dated today.
+	 */
+	current_balance: string,
+};
+
+/**  What saving did. */
+export type LoanSaved = {
+	loan: Loan,
+	/**  The Opening Balance transaction added, if one was. */
+	adjustment: TxnId | null,
+};
+
+/**  What the loan is for (LOAN-010). */
+export type LoanType = "mortgage" | "auto" | "consumer" | "student" | "commercial" | "business" | "construction" | "home_equity";
+
+/**  Where the loan stands, for the loan screen (LOAN-010, LOAN-070). */
+export type LoanView = {
+	/**
+	 *  The payment, principal and interest, the terms work out
+	 *  (LOAN-025) at the rate in effect on the next due date.
+	 */
+	computed_payment: string,
+	/**  The payment in force: typed, or as computed. */
+	payment: string,
+	/**  The next payment's split. */
+	next: LoanPayment | null,
+	/**  The Other lines added up. */
+	others: string,
+	/**
+	 *  The next payment in all: principal and interest, Other, and extra
+	 *  principal.
+	 */
+	total: string,
+	/**  From the next payment on. */
+	table: LoanPayment[],
+	payoff: string | null,
+	total_interest: string,
+	/**  The same, without the extra principal. */
+	payoff_without_extra: string | null,
+	total_interest_without_extra: string,
+	/**  Some payment's interest is more than the payment. */
+	short: boolean,
+};
+
 /**  A lot as recorded at acquisition (LOT-010). */
 export type Lot = {
 	id: LotId,
@@ -2289,6 +2448,9 @@ export type PayeeFields = {
 
 /**  Row ID of a payee. */
 export type PayeeId = number;
+
+/**  How often payments are due (LOAN-010). */
+export type PaymentFrequency = "twice_per_year" | "quarterly" | "every_other_month" | "monthly" | "twice_per_month" | "every_other_week" | "weekly";
 
 /**  The review list with the names a fix may choose from. */
 export type PendingList = {
@@ -3034,6 +3196,11 @@ export type ScheduleRow = {
 	due_date: string | null,
 	/**  "# left" for an after-count schedule. */
 	left: number | null,
+	/**
+	 *  The loan account whose payment reminder this is: its amounts are
+	 *  changed on the loan screen (LOAN-060).
+	 */
+	loan: AccountId | null,
 };
 
 /**  Where a schedule stands. */

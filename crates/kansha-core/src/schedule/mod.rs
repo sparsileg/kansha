@@ -28,6 +28,7 @@ mod recurrence;
 mod service;
 
 pub use recurrence::{Dates, Frequency, Recurrence, WeekendRule, add_days};
+pub(crate) use service::update_owned;
 pub use service::{
     AutoEnterFailure, AutoEnterReport, EnterEdits, Entered, auto_enter_due, create, delete,
     dismiss_review, due_list, enter, from_entry, list_rows, occurrences_between, prefill_entry,
@@ -271,6 +272,9 @@ pub struct ScheduleRow {
     pub due_date: Option<Date>,
     /// "# left" for an after-count schedule.
     pub left: Option<i64>,
+    /// The loan account whose payment reminder this is: its amounts are
+    /// changed on the loan screen (LOAN-060).
+    pub loan: Option<AccountId>,
 }
 
 /// Projected balance at the end of a day (CAL-050).

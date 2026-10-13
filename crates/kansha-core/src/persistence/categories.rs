@@ -318,8 +318,16 @@ pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merg
     let moved = Merged {
         into: target.0,
         postings,
+        // A loan's interest and Other lines count as schedule lines:
+        // they become its reminder's (LOAN-060).
         schedule_lines: conn.execute(
             "UPDATE schedule_line SET category_id = ?2 WHERE category_id = ?1",
+            [source, target],
+        )? + conn.execute(
+            "UPDATE loan SET interest_category_id = ?2 WHERE interest_category_id = ?1",
+            [source, target],
+        )? + conn.execute(
+            "UPDATE loan_other SET category_id = ?2 WHERE category_id = ?1",
             [source, target],
         )?,
         payee_defaults: conn.execute(

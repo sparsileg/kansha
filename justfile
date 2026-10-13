@@ -75,6 +75,11 @@ clippy:
 typecheck:
     npm run check
 
+# Build the User's Guide PDF the app bundles (UI-048); needs pandoc and typst
+[unix]
+guide:
+    guide/build-guide.sh
+
 # Run the desktop app in dev mode (hot reload; regenerates TS bindings)
 dev:
     npm run tauri dev

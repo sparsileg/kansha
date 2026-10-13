@@ -21,6 +21,7 @@ mod integrity;
 mod invest;
 mod ipc_json;
 mod ledger;
+mod loans;
 mod migrations;
 mod new_book;
 mod perf;

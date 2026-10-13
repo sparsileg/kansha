@@ -34,7 +34,7 @@ text_enum! {
         DonorAdvisedFund = "donor_advised_fund",
         OtherAsset = "other_asset",
         OtherLiability = "other_liability",
-        /// Loan or mortgage; balance tracking only in 1.0.
+        /// Loan or mortgage; may hold loan terms (LOAN, §5.4).
         Loan = "loan",
     }
 }

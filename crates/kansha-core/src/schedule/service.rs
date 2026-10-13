@@ -2,8 +2,6 @@
 //! overrides, auto-entry, the due list, calendar occurrences, and the
 //! projected balance (REC-010 … REC-160, CAL-010 … CAL-050).
 
-use std::collections::HashSet;
-
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +19,9 @@ use crate::ledger::{self, Entry, EntryLine, Target, TxnId, TxnSource};
 use crate::money::{Money, mul_div};
 use crate::persistence::audit::{self, AuditAction, AuditEntity};
 use crate::persistence::schedules as repo;
-use crate::persistence::{Db, Origin, Tx, accounts, categories, ledger as ledger_repo, payees};
+use crate::persistence::{
+    Db, Origin, Tx, accounts, categories, ledger as ledger_repo, loans, payees,
+};
 
 /// Most occurrences generated per schedule in one query; a schedule this
 /// far behind (a daily one, years overdue) is cut off, not looped forever.
@@ -317,6 +317,28 @@ pub fn create(tx: &Tx<'_>, fields: &ScheduleFields) -> Result<Schedule> {
 /// they belonged to has changed. A schedule that has ended comes back to
 /// life if the new fields leave it an occurrence.
 pub fn update(tx: &Tx<'_>, id: ScheduleId, fields: &ScheduleFields) -> Result<Schedule> {
+    refuse_loan(tx.conn(), id)?;
+    update_owned(tx, id, fields)
+}
+
+/// A loan's payment reminder is changed from its loan (LOAN-060).
+fn refuse_loan(conn: &Connection, id: ScheduleId) -> Result<()> {
+    if loans::for_schedule(conn, id)?.is_some() {
+        return Err(Error::Invalid(
+            "this is a loan's payment reminder; change it with Loan details in the loan's \
+             register"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+/// [`update`] without the loan check: the loan's own save.
+pub(crate) fn update_owned(
+    tx: &Tx<'_>,
+    id: ScheduleId,
+    fields: &ScheduleFields,
+) -> Result<Schedule> {
     let before = repo::get(tx.conn(), id)?;
     if before.status == ScheduleStatus::Deleted {
         return Err(Error::Invalid("this schedule was deleted".into()));
@@ -391,6 +413,7 @@ pub(crate) fn txn_changed(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
 
 /// Delete a schedule (REC-100). Transactions it entered stay.
 pub fn delete(tx: &Tx<'_>, id: ScheduleId) -> Result<()> {
+    refuse_loan(tx.conn(), id)?;
     let s = repo::get(tx.conn(), id)?;
     if s.status == ScheduleStatus::Deleted {
         return Err(Error::Invalid("this schedule was already deleted".into()));
@@ -486,16 +509,36 @@ fn require_next(s: &Schedule, due: Date) -> Result<()> {
     Ok(())
 }
 
+/// Lines added up: an occurrence's amount.
+fn sum_lines(lines: &[ScheduleLine]) -> Result<Money> {
+    lines.iter().try_fold(Money::ZERO, |acc, l| {
+        acc.checked_add(l.amount)
+            .ok_or(Error::Overflow("schedule amount"))
+    })
+}
+
+/// The lines the next occurrence enters with: a loan's split worked out
+/// for it (LOAN-030), or the schedule's own.
+fn next_lines(conn: &Connection, s: &Schedule, due: Date) -> Result<Vec<ScheduleLine>> {
+    match crate::loan::occurrence_lines(conn, s, &[due])? {
+        None => Ok(s.fields.lines.clone()),
+        Some(mut each) => each
+            .pop()
+            .ok_or_else(|| Error::Invalid("this loan is paid off".into())),
+    }
+}
+
 /// The entry an occurrence becomes.
 fn build_entry(
     s: &Schedule,
+    lines: &[ScheduleLine],
     due: Date,
     row: Option<&Occurrence>,
     edits: &EnterEdits,
     confirmed: bool,
 ) -> Result<Entry> {
     let f = &s.fields;
-    let template = f.amount()?;
+    let template = sum_lines(lines)?;
     let explicit = edits.amount.or(row.and_then(|o| o.override_amount));
     if f.amount_type == AmountType::Estimated && explicit.is_none() && !confirmed {
         return Err(Error::ConfirmationRequired(
@@ -505,7 +548,7 @@ fn build_entry(
     }
     check_direction(s, explicit)?;
     let amount = explicit.unwrap_or(template);
-    if amount != template && f.lines.len() != 1 {
+    if amount != template && lines.len() != 1 {
         return Err(Error::Invalid(
             "the amount of a split cannot be changed here; enter it, then edit the split".into(),
         ));
@@ -515,11 +558,11 @@ fn build_entry(
         .or(row.and_then(|o| o.override_date))
         .unwrap_or_else(|| f.recurrence.due_date(due));
 
-    let single = f.lines.len() == 1;
+    let single = lines.len() == 1;
     let mut entry = Entry::new(f.account, date, amount);
     entry.payee = f.payee;
     entry.memo = f.memo.clone();
-    for l in &f.lines {
+    for l in lines {
         let tags: Vec<_> = l.tag.into_iter().collect();
         let mut line = EntryLine::new(l.target, if single { amount } else { l.amount });
         line.memo = l.memo.clone();
@@ -582,7 +625,7 @@ pub fn enter(
                     .into(),
             ));
         }
-        let entry = build_entry(&s, due, row.as_ref(), edits, confirmed)?;
+        let entry = build_entry(&s, &s.fields.lines, due, row.as_ref(), edits, confirmed)?;
         (enter_cash(tx, id, &entry, &leg)?, entry.date)
     } else {
         let entry = match &edits.entry {
@@ -592,7 +635,10 @@ pub fn enter(
                 ));
             }
             Some(e) => e.clone(),
-            None => build_entry(&s, due, row.as_ref(), edits, confirmed)?,
+            None => {
+                let lines = next_lines(tx.conn(), &s, due)?;
+                build_entry(&s, &lines, due, row.as_ref(), edits, confirmed)?
+            }
         };
         let txn = ledger::create_with_source(
             tx,
@@ -616,6 +662,7 @@ pub fn enter(
     )?;
     advance(tx, &s, due)?;
     refresh_average(tx, id)?;
+    crate::loan::refresh(tx, id)?;
     Ok(Entered {
         schedule: id,
         nominal: due,
@@ -641,6 +688,7 @@ pub(crate) fn release_txn(tx: &Tx<'_>, txn: TxnId) -> Result<()> {
     let schedule = occ.schedule;
     release(tx, occ)?;
     refresh_average(tx, schedule)?;
+    crate::loan::refresh(tx, schedule)?;
     Ok(())
 }
 
@@ -698,7 +746,8 @@ pub fn prefill_entry(conn: &Connection, id: ScheduleId, due: Date) -> Result<Ent
     let s = repo::get(conn, id)?;
     require_next(&s, due)?;
     let row = repo::occurrence(conn, id, due)?;
-    build_entry(&s, due, row.as_ref(), &EnterEdits::default(), true)
+    let lines = next_lines(conn, &s, due)?;
+    build_entry(&s, &lines, due, row.as_ref(), &EnterEdits::default(), true)
 }
 
 /// Skip an occurrence: no transaction, and "# left" still counts it
@@ -720,6 +769,7 @@ pub fn skip(tx: &Tx<'_>, id: ScheduleId, due: Date) -> Result<()> {
         },
     )?;
     advance(tx, &s, due)?;
+    crate::loan::refresh(tx, id)?;
     Ok(())
 }
 
@@ -905,9 +955,20 @@ pub fn list_rows(conn: &Connection) -> Result<Vec<ScheduleRow>> {
     let mut rows = Vec::new();
     for s in repo::list(conn)? {
         let due_date = s.next_due_date();
+        let loan = loans::for_schedule(conn, s.id)?;
+        let amount = match (&loan, s.next_due) {
+            (Some(_), Some(next)) if s.status == ScheduleStatus::Active => {
+                match next_lines(conn, &s, next) {
+                    Ok(lines) => sum_lines(&lines)?,
+                    Err(_) => s.fields.amount()?,
+                }
+            }
+            _ => s.fields.amount()?,
+        };
         rows.push(ScheduleRow {
             how_often: s.fields.recurrence.describe(),
-            amount: s.fields.amount()?,
+            amount,
+            loan: loan.map(|l| l.fields.account),
             due_date,
             left: match s.fields.end {
                 End::AfterCount { count } => Some(count),
@@ -922,6 +983,7 @@ pub fn list_rows(conn: &Connection) -> Result<Vec<ScheduleRow>> {
 
 fn pending_view(
     s: &Schedule,
+    lines: &[ScheduleLine],
     nominal: Date,
     row: Option<&Occurrence>,
     today: Date,
@@ -931,7 +993,7 @@ fn pending_view(
         .unwrap_or_else(|| s.fields.recurrence.due_date(nominal));
     let amount = match row.and_then(|o| o.override_amount) {
         Some(a) => a,
-        None => s.fields.amount()?,
+        None => sum_lines(lines)?,
     };
     Ok(OccurrenceView {
         schedule: s.id,
@@ -1000,36 +1062,52 @@ fn pending_until(
     to: Date,
     today: Date,
 ) -> Result<Vec<OccurrenceView>> {
+    Ok(pending_lines_until(conn, s, from, to, today)?
+        .into_iter()
+        .map(|(v, _)| v)
+        .collect())
+}
+
+/// [`pending_until`], each occurrence with its lines: a loan's split
+/// worked out for each (LOAN-060), or the schedule's own. A loan paid
+/// off before an occurrence leaves it out.
+fn pending_lines_until(
+    conn: &Connection,
+    s: &Schedule,
+    from: Option<Date>,
+    to: Date,
+    today: Date,
+) -> Result<Vec<(OccurrenceView, Vec<ScheduleLine>)>> {
     if s.status != ScheduleStatus::Active {
         return Ok(Vec::new());
     }
     let rows = repo::pending_occurrences(conn, s.id)?;
     let in_range = |d: Date| d <= to && from.is_none_or(|f| d >= f);
-    let mut out = Vec::new();
-    let mut seen = HashSet::new();
-    for nominal in upcoming(s).take(GENERATION_CAP) {
-        // Weekend shifts keep dates in order, so the first base date past
-        // `to` ends the walk.
-        if s.fields.recurrence.due_date(nominal) > to {
-            break;
-        }
-        let row = rows.iter().find(|o| o.due_date == nominal);
-        let view = pending_view(s, nominal, row, today)?;
-        seen.insert(nominal);
-        if in_range(view.date) {
-            out.push(view);
-        }
-    }
     // A one-time date can pull a later occurrence into range.
-    for row in &rows {
-        if !seen.contains(&row.due_date) {
-            let view = pending_view(s, row.due_date, Some(row), today)?;
-            if in_range(view.date) && is_upcoming(s, row.due_date) {
-                out.push(view);
-            }
+    let last_row = rows.iter().map(|o| o.due_date).max();
+    // Weekend shifts keep dates in order, so the first base date past
+    // `to` (and past any one-time row) ends the walk.
+    let nominals: Vec<Date> = upcoming(s)
+        .take(GENERATION_CAP)
+        .take_while(|n| s.fields.recurrence.due_date(*n) <= to || last_row.is_some_and(|l| *n <= l))
+        .collect();
+    let loan_lines = crate::loan::occurrence_lines(conn, s, &nominals)?;
+    let mut out = Vec::new();
+    for (k, nominal) in nominals.iter().enumerate() {
+        let lines = match &loan_lines {
+            Some(each) => match each.get(k) {
+                Some(l) => l.as_slice(),
+                None => break,
+            },
+            None => s.fields.lines.as_slice(),
+        };
+        let row = rows.iter().find(|o| o.due_date == *nominal);
+        let view = pending_view(s, lines, *nominal, row, today)?;
+        if in_range(view.date) {
+            out.push((view, lines.to_vec()));
         }
     }
-    out.sort_by_key(|v| (v.date, v.nominal, v.schedule));
+    out.sort_by_key(|(v, _)| (v.date, v.nominal, v.schedule));
     Ok(out)
 }
 
@@ -1106,14 +1184,14 @@ pub fn scheduled_by_category(
         if !accounts.contains(&s.fields.account) {
             continue;
         }
-        for v in pending_until(conn, &s, Some(from), to, today)? {
-            if let [line] = s.fields.lines.as_slice() {
+        for (v, lines) in pending_lines_until(conn, &s, Some(from), to, today)? {
+            if let [line] = lines.as_slice() {
                 if let Target::Category(c) = line.target {
                     out.push((c, v.amount));
                 }
                 continue;
             }
-            for l in &s.fields.lines {
+            for l in &lines {
                 if let Target::Category(c) = l.target {
                     out.push((c, l.amount));
                 }
@@ -1188,16 +1266,15 @@ pub fn projected_balances(
         if !involves(&s, &[account]) {
             continue;
         }
-        for v in pending_until(conn, &s, None, to, today)? {
+        for (v, lines) in pending_lines_until(conn, &s, None, to, today)? {
             let delta = if s.fields.account == account {
                 v.amount
-            } else if s.fields.lines.len() == 1 {
+            } else if lines.len() == 1 {
                 v.amount
                     .checked_neg()
                     .ok_or(Error::Overflow("projected balance"))?
             } else {
-                s.fields
-                    .lines
+                lines
                     .iter()
                     .filter(|l| l.target == Target::Account(account))
                     .try_fold(Money::ZERO, |acc, l| {

@@ -7,6 +7,7 @@
   import Account from "./views/Account.svelte";
   import Accounts from "./views/Accounts.svelte";
   import AccountModal from "./lib/components/AccountModal.svelte";
+  import LoanModal from "./lib/components/LoanModal.svelte";
   import ConfirmDialog from "./lib/components/ConfirmDialog.svelte";
   import DueDialog from "./lib/components/DueDialog.svelte";
   import ReviewEntries from "./lib/components/entries/ReviewEntries.svelte";
@@ -187,6 +188,7 @@
   {#if dialogState.qifImport}<ImportModal onclose={() => (dialogState.qifImport = false)} />{/if}
   {#if dialogState.navbar}<NavBarModal />{/if}
   {#if dialogState.due}<DueDialog />{/if}
+  {#if dialogState.loan !== undefined}{#key dialogState.loan}<LoanModal account={dialogState.loan} />{/key}{/if}
   {#if dialogState.reviewEntries}<ReviewEntries />{/if}
   {#if dialogState.schedule !== undefined}
     {#key dialogState.schedule.id ?? `new-${dialogState.schedule.start}`}

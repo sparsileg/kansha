@@ -32,6 +32,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::app_version,
             commands::schema_version,
+            commands::help_open_guide,
             commands::today,
             commands::window_mode,
             commands::book::book_status,
@@ -107,6 +108,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ledger::audit_history,
             commands::ledger::integrity_check,
             commands::sample::sample_data_load,
+            commands::loan::loan_get,
+            commands::loan::loan_preview,
+            commands::loan::loan_save,
             commands::schedule::schedule_list,
             commands::schedule::schedule_get,
             commands::schedule::schedule_create,

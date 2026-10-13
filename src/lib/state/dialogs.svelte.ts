@@ -1,6 +1,6 @@
 // Which modal dialogs are open. Rendered once in App.svelte.
 
-import type { Account, IntegrityReport, ScheduleFields, ScheduleId } from "../types/bindings";
+import type { Account, AccountId, IntegrityReport, ScheduleFields, ScheduleId } from "../types/bindings";
 
 class DialogState {
   /** `undefined` closed; `null` new account; an account to edit. */
@@ -41,6 +41,9 @@ class DialogState {
   /** Schedule form: `id` set when editing; `fields` seeds a new one
    * ("Schedule this", a calendar day). `undefined` closed. */
   schedule = $state<{ id: ScheduleId | null; fields: ScheduleFields | null; start: string | null } | undefined>(undefined);
+
+  /** The loan screen for a Loan/Mortgage account (LOAN-010). */
+  loan = $state<AccountId | undefined>(undefined);
 
   newSchedule(start: string | null = null, fields: ScheduleFields | null = null) {
     this.schedule = { id: null, fields, start };

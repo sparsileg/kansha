@@ -11,6 +11,7 @@ vi.mock("../api", async (orig) => {
       undoStatus: vi.fn(),
       undoApply: vi.fn(),
       pricesDownload: vi.fn(),
+      helpOpenGuide: vi.fn(),
       scheduleList: () => ok([]),
       scheduleDueList: () => ok([]),
       scheduleReviewList: () => ok([]),
@@ -23,7 +24,7 @@ vi.mock("../api", async (orig) => {
 import { commands } from "../api";
 import { confirmState } from "../state/confirm.svelte";
 import { statusState } from "../state/status.svelte";
-import { downloadPrices, isCurrent, runAction, undoLast } from "./actions";
+import { downloadPrices, isCurrent, openGuide, runAction, undoLast } from "./actions";
 import { windowState } from "../state/windows.svelte";
 import { reportState } from "../state/reports.svelte";
 import { viewState } from "../state/view.svelte";
@@ -109,5 +110,21 @@ describe("Reports > Saved Reports (RPT-020)", () => {
     runAction("saved:4");
     expect(open).toHaveBeenCalledWith(r);
     open.mockRestore();
+  });
+});
+
+describe("Help > User's Guide (UI-048)", () => {
+  it("opens the guide", async () => {
+    c.helpOpenGuide.mockImplementation(() => ok(null));
+    await openGuide();
+    expect(c.helpOpenGuide).toHaveBeenCalled();
+    expect(statusState.message).toBeNull();
+  });
+
+  it("says why the guide did not open", async () => {
+    c.helpOpenGuide.mockImplementation(() => fail("internal", "The User's Guide is not in this build.") as never);
+    await openGuide();
+    expect(statusState.message?.text).toBe("The User's Guide did not open: The User's Guide is not in this build.");
+    expect(statusState.message?.kind).toBe("alert");
   });
 });

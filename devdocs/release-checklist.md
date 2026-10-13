@@ -151,7 +151,15 @@ refuses that book (spec §21). There is no way back except a backup.
 
 ## 5. Build
 
-1. [ ] Build the installers:
+1. [ ] Rebuild the User's Guide, so its cover shows X.Y.Z, and
+   commit `src-tauri/help/kansha-guide.pdf` (needs pandoc and
+   typst, so on Kubuntu):
+
+   ```sh
+   just guide
+   ```
+
+2. [ ] Build the installers:
 
    ```sh
    just build
@@ -162,7 +170,8 @@ refuses that book (spec §21). There is no way back except a backup.
    release on the book; the published installers come from GitHub
    (§7).
 
-2. [ ] Install it. Help > About Kansha shows X.Y.Z.
+3. [ ] Install it. Help > About Kansha shows X.Y.Z; Help > User's
+   Guide opens the guide.
 
 ## 6. Smoke test on the book
 

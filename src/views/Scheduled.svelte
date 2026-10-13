@@ -7,6 +7,11 @@
   import { scheduleState } from "../lib/state/schedule.svelte";
   import type { ScheduleRow } from "../lib/types/bindings";
 
+  /** A loan's reminder opens its loan screen (LOAN-060). */
+  const edit = (r: ScheduleRow) => {
+    if (r.loan !== null) dialogState.loan = r.loan;
+    else dialogState.editSchedule(r.schedule.id, r.schedule.fields);
+  };
   const modeLabel = (r: ScheduleRow) =>
     r.schedule.fields.mode === "auto" ? "Auto" : "Remind";
   /** The transaction type, named for the account (REC-300). */
@@ -43,8 +48,8 @@
               class:alt={i % 2 === 1}
               class:dim={r.schedule.status !== "active"}
               tabindex="0"
-              onclick={() => dialogState.editSchedule(r.schedule.id, f)}
-              onkeydown={(e) => e.key === "Enter" && dialogState.editSchedule(r.schedule.id, f)}
+              onclick={() => edit(r)}
+              onkeydown={(e) => e.key === "Enter" && edit(r)}
             >
               <td>{r.due_date ? displayDate(r.due_date) : "Ended"}</td>
               <td>{f.payee === null ? "" : (listsState.payee(f.payee)?.name ?? "")}</td>

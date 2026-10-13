@@ -71,6 +71,9 @@ export function runAction(id: string): void {
       case "file.exit":
         void exitApp();
         break;
+      case "help.guide":
+        void openGuide();
+        break;
       case "help.about":
         dialogState.about = true;
         break;
@@ -161,6 +164,15 @@ export async function exportNames(): Promise<void> {
     if (path !== null) statusState.show(`Saved the names to ${path}.`);
   } catch (e) {
     statusState.show(`The names were not saved: ${e instanceof Error ? e.message : String(e)}`, "alert");
+  }
+}
+
+/** Help > User's Guide (UI-048): the bundled PDF in the PDF viewer. */
+export async function openGuide(): Promise<void> {
+  try {
+    await call(commands.helpOpenGuide());
+  } catch (e) {
+    statusState.show(`The User's Guide did not open: ${e instanceof Error ? e.message : String(e)}`, "alert");
   }
 }
 

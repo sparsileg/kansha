@@ -33,6 +33,7 @@ describe("menu definitions", () => {
       "Income/Expense by Payee",
     ]);
     expect(sub("Tax")).toEqual(["Capital Gains", "Tax Schedule", "Tax Summary"]);
+    expect(MENUS[4].items.map((i) => i.label)).toEqual(["User's Guide", "About Kansha"]);
   });
 
   it("Saved Reports lists each folder's reports by name, then Manage", () => {

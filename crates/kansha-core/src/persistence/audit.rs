@@ -32,6 +32,7 @@ text_enum! {
         Insight = "insight",
         SpendingCard = "spending_card",
         PendingEntry = "pending_entry",
+        Loan = "loan",
     }
 }
 

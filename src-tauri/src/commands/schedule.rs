@@ -28,7 +28,7 @@ pub fn schedule_get(state: State<'_, AppState>, id: ScheduleId) -> CmdResult<Sch
 /// `payee_name`, when given, is looked up (or created) in the same
 /// transaction and replaces `fields.payee`; an empty name clears it, as in
 /// `entry_create`.
-fn resolve_payee(
+pub(crate) fn resolve_payee(
     tx: &Tx<'_>,
     payee: &mut Option<kansha_core::categories::PayeeId>,
     name: Option<&str>,

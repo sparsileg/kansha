@@ -36,7 +36,7 @@
     ["donor_advised_fund", "Donor Advised Fund (DAF)"],
     ["other_asset", "Other asset"],
     ["other_liability", "Other liability"],
-    ["loan", "Loan"],
+    ["loan", "Loan/Mortgage"],
   ];
   const TAX: [TaxTreatment, string][] = [
     ["taxable", "Taxable"],
@@ -123,6 +123,8 @@
       if (isNew) {
         viewState.navigate("account", { account: saved.id });
         await registerState.open(saved.id);
+        // A new loan goes on to its terms (LOAN-015).
+        if (saved.account_type === "loan") dialogState.loan = saved.id;
       } else if (registerState.accountId === saved.id) {
         await registerState.refresh();
       }
