@@ -101,9 +101,10 @@ pub fn account_reopen(state: State<'_, AppState>, id: AccountId) -> CmdResult<Ac
     state.write(|tx| accounts::reopen(tx, id))
 }
 
-/// Only an account with no transactions can be deleted (ACCT-220).
+/// Only an account with no transactions can be deleted (ACCT-220); a
+/// loan's terms and reminder go with it (LOAN-090).
 #[tauri::command]
 #[specta::specta]
 pub fn account_delete(state: State<'_, AppState>, id: AccountId) -> CmdResult<()> {
-    state.write(|tx| accounts::delete(tx, id))
+    state.write(|tx| kansha_core::accounts::delete(tx, id))
 }

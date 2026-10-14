@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSave, draftFromDetails, newLoanDraft, rateChanged } from "./form";
+import { buildSave, buildTerms, draftFromDetails, newLoanDraft, rateChanged } from "./form";
 import type { LoanDetails } from "../types/bindings";
 
 const TODAY = "2026-01-20";
@@ -111,5 +111,31 @@ describe("buildSave", () => {
       { effective: "2026-03-01", rate: "7" },
     ]);
     expect(r.ok && r.lenderName).toBe("Big Bank");
+  });
+});
+
+describe("buildTerms", () => {
+  it("needs only balance, rate, and length; not the dates or accounts", () => {
+    const d = newLoanDraft(7);
+    d.original = "30,000";
+    d.rate = "5";
+    d.length = "60";
+    d.lengthUnit = "months";
+    expect(buildTerms(d)).toEqual({
+      original: "30000.00",
+      months: 60,
+      rate: "5",
+      compounding: "monthly",
+      frequency: "monthly",
+    });
+  });
+
+  it("is null until the terms are typed", () => {
+    const d = newLoanDraft(7);
+    d.original = "30000";
+    expect(buildTerms(d)).toBeNull();
+    d.rate = "5";
+    d.length = "";
+    expect(buildTerms(d)).toBeNull();
   });
 });

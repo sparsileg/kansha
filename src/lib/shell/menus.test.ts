@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MENUS, savedReportItems } from "./menus";
+import { budgetItems, MENUS, savedReportItems } from "./menus";
 
 type Item = (typeof MENUS)[number]["items"][number];
 const all = (xs: Item[]): Item[] => xs.flatMap((i) => [i, ...all(i.items ?? [])]);
@@ -7,7 +7,7 @@ const items = MENUS.flatMap((m) => all(m.items));
 
 describe("menu definitions", () => {
   it("has the agreed menus in order", () => {
-    expect(MENUS.map((m) => m.label)).toEqual(["File", "Edit", "Tools", "Reports", "Help"]);
+    expect(MENUS.map((m) => m.label)).toEqual(["File", "Edit", "Tools", "Reports", "Budget", "Help"]);
     expect(MENUS[0].items.map((i) => i.label)).toEqual([
       "New…", "Open…", "Recent", "Rename Book…", "Back Up Now", "Restore…", "Import…", "Import Entries…", "Review Entries…", "Export Names for Phones…", "Export…", "Integrity Check", "Exit",
     ]);
@@ -33,7 +33,8 @@ describe("menu definitions", () => {
       "Income/Expense by Payee",
     ]);
     expect(sub("Tax")).toEqual(["Capital Gains", "Tax Schedule", "Tax Summary"]);
-    expect(MENUS[4].items.map((i) => i.label)).toEqual(["User's Guide", "About Kansha"]);
+    expect(MENUS[4].items.map((i) => i.label)).toEqual(["Create Budget…"]);
+    expect(MENUS[5].items.map((i) => i.label)).toEqual(["User's Guide", "About Kansha"]);
   });
 
   it("Saved Reports lists each folder's reports by name, then Manage", () => {
@@ -73,5 +74,22 @@ describe("menu definitions", () => {
     for (const id of ["file.integrity", "file.exit", "edit.settings", "tools.accounts", "tools.calendar", "tools.reminders", "tools.investments", "tools.payees", "tools.categories", "tools.tags", "tools.securities", "tools.import_prices", "tools.download_prices", "edit.undo", "edit.find", "edit.find_replace", "reports.saved", "reports.net_worth", "reports.tax_summary"]) {
       expect(on(id), id).toBeUndefined();
     }
+  });
+});
+
+describe("budget menu", () => {
+  it("lists Create Budget…, then the budgets by name with a line above", () => {
+    const create = { id: "budget.create", label: "Create Budget…" };
+    expect(budgetItems(create, [])).toEqual([create]);
+    expect(
+      budgetItems(create, [
+        { id: 2, name: "Household" },
+        { id: 5, name: "Lean" },
+      ]),
+    ).toEqual([
+      create,
+      { id: "budget:2", label: "Household", divider: true },
+      { id: "budget:5", label: "Lean", divider: false },
+    ]);
   });
 });

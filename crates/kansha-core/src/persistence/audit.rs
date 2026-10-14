@@ -33,6 +33,7 @@ text_enum! {
         SpendingCard = "spending_card",
         PendingEntry = "pending_entry",
         Loan = "loan",
+        Budget = "budget",
     }
 }
 

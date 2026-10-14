@@ -8,6 +8,7 @@
 
 mod attention;
 mod backup;
+mod budgets;
 mod compare;
 mod copy_carry;
 mod encryption;

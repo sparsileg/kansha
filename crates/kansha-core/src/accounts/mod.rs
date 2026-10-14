@@ -1,7 +1,8 @@
 //! Accounts: types, attributes, and lifecycle (ACCT-010 … ACCT-240).
 //!
 //! Domain types. Storage is `persistence::accounts`; closing, which needs
-//! the ledger (ACCT-210), is `ledger::close_account`.
+//! the ledger (ACCT-210), is `ledger::close_account`; deleting is
+//! [`delete`].
 
 use serde::{Deserialize, Serialize};
 
@@ -289,7 +290,18 @@ pub struct Account {
     pub created_at: Timestamp,
 }
 
-/// Account number masked to its last four characters (ACCT-150).
+/// Delete an account (ACCT-220): refused while it holds transactions or
+/// lots. A loan's terms and payment reminder go with it (LOAN-090).
+pub fn delete(tx: &crate::persistence::Tx<'_>, id: AccountId) -> crate::error::Result<()> {
+    if crate::persistence::newbook::has_history(tx, id)? {
+        return Err(crate::error::Error::Invalid(
+            "this account has transactions: delete them first, or close the account".into(),
+        ));
+    }
+    crate::loan::remove(tx, id)?;
+    crate::persistence::accounts::delete(tx, id)
+}
+
 /// Fields for a new account: the type's defaults, and for an investment
 /// account the book's default lot method (SET-040).
 pub fn defaults(
@@ -304,6 +316,7 @@ pub fn defaults(
     Ok(f)
 }
 
+/// Account number masked to its last four characters (ACCT-150).
 pub fn masked_account_number(number: &str) -> String {
     let chars: Vec<char> = number.chars().collect();
     if chars.len() <= 4 {

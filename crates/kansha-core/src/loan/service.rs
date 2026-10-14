@@ -6,13 +6,13 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::math::{self, Projection, Step};
-use super::{Loan, LoanFields, PaymentFrequency};
+use super::{Compounding, Loan, LoanFields, PaymentFrequency};
 use crate::accounts::{AccountStatus, AccountType};
 use crate::categories::{CategoryKind, SystemCategory};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::ledger::{self, Entry, EntryLine, Target};
-use crate::money::Money;
+use crate::money::{Money, Rate};
 use crate::persistence::schedules as schedule_repo;
 use crate::persistence::{Tx, accounts, categories, ledger as ledger_repo, loans as repo, payees};
 use crate::schedule::{
@@ -200,7 +200,7 @@ fn step_back(r: &Recurrence, date: Date) -> Result<Date> {
 fn number_of(f: &LoanFields, r: &Recurrence, date: Date) -> Result<(i64, Date)> {
     if date <= f.opening_date {
         return Err(Error::Invalid(
-            "the next payment is due after the opening date".into(),
+            "the next payment must be due after the opening date".into(),
         ));
     }
     let previous = step_back(r, date)?.max(f.opening_date);
@@ -497,6 +497,49 @@ pub fn preview(conn: &Connection, save: &LoanSave) -> Result<LoanView> {
     view(conn, &f, save.next_due, save.current_balance)
 }
 
+/// The payment worked out from the terms alone (LOAN-025), so the
+/// loan screen shows it before the rest is filled in.
+pub fn payment_for(
+    original: Money,
+    length_months: i64,
+    rate: Rate,
+    compounding: Compounding,
+    frequency: PaymentFrequency,
+) -> Result<Money> {
+    let bad = |m: &str| Err(Error::Invalid(m.to_string()));
+    if !original.cents().is_positive() {
+        return bad("enter the original balance");
+    }
+    if !(1..=MAX_MONTHS).contains(&length_months) {
+        return bad("the loan's length must be between 1 month and 50 years");
+    }
+    let n = math::payments_in(length_months, frequency)?;
+    if n < 1 {
+        return bad("the loan is too short for one payment");
+    }
+    if rate.is_negative() || rate.raw() > 100_000_000 {
+        return bad("an interest rate must be between 0 and 100 percent");
+    }
+    math::level_payment(
+        original,
+        math::rate_per_payment(rate, compounding, frequency)?,
+        n,
+    )
+}
+
+/// Remove the loan's terms and its payment reminder with its account
+/// (LOAN-090); nothing to do for an account without terms.
+pub(crate) fn remove(tx: &Tx<'_>, account: crate::accounts::AccountId) -> Result<()> {
+    let Some(loan) = repo::get(tx.conn(), account)? else {
+        return Ok(());
+    };
+    repo::delete(tx, account)?;
+    if let Some(id) = loan.schedule {
+        schedule_repo::purge(tx, id)?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Save
 // ---------------------------------------------------------------------------
@@ -569,7 +612,7 @@ fn check_terms(f: &LoanFields, next_due: Date, current: Money) -> Result<()> {
         _ => {}
     }
     if next_due <= f.opening_date {
-        return bad("the next payment is due after the opening date");
+        return bad("the next payment must be due after the opening date");
     }
     Ok(())
 }

@@ -145,7 +145,10 @@ export const commands = {
 	 */
 	accountClose: (id: AccountId, date: string, confirmed: boolean) => typedError<Account, IpcError>(__TAURI_INVOKE("account_close", { id, date, confirmed })),
 	accountReopen: (id: AccountId) => typedError<Account, IpcError>(__TAURI_INVOKE("account_reopen", { id })),
-	/**  Only an account with no transactions can be deleted (ACCT-220). */
+	/**
+	 *  Only an account with no transactions can be deleted (ACCT-220); a
+	 *  loan's terms and reminder go with it (LOAN-090).
+	 */
 	accountDelete: (id: AccountId) => typedError<null, IpcError>(__TAURI_INVOKE("account_delete", { id })),
 	/**  All categories, parents before children. */
 	categoryList: () => typedError<Category[], IpcError>(__TAURI_INVOKE("category_list")),
@@ -272,6 +275,39 @@ export const commands = {
 	 *  book that already has accounts.
 	 */
 	sampleDataLoad: (seed: number) => typedError<SampleSummary, IpcError>(__TAURI_INVOKE("sample_data_load", { seed })),
+	/**  Every budget, by name (the Budget menu, BUD-020). */
+	budgetList: () => typedError<Budget[], IpcError>(__TAURI_INVOKE("budget_list")),
+	/**  Create Budget… (BUD-020): this year, from last year's actuals. */
+	budgetCreate: (name: string) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_create", { name })),
+	/**  Copy this budget… (BUD-040). */
+	budgetCopy: (id: BudgetId, name: string) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_copy", { id, name })),
+	/**  Edit budget name… (BUD-040). */
+	budgetRename: (id: BudgetId, name: string) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_rename", { id, name })),
+	/**  Delete this budget… (BUD-040); transactions are untouched. */
+	budgetDelete: (id: BudgetId) => typedError<null, IpcError>(__TAURI_INVOKE("budget_delete", { id })),
+	/**  Select categories to budget… (BUD-040). */
+	budgetCategoriesSet: (id: BudgetId, categories: CategoryId[]) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_categories_set", { id, categories })),
+	/**  Add a year (BUD-050): `copy_from`'s amounts, or none. */
+	budgetYearCreate: (id: BudgetId, year: number, copyFrom: number | null) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_year_create", { id, year, copyFrom })),
+	/**  One month's budget for one category (BUD-070). */
+	budgetSet: (id: BudgetId, category: CategoryId, year: number, month: number, amount: string) => typedError<null, IpcError>(__TAURI_INVOKE("budget_set", { id, category, year, month, amount })),
+	/**  A Graph View row's budget for its whole period (BUD-060). */
+	budgetSetPeriod: (id: BudgetId, category: CategoryId, period: GraphPeriod, at: {
+	year: number,
+	index: number,
+} | null, amount: string) => typedError<null, IpcError>(__TAURI_INVOKE("budget_set_period", { id, category, period, at, amount })),
+	/**
+	 *  Copy a month's budget across its year (BUD-070): every category's
+	 *  (`category` `None`, the month heading's ▾) or one row's.
+	 */
+	budgetCopyMonth: (id: BudgetId, year: number, month: number, scope: CopyScope, category: number | null) => typedError<null, IpcError>(__TAURI_INVOKE("budget_copy_month", { id, year, month, scope, category })),
+	/**  The Annual View of `year` (BUD-070). */
+	budgetAnnual: (id: BudgetId, year: number) => typedError<AnnualView, IpcError>(__TAURI_INVOKE("budget_annual", { id, year })),
+	/**  The Graph View of a period (BUD-060); `at` `None` is the current one. */
+	budgetGraph: (id: BudgetId, period: GraphPeriod, at: {
+	year: number,
+	index: number,
+} | null) => typedError<GraphView, IpcError>(__TAURI_INVOKE("budget_graph", { id, period, at })),
 	/**
 	 *  The loan on `account` and where it stands; `None` before its terms
 	 *  are saved.
@@ -284,6 +320,11 @@ export const commands = {
 	next_due: string | null,
 	view: LoanView,
 } | null, IpcError>(__TAURI_INVOKE("loan_get", { account })),
+	/**
+	 *  The payment from the terms alone (LOAN-025), shown before the rest
+	 *  of the loan screen is filled in.
+	 */
+	loanPayment: (original: string, lengthMonths: number, rate: string, compounding: Compounding, frequency: PaymentFrequency) => typedError<string, IpcError>(__TAURI_INVOKE("loan_payment", { original, lengthMonths, rate, compounding, frequency })),
 	/**
 	 *  The loan screen's figures for terms not yet saved: payment, next
 	 *  split, and amortization table (LOAN-070).
@@ -833,6 +874,64 @@ export type AllocationRow = {
  */
 export type AmountType = "fixed" | "estimated";
 
+/**  Expenses or Income, with its totals on its heading row. */
+export type AnnualGroup = {
+	kind: CategoryKind,
+	total: AnnualRow,
+	rows: AnnualRow[],
+	/**  Everything Else, when it has any actual. */
+	other: AnnualRow | null,
+};
+
+/**  One Annual View row (BUD-070). */
+export type AnnualRow = {
+	/**  The budgeted category; `None` on Everything Else and totals. */
+	category: CategoryId | null,
+	/**  The path before the name, with its ": ", as "Car: Gas: ". */
+	prefix: string,
+	/**  Shown bold. */
+	name: string,
+	/**  January through December. */
+	months: BudgetFigures[],
+	/**  Through the last month counted in To Date. */
+	to_date: BudgetFigures,
+	year: BudgetFigures,
+	/**  Each month's budget as entered, in cents, for its edit box. */
+	entered: string[],
+	/**
+	 *  The categories its actual counts: the category and its
+	 *  subcategories not budgeted themselves; Everything Else's
+	 *  categories. Its transactions are theirs.
+	 */
+	counted: CategoryId[],
+	/**  Everything Else only: the categories in it (actual only). */
+	children: AnnualRow[],
+};
+
+/**  The Annual View of one year (BUD-070). */
+export type AnnualView = {
+	budget: Budget,
+	year: number,
+	/**
+	 *  The budget holds this year; when not, the view asks to create it
+	 *  (BUD-050) and its budgets are 0.
+	 */
+	held: boolean,
+	/**  The current month, shaded, when the year is this one. */
+	current: number | null,
+	/**
+	 *  Months that are past or current (0–12): they show Budget, Actual,
+	 *  and Balance, and To Date counts them.
+	 */
+	to_date: number,
+	columns: MonthColumn[],
+	summary: Summary,
+	/**  Expenses, then Income. */
+	groups: AnnualGroup[],
+	/**  Income − Expenses. */
+	total: AnnualRow,
+};
+
 /**  Theme, font, and font size (per computer, SET-070). */
 export type Appearance = {
 	theme: string | null,
@@ -880,7 +979,7 @@ export type AttentionCheck = {
 export type AuditAction = "create" | "update" | "void" | "delete" | "merge" | "close" | "reopen" | "rollback";
 
 /**  What kind of record an audit entry describes. */
-export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card" | "pending_entry" | "loan";
+export type AuditEntity = "account" | "category" | "payee" | "tag" | "txn" | "security" | "price" | "lot" | "schedule" | "reconciliation" | "import_batch" | "saved_report" | "report_folder" | "insight" | "spending_card" | "pending_entry" | "loan" | "budget";
 
 /**  An audit entry with its changes spelled out. */
 export type AuditEntry = {
@@ -981,6 +1080,16 @@ export type BackupStatus = {
 	folder_missing: boolean,
 };
 
+/**
+ *  A bar of actual against budget, in thousandths of its width
+ *  (BUD-060). Under budget: `fill` is the part spent. Over: `fill` is
+ *  1000 and `split` marks where the budget ends.
+ */
+export type Bar = {
+	fill: number,
+	split: number | null,
+};
+
 export type BatchStatus = "staged" | "committed" | "rolled_back";
 
 /**  What is on disk (SECU-080, SECU-090). */
@@ -1007,6 +1116,27 @@ export type BookStatus = {
 	/**  The default backup folder (BAK-030). */
 	downloads: string | null,
 };
+
+/**  A budget: its name, categories, and years (BUD-010). */
+export type Budget = {
+	id: BudgetId,
+	/**  Unique, any case. */
+	name: string,
+	/**  Income and expense categories at any level, by ID. */
+	categories: CategoryId[],
+	/**  The years it holds, oldest first. */
+	years: number[],
+};
+
+/**  Budget, actual, and Budget − Actual, in whole dollars. */
+export type BudgetFigures = {
+	budget: string,
+	actual: string,
+	balance: string,
+};
+
+/**  Row ID of a budget. */
+export type BudgetId = number;
 
 /**
  *  A register transaction on the calendar (CAL-020): one per transaction
@@ -1294,6 +1424,9 @@ export type CopyOptions = {
 	 */
 	closed_accounts: boolean,
 };
+
+/**  Which months a month's budget is copied to (BUD-070), in its year. */
+export type CopyScope = "future" | "past" | "all";
 
 /**  What sits on the other side of a register row. */
 export type Counterpart = 
@@ -1671,6 +1804,76 @@ export type FoundRow = {
  *  are `Monthly` with interval 3 and 6.
  */
 export type Frequency = "once" | "daily" | "weekly" | "twice_monthly" | "monthly" | "monthly_last_day" | "monthly_nth_weekday" | "yearly";
+
+/**
+ *  Which month, quarter, or year a Monthly, Quarterly, or Yearly period
+ *  shows: `index` is the month (1–12), the quarter (1–4), or 1.
+ */
+export type GraphAt = {
+	year: number,
+	index: number,
+};
+
+/**  Expenses or Income in the Graph View. */
+export type GraphGroup = {
+	kind: CategoryKind,
+	total: GraphRow,
+	rows: GraphRow[],
+	other: GraphRow | null,
+};
+
+/**  The Graph View's second control (BUD-060). */
+export type GraphPeriod = "monthly" | "quarterly" | "yearly" | "quarter_to_date" | "year_to_date" | "last_3_months" | "last_6_months";
+
+/**  One Graph View row (BUD-060). */
+export type GraphRow = {
+	category: CategoryId | null,
+	prefix: string,
+	name: string,
+	figures: BudgetFigures,
+	/**  The period's budget as entered, in cents, for its edit box. */
+	entered: string,
+	standing: Standing,
+	/**  The balance, positive: "N left", "N over", "N under". */
+	amount: string,
+	/**  `None` when the budget is zero or less. */
+	bar: Bar | null,
+	/**  As [`AnnualRow::counted`]. */
+	counted: CategoryId[],
+	/**  Everything Else only: the categories in it (actual only). */
+	children: GraphRow[],
+};
+
+/**  The Graph View of one period (BUD-060). */
+export type GraphView = {
+	budget: Budget,
+	period: GraphPeriod,
+	/**
+	 *  The month, quarter, or year shown, and its neighbors (Monthly,
+	 *  Quarterly, Yearly).
+	 */
+	at: GraphAt | null,
+	prev: GraphAt | null,
+	next: GraphAt | null,
+	/**  "October 2026", "Q4 2026", "2026"; empty for the others. */
+	title: string,
+	/**
+	 *  A year the period needs and the budget lacks: the view asks to
+	 *  create it (BUD-050). Never set for Last 3 and Last 6 months.
+	 */
+	missing_year: number | null,
+	/**
+	 *  Every month of the period is in a year the budget holds, so a
+	 *  row's budget can be edited.
+	 */
+	editable: boolean,
+	/**  The period's first and last days. */
+	from: string,
+	to: string,
+	summary: Summary,
+	groups: GraphGroup[],
+	total: GraphRow,
+};
 
 /**  One account group's row on the Net worth card (CARD-010). */
 export type GroupBalances = {
@@ -2316,6 +2519,17 @@ export type MmfMode =
 "security" | 
 /**  Part of the account's cash balance. */
 "cash";
+
+/**  One month of the Annual View. */
+export type MonthColumn = {
+	month: number,
+	/**  "Jan". */
+	short: string,
+	/**  "January". */
+	long: string,
+	from: string,
+	to: string,
+};
 
 /**  A name as given, and as found in the book. */
 export type NameCheck = {
@@ -3515,6 +3729,15 @@ export type SplitView = {
 	memo: string,
 };
 
+/**  What is written right of a Graph View bar (BUD-060). */
+export type Standing = 
+/**  Money left (or not yet received). */
+"left" | 
+/**  Over budget. */
+"over" | 
+/**  A negative budget went further below zero. */
+"under";
+
 /**  What starting a reconciliation needs (RCN-020 step 1). */
 export type StartInput = {
 	account: AccountId,
@@ -3546,6 +3769,19 @@ export type StatementItem = {
 
 /**  Capital gains grouping ("Subtotal by"). */
 export type Subtotal = "none" | "term" | "month" | "quarter" | "year" | "account" | "security";
+
+/**  The summary band (BUD-040): expenses only, over the range shown. */
+export type Summary = {
+	/**  "Jan 2026 - Oct 2026". */
+	range: string,
+	spending: string,
+	budget: string,
+	/**  LEFT (or OVER): how far spending is from the budget, positive. */
+	amount: string,
+	over: boolean,
+	/**  `None` when the budget is zero or less. */
+	bar: Bar | null,
+};
 
 /**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
 export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";

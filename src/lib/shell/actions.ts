@@ -19,7 +19,8 @@ import { exitApp, openAccount, openInsights, openReconcile } from "./nav";
 import { openPanel } from "./panels";
 import { windowState } from "../state/windows.svelte";
 import { INSIGHTS_ID, INVESTMENTS_ID } from "./navitems";
-import { SAVED_PREFIX } from "./menus";
+import { BUDGET_PREFIX, SAVED_PREFIX } from "./menus";
+import { budgetState } from "../state/budget.svelte";
 import type { BackupResult } from "../types/bindings";
 import { bookState } from "../state/book.svelte";
 import { openBookFile, RECENT_PREFIX, switchBook } from "./books";
@@ -31,6 +32,8 @@ export function runAction(id: string): void {
     void openAccount(Number(id.slice("account:".length)));
   } else if (id.startsWith(RECENT_PREFIX)) {
     void switchBook(id.slice(RECENT_PREFIX.length)).catch(showError);
+  } else if (id.startsWith(BUDGET_PREFIX)) {
+    budgetState.open(Number(id.slice(BUDGET_PREFIX.length)), Number(listsState.today.slice(0, 4)));
   } else if (id.startsWith(SAVED_PREFIX)) {
     void reportState.openSavedId(Number(id.slice(SAVED_PREFIX.length))).catch(showError);
   } else if (id in MENU_REPORTS) {
@@ -125,6 +128,9 @@ export function runAction(id: string): void {
         break;
       case "reports.saved":
         reportState.savedOpen = true;
+        break;
+      case "budget.create":
+        budgetState.naming = { mode: "create", id: null, name: "" };
         break;
     }
   }

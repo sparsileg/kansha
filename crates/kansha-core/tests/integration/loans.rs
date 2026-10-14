@@ -385,6 +385,98 @@ fn preview_works_out_the_table_before_saving() {
     assert!(v.table.len() < 360);
 }
 
+/// A loan account deletes with its terms and reminder once its
+/// transactions are gone (ACCT-220, LOAN-090); before, it says so.
+#[test]
+fn a_loan_account_deletes_with_its_terms_and_reminder() {
+    let mut fx = fx();
+    let s = mortgage(&fx);
+    let id = save(&mut fx, &s);
+    enter_next(&mut fx, id);
+    let err = fx
+        .book
+        .write(|tx| kansha_core::accounts::delete(tx, fx.loan))
+        .unwrap_err();
+    assert!(err.to_string().contains("delete them first"), "{err}");
+
+    let txns: Vec<i64> = fx
+        .book
+        .conn()
+        .prepare("SELECT DISTINCT txn_id FROM posting WHERE account_id = ?1")
+        .unwrap()
+        .query_map([fx.loan.0], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(txns.len(), 2, "opening balance and one payment");
+    for t in txns {
+        fx.book
+            .write(|tx| kansha_core::ledger::delete(tx, kansha_core::ledger::TxnId(t), true))
+            .unwrap();
+    }
+    fx.book
+        .write(|tx| kansha_core::accounts::delete(tx, fx.loan))
+        .unwrap();
+    assert!(loans::get(fx.book.conn(), fx.loan).unwrap().is_none());
+    let left: i64 = fx
+        .book
+        .conn()
+        .query_row(
+            "SELECT (SELECT count(*) FROM schedule WHERE id = ?1)
+                  + (SELECT count(*) FROM schedule_occurrence WHERE schedule_id = ?1)
+                  + (SELECT count(*) FROM loan_rate WHERE loan_id = ?2)",
+            [id.0, fx.loan.0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(left, 0);
+    // An account with no loan deletes as before.
+    let other = fx.book.account("Spare", AccountType::Savings).unwrap();
+    fx.book
+        .write(|tx| kansha_core::accounts::delete(tx, other))
+        .unwrap();
+}
+
+/// The loan screen shows the payment as soon as the terms are typed,
+/// before the due date, lender, and accounts (LOAN-025).
+#[test]
+fn the_payment_is_worked_out_from_the_terms_alone() {
+    let pay = |original: &str, months: i64, rate: &str, freq: PaymentFrequency| {
+        loan::payment_for(
+            m(original),
+            months,
+            rate.parse().unwrap(),
+            Compounding::Monthly,
+            freq,
+        )
+    };
+    assert_eq!(
+        pay("300000", 360, "6", PaymentFrequency::Monthly).unwrap(),
+        m("1798.65")
+    );
+    // 30,000 auto loan at 5 % for 5 years.
+    assert_eq!(
+        pay("30000", 60, "5", PaymentFrequency::Monthly).unwrap(),
+        m("566.14")
+    );
+    assert_eq!(
+        pay("1200", 12, "0", PaymentFrequency::Monthly).unwrap(),
+        m("100.00")
+    );
+    for (original, months, rate, freq) in [
+        ("0", 60, "5", PaymentFrequency::Monthly),
+        ("30000", 0, "5", PaymentFrequency::Monthly),
+        ("30000", 601, "5", PaymentFrequency::Monthly),
+        ("30000", 3, "5", PaymentFrequency::TwicePerYear),
+        ("30000", 60, "101", PaymentFrequency::Monthly),
+    ] {
+        assert!(
+            matches!(pay(original, months, rate, freq), Err(Error::Invalid(_))),
+            "{original} {months} {rate}"
+        );
+    }
+}
+
 #[test]
 fn twice_a_month_and_every_other_week() {
     let mut fx = fx();

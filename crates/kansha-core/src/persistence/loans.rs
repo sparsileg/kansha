@@ -167,6 +167,25 @@ pub fn put(tx: &Tx<'_>, f: &LoanFields) -> Result<Loan> {
     Ok(after)
 }
 
+/// Remove the loan's terms (its rates and Other lines go with them).
+/// The schedule is the caller's.
+pub fn delete(tx: &Tx<'_>, account: AccountId) -> Result<()> {
+    let Some(before) = get(tx.conn(), account)? else {
+        return Ok(());
+    };
+    tx.conn()
+        .execute("DELETE FROM loan WHERE account_id = ?1", [account])?;
+    audit::record::<_, ()>(
+        tx,
+        AuditEntity::Loan,
+        account.0,
+        AuditAction::Delete,
+        Some(&before),
+        None,
+    )?;
+    Ok(())
+}
+
 /// Link the loan to its payment reminder (the schedule's own audit entry
 /// records the schedule).
 pub fn set_schedule(tx: &Tx<'_>, account: AccountId, schedule: Option<ScheduleId>) -> Result<()> {

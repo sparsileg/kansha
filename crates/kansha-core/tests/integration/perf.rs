@@ -233,6 +233,46 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
         &mut failures,
     );
 
+    // A budget (BUD-020): made from last year's actuals, then every
+    // income and expense category budgeted, shown a year at a time and
+    // year to date.
+    let t = Instant::now();
+    let budget = db
+        .write(&clock, Origin::System, |tx| {
+            kansha_core::budget::create(tx, today, "Everything")
+        })
+        .unwrap();
+    check("budget, create", t.elapsed(), 2000, &mut failures);
+    let flows: Vec<_> = kansha_core::persistence::categories::list(db.conn())
+        .unwrap()
+        .into_iter()
+        .filter(|c| c.fields.kind != kansha_core::categories::CategoryKind::Equity)
+        .map(|c| c.id)
+        .collect();
+    db.write(&clock, Origin::System, |tx| {
+        kansha_core::budget::set_categories(tx, budget.id, &flows)
+    })
+    .unwrap();
+    let t = Instant::now();
+    let annual = kansha_core::budget::annual(db.conn(), today, budget.id, today.year()).unwrap();
+    assert!(!annual.groups[0].rows.is_empty());
+    check("budget, annual view", t.elapsed(), 2000, &mut failures);
+    let t = Instant::now();
+    kansha_core::budget::graph(
+        db.conn(),
+        today,
+        budget.id,
+        kansha_core::budget::GraphPeriod::YearToDate,
+        None,
+    )
+    .unwrap();
+    check(
+        "budget, graph year to date",
+        t.elapsed(),
+        2000,
+        &mut failures,
+    );
+
     // Integrity check (INT): timed, no limit.
     let t = Instant::now();
     let report = integrity::check(db.conn()).unwrap();

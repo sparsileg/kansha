@@ -78,6 +78,7 @@ macro_rules! id_sql {
 
 id_sql!(
     crate::accounts::AccountId,
+    crate::budget::BudgetId,
     crate::categories::CategoryId,
     crate::categories::PayeeId,
     crate::categories::TagId,

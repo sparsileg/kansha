@@ -8,6 +8,7 @@ pub mod accounts;
 pub mod audit;
 pub mod backup;
 pub mod book;
+pub mod budget;
 pub mod calc;
 pub mod categories;
 pub mod csv;

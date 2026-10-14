@@ -8,6 +8,7 @@
 pub mod accounts;
 pub mod audit;
 pub mod backup;
+pub mod budgets;
 pub mod categories;
 pub mod entries;
 pub mod imports;

@@ -160,6 +160,27 @@ function whole(s: string): number | null {
   return /^\d+$/.test(t) ? Number(t) : null;
 }
 
+export interface LoanTerms {
+  original: string;
+  months: number;
+  rate: string;
+  compounding: Compounding;
+  frequency: PaymentFrequency;
+}
+
+/** The terms the payment is worked out from (`loan_payment`), once
+ * they are all typed; `null` before. */
+export function buildTerms(d: LoanDraft): LoanTerms | null {
+  const original = parseMoney(d.original);
+  if (original === null || original.startsWith("-")) return null;
+  const rate = d.rate.trim();
+  if (!/^\d+(\.\d{1,6})?$/.test(rate) && !/^\.\d{1,6}$/.test(rate)) return null;
+  const n = whole(d.length);
+  if (n === null || n < 1) return null;
+  const months = d.lengthUnit === "years" ? n * 12 : n;
+  return { original, months, rate, compounding: d.compounding, frequency: d.frequency };
+}
+
 /** The draft as `loan_save` takes it, or what is missing. */
 export function buildSave(d: LoanDraft, today: string): Built {
   const opening = parseDate(d.opening, today);

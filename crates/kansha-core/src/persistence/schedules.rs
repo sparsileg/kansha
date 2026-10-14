@@ -378,6 +378,17 @@ pub fn delete(tx: &Tx<'_>, id: ScheduleId) -> Result<()> {
     Ok(())
 }
 
+/// Delete a schedule with all its occurrences (a deleted loan's
+/// reminder, LOAN-090). Kept as `deleted` while a transaction still
+/// names it.
+pub fn purge(tx: &Tx<'_>, id: ScheduleId) -> Result<()> {
+    tx.conn().execute(
+        "DELETE FROM schedule_occurrence WHERE schedule_id = ?1",
+        [id.0],
+    )?;
+    delete(tx, id)
+}
+
 // ---------------------------------------------------------------------------
 // Occurrences
 // ---------------------------------------------------------------------------

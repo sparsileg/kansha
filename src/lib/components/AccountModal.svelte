@@ -8,6 +8,7 @@
   import { dialogState } from "../state/dialogs.svelte";
   import { listsState } from "../state/lists.svelte";
   import { registerState } from "../state/register.svelte";
+  import { scheduleState } from "../state/schedule.svelte";
   import { viewState } from "../state/view.svelte";
   import type {
     Account,
@@ -159,6 +160,8 @@
     if (!(await confirmState.ask(`Delete account "${account!.name}"?`))) return;
     await run(async () => {
       await call(commands.accountDelete(account!.id));
+      // A loan's reminder went with it (LOAN-090).
+      await scheduleState.changed();
       if (registerState.accountId === account!.id) {
         registerState.close();
         viewState.navigate("insights");

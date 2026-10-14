@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.96 (draft) |
+| **Document version** | 0.7.100 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-13 |
+| **Last updated** | 2026-10-14 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -161,7 +161,9 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
   balance.
 - **ACCT-220** [1.0][R] **Deleting** an account is only permitted if
   it has no transactions. Otherwise the user must close it. This
-  protects history (see Section 13).
+  protects history (see Section 13). The refusal says to delete the
+  transactions first or close the account. A loan's terms and
+  payment reminder are deleted with its account (LOAN-090).
 - **ACCT-230** [1.0][S] Account balance is always derived from
   transactions, never stored as authoritative data (see Section 15.1).
 - **ACCT-240** [1.0][R] Accounts can be reordered and grouped in the
@@ -222,11 +224,14 @@ splits into principal and interest and drive the payment reminder
 - **LOAN-025** [1.0][S] The payment (principal and interest) is
   computed as B·i / (1 − (1 + i)^−n), rounded half-even to cents,
   where B is the original balance and n the original length in
-  payments. Stan may type the lender's figure instead; a typed
-  payment is kept and marked as typed. A rate change (LOAN-050)
-  recomputes a computed payment from the balance before the first
-  payment at the new rate (the register's, when that payment is
-  past) and the payments left then.
+  payments. It shows as soon as the original balance, rate, length,
+  compounding, and payment schedule are typed, before the rest of
+  the screen is filled in. Stan may type the lender's figure
+  instead: "Use the lender's payment figure" opens a field for it;
+  a typed payment is kept and marked as typed. A rate change
+  (LOAN-050) recomputes a computed payment from the balance before
+  the first payment at the new rate (the register's, when that
+  payment is past) and the payments left then.
 - **LOAN-030** [1.0][S] Each payment's split is worked out from the
   loan account's register balance B on the day before the payment
   date, so extra, late, or missed payments show in the next split:
@@ -291,9 +296,11 @@ splits into principal and interest and drive the payment reminder
   none, extra principal, lender, paying account, interest category,
   schedule), `loan_rate` (loan, effective date, rate × 10^6), and
   `loan_other` (loan, category, amount). A closed loan account keeps
-  its terms. The loan is keyed by its account; a NULL payment is
-  computed. Changes are audited under the entity `loan`. Merging
-  categories or payees carries the loan's along.
+  its terms; a deleted one takes its terms and reminder with it,
+  once its transactions are gone (ACCT-220). The loan is keyed by
+  its account; a NULL payment is computed. Changes are audited
+  under the entity `loan`. Merging categories or payees carries the
+  loan's along.
 
 ### 6. Categories, Payees, and Tags (CAT, PAY, TAG)
 
@@ -1540,6 +1547,8 @@ entries in Appendix A and migration 0014 use those IDs.
 #### 12.5 Budgets (BUD)
 
 Build plan and Quicken 2013 screenshots: `devdocs/budget-plan.md`.
+Built 0.7.97 (migration 0021): the budgets, their figures, and the
+Annual View; the Graph View's figures are built, its screen is next.
 
 - **BUD-010** [1.0][S] A budget has a name (unique, any case), a list
   of income and expense categories at any level, and whole years. Each
@@ -1553,57 +1562,66 @@ Build plan and Quicken 2013 screenshots: `devdocs/budget-plan.md`.
   categories used in the last 12 months, each month at the
   category's monthly average for the last calendar year (that year's
   actual ÷ 12, whole dollars, half-even; 0 with no actual), then
-  opens the budget view.
-- **BUD-030** [1.0][S] Actual: per split posting to a category, in
-  all accounts (investment accounts included); transfers and Opening
-  Balance left out. Expense actual is spending (a refund lowers it);
-  income actual is money received; both shown positive. A budgeted
-  category's actual takes in its subcategories that are not budgeted
-  themselves. Spending in categories not in the budget goes to an
-  Everything Else row at the end of its group (actual only; ▸ lists
-  them). Balance = Budget − Actual for both kinds.
+  opens the budget view. Balance Adjustment (RCN-040) is never picked;
+  it can be ticked by hand.
+- **BUD-030** [1.0][S] Actual: per split posting to a category, in all
+  accounts (investment accounts included); transfers and Opening Balance
+  left out. Expense actual is spending (a refund lowers it); income
+  actual is money received; both shown positive. A budgeted category's
+  actual takes in its subcategories that are not budgeted themselves.
+  Spending in categories not in the budget goes to an Everything Else
+  row at the end of its group (actual only; ▸ lists them), but for
+  Balance Adjustment, which counts only when budgeted. Balance =
+  Budget − Actual for both kinds. A month's actual counts every
+  transaction dated in it, later-dated ones included.
 - **BUD-040** [1.0][S] The budget view is one sheet. Its title band
   holds the budget's name and a gear: Select categories to budget…,
   Budget reports ▸ (Current budget, Historical budgets; disabled until
   built, [Later]), Copy this budget… (new name; categories and every
-  year's amounts), Edit budget name…, Delete this budget… (asks
-  first; transactions untouched), Create new budget…. Under it, the
-  controls: View (Graph View, Annual View), then per view as
-  BUD-060, BUD-070. A summary band shows expenses only for the range
-  shown: SPENDING total, a bar of spending against the budget, the
-  budget total, and the amount LEFT (or OVER). Rows: Expenses group,
-  then Income group, each with its totals on its collapsible heading
-  row; the last row is Total (Income − Expenses). A row names the
-  category's path, the last name bold. The view shows whole dollars,
-  rounded half-even in Rust; entry accepts cents.
-- **BUD-050** [1.0][S] Moving to a period in a year the budget does
-  not hold asks to create it: copy this year's categories and budget
-  values, or copy only its categories (amounts 0). Last 3 months and
-  Last 6 months do not ask; months outside the budget count as 0.
+  year's amounts), Edit budget name…, Delete this budget… (asks first;
+  transactions untouched), Create new budget…. Under it, the controls:
+  View (Graph View, Annual View), then per view as BUD-060, BUD-070. A
+  summary band shows expenses only for the range shown: SPENDING total,
+  a bar of spending against the budget, the budget total, and the amount
+  LEFT (or OVER). Rows: Expenses group, then Income group, each with its
+  totals on its collapsible heading row; the last row is Total (Income −
+  Expenses). A row names the category's path, the last name bold. The
+  view shows whole dollars, rounded half-even in Rust; entry accepts
+  cents. Over budget is said in words ("OVER", with ⚠) and its bar is
+  striped, never by color alone.
+- **BUD-050** [1.0][S] Moving to a period in a year the budget does not
+  hold asks to create it: copy this year's categories and budget values,
+  or copy only its categories (amounts 0). Last 3 months and Last 6
+  months do not ask; months outside the budget count as 0. The copy
+  comes from the held year nearest the one asked for. A year not held
+  shows its budgets as 0 and says so.
 - **BUD-060** [1.0][S] Graph View. Second control: Monthly, Quarterly,
   Yearly, Quarter to date, Year to date, Last 3 months, Last 6 months.
-  Monthly, Quarterly, and Yearly add a third control: the period with
-  ◀ ▶, the current one first. Last 3 and Last 6 months are full
-  months before the current one (as RPT-040's "Last" presets). One
-  horizontal bar per row: its full width is the period's budget, the
-  actual written in it; green while under budget, red when over (the
-  whole bar, the part past the budget lighter). Right of the bars:
-  "N left", "N over" (red), or "N under" (a negative budget, red);
-  then the period's Budget. Hovering a row makes its Budget an edit
-  box for the period: the amount is spread over the period's months,
-  the remainder to the last month.
-- **BUD-070** [1.0][S] Annual View. Second control: the year with
-  ◀ ▶. Third control: Details, Budget, Balance, Actual. Details shows
-  Budget, Actual, and Balance for past and current months, Budget
-  only for future months; the others one column per month. After the
-  current month (shaded), a To Date column; last, the year's column:
-  Balance for Details and Balance, Budget for Budget, Actual for
-  Actual. Budget cells are edited in place (Enter and Tab move as in
-  a spreadsheet). Actual figures open their transactions. Balance is
-  bold, negative in the negative color. Each month's Budget heading
-  has a ▾ menu: Copy <Month> budget to all future months in <year>,
-  to all past months in <year>, to all months in <year>. A row's
-  copy icon copies a month across the row the same three ways.
+  Monthly, Quarterly, and Yearly add a third control: the period with ◀
+  ▶, the current one first. Last 3 and Last 6 months are full months
+  before the current one (as RPT-040's "Last" presets). One horizontal
+  bar per row: its full width is the period's budget, the actual written
+  in it; green while under budget, red when over (the whole bar, the
+  part past the budget lighter). Right of the bars: "N left", "N over"
+  (red), or "N under" (a negative budget, red); then the period's
+  Budget. Hovering a row makes its Budget an edit box for the period:
+  the amount is spread over the period's months, the remainder to the
+  last month. An amount in whole dollars spreads in whole dollars.
+- **BUD-070** [1.0][S] Annual View. Second control: the year with ◀ ▶.
+  Third control: Details, Budget, Balance, Actual. Details shows Budget,
+  Actual, and Balance for past and current months, Budget only for
+  future months; the others one column per month. After the current
+  month (shaded), a To Date column; last, the year's column: Balance for
+  Details and Balance, Budget for Budget, Actual for Actual. Budget
+  cells are edited in place (Enter and Tab move as in a spreadsheet).
+  Actual figures open their transactions. Balance is bold, negative in
+  the negative color. Each month's Budget heading has a ▾ menu: Copy
+  <Month> budget to all future months in <year>, to all past months in
+  <year>, to all months in <year>. A row's copy icon copies a month
+  across the row the same three ways. The To Date column shows only in
+  the current year. A row's copy icon copies the month last edited in
+  the row (the current month at first), and shows only with Details
+  and Budget. Category rows are indented under their group's toggle.
 - **BUD-080** [1.0][S] Deleting a category removes its budget amounts;
   merging one adds them into the target's.
 - **BUD-090** [Later] Budget reports (Current budget, Historical
@@ -3201,6 +3219,10 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.100 | 2026-10-14 | ACCT-220, LOAN-090: deleting a loan account deletes its terms and payment reminder (the loan's reminder could not be deleted, so the account could not be either); deleting an account with transactions says to delete them first or close it. No schema or API change. |
+| 0.7.99 | 2026-10-13 | LOAN-025: the payment shows as soon as the terms are typed (new command `loan_payment`); the lender's figure is typed in a field that opens beside "Use the lender's payment figure". Loan screen fields narrowed; a save error clears on the next edit; "the next payment must be due after the opening date" reworded. **API change:** new command `loan_payment`. No schema change. |
+| 0.7.98 | 2026-10-13 | BUD-020: Create Budget… never picks Balance Adjustment. BUD-030: Balance Adjustment counts only when budgeted, never in Everything Else. BUD-070: the row copy icon shows only with Details and Budget; category rows indented under their group. No schema or API change. |
+| 0.7.97 | 2026-10-13 | §12.5 Budgets built (BUD-010 … BUD-080): budgets, actuals, the Annual View, the Graph View's figures; its screen is next. BUD-030: a month's actual counts every transaction dated in it. BUD-040: over budget in words with ⚠ and a striped bar, never color alone. BUD-050: a new year copies from the nearest held year. BUD-060: whole dollars spread in whole dollars. BUD-070: To Date only in the current year; a row's copy icon copies the month last edited in it. **Schema change:** migration 0021 (`budget`, `budget_year`, `budget_category`, `budget_amount`; audit entity `budget`). **API change:** new commands `budget_list`, `budget_create`, `budget_copy`, `budget_rename`, `budget_delete`, `budget_categories_set`, `budget_year_create`, `budget_set`, `budget_set_period`, `budget_copy_month`, `budget_annual`, `budget_graph`. |
 | 0.7.96 | 2026-10-13 | §5.4 Loans built (LOAN-010 … LOAN-090). LOAN-015, LOAN-060, LOAN-070, LOAN-090 settled from [R] to [S] as built. LOAN-025: a rate change works the payment out from the balance before the first payment at the new rate. LOAN-030: payment number n settles the payment's rounding, as published tables do; when interest exceeds the payment it is paid alone; payments are numbered back from the next due date; days count between nominal dates. LOAN-060: editing the reminder opens the loan screen, deleting it is refused; Remind me, 7 days ahead; "# left" follows the balance. **Schema change:** migration 0020 (`loan`, `loan_rate`, `loan_other`; audit entity `loan`). **API change:** new commands `loan_get`, `loan_preview`, `loan_save`; `ScheduleRow` gains `loan`. |
 | 0.7.95 | 2026-10-13 | UI-048: Help > User's Guide, above About Kansha, opens the bundled Kansha User's Guide (`src-tauri/help/kansha-guide.pdf`, a bundle resource) in the PDF viewer; the status bar says why if it cannot. The guide's Markdown chapters are in `guide/chapters/`, built by `just guide` (pandoc, typst; layout from the Astryx guide). §21 and the release checklist §5: rebuild the guide before a release. No schema change. **API change:** new command `help_open_guide`. |
 | 0.7.94 | 2026-10-13 | New §12.5 Budgets (BUD-010 … BUD-090), from Stan and Quicken 2013 (`devdocs/budget-plan.md`): several named budgets by year, one amount per category and month; Budget menu with Create Budget… (categories used in the last 12 months, last year's monthly average); gear with Select categories, Copy, Edit name, Delete, Create (Budget reports [Later]); expenses-only summary band; Graph View (Monthly, Quarterly, Yearly with ◀ ▶; Quarter and Year to date; Last 3 and 6 months) with bars against the period's budget; Annual View (Details, Budget, Balance, Actual; To Date and year columns; month and row copy); Everything Else row; Total row; prompt to create a missing year. RPT-300 keeps only the reports. Requirements only; not built. Schema change and API change to come with the build. |

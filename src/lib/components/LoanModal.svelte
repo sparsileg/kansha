@@ -8,6 +8,7 @@
     FREQUENCIES,
     LOAN_TYPES,
     buildSave,
+    buildTerms,
     draftFromDetails,
     newLoanDraft,
     rateChanged,
@@ -30,6 +31,8 @@
   let loaded = $state(false);
   let view = $state<LoanView | null>(null);
   let previewError = $state<string | null>(null);
+  /** The payment from the terms alone (LOAN-025), before the rest is filled in. */
+  let termsPayment = $state<string | undefined>(undefined);
   let error = $state<string | null>(null);
   let busy = $state(false);
   let showTable = $state(false);
@@ -95,6 +98,28 @@
     return () => clearTimeout(timer);
   });
 
+  // The payment shows as soon as the terms are typed.
+  $effect(() => {
+    if (!loaded) return;
+    const t = buildTerms($state.snapshot(d) as LoanDraft);
+    if (t === null) {
+      termsPayment = undefined;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        termsPayment = await call(commands.loanPayment(t.original, t.months, t.rate, t.compounding, t.frequency));
+      } catch {
+        termsPayment = undefined;
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  });
+
+  // The preview's figure follows a rate change (LOAN-025); until the
+  // screen is filled in, the one from the terms alone.
+  const computed = $derived(previewError === null && view ? view.computed_payment : termsPayment);
+
   const money = (m: string | undefined) => (m === undefined ? "" : formatMoney(m));
 
   async function save() {
@@ -128,6 +153,8 @@
 
 <Modal title={`Loan details: ${name}`} wide onclose={close}>
   <form
+    oninput={() => (error = null)}
+    onchange={() => (error = null)}
     onsubmit={(e) => {
       e.preventDefault();
       void save();
@@ -142,7 +169,7 @@
       </label>
       <label>
         Lender
-        <input list={payeeListId} autocomplete="off" bind:value={d.lender} placeholder="Choose or type a payee" />
+        <input class="lender" list={payeeListId} autocomplete="off" bind:value={d.lender} placeholder="Choose or type a payee" />
         <datalist id={payeeListId}>
           {#each listsState.payees.filter((p) => !p.hidden) as p (p.id)}<option value={p.name}></option>{/each}
         </datalist>
@@ -152,16 +179,16 @@
     <fieldset>
       <legend>Loan details</legend>
       <div class="grid">
-        <label>Opening date <input bind:value={d.opening} placeholder={datePattern()} onblur={blurDate("opening")} /></label>
-        <label>Original balance <input class="amt" inputmode="decimal" bind:value={d.original} /></label>
-        <label>Interest rate (%) <input class="amt" inputmode="decimal" bind:value={d.rate} /></label>
+        <label>Opening date <input class="date" bind:value={d.opening} placeholder={datePattern()} onblur={blurDate("opening")} /></label>
+        <label>Original balance <input class="amt money" inputmode="decimal" bind:value={d.original} /></label>
+        <label>Interest rate (%) <input class="amt rate" inputmode="decimal" bind:value={d.rate} /></label>
         {#if saved && rateChanged(d)}
-          <label>New rate from <input bind:value={d.rateFrom} placeholder={datePattern()} onblur={blurDate("rateFrom")} /></label>
+          <label>New rate from <input class="date" bind:value={d.rateFrom} placeholder={datePattern()} onblur={blurDate("rateFrom")} /></label>
         {/if}
         <label>
           Original length
           <span class="inline">
-            <input class="amt" inputmode="numeric" aria-label="Original length" bind:value={d.length} />
+            <input class="amt short" inputmode="numeric" aria-label="Original length" bind:value={d.length} />
             <select aria-label="Length unit" bind:value={d.lengthUnit}>
               <option value="years">Years</option>
               <option value="months">Months</option>
@@ -184,12 +211,12 @@
           <label>
             On days
             <span class="inline">
-              <input class="amt" inputmode="numeric" aria-label="First day of the month" bind:value={d.day1} />
-              <input class="amt" inputmode="numeric" aria-label="Second day of the month" bind:value={d.day2} />
+              <input class="amt short" inputmode="numeric" aria-label="First day of the month" bind:value={d.day1} />
+              <input class="amt short" inputmode="numeric" aria-label="Second day of the month" bind:value={d.day2} />
             </span>
           </label>
         {/if}
-        <label>Current balance <input class="amt" inputmode="decimal" bind:value={d.current} placeholder={d.original} /></label>
+        <label>Current balance <input class="amt money" inputmode="decimal" bind:value={d.current} placeholder={d.original} /></label>
       </div>
       {#if d.rates.length > 1}
         <p class="note">
@@ -197,22 +224,24 @@
           {#each d.rates as r, i (r.effective)}{i > 0 ? "; " : ""}{r.rate}% from {displayDate(r.effective)}{/each}
         </p>
       {/if}
-      <div class="grid">
-        <label>
-          Payment (principal and interest)
-          <input class="amt" readonly={!d.typed} value={d.typed ? d.payment : money(view?.computed_payment)} oninput={(e) => (d.payment = e.currentTarget.value)} />
-        </label>
+      <div class="payment">
+        <span>Payment (principal and interest)</span><span class="r figure">{money(computed)}</span>
+      </div>
+      <div class="payment">
         <label class="check">
-          <input type="checkbox" bind:checked={d.typed} onchange={() => { if (d.typed && d.payment === "") d.payment = view?.computed_payment ?? ""; }} />
-          Use the lender's figure
+          <input type="checkbox" bind:checked={d.typed} onchange={() => { if (d.typed && d.payment === "") d.payment = computed ?? ""; }} />
+          Use the lender's payment figure
         </label>
+        {#if d.typed}
+          <input class="amt money" inputmode="decimal" aria-label="Lender's payment" bind:value={d.payment} />
+        {/if}
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Payment</legend>
       <div class="grid">
-        <label>Next payment due <input bind:value={d.nextDue} placeholder={datePattern()} onblur={blurDate("nextDue")} /></label>
+        <label>Next payment due <input class="date" bind:value={d.nextDue} placeholder={datePattern()} onblur={blurDate("nextDue")} /></label>
         <label>
           Pay from
           <select bind:value={d.payingAccount}>
@@ -227,7 +256,7 @@
             {#each expenseCategories as c (c.id)}<option value={String(c.id)}>{c.path}</option>{/each}
           </select>
         </label>
-        <label>Extra principal <input class="amt" inputmode="decimal" bind:value={d.extra} placeholder="0.00" /></label>
+        <label>Extra principal <input class="amt money" inputmode="decimal" bind:value={d.extra} placeholder="0.00" /></label>
       </div>
 
       <div class="split">
@@ -241,7 +270,7 @@
             </select>
             <button type="button" aria-label={`Remove other line ${i + 1}`} onclick={() => d.others.splice(i, 1)}>×</button>
           </span>
-          <input class="amt r" inputmode="decimal" aria-label={`Other line ${i + 1} amount`} bind:value={o.amount} />
+          <input class="amt money" inputmode="decimal" aria-label={`Other line ${i + 1} amount`} bind:value={o.amount} />
         {/each}
         <span><button type="button" onclick={() => d.others.push({ category: "", amount: "" })}>Add other line (fee, escrow, insurance)</button></span><span></span>
         <span>Extra principal</span><span class="r">{money(view?.next?.extra)}</span>
@@ -280,7 +309,7 @@
       {/if}
     {/if}
 
-    {#if previewError && loaded}<p class="note">{previewError}</p>{/if}
+    {#if previewError && loaded && !error}<p class="note">{previewError}</p>{/if}
     {#if error}<p class="err" role="alert">{error}</p>{/if}
     <p class="note">Saving adds or updates the payment reminder, from the Pay from account to the lender. Its amounts are worked out for each payment.</p>
     <div class="buttons">
@@ -302,11 +331,37 @@
     display: grid;
     gap: 0.5rem;
   }
+  /* Fields keep their own width (dates, amounts, short numbers);
+     selects size to their text. */
   .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
     align-items: end;
+  }
+  .date {
+    width: 7.5rem;
+  }
+  .money {
+    width: 7rem;
+  }
+  .rate {
+    width: 4.5rem;
+  }
+  .short {
+    width: 3.5rem;
+  }
+  .lender {
+    width: 14rem;
+  }
+  .payment {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    font-size: var(--fs-register);
+  }
+  .figure {
+    min-width: 7rem;
   }
   label {
     display: grid;
@@ -322,17 +377,13 @@
     display: flex;
     gap: 0.25rem;
   }
-  .inline > * {
-    flex: 1;
-    min-width: 0;
-  }
   .amt,
   .r {
     text-align: right;
   }
   .split {
     display: grid;
-    grid-template-columns: minmax(12rem, 22rem) 8rem;
+    grid-template-columns: minmax(12rem, 22rem) 7rem;
     gap: 0.25rem 1rem;
     align-items: center;
     font-size: var(--fs-register);

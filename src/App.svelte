@@ -26,6 +26,10 @@
   import WindowFrame from "./lib/components/shell/WindowFrame.svelte";
   import ReportWindow from "./lib/components/reports/ReportWindow.svelte";
   import SavedReportsModal from "./lib/components/reports/SavedReportsModal.svelte";
+  import BudgetWindow from "./lib/components/budget/BudgetWindow.svelte";
+  import BudgetNameModal from "./lib/components/budget/BudgetNameModal.svelte";
+  import BudgetCategoriesModal from "./lib/components/budget/BudgetCategoriesModal.svelte";
+  import { BUDGET_WINDOW, budgetState } from "./lib/state/budget.svelte";
   import MenuBar from "./lib/components/shell/MenuBar.svelte";
   import NavBar from "./lib/components/shell/NavBar.svelte";
   import ThemePicker from "./lib/components/shell/ThemePicker.svelte";
@@ -40,7 +44,7 @@
   import StartScreen from "./views/StartScreen.svelte";
   import { fullWindow } from "./lib/shell/windowsize";
   import { isPanel, type PanelKind } from "./lib/shell/panels";
-  import { MENUS, savedReportItems, type Menu, type MenuItem } from "./lib/shell/menus";
+  import { MENUS, budgetItems, savedReportItems, type Menu, type MenuItem } from "./lib/shell/menus";
   import { recentItems } from "./lib/shell/books";
   import NewBookModal from "./lib/components/books/NewBookModal.svelte";
   import RenameBookModal from "./lib/components/books/RenameBookModal.svelte";
@@ -123,7 +127,15 @@
       return { ...i, items: savedReportItems(reportState.folders, reportState.savedList, i.items[i.items.length - 1]) };
     return i;
   }
-  const menus = $derived<Menu[]>(MENUS.map((m) => ({ ...m, items: m.items.map(fill) })));
+  // The Budget menu lists the budgets by name (BUD-020).
+  $effect(() => {
+    if (bookState.open) void budgetState.refresh().catch(() => {});
+  });
+  const menus = $derived<Menu[]>(
+    MENUS.map((m) =>
+      m.id === "budget" ? { ...m, items: budgetItems(m.items[0], budgetState.list) } : { ...m, items: m.items.map(fill) },
+    ),
+  );
   $effect(() => {
     const name = bookState.status?.name;
     const title = name ? `${name} — Kansha` : "Kansha";
@@ -208,6 +220,8 @@
       onclose={() => (reportState.savedOpen = false)}
     />
   {/if}
+  {#if budgetState.naming}<BudgetNameModal />{/if}
+  {#if budgetState.choosing !== null}<BudgetCategoriesModal onsaved={() => (budgetState.version += 1)} />{/if}
   <ConfirmDialog />
   {#if dialogState.restore}
     <!-- A restored book starts over: reload, as after unlocking. -->
@@ -237,6 +251,8 @@
           <WindowFrame id={win.id}>
             {#if report}
               <ReportWindow inst={report} />
+            {:else if win.kind === BUDGET_WINDOW}
+              <BudgetWindow id={win.id} />
             {:else if isPanel(win.kind)}
               {@const Panel = panels[win.kind]}
               <Panel />

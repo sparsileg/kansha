@@ -15,6 +15,10 @@ use crate::fixture::{clock, count, date, db};
 const TABLES: &[&str] = &[
     "account",
     "audit_log",
+    "budget",
+    "budget_amount",
+    "budget_category",
+    "budget_year",
     "category",
     "entry_file",
     "import_batch",

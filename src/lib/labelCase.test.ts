@@ -17,6 +17,9 @@ const NAMES = new Set([
   "Memorized Payees", // tab named as in the Tools menu
   "Balance Adjustment…", // the built-in category (RCN-040)
   "Monthly Avg", // spending card column, as in Quicken (CARD-060)
+  "Graph View", // the budget's views, as in Quicken (BUD-040)
+  "Annual View",
+  "To Date", // the budget's To Date column, as in Quicken (BUD-070)
   "Count money moved to or from accounts not chosen on the Accounts tab", // a tab's name
   "Enter creates the tag; Esc cancels", // key names
   "Fix the names marked ⚠ first (Edit)", // the Edit button's name

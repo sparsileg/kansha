@@ -122,6 +122,12 @@ export const MENUS: Menu[] = [
     ],
   },
   {
+    id: "budget",
+    label: "Budget",
+    // The budgets by name follow Create Budget… (App.svelte).
+    items: [{ id: "budget.create", label: "Create Budget…" }],
+  },
+  {
     id: "help",
     label: "Help",
     items: [
@@ -130,6 +136,14 @@ export const MENUS: Menu[] = [
     ],
   },
 ];
+
+/** Menu item id for a budget (BUD-020). */
+export const BUDGET_PREFIX = "budget:";
+
+/** The Budget menu: Create Budget…, then the budgets by name. */
+export function budgetItems(create: MenuItem, budgets: { id: number; name: string }[]): MenuItem[] {
+  return [create, ...budgets.map((b, i) => ({ id: `${BUDGET_PREFIX}${b.id}`, label: b.name, divider: i === 0 }))];
+}
 
 /** Menu item id for a saved report. */
 export const SAVED_PREFIX = "saved:";

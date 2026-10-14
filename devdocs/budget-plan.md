@@ -160,10 +160,10 @@ adds the source's amounts into the target's; a delete removes them
    one pass (NFR-040: time on the large book with `just perf`); the
    Annual grid, Graph rows, and summary band built in Rust.
 2. **IPC**: commands `budget_list`, `budget_create`, `budget_copy`,
-   `budget_rename`,
-   `budget_delete`, `budget_categories_set`, `budget_year_create`,
-   `budget_set`, `budget_set_period`, `budget_copy_month`,
-   `budget_copy_row`, `budget_annual`, `budget_graph`;
+   `budget_rename`, `budget_delete`, `budget_categories_set`,
+   `budget_year_create`, `budget_set`, `budget_set_period`,
+   `budget_copy_month` (with a category, a row's copy: no separate
+   `budget_copy_row`), `budget_annual`, `budget_graph`;
    `just bindings`. ⚠ API change.
 3. **UI, Annual View**: Budget menu, Create dialog, view on a sheet
    with the title band and gear, controls, summary band, grid

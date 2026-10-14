@@ -3,6 +3,7 @@
 
 pub mod accounts;
 pub mod book;
+pub mod budget;
 pub mod entries;
 pub mod import;
 pub mod insights;

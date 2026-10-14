@@ -12,6 +12,7 @@
 //! income and money coming in are positive, expenses and money going out
 //! negative (a category or transfer amount is minus its posting).
 
+mod budget;
 mod capital_gains;
 mod cards;
 mod chart;
@@ -27,6 +28,7 @@ mod security;
 mod tax;
 mod tree;
 
+pub(crate) use budget::budget_actuals;
 pub use cards::{
     Attention, AttentionCheck, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding,
     GroupBalances, Notice, Session, account_bar_net_worth, age, attention, card_data, net_worth,

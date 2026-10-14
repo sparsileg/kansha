@@ -6,11 +6,11 @@
 pub mod math;
 mod service;
 
-pub(crate) use service::refresh;
 pub use service::{
     LoanDetails, LoanPayment, LoanSave, LoanSaved, LoanView, details, lines_for, occurrence_lines,
-    preview, recurrence, save,
+    payment_for, preview, recurrence, save,
 };
+pub(crate) use service::{refresh, remove};
 
 use serde::{Deserialize, Serialize};
 

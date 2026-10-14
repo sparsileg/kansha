@@ -71,7 +71,7 @@
     --head-sorted-bg:   #006400;
     --head-sorted-fg:   #00ff00;
     --row-bg:           #000000;
-    --row-alt:          rgba(0, 255, 0, 0.1);
+    --row-alt:          rgba(0, 255, 0, 0.2);
     /* A report's top-level rows (a tax form); reports print light. */
     --report-shade:     rgba(128, 128, 128, 0.15);
     /* Future rows stripe in amber; they are also italic. */

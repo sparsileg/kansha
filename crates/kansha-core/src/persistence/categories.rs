@@ -241,6 +241,8 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
     }
     // A payee's memorized default doesn't keep a category alive.
     super::payees::forget_default(tx, Some(id), None)?;
+    // Nor does a budget: its amounts go with it (BUD-080).
+    super::budgets::category_deleted(tx, id)?;
     tx.conn()
         .execute("DELETE FROM category WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "category", id.0))?;
@@ -340,6 +342,8 @@ pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merg
         )?,
         ..Merged::default()
     };
+    // Budget amounts add into the target's (BUD-080).
+    super::budgets::category_merged(tx, source, target)?;
     conn.execute("DELETE FROM category WHERE id = ?1", [source])?;
     reports::saved_replace_id(tx, FilterList::Categories, source.0, Some(target.0))?;
     audit::record(
