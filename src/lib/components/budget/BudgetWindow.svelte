@@ -473,11 +473,11 @@
     display: grid;
   }
   .cap {
-    font-size: 0.8em;
+    font-size: var(--fs-header);
     letter-spacing: 0.05em;
   }
   .range {
-    font-size: 0.85em;
+    font-size: var(--fs-register);
     opacity: 0.85;
   }
   .meter {
@@ -510,7 +510,7 @@
     top: 0;
     bottom: 0;
     width: 3px;
-    background: var(--text, currentColor);
+    background: var(--fg);
   }
   .grid-wrap {
     flex: 1;
