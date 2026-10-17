@@ -680,8 +680,16 @@ pub struct SectionTotal {
 /// totals add up to net worth. Assets & Debt holds Assets and Liabilities;
 /// a debt's balance is negative, so it reduces the total.
 pub fn section_totals(conn: &Connection, today: Date) -> Result<Vec<SectionTotal>> {
-    use crate::accounts::AccountGroup;
     let balances = account_balances(conn, today)?;
+    section_totals_of(&crate::persistence::accounts::list(conn)?, &balances)
+}
+
+/// [`section_totals`] from balances already in hand.
+fn section_totals_of(
+    accounts: &[crate::accounts::Account],
+    balances: &[AccountBalance],
+) -> Result<Vec<SectionTotal>> {
+    use crate::accounts::AccountGroup;
     let mut totals: Vec<SectionTotal> = [
         "banking",
         "credit",
@@ -696,7 +704,7 @@ pub fn section_totals(conn: &Connection, today: Date) -> Result<Vec<SectionTotal
         total: Money::ZERO,
     })
     .collect();
-    for a in crate::persistence::accounts::list(conn)? {
+    for a in accounts {
         let section = match a.fields.group {
             AccountGroup::Banking => "banking",
             AccountGroup::Credit => "credit",
@@ -746,6 +754,52 @@ pub fn account_bar_section_totals(conn: &Connection, today: Date) -> Result<Vec<
         t.total = account_bar_figure(conn, t.total)?;
     }
     Ok(out)
+}
+
+/// Everything the account bar shows (ACCT-230, ACCT-240).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+pub struct AccountBar {
+    pub balances: Vec<AccountBalance>,
+    pub section_totals: Vec<SectionTotal>,
+    /// Net worth today: every account's `current` balance summed, which
+    /// is assets less what is owed in ledger sign.
+    pub net_worth: Money,
+}
+
+/// [`account_bar_balances`], [`account_bar_section_totals`], and
+/// [`crate::reports::account_bar_net_worth`] from one read of the
+/// balances and the settings.
+pub fn account_bar(conn: &Connection, today: Date) -> Result<AccountBar> {
+    let cents = crate::settings::load(conn)?.account_bar_cents;
+    let shown = |m: Money| if cents { Ok(m) } else { m.round_to_dollars() };
+    let exact = account_balances(conn, today)?;
+    let accounts = crate::persistence::accounts::list(conn)?;
+    let net_worth = shown(checked_sum(exact.iter().map(|b| b.current))?)?;
+    let section_totals = section_totals_of(&accounts, &exact)?
+        .into_iter()
+        .map(|t| {
+            Ok(SectionTotal {
+                total: shown(t.total)?,
+                ..t
+            })
+        })
+        .collect::<Result<_>>()?;
+    let balances = exact
+        .iter()
+        .map(|b| {
+            Ok(AccountBalance {
+                current: shown(b.current)?,
+                ending: shown(b.ending)?,
+                ..*b
+            })
+        })
+        .collect::<Result<_>>()?;
+    Ok(AccountBar {
+        balances,
+        section_totals,
+        net_worth,
+    })
 }
 
 /// Register footer figures (REG-060).

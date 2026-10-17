@@ -16,6 +16,7 @@ vi.mock("../api", async (orig) => {
       scheduleDueList: () => ok([]),
       scheduleReviewList: () => ok([]),
       accountBalances: () => ok([]),
+      accountBar: () => ok({ balances: [], section_totals: [], net_worth: "0.00" }),
       securityList: () => ok([]),
     },
   };

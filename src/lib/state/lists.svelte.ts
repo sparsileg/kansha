@@ -3,6 +3,7 @@
 
 import { call, commands } from "../api";
 import type {
+  AccountBar,
   Account,
   AccountBalance,
   AccountId,
@@ -92,10 +93,10 @@ class ListsState {
 
   async loadAll(): Promise<void> {
     try {
-      const [today, accounts, balances, categories, tags, payees, taxLines, insights, spendingCards] = await Promise.all([
+      const [today, accounts, bar, categories, tags, payees, taxLines, insights, spendingCards] = await Promise.all([
         call(commands.today()),
         call(commands.accountList()),
-        call(commands.accountBalances()),
+        call(commands.accountBar()),
         call(commands.categoryList()),
         call(commands.tagList()),
         call(commands.payeeList()),
@@ -105,7 +106,7 @@ class ListsState {
       ]);
       this.today = today;
       this.accounts = accounts;
-      this.balances = balances;
+      this.setBar(bar);
       this.categories = categories;
       this.tags = tags;
       this.payees = payees;
@@ -113,7 +114,6 @@ class ListsState {
       this.insights = insights;
       this.spendingCards = spendingCards;
       this.error = null;
-      void this.loadNetWorth();
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -134,35 +134,22 @@ class ListsState {
     this.payees = await call(commands.payeeList());
   }
 
-  /** After any ledger write: balances change, the lists do not. */
+  /** After any ledger write: balances change, the lists do not. One
+   * call brings the account bar's balances, section totals, and net
+   * worth. */
   async loadBalances(): Promise<void> {
     try {
-      this.balances = await call(commands.accountBalances());
+      this.setBar(await call(commands.accountBar()));
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }
-    await this.loadNetWorth();
-    await this.loadSectionTotals();
   }
 
-  /** A failure only drops the totals: the list still works. */
-  async loadSectionTotals(): Promise<void> {
-    try {
-      const rows = await call(commands.sectionTotals());
-      this.sectionTotals = Object.fromEntries(rows.map((r) => [r.section, r.total]));
-    } catch {
-      this.sectionTotals = {};
-    }
-  }
-
-  /** Net worth changes with balances and prices. A failure only blanks
-   * the figure: the rest of the list still works. */
-  async loadNetWorth(): Promise<void> {
-    try {
-      this.netWorth = await call(commands.netWorth());
-    } catch {
-      this.netWorth = null;
-    }
+  /** The account bar's figures (ACCT-230, ACCT-240). */
+  private setBar(bar: AccountBar): void {
+    this.balances = bar.balances;
+    this.sectionTotals = Object.fromEntries(bar.section_totals.map((r) => [r.section, r.total]));
+    this.netWorth = bar.net_worth;
   }
 }
 

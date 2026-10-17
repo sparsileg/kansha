@@ -269,6 +269,43 @@ fn search_finds_text_and_amounts_across_accounts_newest_first() {
     assert_eq!(search(&f, "cafe", Some(f.sav)).total, 0);
 }
 
+/// What the search matches besides the above: notes, part of a category
+/// path, `[Account]` and `--Split--` as the Category column shows them,
+/// and an amount in a scoped search; the total past the limit.
+#[test]
+fn search_matches_notes_paths_brackets_and_split() {
+    let mut f = fixture();
+    let food = f.book.find_category("Food:Dining").unwrap().unwrap();
+    let mut entry = f
+        .book
+        .entry(f.sav, date("2026-03-01"))
+        .payee("Bakery")
+        .amount(m("-7.25"))
+        .category(food)
+        .build()
+        .unwrap();
+    entry.notes = "zz-birthday".into();
+    f.book.write(|tx| ledger::create_entry(tx, &entry)).unwrap();
+
+    assert_eq!(search(&f, "BIRTHDAY", None).total, 1);
+    assert_eq!(search(&f, "od:din", None).total, 3); // inside the path
+    assert_eq!(search(&f, "[savings]", None).total, 1); // chk's transfer row
+    assert_eq!(search(&f, "[checking", None).total, 1); // sav's transfer row
+    assert_eq!(search(&f, "--split--", None).total, 1);
+    assert_eq!(search(&f, "split", None).total, 1);
+    assert_eq!(search(&f, "it-", None).total, 1); // part of --Split--
+    assert_eq!(search(&f, "$7.25", Some(f.sav)).total, 1);
+    assert_eq!(search(&f, "7.25", Some(f.chk)).total, 0);
+    assert_eq!(search(&f, "zz-nothing", None).total, 0);
+    let q = SearchQuery {
+        text: "food".into(),
+        account: None,
+        limit: 2,
+    };
+    let p = ledger::search(f.book.conn(), &q).unwrap();
+    assert_eq!((p.rows.len(), p.total), (2, 5));
+}
+
 #[test]
 fn search_blank_finds_nothing_and_limit_caps_rows_not_the_count() {
     let f = fixture();
@@ -389,6 +426,23 @@ fn sorting_and_paging() {
     let p = query(&f, |q| q.offset = 99);
     assert!(p.rows.is_empty());
     assert_eq!(p.total, 6);
+    // The total counts the filtered rows, paged or not, past the end too.
+    let p = query(&f, |q| q.text = Some("costco".into()));
+    assert_eq!((p.rows.len(), p.total), (2, 2));
+    let p = query(&f, |q| {
+        q.text = Some("costco".into());
+        q.limit = Some(1);
+        q.offset = 1;
+    });
+    assert_eq!((p.rows.len(), p.total), (1, 2));
+    let p = query(&f, |q| {
+        q.text = Some("costco".into());
+        q.limit = Some(1);
+        q.offset = 5;
+    });
+    assert_eq!((p.rows.len(), p.total), (0, 2));
+    let p = query(&f, |q| q.limit = Some(0));
+    assert_eq!((p.rows.len(), p.total), (0, 6));
 
     // The balance column stays the true running balance when sorted.
     let p = query(&f, |q| {
@@ -964,6 +1018,90 @@ fn account_bar_figures_drop_cents_when_the_setting_is_off() {
     // The ledger's own balances keep their cents.
     let exact = ledger::account_balances(f.book.conn(), today).unwrap();
     assert!(exact.iter().any(|b| b.current == m("1234.56")));
+}
+
+/// ACCT-230, ACCT-240: the account bar's figures from one pass equal
+/// the three separate ones, with a liability, a credit card, priced and
+/// unpriced holdings, a future-dated posting, and a closed account.
+#[test]
+fn account_bar_in_one_pass_matches_the_separate_figures() {
+    use kansha_core::accounts::AccountType;
+    use kansha_core::securities::SecurityType;
+    let today = date("2026-06-30");
+    let mut book = Book::new(today).unwrap();
+    let chk = book.account("Checking", AccountType::Checking).unwrap();
+    let card = book.account("Visa", AccountType::CreditCard).unwrap();
+    let loan = book.account("Car loan", AccountType::Loan).unwrap();
+    let old = book.account("Old savings", AccountType::Savings).unwrap();
+    let brk = book.account("Brokerage", AccountType::Brokerage).unwrap();
+    let food = book.category("Food", CategoryKind::Expense).unwrap();
+    book.opening_balance(chk, date("2026-01-01"), m("5000.25"))
+        .unwrap();
+    book.opening_balance(loan, date("2026-01-01"), m("-12000.40"))
+        .unwrap();
+    book.opening_balance(old, date("2026-01-01"), m("300.00"))
+        .unwrap();
+    book.entry(card, date("2026-02-01"))
+        .amount(m("-450.13"))
+        .category(food)
+        .save()
+        .unwrap();
+    book.entry(chk, date("2026-07-15"))
+        .amount(m("-80.00"))
+        .category(food)
+        .save()
+        .unwrap();
+    book.entry(old, date("2026-03-01"))
+        .amount(m("-300.00"))
+        .transfer(chk)
+        .save()
+        .unwrap();
+    book.write(|tx| kansha_core::persistence::accounts::close(tx, old, date("2026-03-02")))
+        .unwrap();
+    let priced = book.security("Total", "VTI", SecurityType::Etf).unwrap();
+    let unpriced = book.security("Odd", "ODD", SecurityType::Stock).unwrap();
+    let opening = book.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    cash.amount = Some(m("2000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    book.invest(&cash).unwrap();
+    for (sec, qty, amount) in [(priced, "3", "600.00"), (unpriced, "7", "123.45")] {
+        let mut buy = InvInput::new(brk, InvAction::Buy, date("2026-01-10"));
+        buy.security = Some(sec);
+        buy.quantity = Some(qty.parse().unwrap());
+        buy.amount = Some(m(amount));
+        book.invest(&buy).unwrap();
+    }
+    book.price(priced, date("2026-06-01"), "250.333".parse().unwrap())
+        .unwrap();
+    let mut f = Fixture {
+        book,
+        chk,
+        sav: old,
+    };
+
+    for cents in [true, false] {
+        set_settings(&mut f, |s| s.account_bar_cents = cents);
+        let conn = f.book.conn();
+        let bar = ledger::account_bar(conn, today).unwrap();
+        assert_eq!(
+            bar.balances,
+            ledger::account_bar_balances(conn, today).unwrap()
+        );
+        assert_eq!(
+            bar.section_totals,
+            ledger::account_bar_section_totals(conn, today).unwrap()
+        );
+        assert_eq!(
+            bar.net_worth,
+            kansha_core::reports::account_bar_net_worth(conn, today).unwrap()
+        );
+    }
+    // The investment account is at market value: the figures differ
+    // from cost, so the comparison above means something.
+    let exact = ledger::account_balances(f.book.conn(), today).unwrap();
+    let brk_value = exact.iter().find(|b| b.account == brk).unwrap().current;
+    assert_ne!(brk_value, m("2000.00"));
 }
 
 /// REG-160.

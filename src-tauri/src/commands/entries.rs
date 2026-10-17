@@ -99,7 +99,7 @@ fn archive_target(
 /// Read the book's inbox (`<book>-inbox/`): on opening the book, when
 /// the window gets focus, and when told files arrived (CLI-040). The
 /// first read starts the watch that sends `inbox-changed`.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn entries_inbox_read(
     app: tauri::AppHandle,
@@ -142,7 +142,7 @@ pub async fn pick_entries_file(app: tauri::AppHandle, start: Option<String>) -> 
 
 /// Receive a chosen file of entries for review (File > Import
 /// entries…); the file stays where it is.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn entries_import(state: State<'_, AppState>, path: String) -> CmdResult<InboxReport> {
     let clock = *state.clock();

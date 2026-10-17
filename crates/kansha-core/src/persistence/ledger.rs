@@ -335,15 +335,13 @@ pub fn register_query(
     let limit = q.limit.unwrap_or(-1);
     let offset = q.offset.max(0);
 
-    let count_sql = format!("{ctes} SELECT count(*) FROM shaped s {filter}");
-    let total: i64 = conn.prepare_cached(&count_sql)?.query_row(
-        named_params! {
-            ":account": q.account, ":from": q.date_from, ":to": q.date_to, ":payee": q.payee,
-            ":cleared": q.cleared, ":category": q.category, ":tag": q.tag, ":text": text,
-        },
-        |r| r.get(0),
-    )?;
-
+    // Unpaged, the total is the row count; paged, each row carries it.
+    let paged = q.limit.is_some() || offset > 0;
+    let total_col = if paged {
+        ", count(*) OVER () AS total"
+    } else {
+        ""
+    };
     let sql = format!(
         "{ctes} SELECT s.txn_id, s.txn_date, s.check_num, s.payee_id, s.payee_name, s.memo,
                 s.status, s.amount, s.cleared, s.others, s.other_account, s.other_category,
@@ -357,9 +355,10 @@ pub fn register_query(
                             JOIN tag tg ON tg.id = pt.tag_id
                             WHERE o.txn_id = s.txn_id
                               AND (s.others <= 1 OR o.id = s.posting_id)
-                            ORDER BY tg.name)), '') AS tags
+                            ORDER BY tg.name)), '') AS tags{total_col}
          FROM shaped s {filter} ORDER BY {order} LIMIT :limit OFFSET :offset"
     );
+    let mut total = 0_i64;
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt.query_map(
         named_params! {
@@ -377,6 +376,9 @@ pub fn register_query(
                 },
                 _ => Counterpart::Split,
             };
+            if paged {
+                total = r.get("total")?;
+            }
             let date: Date = r.get("txn_date")?;
             Ok(RegisterRow {
                 txn_id: r.get("txn_id")?,
@@ -396,7 +398,21 @@ pub fn register_query(
             })
         },
     )?;
-    Ok((rows.collect::<rusqlite::Result<Vec<_>>>()?, total))
+    let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    if !paged {
+        total = i64::try_from(rows.len()).map_err(|_| Error::Overflow("register rows"))?;
+    } else if rows.is_empty() {
+        // Past the end, or no room: no row carries the total.
+        let count_sql = format!("{ctes} SELECT count(*) FROM shaped s {filter}");
+        total = conn.prepare_cached(&count_sql)?.query_row(
+            named_params! {
+                ":account": q.account, ":from": q.date_from, ":to": q.date_to, ":payee": q.payee,
+                ":cleared": q.cleared, ":category": q.category, ":tag": q.tag, ":text": text,
+            },
+            |r| r.get(0),
+        )?;
+    }
+    Ok((rows, total))
 }
 
 /// The typed text as a number of cents ("184.23", "$1,000", "-5"), if it
@@ -428,11 +444,31 @@ pub fn search(
             UNION ALL
             SELECT c.id, cp.path || ':' || c.name FROM category c JOIN cat_path cp ON c.parent_id = cp.id
         ),
+        -- Transactions that can match: a superset of the matches, so only
+        -- these are shaped, and the exact filter below still decides.
+        hit_txn (id) AS (
+            SELECT t.id FROM txn t LEFT JOIN payee py ON py.id = t.payee_id
+            WHERE instr(lower(ifnull(py.name, '') || char(31) || t.memo || char(31) || t.notes
+                              || char(31) || t.check_num), lower(:text)) > 0
+            UNION
+            SELECT p.txn_id FROM posting p
+            LEFT JOIN cat_path cp ON cp.id = p.category_id
+            LEFT JOIN account a ON a.id = p.account_id
+            WHERE instr(lower(p.memo), lower(:text)) > 0
+               OR instr(lower(ifnull(cp.path, '')), lower(:text)) > 0
+               OR instr(lower('[' || ifnull(a.name, '') || ']'), lower(:text)) > 0
+               OR (:cents IS NOT NULL AND abs(p.amount) = :cents)
+            UNION
+            SELECT txn_id FROM posting
+            WHERE instr('--split--', lower(:text)) > 0
+            GROUP BY txn_id HAVING count(*) > 2
+        ),
         base AS (
             SELECT t.id AS txn_id, t.txn_date, t.check_num, t.payee_id, t.memo, t.notes, t.status,
                    p.id AS posting_id, p.account_id, p.amount
             FROM posting p JOIN txn t ON t.id = p.txn_id
             WHERE p.account_id IS NOT NULL AND (:account IS NULL OR p.account_id = :account)
+              AND p.txn_id IN (SELECT id FROM hit_txn)
               -- One row per (transaction, account): an investment account's
               -- cash posting, else its first holding posting.
               AND p.id = (SELECT x.id FROM posting x
@@ -473,22 +509,20 @@ pub fn search(
                           SELECT 1 FROM posting o
                           WHERE o.txn_id = s.txn_id AND abs(o.amount) = :cents))";
     let cents = amount_cents(text);
-    let total: i64 = conn
-        .prepare_cached(&format!("{ctes} SELECT count(*) FROM shaped s {filter}"))?
-        .query_row(
-            named_params! {":account": account, ":text": text, ":cents": cents},
-            |r| r.get(0),
-        )?;
+    // Each row carries the total; with no row it is 0. `limit` is at
+    // least 1 (the caller clamps it).
     let sql = format!(
         "{ctes} SELECT s.txn_id, s.account_id, s.txn_date, s.payee_name, s.memo, s.status,
-                s.amount, s.category
+                s.amount, s.category, count(*) OVER () AS total
          FROM shaped s {filter}
          ORDER BY s.txn_date DESC, s.txn_id DESC, s.posting_id DESC LIMIT :limit"
     );
+    let mut total = 0_i64;
     let mut stmt = conn.prepare_cached(&sql)?;
     let rows = stmt.query_map(
         named_params! {":account": account, ":text": text, ":cents": cents, ":limit": limit},
         |r| {
+            total = r.get("total")?;
             Ok(SearchHit {
                 txn_id: r.get("txn_id")?,
                 account: r.get("account_id")?,
@@ -501,7 +535,8 @@ pub fn search(
             })
         },
     )?;
-    Ok((rows.collect::<rusqlite::Result<Vec<_>>>()?, total))
+    let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((rows, total))
 }
 
 /// Every posting of every normal (not void), non-investment transaction,

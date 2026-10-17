@@ -16,7 +16,7 @@ use crate::state::{AppState, CmdResult};
 
 /// Register rows for an account with filters, sort, and paging (REG-040).
 /// The running balance is always the true one in date order (REG-020).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn register_query(state: State<'_, AppState>, query: RegisterQuery) -> CmdResult<RegisterPage> {
     state.read(|db, today| ledger::register_query(db.conn(), &query, today))
@@ -24,7 +24,7 @@ pub fn register_query(state: State<'_, AppState>, query: RegisterQuery) -> CmdRe
 
 /// Transactions matching some text or amount, in any account or one
 /// (navigation bar search). Newest first, capped by `limit`.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn search_transactions(
     state: State<'_, AppState>,
@@ -34,7 +34,7 @@ pub fn search_transactions(
 }
 
 /// Edit > Find/Replace: rows matching the Find rows (REG-170).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn find_transactions(state: State<'_, AppState>, query: FindQuery) -> CmdResult<FindResult> {
     state.read(|db, _| ledger::find(db.conn(), &query))
@@ -45,7 +45,7 @@ pub fn find_transactions(state: State<'_, AppState>, query: FindQuery) -> CmdRes
 /// `confirmed` (one question for the batch). A bulk backup comes first;
 /// one Undo puts every changed transaction back and deletes
 /// the tags, payees, and categories it created.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn replace_transactions(
     state: State<'_, AppState>,
@@ -72,7 +72,7 @@ pub fn replace_transactions(
 }
 
 /// Footer figures: current, cleared, ending, available credit (REG-060).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn register_summary(
     state: State<'_, AppState>,
@@ -237,7 +237,7 @@ pub fn audit_history(
 }
 
 /// Run the integrity check (INT-030).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn integrity_check(state: State<'_, AppState>) -> CmdResult<IntegrityReport> {
     let report = state.read(|db, _| integrity::check(db.conn()))?;

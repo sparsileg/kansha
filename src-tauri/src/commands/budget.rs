@@ -130,7 +130,7 @@ pub fn budget_copy_month(
 }
 
 /// The Annual View of `year` (BUD-070).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn budget_annual(state: State<'_, AppState>, id: BudgetId, year: i32) -> CmdResult<AnnualView> {
     let today = state.clock().today();
@@ -138,7 +138,7 @@ pub fn budget_annual(state: State<'_, AppState>, id: BudgetId, year: i32) -> Cmd
 }
 
 /// The Graph View of a period (BUD-060); `at` `None` is the current one.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn budget_graph(
     state: State<'_, AppState>,

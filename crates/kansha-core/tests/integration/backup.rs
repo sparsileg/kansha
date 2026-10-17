@@ -147,6 +147,38 @@ fn backup_round_trips_and_needs_the_passphrase() {
     assert_eq!(fingerprint(&opened.db), fingerprint(&open.db));
 }
 
+/// A backup in steps (the app holds the book's lock only to take and to
+/// record): it holds the book as it was when taken, and a change made
+/// meanwhile is kept in the book but not in the backup.
+#[test]
+fn a_backup_in_steps_holds_the_book_as_taken() {
+    use kansha_core::settings;
+    let dir = tempfile::tempdir().unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    let before = fingerprint(&open.db);
+    let taken = backup::Taken::take(&open.db, &open.key_file, Some(out.path())).unwrap();
+    add_txn(&mut open.db);
+    let done = taken
+        .finish("kansha", BackupKind::Timeout, "0.1.0", &clock())
+        .unwrap();
+    assert_eq!(done.written.integrity_issues, 0);
+    assert_eq!(done.written.path.parent(), Some(out.path()));
+    assert_eq!(
+        settings::backup_status(open.db.conn()).unwrap().last_at,
+        None
+    );
+    backup::record(&mut open.db, &done, &clock()).unwrap();
+    assert_eq!(
+        settings::backup_status(open.db.conn()).unwrap().last_at,
+        Some(done.written.manifest.created_at)
+    );
+
+    let opened = backup::open(&done.written.path, &pass("secret"), &clock()).unwrap();
+    assert_eq!(fingerprint(&opened.db), before);
+    assert_ne!(fingerprint(&open.db), before);
+}
+
 fn clock_now() -> kansha_core::Timestamp {
     use kansha_core::Clock;
     clock().now()

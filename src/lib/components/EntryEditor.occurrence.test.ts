@@ -18,6 +18,7 @@ vi.mock("../api", async (orig) => {
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       accountBalances: vi.fn(),
+      accountBar: vi.fn(),
     },
   };
 });
@@ -52,6 +53,7 @@ beforeEach(() => {
   c.registerQuery.mockImplementation(() => ok({ rows: [], total: 0, today: "2026-09-24" }));
   c.registerSummary.mockImplementation(() => ok({ current: "0.00", cleared: "0.00", ending: "0.00", available_credit: null }));
   c.accountBalances.mockImplementation(() => ok([]));
+  c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
   registerState.accountId = 2;
 });
 

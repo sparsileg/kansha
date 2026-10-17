@@ -141,7 +141,7 @@ pub fn book_setup(
 
 /// Unlock the book with the backup passphrase (SECU-020). A book from an
 /// older Kansha is backed up, then migrated (BAK-020).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn book_unlock(state: State<'_, AppState>, passphrase: String) -> CmdResult<()> {
     let mut guard = state.book()?;
@@ -192,7 +192,7 @@ fn backup_result(d: backup::Done) -> BackupResult {
 }
 
 /// File > Back Up Now (BAK-030).
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn backup_now(state: State<'_, AppState>) -> CmdResult<BackupResult> {
     state.backup(BackupKind::Manual).map(backup_result)
@@ -206,7 +206,7 @@ pub fn backup_timed_due(state: State<'_, AppState>) -> CmdResult<bool> {
 }
 
 /// The timed backup (SET-050), kind `timeout`.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn backup_timed_run(state: State<'_, AppState>) -> CmdResult<BackupResult> {
     state.backup(BackupKind::Timeout).map(backup_result)
@@ -379,7 +379,7 @@ pub struct RestorePreview {
 /// Restore, step 2: back up the current book, then replace it with the
 /// backup under a new database key, and open it. From now on the
 /// backup's passphrase opens the book.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn restore_apply(state: State<'_, AppState>) -> CmdResult<()> {
     let mut guard = state.book()?;

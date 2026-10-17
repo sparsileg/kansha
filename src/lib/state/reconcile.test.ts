@@ -6,6 +6,7 @@ vi.mock("../api", async (orig) => {
     ...real,
     commands: {
       accountBalances: vi.fn(),
+      accountBar: vi.fn(),
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       reconcileOpen: vi.fn(),
@@ -51,6 +52,7 @@ beforeEach(async () => {
   registerState.close();
   listsState.accounts = [];
   c.accountBalances.mockImplementation(() => ok([]));
+  c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
   c.reconcileOpeningCheck.mockImplementation(() => ok(opening));
   c.reconcileHistory.mockImplementation(() => ok([]));
   c.reconcileOpen.mockImplementation(() => ok(null));

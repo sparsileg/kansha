@@ -31,6 +31,7 @@ vi.mock("../../api", async (orig) => {
       invGains: () => ok([]),
       invAllocation: () => ok(null),
       accountBalances: () => ok([]),
+      accountBar: () => ok({ balances: [], section_totals: [], net_worth: "0.00" }),
     },
   };
 });

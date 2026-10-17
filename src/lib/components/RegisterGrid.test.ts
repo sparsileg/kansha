@@ -9,6 +9,7 @@ vi.mock("../api", async (orig) => {
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       accountBalances: vi.fn(),
+      accountBar: vi.fn(),
       payeeSearch: vi.fn(),
       txnSetCleared: vi.fn(),
       entryGet: vi.fn(),
@@ -55,6 +56,7 @@ beforeEach(async () => {
   );
   c.registerSummary.mockImplementation(() => ok({ current: "1234.5", cleared: "0.00", ending: "1.00", available_credit: null }));
   c.accountBalances.mockImplementation(() => ok([]));
+  c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
   c.payeeSearch.mockImplementation(() => ok([]));
   c.txnSetCleared.mockImplementation(() => ok(null));
   c.payeeList.mockImplementation(() => ok([]));

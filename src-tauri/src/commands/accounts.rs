@@ -4,7 +4,7 @@ use kansha_core::Date;
 use kansha_core::accounts::{
     Account, AccountFields, AccountId, AccountType, GroupOrder, masked_account_number,
 };
-use kansha_core::ledger::{self, AccountBalance, SectionTotal};
+use kansha_core::ledger::{self, AccountBalance, AccountBar};
 use kansha_core::persistence::accounts;
 use tauri::State;
 
@@ -19,18 +19,18 @@ pub fn account_list(state: State<'_, AppState>) -> CmdResult<Vec<Account>> {
 
 /// Current and ending balance of every account (ACCT-230), as the
 /// account bar shows them: without cents if the setting says so.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn account_balances(state: State<'_, AppState>) -> CmdResult<Vec<AccountBalance>> {
     state.read(|db, today| ledger::account_bar_balances(db.conn(), today))
 }
 
-/// Each account list section's total (ACCT-240), as the account bar
-/// shows it.
-#[tauri::command]
+/// Balances, section totals, and net worth for the account bar in one
+/// call (ACCT-230, ACCT-240), as it shows them.
+#[tauri::command(async)]
 #[specta::specta]
-pub fn section_totals(state: State<'_, AppState>) -> CmdResult<Vec<SectionTotal>> {
-    state.read(|db, today| ledger::account_bar_section_totals(db.conn(), today))
+pub fn account_bar(state: State<'_, AppState>) -> CmdResult<AccountBar> {
+    state.read(|db, today| ledger::account_bar(db.conn(), today))
 }
 
 /// A new account's fields with the type's defaults: group, tax treatment,

@@ -45,7 +45,7 @@ pub fn report_period_choices(
     state.read(|_, today| reports::period_choices(&range, today))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn report_run(state: State<'_, AppState>, settings: ReportSettings) -> CmdResult<Report> {
     state.read(|db, today| reports::run(db.conn(), &settings, today))
@@ -105,7 +105,7 @@ pub(crate) fn download_path(
 
 /// Write the report as CSV to the Downloads folder (RPT-050); returns
 /// the file's path. An existing file is never overwritten.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn report_export_csv(
     app: tauri::AppHandle,
@@ -233,7 +233,7 @@ pub fn net_worth_trend(state: State<'_, AppState>, years: i64, fitted: bool) -> 
 
 /// Net worth today, for the foot of the account list (ACCT-240), as the
 /// account bar shows it.
-#[tauri::command]
+#[tauri::command(async)]
 #[specta::specta]
 pub fn net_worth(state: State<'_, AppState>) -> CmdResult<Money> {
     state.read(|db, today| reports::account_bar_net_worth(db.conn(), today))

@@ -28,6 +28,7 @@ vi.mock("../api", async (orig) => {
       scheduleDueList: () => ok([]),
       scheduleReviewList: () => ok([]),
       accountBalances: () => ok([]),
+      accountBar: () => ok({ balances: [], section_totals: [], net_worth: "0.00" }),
       registerQuery: () => ok({ rows: [], total: 0, today: "2026-10-01" }),
       registerSummary: () => ok({ current: "0.00", cleared: "0.00", ending: "0.00", available_credit: null }),
     },

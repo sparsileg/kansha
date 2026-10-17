@@ -96,6 +96,28 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     ledger::register_query(db.conn(), &q, today).unwrap();
     check("register, text filter", t.elapsed(), 1000, &mut failures);
 
+    // The account bar after a save (ACCT-230, ACCT-240): one call.
+    let t = Instant::now();
+    ledger::account_bar(db.conn(), today).unwrap();
+    check("account bar", t.elapsed(), 1000, &mut failures);
+
+    // Navigation-bar search: a common payee and a word found nowhere.
+    for text in ["safeway", "zzzz-nothing"] {
+        let sq = ledger::SearchQuery {
+            text: text.into(),
+            account: None,
+            limit: 200,
+        };
+        let t = Instant::now();
+        let hits = ledger::search(db.conn(), &sq).unwrap();
+        check(
+            &format!("search \"{text}\", {} found", hits.total),
+            t.elapsed(),
+            1000,
+            &mut failures,
+        );
+    }
+
     // Find/Replace (REG-170): reads every posting of the book.
     let fq = ledger::FindQuery {
         conditions: vec![ledger::FindCondition {
@@ -282,6 +304,37 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
         t.elapsed()
     );
     assert!(report.is_clean());
+
+    // A backup (BAK-030 … BAK-080): the app holds the book's lock only
+    // for the image; the rest runs without it.
+    let (key_file, _) =
+        kansha_core::security::KeyFile::create(&kansha_core::security::Passphrase::for_tests("p"))
+            .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let t = Instant::now();
+    let taken = kansha_core::backup::Taken::take(&db, &key_file, Some(out.path())).unwrap();
+    check(
+        "backup image (under the lock)",
+        t.elapsed(),
+        1000,
+        &mut failures,
+    );
+    let t = Instant::now();
+    let done = taken
+        .finish(
+            "perf",
+            kansha_core::backup::BackupKind::Timeout,
+            "0.0.0",
+            &clock,
+        )
+        .unwrap();
+    check(
+        "backup write (without the lock)",
+        t.elapsed(),
+        5000,
+        &mut failures,
+    );
+    assert_eq!(done.written.integrity_issues, 0);
 
     // Year-End Copy (UI-085): ten years carried, ten kept. Last, as it
     // turns this book into the copy.

@@ -181,14 +181,50 @@ pub fn write(
     app_version: &str,
     clock: &dyn Clock,
 ) -> Result<Written> {
-    if !folder.is_dir() {
-        return Err(Error::Io(format!(
-            "the backup folder {} does not exist",
-            folder.display()
-        )));
+    check_folder(folder)?;
+    let image = Image::take(db)?;
+    write_image(image, key_file, folder, book, kind, app_version, clock)
+}
+
+fn check_folder(folder: &Path) -> Result<()> {
+    if folder.is_dir() {
+        return Ok(());
     }
-    let image = db.snapshot()?;
-    let snapshot = Db::from_snapshot(&image, clock)?;
+    Err(Error::Io(format!(
+        "the backup folder {} does not exist",
+        folder.display()
+    )))
+}
+
+/// A consistent image of the database (BAK-050): the only part of a
+/// backup that needs the book.
+struct Image {
+    bytes: Vec<u8>,
+    schema_version: u32,
+}
+
+impl Image {
+    fn take(db: &Db) -> Result<Image> {
+        Ok(Image {
+            bytes: db.snapshot()?,
+            schema_version: db.schema_version()?,
+        })
+    }
+}
+
+/// [`write`] after the snapshot: check the image, compress, encrypt,
+/// write, read back. Needs no database connection.
+fn write_image(
+    image: Image,
+    key_file: &KeyFile,
+    folder: &Path,
+    book: &str,
+    kind: BackupKind,
+    app_version: &str,
+    clock: &dyn Clock,
+) -> Result<Written> {
+    check_folder(folder)?;
+    let snapshot = Db::from_snapshot(&image.bytes, clock)?;
     let integrity_issues = integrity::check(snapshot.conn())?.issues.len();
     drop(snapshot);
 
@@ -197,10 +233,10 @@ pub fn write(
         book: Some(book.to_owned()),
         created_at: clock.now(),
         app_version: app_version.to_owned(),
-        schema_version: db.schema_version()?,
+        schema_version: image.schema_version,
         kind,
     };
-    let payload = key_file.public_key()?.encrypt(&gzip(&image)?)?;
+    let payload = key_file.public_key()?.encrypt(&gzip(&image.bytes)?)?;
     drop(image);
     let bytes = build_zip(&manifest, &payload, key_file.locked_private_key())?;
 
@@ -261,27 +297,86 @@ pub fn back_up(
     app_version: &str,
     clock: &dyn Clock,
 ) -> Result<Done> {
-    let s = settings::load(db.conn())?;
-    let (folder, folder_missing) =
-        target_folder(s.backup_folder.as_deref().map(Path::new), downloads)?;
-    let written = write(db, key_file, &folder, book, kind, app_version, clock)?;
-    // Pruning is housekeeping: a failure never fails the backup.
-    let keep_last = u32::try_from(s.backup_keep_last).unwrap_or(u32::MAX);
-    let keep_months = u32::try_from(s.backup_keep_months).unwrap_or(0);
-    let pruned = prune(&folder, book, clock.now(), keep_last, keep_months).map_or(0, |d| d.len());
+    let taken = Taken::take(db, key_file, downloads)?;
+    let done = taken.finish(book, kind, app_version, clock)?;
+    record(db, &done, clock)?;
+    Ok(done)
+}
+
+/// What a backup needs from the open book: its image, key, and backup
+/// settings. [`back_up`] in three steps, so a caller holding a lock on
+/// the book holds it only for [`Taken::take`] and [`record`]; the slow
+/// part, [`Taken::finish`], needs no book.
+pub struct Taken {
+    image: Image,
+    key_file: KeyFile,
+    folder: PathBuf,
+    folder_missing: bool,
+    keep_last: u32,
+    keep_months: u32,
+}
+
+impl Taken {
+    /// Pick the folder (BAK-030) and take the image (BAK-050).
+    pub fn take(db: &Db, key_file: &KeyFile, downloads: Option<&Path>) -> Result<Taken> {
+        let s = settings::load(db.conn())?;
+        let (folder, folder_missing) =
+            target_folder(s.backup_folder.as_deref().map(Path::new), downloads)?;
+        Ok(Taken {
+            image: Image::take(db)?,
+            key_file: key_file.clone(),
+            folder,
+            folder_missing,
+            keep_last: u32::try_from(s.backup_keep_last).unwrap_or(u32::MAX),
+            keep_months: u32::try_from(s.backup_keep_months).unwrap_or(0),
+        })
+    }
+
+    /// Write and check the backup, then prune this book's old automatic
+    /// ones (BAK-040). Nothing is recorded in the book yet.
+    pub fn finish(
+        self,
+        book: &str,
+        kind: BackupKind,
+        app_version: &str,
+        clock: &dyn Clock,
+    ) -> Result<Done> {
+        let written = write_image(
+            self.image,
+            &self.key_file,
+            &self.folder,
+            book,
+            kind,
+            app_version,
+            clock,
+        )?;
+        // Pruning is housekeeping: a failure never fails the backup.
+        let pruned = prune(
+            &self.folder,
+            book,
+            clock.now(),
+            self.keep_last,
+            self.keep_months,
+        )
+        .map_or(0, |d| d.len());
+        Ok(Done {
+            written,
+            folder_missing: self.folder_missing,
+            pruned,
+        })
+    }
+}
+
+/// Record a finished backup in the book (BAK-030, BAK-080).
+pub fn record(db: &mut Db, done: &Done, clock: &dyn Clock) -> Result<()> {
     db.write(clock, Origin::System, |tx| {
         settings::record_backup(
             tx,
-            written.manifest.created_at,
-            &written.path.to_string_lossy(),
-            written.integrity_issues,
-            folder_missing,
+            done.written.manifest.created_at,
+            &done.written.path.to_string_lossy(),
+            done.written.integrity_issues,
+            done.folder_missing,
         )
-    })?;
-    Ok(Done {
-        written,
-        folder_missing,
-        pruned,
     })
 }
 

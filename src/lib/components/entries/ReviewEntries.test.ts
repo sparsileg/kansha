@@ -69,7 +69,7 @@ vi.mock("../../api", async (orig) => {
       entriesImport: () => Promise.resolve({ status: "ok", data: inbox }),
       pickEntriesFile: () => Promise.resolve(picked),
       accountBalances: () => Promise.resolve({ status: "ok", data: [] }),
-      sectionTotals: () => Promise.resolve({ status: "ok", data: [] }),
+      accountBar: () => Promise.resolve({ status: "ok", data: { balances: [], section_totals: [], net_worth: "0.00" } }),
     },
   };
 });

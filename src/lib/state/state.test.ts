@@ -8,6 +8,7 @@ vi.mock("../api", async (orig) => {
       today: vi.fn(),
       accountList: vi.fn(),
       accountBalances: vi.fn(),
+      accountBar: vi.fn(),
       categoryList: vi.fn(),
       tagList: vi.fn(),
       payeeList: vi.fn(),
@@ -44,6 +45,7 @@ beforeEach(() => {
   c.registerQuery.mockImplementation(() => ok(page(3)));
   c.registerSummary.mockImplementation(() => ok(summary));
   c.accountBalances.mockImplementation(() => ok([]));
+  c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
 });
 
 describe("listsState", () => {
@@ -160,9 +162,9 @@ describe("registerState", () => {
 
   it("refresh reloads the page and balances", async () => {
     await registerState.open(7);
-    c.accountBalances.mockClear();
+    c.accountBar.mockClear();
     await registerState.refresh();
-    expect(c.accountBalances).toHaveBeenCalledTimes(1);
+    expect(c.accountBar).toHaveBeenCalledTimes(1);
   });
 });
 

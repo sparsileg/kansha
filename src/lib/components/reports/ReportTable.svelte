@@ -9,6 +9,9 @@
   // the columns up to its figures, and a transaction's first column sits
   // under it. Top-level rows are shaded; every row is one line, text cut
   // with "…" to fit the page (`fitColumns`), on screen and on paper.
+  //
+  // A long report draws only the lines in view, plus a margin, between
+  // two spacer rows standing for the rest; Save PDF draws every line.
   import { tick, untrack } from "svelte";
   import { columnHeading, formatCell } from "../../format/report";
   import {
@@ -48,6 +51,8 @@
 
   const sortOf = (c: Column): DetailSort | null => (sort && onsort ? (COLUMN_SORTS[c.id] ?? null) : null);
 
+  const WINDOW_FROM = 500;
+  const OVERSCAN = 40;
   const lines = $derived(flatten(report.rows, (p) => inst.isCollapsed(p), report.totals_on_heading));
   const numeric = (c: Column) => c.kind === "money" || c.kind === "quantity" || c.kind === "percent";
   /** Negative amounts show in the theme's negative color, as Quicken's
@@ -92,14 +97,130 @@
   /** Each printed page's first line, while saving a PDF. */
   let pages = $state<number[] | null>(null);
 
-  // Measure again whenever the lines change.
+  // Natural widths come from every line with nothing collapsed, so
+  // collapsing or expanding never needs them again (a collapsed group
+  // never needs more room). A long report measures only the lines with
+  // the longest text in each column.
+  const allLines = $derived(flatten(report.rows, () => false, report.totals_on_heading));
+  const measureLines = $derived(allLines.length > WINDOW_FROM ? widest(allLines) : allLines);
+
+  /** The few lines with the longest text in each column, and the
+   * deepest (their indent adds width). */
+  function widest(all: Line[]): Line[] {
+    const keep = new Set<Line>();
+    const top = (score: (l: Line) => number) => {
+      for (const l of [...all].sort((a, b) => score(b) - score(a)).slice(0, 5)) keep.add(l);
+    };
+    report.columns.forEach((c, i) => {
+      top((l) => {
+        if (labelled(l) && i < span) return -1;
+        const text = formatCell(c.kind, l.cells[i] ?? "", report.cents).length;
+        return i === 0 ? text + l.depth * 2.6 : text;
+      });
+    });
+    top((l) => l.depth);
+    return all.filter((l) => keep.has(l));
+  }
+
+  // Measure again when the report or its columns change.
   $effect(() => {
-    void lines;
+    void report;
     void ids;
     if (!report.compact) return;
     untrack(() => {
       measured = null;
       void tick().then(measure);
+    });
+  });
+
+  // Windowing: a report of more lines than this draws only those in view.
+  /** Set while Save PDF needs every line drawn. */
+  let printing = $state(false);
+  const windowed = $derived(!printing && lines.length > WINDOW_FROM);
+  /** A line's drawn height in px by its look (kind, heading, total);
+   * `rowH` until one of that look has been drawn. */
+  let heights = $state<Record<string, number>>({});
+  let rowH = $state(22);
+  const look = (l: Line) => `${l.kind}${l.path !== null && !l.collapsed ? "h" : ""}${l.closing ? "c" : ""}`;
+  /** Each line's top in px within the body, and the body's height last. */
+  const tops = $derived.by(() => {
+    if (!windowed) return [];
+    const out = new Array<number>(lines.length + 1);
+    out[0] = 0;
+    for (let i = 0; i < lines.length; i++) out[i + 1] = out[i] + (heights[look(lines[i])] ?? rowH);
+    return out;
+  });
+  /** The visible part of the body, in px from its top. */
+  let view = $state({ top: 0, height: 800 });
+  /** The first line whose bottom is below `y`. */
+  const lineAt = (y: number) => {
+    let lo = 0;
+    let hi = lines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (tops[mid + 1] <= y) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const range = $derived.by(() => {
+    if (!windowed) return { from: 0, to: lines.length };
+    const from = Math.max(0, lineAt(view.top) - OVERSCAN);
+    const to = Math.min(lines.length, lineAt(view.top + view.height) + 1 + OVERSCAN);
+    return { from, to };
+  });
+  const shown = $derived(natural === null && report.compact ? measureLines : lines.slice(range.from, range.to));
+  let body = $state<HTMLTableSectionElement>();
+
+  /** The nearest ancestor that scrolls, or none. */
+  function scrollerOf(el: HTMLElement): HTMLElement | null {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const o = getComputedStyle(p).overflowY;
+      if (o === "auto" || o === "scroll") return p;
+    }
+    return null;
+  }
+
+  // Follow the scrolling while windowed.
+  $effect(() => {
+    const el = body;
+    if (!el || !windowed) return;
+    const scroller = scrollerOf(el);
+    const update = () => {
+      const box = scroller?.getBoundingClientRect() ?? { top: 0 };
+      const height = scroller?.clientHeight || window.innerHeight || 800;
+      view = { top: Math.max(0, box.top - el.getBoundingClientRect().top), height };
+    };
+    update();
+    const target: HTMLElement | Window = scroller ?? window;
+    target.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      target.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  });
+
+  // Learn each look's height from the drawn lines.
+  $effect(() => {
+    void shown;
+    if (!windowed) return;
+    void tick().then(() => {
+      const trs = body ? [...body.querySelectorAll<HTMLElement>("tr[data-i]")] : [];
+      const next = { ...untrack(() => heights) };
+      let changed = false;
+      for (const tr of trs) {
+        const h = tr.getBoundingClientRect().height;
+        const l = lines[Number(tr.dataset.i)];
+        if (h > 0 && l && next[look(l)] !== h) {
+          next[look(l)] = h;
+          changed = true;
+        }
+      }
+      if (changed) {
+        heights = next;
+        rowH = Object.values(next)[0] ?? rowH;
+      }
     });
   });
 
@@ -127,6 +248,8 @@
   /** Before Save PDF: split a compact report into pages (`paginate`),
    * from its rows' heights set as on paper (`.paper`). */
   export async function preparePrint(): Promise<void> {
+    printing = true;
+    await tick();
     if (!report.compact || !table || !paper || lines.length === 0) return;
     const t = table;
     t.classList.add("paper");
@@ -145,6 +268,7 @@
   /** After Save PDF. */
   export function endPrint() {
     pages = null;
+    printing = false;
   }
 </script>
 
@@ -173,8 +297,12 @@
   </tr>
 {/snippet}
 
-{#snippet bodyRow(l: Line)}
-  <tr class={l.kind} class:closing={l.closing} class:heading={l.path !== null && !l.collapsed}>
+{#snippet gap(px: number, cols: number)}
+  {#if px > 0}<tr class="gap" aria-hidden="true"><td colspan={cols} style:height="{px}px"></td></tr>{/if}
+{/snippet}
+
+{#snippet bodyRow(l: Line, i: number | null = null)}
+  <tr class={l.kind} class:closing={l.closing} class:heading={l.path !== null && !l.collapsed} data-i={i}>
     {#if labelled(l)}
       <td class="label" colspan={span} title={l.label} style:padding-left={indent(l.depth)}>
         {#if l.path !== null}
@@ -232,12 +360,14 @@
     >
       {@render cols()}
       <thead>{@render headRow()}</thead>
-      <tbody>
-        {#each lines as l (l.key)}
-          {@render bodyRow(l)}
+      <tbody bind:this={body}>
+        {#if windowed && natural !== null}{@render gap(tops[range.from], report.columns.length)}{/if}
+        {#each shown as l, k (l.key)}
+          {@render bodyRow(l, natural === null ? null : range.from + k)}
         {:else}
           <tr><td class="none" colspan={report.columns.length}>Nothing to report for these dates and settings.</td></tr>
         {/each}
+        {#if windowed && natural !== null}{@render gap(tops[lines.length] - tops[range.to], report.columns.length)}{/if}
       </tbody>
     </table>
   </div>
@@ -280,9 +410,10 @@
       {/each}
     </tr>
   </thead>
-  <tbody>
-    {#each lines as l (l.key)}
-      <tr class={l.kind} class:closing={l.closing} class:heading={l.path !== null && !l.collapsed}>
+  <tbody bind:this={body}>
+    {#if windowed}{@render gap(tops[range.from], report.columns.length + 1)}{/if}
+    {#each shown as l, k (l.key)}
+      <tr class={l.kind} class:closing={l.closing} class:heading={l.path !== null && !l.collapsed} data-i={range.from + k}>
         <td class="label" style="padding-left: {0.4 + l.depth * 1.2}rem">
           {#if l.path !== null}
             <button
@@ -310,6 +441,7 @@
     {:else}
       <tr><td class="none" colspan={report.columns.length + 1}>Nothing to report for these dates and settings.</td></tr>
     {/each}
+    {#if windowed}{@render gap(tops[lines.length] - tops[range.to], report.columns.length + 1)}{/if}
   </tbody>
 </table>
 {/if}
@@ -409,6 +541,12 @@
   .none {
     opacity: 0.7;
     padding: 1rem;
+  }
+  /* Stands for the lines not drawn. */
+  .gap td {
+    padding-top: 0;
+    padding-bottom: 0;
+    border: 0;
   }
 
   /* Compact (RPT-145): fixed column widths from the fit, one line per

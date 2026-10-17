@@ -7,6 +7,7 @@
 //! command fails with `locked` until then.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
 use crate::inbox_watch::InboxWatch;
@@ -95,6 +96,13 @@ pub struct AppState {
     pending_restore: Mutex<Option<backup::Opened>>,
     /// When a timed backup is due (SET-050).
     timer: Mutex<BackupTimer>,
+    /// Held for a whole backup made by [`AppState::backup`]: one at a
+    /// time, and closing waits for one under way.
+    backing_up: Mutex<()>,
+    /// Counts the times another book was opened, or none, or the book's
+    /// data replaced, so a backup finished without the book's lock is
+    /// recorded only in the book it was taken from.
+    generation: AtomicU64,
     /// The last register change, while it can be undone (UI-060).
     undo: Mutex<Option<Undo>>,
     /// The last integrity check of the open book, for the Needs attention
@@ -132,6 +140,8 @@ impl AppState {
             book: Mutex::new(None),
             pending_restore: Mutex::new(None),
             timer: Mutex::new(BackupTimer::default()),
+            backing_up: Mutex::new(()),
+            generation: AtomicU64::new(0),
             undo: Mutex::new(None),
             integrity: Mutex::new(None),
             session: Mutex::new(None),
@@ -194,7 +204,7 @@ impl AppState {
     /// kept integrity result is stale.
     pub fn note_import(&self) {
         self.note_change();
-        self.forget_session();
+        self.forget_undo_and_integrity();
     }
 
     /// Entries were received for review: written to the book, so a timed
@@ -325,6 +335,11 @@ impl AppState {
     /// Another book opened, or none, or the book's data replaced: its
     /// undo does not apply, and its integrity result is not kept.
     pub fn forget_session(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.forget_undo_and_integrity();
+    }
+
+    fn forget_undo_and_integrity(&self) {
         if let Ok(mut slot) = self.undo.lock() {
             *slot = None;
         }
@@ -416,24 +431,47 @@ impl AppState {
         Ok(report)
     }
 
-    /// Back up the open book now (BAK-020, BAK-030).
+    /// Back up the open book now (BAK-020, BAK-030). The book's lock is
+    /// held only to take the image and to record the backup; writing it
+    /// (the integrity check, compression, encryption, the file) runs
+    /// without, so other commands wait only for the snapshot.
     pub fn backup(&self, kind: BackupKind) -> CmdResult<backup::Done> {
+        let _one = self
+            .backing_up
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let clock = SystemClock;
         let downloads = self.downloads.clone();
-        let version = self.app_version.clone();
-        let name = self.files().name();
-        let done = self.with_book(|b| {
-            backup::back_up(
-                &mut b.db,
-                &b.key_file,
-                &name,
-                downloads.as_deref(),
-                kind,
-                &version,
-                &clock,
-            )
+        let (taken, name, generation) = self.with_book(|b| {
+            let taken = backup::Taken::take(&b.db, &b.key_file, downloads.as_deref())?;
+            if let Ok(mut t) = self.timer.lock() {
+                t.taken();
+            }
+            Ok((taken, self.files().name(), self.generation()))
         })?;
-        // Anything before this is saved: nothing is waiting for a backup.
+        let done = match taken.finish(&name, kind, &self.app_version, &clock) {
+            Ok(done) => done,
+            Err(e) => {
+                if let Ok(mut t) = self.timer.lock() {
+                    t.failed();
+                }
+                return Err(e.into());
+            }
+        };
+        // Recorded only in the book it was taken from, if still open.
+        let mut guard = self.book()?;
+        let same = self.generation() == generation;
+        match guard.as_mut() {
+            Some(b) if same => backup::record(&mut b.db, &done, &clock)?,
+            _ => {
+                if let Ok(mut t) = self.timer.lock() {
+                    t.failed();
+                }
+                return Ok(done);
+            }
+        }
+        drop(guard);
+        // What was saved before the image needs no backup now.
         if let Ok(mut t) = self.timer.lock() {
             t.backed_up();
         }
@@ -443,6 +481,10 @@ impl AppState {
             issues: done.written.integrity_issues,
         }));
         Ok(done)
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
     }
 
     /// Watch `folder`, the open book's inbox, unless it is watched
@@ -461,6 +503,11 @@ impl AppState {
     /// command line's name check (CLI-080). Failures are reported on
     /// stderr: there is no window left to show them in.
     pub fn close_book(&self) {
+        // A backup under way finishes first.
+        let _one = self
+            .backing_up
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let files = self.files();
         let name = files.name();
         let Ok(mut guard) = self.book.lock() else {

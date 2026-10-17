@@ -121,10 +121,10 @@ export const commands = {
 	 */
 	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
 	/**
-	 *  Each account list section's total (ACCT-240), as the account bar
-	 *  shows it.
+	 *  Balances, section totals, and net worth for the account bar in one
+	 *  call (ACCT-230, ACCT-240), as it shows them.
 	 */
-	sectionTotals: () => typedError<SectionTotal[], IpcError>(__TAURI_INVOKE("section_totals")),
+	accountBar: () => typedError<AccountBar, IpcError>(__TAURI_INVOKE("account_bar")),
 	/**
 	 *  A new account's fields with the type's defaults: group, tax treatment,
 	 *  investment or other-asset settings (ACCT-030, ACCT-240); an
@@ -717,6 +717,17 @@ export type AccountBalance = {
 	current: string,
 	/**  All postings, including future-dated ones. */
 	ending: string,
+};
+
+/**  Everything the account bar shows (ACCT-230, ACCT-240). */
+export type AccountBar = {
+	balances: AccountBalance[],
+	section_totals: SectionTotal[],
+	/**
+	 *  Net worth today: every account's `current` balance summed, which
+	 *  is assets less what is owed in ledger sign.
+	 */
+	net_worth: string,
 };
 
 /**  Where a QIF account goes (MIG-060). */
