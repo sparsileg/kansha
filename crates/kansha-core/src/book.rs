@@ -17,7 +17,7 @@ use crate::date::Clock;
 use crate::error::{Error, Result};
 use crate::newbook;
 use crate::persistence::{Db, Origin};
-use crate::security::{DbKey, KeyFile, Passphrase, write_atomic};
+use crate::security::{DbKey, KeyFile, Passphrase, sync_folder, write_atomic};
 
 /// Longest book name.
 const NAME_MAX: usize = 40;
@@ -146,6 +146,17 @@ fn remove_if_present(path: &Path) -> Result<()> {
     }
 }
 
+/// Make the renames and removals beside `path` durable before the next
+/// step (see [`sync_folder`]).
+fn synced(path: &Path) -> Result<()> {
+    sync_folder(path).map_err(|e| {
+        Error::Io(format!(
+            "cannot save the changes to the folder of {}: {e}",
+            path.display()
+        ))
+    })
+}
+
 /// SQLite's journal files beside a database.
 fn remove_journals(db: &Path) -> Result<()> {
     remove_if_present(&sidecar(db, "-wal"))?;
@@ -173,13 +184,17 @@ fn stage(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Result<
 }
 
 /// Rename the staged files into place: the database, then the key file.
-/// No connection to `files.db` may be open.
+/// No connection to `files.db` may be open. The folder is synced after
+/// each rename: [`recover`] relies on the database's rename reaching the
+/// disk before the key file's.
 fn commit(files: &BookFiles) -> Result<()> {
     remove_journals(&files.db)?;
     std::fs::rename(sidecar(&files.db, ".new"), &files.db)
         .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.db.display())))?;
+    synced(&files.db)?;
     std::fs::rename(sidecar(&files.key, ".new"), &files.key)
-        .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.key.display())))
+        .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.key.display())))?;
+    synced(&files.key)
 }
 
 /// What [`recover`] did.
@@ -211,18 +226,20 @@ pub fn recover(files: &BookFiles) -> Result<Recovery> {
         remove_if_present(&db_new)?;
         remove_journals(&db_new)?;
         remove_if_present(&key_new)?;
+        synced(&files.db)?;
         return Ok(Recovery::Discarded);
     }
     if key_new.exists() {
         std::fs::rename(&key_new, &files.key)
             .map_err(|e| Error::Io(format!("cannot replace {}: {e}", files.key.display())))?;
+        synced(&files.key)?;
         return Ok(Recovery::Finished);
     }
     Ok(Recovery::Nothing)
 }
 
-/// Rename a closed book to `name` in its folder (both files; its backups
-/// then carry the new name). Refused when a book of that name is there.
+/// Rename a closed book to `name` in its folder (both files, its inbox
+/// and its names copy; its backups then carry the new name). Refused when a book of that name is there.
 /// A marker beside the new files holds the old name until both renames
 /// are done, so [`recover`] can finish one a crash interrupted.
 pub fn rename(files: &BookFiles, name: &str) -> Result<BookFiles> {
@@ -265,8 +282,50 @@ fn finish_rename(target: &BookFiles) -> Result<bool> {
                 .map_err(|e| Error::Io(format!("cannot rename {}: {e}", from.display())))?;
         }
     }
+    // The inbox and names copy follow the name (CLI-030, CLI-080). The
+    // import archive stays: its rows record where each file is. A failed
+    // move does not fail the rename.
+    if let Err(e) = move_sidecars(&old, target) {
+        eprintln!("the book was renamed, but {e}");
+    }
+    // Both files are under the new name on disk before the marker goes.
+    synced(&marker)?;
     remove_if_present(&marker)?;
+    synced(&marker)?;
     Ok(true)
+}
+
+/// Move `<old>-inbox/`'s files into `<new>-inbox/` (the whole folder
+/// when there is none) and `<old>-names.txt` to `<new>-names.txt`. No
+/// file is overwritten: one whose name is taken stays where it is.
+fn move_sidecars(old: &BookFiles, new: &BookFiles) -> Result<()> {
+    use crate::entries::sidecar::{inbox_folder, names_copy_path};
+    let io =
+        |what: &Path, e: std::io::Error| Error::Io(format!("cannot move {}: {e}", what.display()));
+    let (from, to) = (inbox_folder(old), inbox_folder(new));
+    if from.is_dir() {
+        if !to.exists() {
+            std::fs::rename(&from, &to).map_err(|e| io(&from, e))?;
+        } else {
+            for entry in std::fs::read_dir(&from).map_err(|e| io(&from, e))? {
+                let path = entry.map_err(|e| io(&from, e))?.path();
+                let Some(name) = path.file_name() else {
+                    continue;
+                };
+                let dest = to.join(name);
+                if path.is_file() && !dest.exists() {
+                    std::fs::rename(&path, &dest).map_err(|e| io(&path, e))?;
+                }
+            }
+            // Only when empty: a file whose name was taken stays.
+            let _ = std::fs::remove_dir(&from);
+        }
+    }
+    let (from, to) = (names_copy_path(old), names_copy_path(new));
+    if from.is_file() && !to.exists() {
+        std::fs::rename(&from, &to).map_err(|e| io(&from, e))?;
+    }
+    Ok(())
 }
 
 fn install(files: &BookFiles, db: &Db, key: &DbKey, key_file: &KeyFile) -> Result<()> {

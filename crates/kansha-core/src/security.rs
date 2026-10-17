@@ -353,13 +353,45 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         f.write_all(bytes)?;
         f.sync_all()?;
         drop(f);
-        std::fs::rename(&tmp, path)
+        std::fs::rename(&tmp, path)?;
+        sync_folder(path)
     })();
     if let Err(e) = result {
         let _ = std::fs::remove_file(&tmp);
         return Err(Error::Io(format!("cannot write {}: {e}", path.display())));
     }
     Ok(())
+}
+
+/// Make a rename or removal in `path`'s folder durable: on Unix, fsync
+/// the folder, so a crash cannot lose it or reorder it after a later one.
+/// A folder that refuses the sync (some FUSE and network mounts) counts
+/// as synced: the change has happened either way. Nothing on Windows,
+/// which has no folder sync.
+pub(crate) fn sync_folder(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let folder = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        match std::fs::File::open(folder).and_then(|f| f.sync_all()) {
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::Unsupported | std::io::ErrorKind::InvalidInput
+                ) =>
+            {
+                Ok(())
+            }
+            other => other,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
 }
 
 enum CryptError {
@@ -454,6 +486,17 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(!text.contains(&key.hex()));
         assert!(!text.contains("AGE-SECRET-KEY"));
+    }
+
+    #[test]
+    fn a_folder_syncs_whether_named_or_bare() {
+        let dir = tempfile::tempdir().unwrap();
+        sync_folder(&dir.path().join("kansha.key")).unwrap();
+        // A bare file name is in the current folder.
+        sync_folder(Path::new("kansha.key")).unwrap();
+        // A missing folder is an error, not a silent success.
+        #[cfg(unix)]
+        assert!(sync_folder(&dir.path().join("gone/kansha.key")).is_err());
     }
 
     #[test]

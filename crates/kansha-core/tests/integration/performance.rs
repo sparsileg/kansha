@@ -454,6 +454,56 @@ fn holdings_flags_stale_prices() {
     assert!(fresh.note.is_empty());
 }
 
+/// RPT-170: a holding with no price is left out of all three totals, so
+/// basis, value, and gain agree; its row still shows its basis.
+#[test]
+fn holdings_totals_leave_an_unpriced_holding_out() {
+    let mut fx = fixture();
+    let new_fund = fx
+        .book
+        .security("New Fund", "NEWF", SecurityType::MutualFund)
+        .unwrap();
+    let (b, brokerage) = (&mut fx.book, fx.brokerage);
+    trade(
+        b,
+        brokerage,
+        InvAction::Buy,
+        "2026-12-01",
+        Some(new_fund),
+        Some("5"),
+        "500.00",
+    );
+    let h = run(&fx, ReportKind::Holdings);
+    assert_eq!(
+        text(&h),
+        "\
++ Brokerage |  |  |  |  |  | 2100.00 | 14840.00 | 320.00 | 
+  - New Fund | NEWF | 5 |  |  |  | 500.00 |  |  | 
+  - Total Stock Market | VTI | 20 | 121 | 2026-12-31 |  | 2100.00 | 2420.00 | 320.00 | 15.24
+  - Cash |  |  |  |  |  |  | 12420.00 |  | 
++ Linked |  |  |  |  |  | 1000.00 | 1210.00 | 210.00 | 
+  - Total Stock Market | VTI | 10 | 121 | 2026-12-31 |  | 1000.00 | 1210.00 | 210.00 | 21.00
+= OVERALL TOTAL |  |  |  |  |  | 3100.00 | 16050.00 | 530.00 | "
+    );
+    assert!(h.note.contains("left out of the totals"), "{}", h.note);
+    // Totals only: the same figures.
+    let mut s = ReportSettings::defaults(ReportKind::Holdings);
+    s.range = DateRange {
+        preset: DatePreset::Custom,
+        from: Some(date("2026-01-01")),
+        to: Some(date("2026-12-31")),
+    };
+    s.totals_only = true;
+    let t = reports::run(fx.book.conn(), &s, date("2026-12-31")).unwrap();
+    assert_eq!(
+        text(&t),
+        "\
++ Brokerage |  |  |  |  |  | 2100.00 | 14840.00 | 320.00 | 
++ Linked |  |  |  |  |  | 1000.00 | 1210.00 | 210.00 | 
+= OVERALL TOTAL |  |  |  |  |  | 3100.00 | 16050.00 | 530.00 | "
+    );
+}
+
 #[test]
 fn investing_reports_follow_the_account_filter_and_whole_dollars() {
     let fx = fixture();

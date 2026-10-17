@@ -3,15 +3,33 @@
 //! totals on the heading (RPT-020), the heading line carries them and no
 //! total line follows.
 //! Amounts are plain decimals and dates ISO, so spreadsheets read them
-//! exactly.
+//! exactly; text that would run as a formula gets a leading apostrophe.
 
 use super::{Report, ReportKind, Row, RowKind};
 
+/// Text a spreadsheet would run as a formula (CSV injection): it starts
+/// with = + @ tab or CR, or with - not followed by a number. Amounts
+/// ("-12.34"), shares, percents, and dates are left as they are.
+fn formula_like(text: &str) -> bool {
+    match text.as_bytes().first() {
+        Some(b'=' | b'+' | b'@' | b'\t' | b'\r') => true,
+        // Index 1 is a character boundary: the first byte is ASCII.
+        Some(b'-') => text[1..].parse::<rust_decimal::Decimal>().is_err(),
+        _ => false,
+    }
+}
+
 fn field(text: &str) -> String {
+    // A leading apostrophe makes the spreadsheet keep the cell as text.
+    let text = if formula_like(text) {
+        format!("'{text}")
+    } else {
+        text.to_string()
+    };
     if text.contains([',', '"', '\n', '\r']) || text.starts_with(' ') || text.ends_with(' ') {
         format!("\"{}\"", text.replace('"', "\"\""))
     } else {
-        text.to_string()
+        text
     }
 }
 
@@ -164,6 +182,29 @@ mod tests {
             to_csv(&r),
             "\"Spending, 2026\"\r\n2026-01-01 through 2026-01-31\r\n,Memo,Amount\r\nFood,,-1.50\r\n,\"say \"\"hi\"\"\",-1.50\r\nOVERALL TOTAL,,-1.50\r\n"
         );
+    }
+
+    /// Text a spreadsheet would run as a formula gets a leading
+    /// apostrophe; amounts, dates, and indented labels do not.
+    #[test]
+    fn formula_text_is_kept_as_text() {
+        for (text, want) in [
+            ("=1+1", "'=1+1"),
+            ("@SUM(A1)", "'@SUM(A1)"),
+            ("+1", "'+1"),
+            ("-Refund", "'-Refund"),
+            ("-", "'-"),
+            ("\tx", "'\tx"),
+            ("=a,b", "\"'=a,b\""),
+            ("-12.34", "-12.34"),
+            ("-1.500000", "-1.500000"),
+            ("0.00", "0.00"),
+            ("2026-10-12", "2026-10-12"),
+            ("  Food", "\"  Food\""),
+            ("Costco", "Costco"),
+        ] {
+            assert_eq!(field(text), want, "{text:?}");
+        }
     }
 
     #[test]

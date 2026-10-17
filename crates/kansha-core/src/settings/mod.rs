@@ -459,6 +459,40 @@ pub fn record_startup_check(
     }
 }
 
+/// A folder typed for books or backups: trimmed, empty is none, and one
+/// that is named must exist.
+pub fn existing_folder(folder: Option<&str>) -> Result<Option<String>> {
+    match folder.map(str::trim).filter(|f| !f.is_empty()) {
+        None => Ok(None),
+        Some(f) if std::path::Path::new(f).is_dir() => Ok(Some(f.to_owned())),
+        Some(f) => Err(Error::Invalid(format!("{f} is not an existing folder"))),
+    }
+}
+
+/// Store the settings from the app (SET-070) and read them back. A newly
+/// chosen backup folder must exist; the stored one may be missing
+/// (BAK-030: backups then go to Downloads), so other settings still save.
+/// Choosing another folder forgets the missing-folder warning.
+pub fn store(tx: &Tx<'_>, mut s: Settings) -> Result<Settings> {
+    let before = load(tx.conn())?;
+    let typed = s
+        .backup_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|f| !f.is_empty())
+        .map(str::to_owned);
+    s.backup_folder = if typed == before.backup_folder {
+        typed
+    } else {
+        existing_folder(typed.as_deref())?
+    };
+    if s.backup_folder != before.backup_folder {
+        clear_folder_missing(tx)?;
+    }
+    save(tx, &s)?;
+    load(tx.conn())
+}
+
 /// Forget the missing-folder warning (a new folder was chosen).
 pub fn clear_folder_missing(tx: &Tx<'_>) -> Result<()> {
     repo::remove(tx, "backup.folder_missing")

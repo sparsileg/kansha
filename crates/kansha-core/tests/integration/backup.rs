@@ -447,6 +447,77 @@ fn back_up_falls_back_to_downloads_and_records_status() {
 /// SET-050, BAK-040: a timeout backup is temporary. Only the newest is
 /// kept, and it goes as soon as any backup of another kind is newer; the
 /// backups made in the old name style still count.
+/// BAK-030, SET-070: with the stored backup folder missing, other
+/// settings still save and the warning stays; a newly chosen folder must
+/// exist; choosing one that does clears the warning.
+#[test]
+fn settings_save_while_the_stored_backup_folder_is_missing() {
+    use kansha_core::settings;
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let chosen = tempfile::tempdir().unwrap();
+    let (_files, mut open) = sample_book(dir.path());
+    let gone = dir.path().join("usb-drive").display().to_string();
+    let store = |db: &mut Db, change: &dyn Fn(&mut settings::Settings)| {
+        db.write(&clock(), Origin::Ui, |tx| {
+            let mut s = settings::load(tx.conn())?;
+            change(&mut s);
+            settings::store(tx, s)
+        })
+    };
+    let missing = |db: &Db| settings::backup_status(db.conn()).unwrap().folder_missing;
+
+    open.db
+        .write(&clock(), Origin::Ui, |tx| {
+            let mut s = settings::load(tx.conn())?;
+            s.backup_folder = Some(gone.clone());
+            settings::save(tx, &s)
+        })
+        .unwrap();
+    backup::back_up(
+        &mut open.db,
+        &open.key_file,
+        "kansha",
+        Some(downloads.path()),
+        BackupKind::Close,
+        "0.1.0",
+        &clock(),
+    )
+    .unwrap();
+    assert!(missing(&open.db));
+
+    // Another setting changes; the missing folder stays, and so does the
+    // warning.
+    let saved = store(&mut open.db, &|s| s.upcoming_days = 30).unwrap();
+    assert_eq!(saved.upcoming_days, 30);
+    assert_eq!(saved.backup_folder.as_deref(), Some(gone.as_str()));
+    assert!(missing(&open.db));
+    // The same folder with spaces round it is unchanged too.
+    let padded = format!("  {gone} ");
+    store(&mut open.db, &|s| s.backup_folder = Some(padded.clone())).unwrap();
+    assert!(missing(&open.db));
+
+    // A new folder that is not there is refused, and nothing is stored.
+    let other = dir.path().join("elsewhere").display().to_string();
+    let refused = store(&mut open.db, &|s| {
+        s.backup_folder = Some(other.clone());
+        s.upcoming_days = 45;
+    });
+    assert!(matches!(refused, Err(Error::Invalid(_))), "{refused:?}");
+    let now = settings::load(open.db.conn()).unwrap();
+    assert_eq!(now.upcoming_days, 30);
+    assert_eq!(now.backup_folder.as_deref(), Some(gone.as_str()));
+
+    // A folder that exists is taken, and the warning goes.
+    let there = chosen.path().display().to_string();
+    let saved = store(&mut open.db, &|s| s.backup_folder = Some(there.clone())).unwrap();
+    assert_eq!(saved.backup_folder.as_deref(), Some(there.as_str()));
+    assert!(!missing(&open.db));
+    // Cleared: backups go to Downloads.
+    let saved = store(&mut open.db, &|s| s.backup_folder = Some(" ".into())).unwrap();
+    assert_eq!(saved.backup_folder, None);
+}
+
 #[test]
 fn timeout_backups_are_temporary() {
     use kansha_core::{Clock, FixedClock, Timestamp};
@@ -728,6 +799,62 @@ fn recover_finishes_an_interrupted_rename() {
     std::fs::write(dir.path().join("carol.rename"), "kansha").unwrap();
     assert_eq!(book::recover(&new).unwrap(), book::Recovery::Finished);
     book::unlock(&new, &pass("p")).unwrap();
+}
+
+/// UI-080: the inbox and the names copy follow the book's name; the
+/// import archive stays, since its rows record where each file is.
+#[test]
+fn renaming_a_book_moves_its_inbox_and_names_copy() {
+    use kansha_core::entries::sidecar::{inbox_folder, names_copy_path};
+    let write = |path: &Path, text: &str| {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let old = BookFiles::in_folder(dir.path());
+    drop(book::create(&old, &pass("p"), &clock()).unwrap());
+    write(&inbox_folder(&old).join("a.txt"), "a");
+    write(&inbox_folder(&old).join(".b.txt"), "b");
+    write(&names_copy_path(&old), "names");
+    let archived = dir.path().join("kansha-imports").join("c.txt");
+    write(&archived, "c");
+
+    let new = book::rename(&old, "barton2026").unwrap();
+    let read = |path: std::path::PathBuf| std::fs::read_to_string(path).unwrap();
+    assert_eq!(read(inbox_folder(&new).join("a.txt")), "a");
+    assert_eq!(read(inbox_folder(&new).join(".b.txt")), "b");
+    assert_eq!(read(names_copy_path(&new)), "names");
+    assert!(!inbox_folder(&old).exists() && !names_copy_path(&old).exists());
+    assert_eq!(read(archived), "c");
+
+    // The new inbox already has a file: one of the same name stays in
+    // the old inbox, the others move; nothing is overwritten.
+    write(&inbox_folder(&old).join("a.txt"), "old a");
+    write(&inbox_folder(&old).join("b.txt"), "old b");
+    write(&names_copy_path(&old), "old names");
+    let back = book::rename(&new, "kansha").unwrap();
+    assert_eq!(back, old);
+    assert_eq!(read(inbox_folder(&old).join("a.txt")), "old a");
+    assert_eq!(read(inbox_folder(&old).join("b.txt")), "old b");
+    assert_eq!(read(inbox_folder(&old).join(".b.txt")), "b");
+    assert_eq!(read(inbox_folder(&new).join("a.txt")), "a");
+    assert!(!inbox_folder(&new).join(".b.txt").exists());
+    assert_eq!(read(names_copy_path(&old)), "old names");
+    assert_eq!(read(names_copy_path(&new)), "names");
+    book::unlock(&old, &pass("p")).unwrap();
+
+    // A crash after the marker: recovery moves them too.
+    let dir = tempfile::tempdir().unwrap();
+    let old = BookFiles::in_folder(dir.path());
+    drop(book::create(&old, &pass("p"), &clock()).unwrap());
+    write(&inbox_folder(&old).join("a.txt"), "a");
+    write(&names_copy_path(&old), "names");
+    let new = BookFiles::named(dir.path(), "carol").unwrap();
+    std::fs::write(dir.path().join("carol.rename"), "kansha").unwrap();
+    assert_eq!(book::recover(&new).unwrap(), book::Recovery::Finished);
+    assert_eq!(read(inbox_folder(&new).join("a.txt")), "a");
+    assert_eq!(read(names_copy_path(&new)), "names");
+    assert!(!inbox_folder(&old).exists());
 }
 
 /// BAK-080: the check at startup finds the last backup (the one the book

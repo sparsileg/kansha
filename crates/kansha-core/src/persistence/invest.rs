@@ -548,7 +548,7 @@ pub fn category_amounts(
 pub(crate) fn insert(tx: &Tx<'_>, source: TxnSource, plan: &Plan) -> Result<InvTxn> {
     let id = ledger::insert_header(tx, source, &plan.txn)?;
     ledger::insert_postings(tx, id, &plan.txn.postings, &HashMap::new())?;
-    write_detail(tx, id, plan)?;
+    write_detail(tx, id, plan, &[])?;
     let after = get(tx.conn(), id)?;
     audit::record::<(), _>(
         tx,
@@ -561,7 +561,9 @@ pub(crate) fn insert(tx: &Tx<'_>, source: TxnSource, plan: &Plan) -> Result<InvT
     Ok(after)
 }
 
-/// Rewrite `before` from a new plan, after [`clear_effects`].
+/// Rewrite `before` from a new plan, after [`clear_effects`]. Its lots
+/// keep the ids they had, so later specific-identification picks still
+/// name them (LOT-100).
 pub(crate) fn rewrite(
     tx: &Tx<'_>,
     before: &InvTxn,
@@ -574,7 +576,7 @@ pub(crate) fn rewrite(
         params![id, plan.txn.date, plan.txn.memo],
     )?;
     ledger::insert_postings(tx, id, &plan.txn.postings, links)?;
-    write_detail(tx, id, plan)?;
+    write_detail(tx, id, plan, &before.lots)?;
     let after = get(tx.conn(), id)?;
     if after != *before {
         audit::record(
@@ -650,7 +652,12 @@ pub fn delete(tx: &Tx<'_>, before: &InvTxn) -> Result<()> {
     Ok(())
 }
 
-fn write_detail(tx: &Tx<'_>, id: TxnId, plan: &Plan) -> Result<()> {
+/// `reuse`: the lots an edited transaction had, deleted by
+/// [`clear_effects`] in this database transaction. A planned lot takes
+/// the id of the first one not yet taken in the same holding with the
+/// same source lot (a share transfer's); a new id otherwise (an id given
+/// as NULL is assigned).
+fn write_detail(tx: &Tx<'_>, id: TxnId, plan: &Plan, reuse: &[Lot]) -> Result<()> {
     let c = tx.conn();
     let i = &plan.input;
     // A Roth conversion's tax columns (schema 10) only on a conversion.
@@ -701,13 +708,27 @@ fn write_detail(tx: &Tx<'_>, id: TxnId, plan: &Plan) -> Result<()> {
         }
     }
     let mut lot_stmt = c.prepare_cached(
-        "INSERT INTO lot (account_id, security_id, acquired_date, quantity, cost_basis,
+        "INSERT INTO lot (id, account_id, security_id, acquired_date, quantity, cost_basis,
              origin_txn_id, source_lot_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
     )?;
+    let mut taken = vec![false; reuse.len()];
     for l in &plan.lots {
+        let keep = reuse
+            .iter()
+            .zip(taken.iter_mut())
+            .find(|(old, taken)| {
+                !**taken
+                    && old.account == l.account
+                    && old.security == l.security
+                    && old.source_lot == l.source
+            })
+            .map(|(old, taken)| {
+                *taken = true;
+                old.id
+            });
         lot_stmt.execute(params![
-            l.account, l.security, l.acquired, l.quantity, l.basis, id, l.source
+            keep, l.account, l.security, l.acquired, l.quantity, l.basis, id, l.source
         ])?;
     }
     let mut disp_stmt = c.prepare_cached(

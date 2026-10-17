@@ -118,15 +118,30 @@ fn receiving_twice_adds_once() {
     assert_eq!(txn_count(&f.book), 0);
 }
 
+/// CLI-020, CLI-040: an entry without an id gets one made from its file,
+/// so the same file sent again adds nothing; two equal lines in one file
+/// stay two entries.
 #[test]
-fn entries_without_ids_get_one_each() {
+fn an_id_less_file_received_twice_adds_once() {
     let mut f = fx();
-    let text = "kansha-entries 1\n2026-10-12 Shell 1.00 Household acct Checking\n";
-    receive(&mut f.book, text).unwrap();
-    receive(&mut f.book, text).unwrap();
+    let text = "kansha-entries 1\n\
+                2026-10-12 Shell 1.00 Household acct Checking\n\
+                2026-10-12 Shell 1.00 Household acct Checking\n";
+    let first = receive(&mut f.book, text).unwrap();
+    assert_eq!((first.added, first.skipped), (2, 0));
     let all = repo::pending(f.book.conn()).unwrap();
-    assert_eq!(all.len(), 2);
     assert_ne!(all[0].uid, all[1].uid);
+    let again = receive(&mut f.book, text).unwrap();
+    assert_eq!((again.added, again.skipped), (0, 2));
+    // The sender and line endings do not make it another file.
+    let resent = format!("kansha-entries 1\r\nfrom \"Phone\"\r\n{}", &text[17..]);
+    let resent = receive(&mut f.book, &resent).unwrap();
+    assert_eq!((resent.added, resent.skipped), (0, 2));
+    // A file that differs (one more entry) is new: all of it shows again.
+    let longer = format!("{text}2026-10-13 Shell 2.00 Household acct Checking\n");
+    let longer = receive(&mut f.book, &longer).unwrap();
+    assert_eq!((longer.added, longer.skipped), (3, 0));
+    assert_eq!(review::pending_count(f.book.conn()).unwrap(), 5);
 }
 
 #[test]

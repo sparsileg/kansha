@@ -142,10 +142,10 @@ pub fn postings(conn: &Connection, from: Option<Date>, to: Date) -> Result<Vec<P
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// Date of the earliest transaction, for "all dates".
+/// Date of the earliest normal transaction, for "all dates".
 pub fn first_txn_date(conn: &Connection) -> Result<Option<Date>> {
     Ok(conn
-        .prepare_cached("SELECT min(txn_date) FROM txn")?
+        .prepare_cached("SELECT min(txn_date) FROM txn WHERE status = 'normal'")?
         .query_row([], |r| r.get(0))?)
 }
 

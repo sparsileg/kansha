@@ -97,13 +97,16 @@ pub fn compare_before(today: Date, compare: CompareTo, first: WeekStart) -> Resu
 }
 
 /// A range's dates on `today`. "All dates" starts at the first
-/// transaction; a custom range with no start does too.
+/// transaction, or at the end when that is later; a custom range with no
+/// start does too.
 pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<ResolvedRange> {
     use DatePreset as P;
     let year_start = ymd(today.year(), 1, 1)?;
     let month_start = ymd(today.year(), today.month(), 1)?;
     let (from, to) = match range.preset {
-        P::AllDates => (repo::first_txn_date(conn)?, today),
+        // Never after the end: a book whose first transaction is dated
+        // ahead has nothing to show yet, not a range error.
+        P::AllDates => (repo::first_txn_date(conn)?.map(|f| f.min(today)), today),
         P::Monthly | P::Quarterly | P::Yearly => {
             let (start, end) = period_of(range.preset, range.from.unwrap_or(today))?;
             (Some(start), end)
@@ -147,7 +150,7 @@ pub fn resolve(conn: &Connection, range: &DateRange, today: Date) -> Result<Reso
             let to = range.to.unwrap_or(today);
             let from = match range.from {
                 Some(f) => Some(f),
-                None => repo::first_txn_date(conn)?,
+                None => repo::first_txn_date(conn)?.map(|f| f.min(to)),
             };
             (from, to)
         }

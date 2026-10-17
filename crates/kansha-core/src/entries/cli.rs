@@ -22,7 +22,7 @@ use crate::calc;
 use crate::date::{Clock, Date};
 use crate::local_config::LocalConfig;
 use crate::money::Money;
-use crate::security::write_atomic;
+use crate::security::{sync_folder, write_atomic};
 use crate::settings::DateFormat;
 
 /// The sender when `--from` is not given.
@@ -328,6 +328,9 @@ fn run(a: &Args, env: &Env<'_>, stdin: &mut dyn Read, out: &mut dyn Write) -> Re
     if file.from.is_none() || a.from.is_some() {
         file.from = Some(a.from.clone().unwrap_or_else(|| DEFAULT_SENDER.into()));
     }
+    // The same file run twice adds nothing (CLI-040); `kansha add` keeps
+    // random ids, since the same entry typed twice is two purchases.
+    format::derive_missing_ids(&mut file);
     deliver(file, &files, &copy, false, out)
 }
 
@@ -385,6 +388,7 @@ pub fn write_inbox(folder: &Path, text: &str) -> crate::Result<PathBuf> {
     std::fs::rename(&tmp, &path).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })?;
+    sync_folder(&path)?;
     Ok(path)
 }
 
@@ -676,7 +680,11 @@ mod tests {
     }
 
     fn cli(args: &[&str], stdin: &str, prompter: Option<&mut dyn Prompter>) -> Run {
-        let clock = FixedClock::new(d("2026-10-12"));
+        cli_on("2026-10-12", args, stdin, prompter)
+    }
+
+    fn cli_on(today: &str, args: &[&str], stdin: &str, prompter: Option<&mut dyn Prompter>) -> Run {
+        let clock = FixedClock::new(d(today));
         let env = Env {
             clock: &clock,
             config: None,
@@ -888,6 +896,35 @@ yesterday Kroger 10.00 Groceries acct Checking
             "line 3: “five” is not an amount\nNothing was saved.\n"
         );
         assert_eq!(inbox(dir.path()).len(), 1);
+    }
+
+    /// CLI-040: the same file run twice gives the same ids, so the second
+    /// adds nothing; run on another day, `today` makes it other entries.
+    /// `kansha add` keeps random ids: the same entry typed twice is two.
+    #[test]
+    fn a_file_run_twice_keeps_its_ids_unless_today_moved() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = book(dir.path(), true);
+        let db = db.to_str().unwrap();
+        let text = "kansha-entries 1\ntoday Shell 5 Fuel acct Checking\n";
+        // The inbox's files, and how many different ids they hold.
+        let run = |r: Run| {
+            assert_eq!(r.code, 0, "{}", r.err);
+            let ids: std::collections::BTreeSet<String> = inbox(dir.path())
+                .iter()
+                .flat_map(|f| f.entries.iter().map(|e| e.id.clone().unwrap()))
+                .collect();
+            (inbox(dir.path()).len(), ids.len())
+        };
+        assert_eq!(run(cli(&["run", "-", "--book", db], text, None)), (1, 1));
+        assert_eq!(run(cli(&["run", "-", "--book", db], text, None)), (2, 1));
+        let next_day = cli_on("2026-10-13", &["run", "-", "--book", db], text, None);
+        assert_eq!(run(next_day), (3, 2));
+        let entry = [
+            "add", "--book", db, "today", "Shell", "5", "Fuel", "acct", "Checking",
+        ];
+        assert_eq!(run(cli(&entry, "", None)), (4, 3));
+        assert_eq!(run(cli(&entry, "", None)), (5, 4));
     }
 
     #[test]

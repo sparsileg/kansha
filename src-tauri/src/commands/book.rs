@@ -73,16 +73,10 @@ fn set_backup_folder(
     Ok(())
 }
 
-/// The backup folder typed or picked at setup or in Settings: must be an
-/// existing folder (BAK-030).
+/// A backup or book folder typed or picked at setup or for a new book:
+/// must be an existing folder (BAK-030).
 fn check_folder(folder: Option<&str>) -> CmdResult<Option<String>> {
-    match folder.map(str::trim).filter(|f| !f.is_empty()) {
-        None => Ok(None),
-        Some(f) if Path::new(f).is_dir() => Ok(Some(f.to_owned())),
-        Some(f) => {
-            Err(kansha_core::Error::Invalid(format!("{f} is not an existing folder")).into())
-        }
-    }
+    Ok(settings::existing_folder(folder)?)
 }
 
 /// First-run setup (SECU-080), or a new book beside a locked one: a new
@@ -461,20 +455,12 @@ pub fn settings_get(state: State<'_, AppState>) -> CmdResult<Settings> {
     state.read(|db, _| settings::load(db.conn()))
 }
 
-/// Store the book's settings (SET-070). A backup folder must exist.
+/// Store the book's settings (SET-070). A newly chosen backup folder must
+/// exist; the stored one may be missing (BAK-030).
 #[tauri::command]
 #[specta::specta]
 pub fn settings_set(state: State<'_, AppState>, settings: Settings) -> CmdResult<Settings> {
-    let mut s = settings;
-    s.backup_folder = check_folder(s.backup_folder.as_deref())?;
-    state.write(|tx| {
-        let before = settings::load(tx.conn())?;
-        if before.backup_folder != s.backup_folder {
-            settings::clear_folder_missing(tx)?;
-        }
-        settings::save(tx, &s)?;
-        settings::load(tx.conn())
-    })
+    state.write(|tx| settings::store(tx, settings))
 }
 
 /// A book on the recent list (File menu).
@@ -618,7 +604,15 @@ pub async fn book_rename(
                 state.set_files(renamed.clone());
                 cfg.forget_book(&files.db.display().to_string());
                 state.save_config(&cfg)?;
-                *guard = Some(book::unlock(&renamed, &pass)?);
+                let open = book::unlock(&renamed, &pass)?;
+                // `kansha add` checks names against the copy under the
+                // new name (CLI-080).
+                if let Err(e) =
+                    kansha_core::entries::sidecar::write_names_copy(open.db.conn(), &renamed)
+                {
+                    eprintln!("could not write the names copy: {e}");
+                }
+                *guard = Some(open);
             }
             Err(e) => {
                 *guard = Some(book::unlock(&files, &pass)?);

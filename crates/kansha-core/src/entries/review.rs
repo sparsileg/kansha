@@ -132,7 +132,8 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// Add a parsed file's entries for review, skipping ids seen before.
-/// Entries without an id get one. Records the file only when something
+/// Entries without an id get one made from the file, so the same file
+/// received again adds nothing. Records the file only when something
 /// is added. Runs with origin `system` (CLI-070).
 pub fn receive(
     tx: &Tx<'_>,
@@ -142,6 +143,8 @@ pub fn receive(
     source: EntrySource,
     archive_path: Option<String>,
 ) -> Result<Received> {
+    let mut file = file.clone();
+    format::derive_missing_ids(&mut file);
     let mut fresh = Vec::new();
     let mut skipped = 0u32;
     for e in &file.entries {

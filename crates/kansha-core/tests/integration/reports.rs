@@ -1772,3 +1772,43 @@ fn tax_summary_by_tag_groups_a_tag_set_once() {
     assert_eq!(top[0], "+ Bonus, Work = 200.00");
     assert_eq!(top[1], "+ (No tag) = 7350.00");
 }
+
+/// RPT-040: a book whose first transaction is dated ahead shows an empty
+/// range on "Include all dates", not a range error. Void transactions do
+/// not count as the first.
+#[test]
+fn all_dates_in_a_book_dated_ahead_is_empty_not_an_error() {
+    let today = date("2026-10-17");
+    let mut book = Book::new(today).unwrap();
+    let checking = book.account("Checking", AccountType::Checking).unwrap();
+    let food = book.category("Food", CategoryKind::Expense).unwrap();
+    book.entry(checking, date("2026-10-27"))
+        .amount(m("-10.00"))
+        .category(food)
+        .save()
+        .unwrap();
+    let early = book
+        .entry(checking, date("2026-03-01"))
+        .amount(m("-5.00"))
+        .category(food)
+        .save()
+        .unwrap();
+    book.write(|tx| kansha_core::ledger::void(tx, early.id, true))
+        .unwrap();
+    let resolve = |preset, to| {
+        let range = DateRange {
+            preset,
+            from: None,
+            to,
+        };
+        reports::resolve(book.conn(), &range, today).unwrap()
+    };
+    let all = resolve(DatePreset::AllDates, None);
+    assert_eq!((all.from, all.to), (Some(today), today));
+    let yesterday = date("2026-10-16");
+    let custom = resolve(DatePreset::Custom, Some(yesterday));
+    assert_eq!((custom.from, custom.to), (Some(yesterday), yesterday));
+    let mut s = ReportSettings::defaults(ReportKind::ItemizedCategories);
+    s.range.preset = DatePreset::AllDates;
+    reports::run(book.conn(), &s, today).unwrap();
+}

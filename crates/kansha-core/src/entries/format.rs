@@ -96,7 +96,8 @@ pub struct FileEntry {
     pub spend: Spend,
     pub account: String,
     pub memo: String,
-    /// A UUID, lower case; `None` until one is given (see [`new_id`]).
+    /// A UUID, lower case; `None` until one is given (see [`new_id`] and
+    /// [`derive_missing_ids`]).
     pub id: Option<String>,
 }
 
@@ -356,15 +357,49 @@ pub fn new_id() -> Result<String> {
     getrandom::getrandom(&mut b).map_err(|e| Error::Io(format!("no random numbers: {e}")))?;
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
+    Ok(uuid_text(&b))
+}
+
+/// Give every entry without an id one made from the file (CLI-020): a
+/// UUID from SHA-256 over its entries as [`write_entries`] writes them
+/// (dates written out, sender left out) and the entry's place in the
+/// file. The same file sent again gives the same ids, so it adds nothing
+/// (CLI-040); two equal entries in one file differ by place, and a file
+/// using `today` run on another day differs by its dates.
+pub fn derive_missing_ids(file: &mut EntryFile) {
+    use sha2::{Digest, Sha256};
+    let canonical = write_entries(&EntryFile {
+        from: None,
+        entries: file.entries.clone(),
+    });
+    for (place, e) in file.entries.iter_mut().enumerate() {
+        if e.id.is_some() {
+            continue;
+        }
+        let mut h = Sha256::new();
+        h.update(b"kansha-entry-id\0");
+        h.update(canonical.as_bytes());
+        h.update(u64::try_from(place).unwrap_or(u64::MAX).to_le_bytes());
+        let digest = h.finalize();
+        let mut b = [0u8; 16];
+        b.copy_from_slice(&digest[..16]);
+        // RFC 9562 version 8 (custom), RFC 4122 variant.
+        b[6] = (b[6] & 0x0f) | 0x80;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        e.id = Some(uuid_text(&b));
+    }
+}
+
+fn uuid_text(b: &[u8; 16]) -> String {
     let hex: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    Ok(format!(
+    format!(
         "{}-{}-{}-{}-{}",
         &hex[0..8],
         &hex[8..12],
         &hex[12..16],
         &hex[16..20],
         &hex[20..32]
-    ))
+    )
 }
 
 // ---------------------------------------------------------------------------

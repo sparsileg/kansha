@@ -31,7 +31,7 @@ use crate::error::{Error, Result};
 use crate::integrity::{self, IntegrityReport};
 use crate::persistence::migrate::LATEST_VERSION;
 use crate::persistence::{Db, Origin};
-use crate::security::{KeyFile, LockedPrivateKey, Passphrase, PrivateKey};
+use crate::security::{KeyFile, LockedPrivateKey, Passphrase, PrivateKey, sync_folder};
 use crate::settings;
 use crate::text_enum::text_enum;
 
@@ -516,7 +516,8 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
                 "file exists",
             ));
         }
-        std::fs::rename(&partial, path)
+        std::fs::rename(&partial, path)?;
+        sync_folder(path)
     })();
     if let Err(e) = result {
         let _ = std::fs::remove_file(&partial);

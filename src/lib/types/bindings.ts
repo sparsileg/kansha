@@ -78,7 +78,10 @@ export const commands = {
 	/**  Show database key (SECU-020), after the passphrase. */
 	databaseKeyShow: (passphrase: string) => typedError<string, IpcError>(__TAURI_INVOKE("database_key_show", { passphrase })),
 	settingsGet: () => typedError<Settings, IpcError>(__TAURI_INVOKE("settings_get")),
-	/**  Store the book's settings (SET-070). A backup folder must exist. */
+	/**
+	 *  Store the book's settings (SET-070). A newly chosen backup folder must
+	 *  exist; the stored one may be missing (BAK-030).
+	 */
 	settingsSet: (settings: Settings) => typedError<Settings, IpcError>(__TAURI_INVOKE("settings_set", { settings })),
 	appearanceGet: () => __TAURI_INVOKE<Appearance>("appearance_get"),
 	appearanceSet: (appearance: Appearance) => typedError<null, IpcError>(__TAURI_INVOKE("appearance_set", { appearance })),

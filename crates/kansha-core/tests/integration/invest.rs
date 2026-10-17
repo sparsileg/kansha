@@ -490,6 +490,93 @@ fn specific_lots_survive_an_edit_of_the_sale() {
     assert!(integrity::check(b.conn()).unwrap().is_clean());
 }
 
+/// LOT-100: an edit of a buy keeps its lot's id, so a later sale that
+/// picked that lot by specific identification is put back with the same
+/// pick and its basis from the new cost. A pick the edit makes too big is
+/// still refused, and nothing changes.
+#[test]
+fn a_buy_edit_keeps_the_lot_a_later_specific_sale_picked() {
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    let mut first = buy(brk, vti, "2026-02-01", "10", "1000.00");
+    let b1 = b.invest(&first).unwrap();
+    b.invest(&buy(brk, vti, "2026-03-01", "10", "1200.00"))
+        .unwrap();
+    let lot = b1.lots[0].id;
+    let mut sell = InvInput::new(brk, InvAction::Sell, date("2026-04-01"));
+    sell.security = Some(vti);
+    sell.quantity = Some(q("5"));
+    sell.amount = Some(m("600.00"));
+    sell.lots = vec![LotPick {
+        lot,
+        quantity: q("5"),
+    }];
+    let sale = b.invest(&sell).unwrap().txn.id;
+    let picked = |b: &Book| -> Vec<_> {
+        invest::get(b.conn(), sale)
+            .unwrap()
+            .disposals
+            .iter()
+            .map(|d| (d.lot, d.basis))
+            .collect()
+    };
+
+    // The cost, then the date.
+    first.amount = Some(m("1001.00"));
+    let edited = b
+        .write(|tx| invest::update(tx, b1.txn.id, &first, false))
+        .unwrap();
+    assert_eq!(edited.lots[0].id, lot);
+    assert_eq!(picked(&b), vec![(lot, m("500.50"))]);
+    first.date = date("2026-01-15");
+    let edited = b
+        .write(|tx| invest::update(tx, b1.txn.id, &first, false))
+        .unwrap();
+    assert_eq!(edited.lots[0].id, lot);
+    assert_eq!(picked(&b), vec![(lot, m("500.50"))]);
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+
+    // Fewer shares than the sale took: refused, nothing changes.
+    let mut fewer = first.clone();
+    fewer.quantity = Some(q("4"));
+    let refused = b.write(|tx| invest::update(tx, b1.txn.id, &fewer, false));
+    let Err(Error::Invalid(msg)) = refused else {
+        panic!("{refused:?}")
+    };
+    assert!(msg.contains("holds"), "{msg}");
+    assert_eq!(invest::get(b.conn(), b1.txn.id).unwrap().to_input(), first);
+    assert_eq!(picked(&b), vec![(lot, m("500.50"))]);
+
+    // A reinvested dividend's lot too.
+    let mut reinvest = InvInput::new(brk, InvAction::ReinvestDividend, date("2026-04-10"));
+    reinvest.security = Some(vti);
+    reinvest.quantity = Some(q("1"));
+    reinvest.amount = Some(m("120.00"));
+    let r = b.invest(&reinvest).unwrap();
+    let r_lot = r.lots[0].id;
+    let mut sell2 = InvInput::new(brk, InvAction::Sell, date("2026-05-01"));
+    sell2.security = Some(vti);
+    sell2.quantity = Some(q("1"));
+    sell2.amount = Some(m("130.00"));
+    sell2.lots = vec![LotPick {
+        lot: r_lot,
+        quantity: q("1"),
+    }];
+    let sale2 = b.invest(&sell2).unwrap().txn.id;
+    reinvest.amount = Some(m("121.00"));
+    b.write(|tx| invest::update(tx, r.txn.id, &reinvest, false))
+        .unwrap();
+    let d = &invest::get(b.conn(), sale2).unwrap().disposals[0];
+    assert_eq!((d.lot, d.basis), (r_lot, m("121.00")));
+
+    // A new transaction's lot still gets a new id.
+    let b4 = b
+        .invest(&buy(brk, vti, "2026-06-01", "1", "100.00"))
+        .unwrap();
+    assert!(b4.lots[0].id.0 > r_lot.0);
+    assert!(integrity::check(b.conn()).unwrap().is_clean());
+}
+
 #[test]
 fn integrity_check_finds_damaged_lots() {
     let mut b = book();

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.106 (draft) |
+| **Document version** | 0.7.112 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-14 |
 | **Owner** | Stan |
@@ -910,7 +910,12 @@ common patterns.
   otherwise).
 - **LOT-100** [1.0][S] Lot selection methods: **FIFO** and **Specific
   Identification**. Default method configurable per account and per
-  security; overridable on each sale.
+  security; overridable on each sale. A specific pick names the lot, so
+  an edit of the transaction that made the lot (a buy's cost, shares,
+  or date; a reinvestment) keeps the lot's ID while it stays in the
+  same holding, and the later sale keeps its pick with basis from the
+  new cost; an edit leaving the lot fewer shares than a later pick is
+  refused (0.7.110).
 - **LOT-110** [1.0][R] **Average cost** method for mutual funds
   (D-60). Before a disposal, every open lot of the holding takes its
   share of the holding's total basis by shares (lot adjustments of
@@ -1232,9 +1237,17 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   presets instead (0.7.32): Current week, Current month, Current
   quarter, Current year (each from its first day to today); Last
   week, Last month, Last quarter, Last year, Custom dates. A week
-  starts on the Settings' first day of the week (SET-030).
+  starts on the Settings' first day of the week (SET-030). Include all
+  dates, and Custom dates with no start, begin at the first normal
+  (not void) transaction, or at the range's end when that is later:
+  a book whose first transaction is dated ahead shows an empty report,
+  not a range error (0.7.112).
 - **RPT-050** [1.0][S] Export to CSV and PDF; print. CSV goes to the
-  Downloads folder, every group expanded; printing and PDF show only
+  Downloads folder, every group expanded. A text cell a spreadsheet
+  would run as a formula (starting with `=`, `+`, `@`, tab, carriage
+  return, or `-` not followed by a number) gets a leading apostrophe,
+  so it opens as text; amounts, shares, percents, and dates are
+  unchanged (0.7.112). Printing and PDF show only
   the report. Save PDF… asks Portrait or Landscape (remembered while
   the report is open), saves the PDF to the Downloads folder, and
   opens it in the PDF viewer, which is the preview and prints to
@@ -1312,7 +1325,10 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   capital gain distributions, other; cash and reinvested alike.
 - **RPT-170** [1.0][R] **Holdings/portfolio value** — positions,
   market value, basis, unrealized gain, as of a date. An account's own
-  cash is a row; a holding with no price has no market value.
+  cash is a row; a holding with no price has no market value. Such a
+  holding shows its basis on its row but is left out of the account
+  and overall totals for basis, value, and gain alike, so they agree
+  (0.7.109).
 - **RPT-180** [1.0][S] **Asset allocation** — table and chart, by
   asset class as of a date; investment cash counts as Cash. A class
   opens Holdings for its securities.
@@ -1713,7 +1729,8 @@ platform has one.
   existing folder. If it is not (e.g. after a restore on another
   computer), the backup goes to Downloads and the Needs attention
   card warns until a folder is chosen; Kansha never creates a file or folder at
-  the missing path.
+  the missing path. Settings still save while the stored folder is
+  missing; only a newly chosen folder must exist (0.7.107).
 - **BAK-035** [1.0][R] Each backup is one `.zip` file named with its
   date and time; an existing file is never overwritten. It holds:
   - `manifest.json`: backup time (UTC), app version, schema version.
@@ -1978,8 +1995,12 @@ platform has one.
   Open… picks a book's `.db` file; File > Recent lists the books
   opened on this computer (SET-070); either closes the open book
   (backed up) and asks for the other one's passphrase. File > Rename
-  Book… renames both files after the passphrase; earlier backups keep
-  the old name and are no longer pruned. Kansha starts in the most
+  Book… renames both files after the passphrase, and moves the book's
+  inbox (CLI-030) and names copy (CLI-080) with them; a file whose
+  name is taken under the new name stays, never overwritten, and a
+  move that fails does not fail the rename (0.7.111). Earlier backups
+  and archived imports keep the old name; backups are no longer
+  pruned. Kansha starts in the most
   recent book still on disk (`KANSHA_DB` overrides; on a new computer
   setup names the first book, `kansha` by default, or opens an
   existing one). The passphrase and missing-key screens offer
@@ -2184,7 +2205,13 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
     listing the close matches; nothing is guessed, and no category is
     created.
   - `id` is a unique ID (UUID) made when the entry is made. An entry
-    without one gets one from Kansha.
+    without one gets one from Kansha, made from the file's entries
+    (dates written out, sender left out) and the entry's place in it,
+    so the same file sent again gets the same IDs and adds nothing.
+    Two equal entries in one file stay two; a file using `today` run
+    on another day is new entries; an edited file is a new file, all
+    of it shown again for review. `kansha add` makes a random ID: the
+    same entry typed twice is two purchases (0.7.108).
 - **CLI-030** [1.0][S] Ways in (D-160):
   - `kansha add` with no entry asks for one field by field: date
     (Enter for today), payee, amount, account, category or `split`,
@@ -3250,6 +3277,12 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.112 | 2026-10-17 | RPT-050 (closes #40): CSV text cells that start with `=`, `+`, `@`, tab, CR, or `-` plus text get a leading apostrophe so spreadsheets do not run them as formulas; numbers and dates unchanged. RPT-040 (closes #41): Include all dates and Custom with no start no longer fail when the first transaction is after the end (empty range instead), and void transactions no longer set the first date. No schema change. No API change. |
+| 0.7.111 | 2026-10-17 | UI-080 (closes #44): Rename Book moves the book's inbox and names copy to the new name (never overwriting a file there) and writes a fresh names copy, so waiting entries are read and `kansha add` checks names right away; the import archive stays. No schema change. No API change. |
+| 0.7.110 | 2026-10-17 | LOT-100 (closes #29): editing a buy or reinvestment whose lot a later specific-ID sale picked no longer fails with "lot N is not an open lot"; the rewritten lots keep their IDs (same holding and source lot), so the pick survives with basis from the new cost. No schema change. No API change. |
+| 0.7.109 | 2026-10-17 | RPT-170 (closes #38): Holdings totals leave a holding with no price out of Cost Basis as well as Market Value and Gain/Loss, as the note says; its row still shows its basis. Totals with every holding priced are unchanged. No schema change. No API change. |
+| 0.7.108 | 2026-10-17 | CLI-020, CLI-040 (closes #37): an entry without an id gets one made from its file (SHA-256 over the entries as written, without the sender, and the entry's place), not a random one, so the same file shared twice or run twice adds nothing; `kansha add` keeps random ids. No schema change. No API change. |
+| 0.7.107 | 2026-10-17 | BAK-030, SET-070 (closes #42): with the stored backup folder missing (drive unplugged, book restored elsewhere), settings changes save instead of failing with "is not an existing folder"; only a newly chosen folder is checked; the Needs attention warning stays until another folder is chosen. The check and the save moved into kansha-core (`settings::store`). No schema change. No API change (doc comment of `settings_set` only). |
 | 0.7.106 | 2026-10-17 | LOAN-040 (closes #30): the current balance is what is owed before the next payment; the difference is worked out against the register the day before the next due date and dated today or, when that payment is overdue, the day before it. A loan set up after a payment fell due now gets its reminder and the right first split, instead of no reminder (or an existing one ended). Saving refuses rather than ends the reminder while a balance is owed. No schema change. No API change (doc comment of `LoanSave.current_balance` only). |
 | 0.7.105 | 2026-10-16 | POS-040: the Investments column "Price Day Change (%)" is now "Day Change (%)", to save width; saved views keep it (they store the column ID). No schema change. No API change. |
 | 0.7.104 | 2026-10-16 | PRC-040 (closes #39): a downloaded quote in a currency other than USD (CAD, GBp pence, …) is refused and its ticker listed as failed, not stored as dollars; a reply without a currency is accepted as before. No schema change. No API change. |

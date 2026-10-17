@@ -247,11 +247,20 @@ pub(super) fn holdings(
     s: &ReportSettings,
     range: ResolvedRange,
 ) -> Result<Report> {
+    // Cost Basis, Market Value, Gain/Loss.
+    const BASIS: usize = 5;
+    const VALUE: usize = 6;
+    const GAIN: usize = 7;
+    const SUMMED: [usize; 3] = [BASIS, VALUE, GAIN];
+    let add = |a: Money, b: Money| {
+        a.checked_add(b)
+            .ok_or(crate::Error::Overflow("holdings total"))
+    };
     let lk = Lookups::load(conn)?;
     let columns = holdings_columns();
     let width = columns.len();
-    let money = money_columns(&columns);
     let mut rows = Vec::new();
+    let mut overall = vec![Money::ZERO; width];
     let mut missing = false;
     let mut stale = false;
     let stale_days = crate::settings::stale_price_days(conn)?;
@@ -259,12 +268,20 @@ pub(super) fn holdings(
         let h = invest::holdings(conn, a.id, range.to, Some(stale_days))?;
         let drill = Some(Drill::Account { account: a.id });
         let mut kids = Vec::new();
+        // Totals count priced holdings only, so basis, value, and gain
+        // agree; an unpriced one is left out of all three (the note).
+        let mut sums = vec![Money::ZERO; width];
         for p in &h.positions {
             if !ReportSettings::includes(&s.securities, &p.security) {
                 continue;
             }
             missing |= p.market_value.is_none();
             stale |= p.stale;
+            if let (Some(v), Some(g)) = (p.market_value, p.unrealized) {
+                sums[BASIS] = add(sums[BASIS], p.basis)?;
+                sums[VALUE] = add(sums[VALUE], v)?;
+                sums[GAIN] = add(sums[GAIN], g)?;
+            }
             let pct = p
                 .unrealized
                 .and_then(|g| invest::percent_of(g, p.basis))
@@ -286,23 +303,28 @@ pub(super) fn holdings(
             ));
         }
         if let Some(cash) = h.cash.filter(|c| !c.is_zero()) {
+            sums[VALUE] = add(sums[VALUE], cash)?;
             let mut cells = vec![String::new(); width];
-            cells[6] = cash.to_string();
+            cells[VALUE] = cash.to_string();
             kids.push(detail("Cash", cells, drill.clone()));
         }
         if kids.is_empty() {
             continue;
         }
         let mut g = group(RowKind::Group, a.fields.name.clone(), kids);
+        g.cells = vec![String::new(); width];
+        for i in SUMMED {
+            g.cells[i] = sums[i].to_string();
+            overall[i] = add(overall[i], sums[i])?;
+        }
         g.drill = drill;
         rows.push(g);
     }
-    let sums = sum_up(&mut rows, width, &money)?;
     if s.totals_only {
         prune_details(&mut rows);
     }
     if !rows.is_empty() {
-        rows.push(total_row("OVERALL TOTAL", width, &money, &sums));
+        rows.push(total_row("OVERALL TOTAL", width, &SUMMED, &overall));
     }
     let mut out = report(s, range, columns, rows);
     out.as_of = true;
