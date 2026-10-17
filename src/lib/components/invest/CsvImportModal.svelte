@@ -19,6 +19,7 @@
   let lots = $state<SeedPreview | null>(null);
   let error = $state<string | null>(null);
   let done = $state<string | null>(null);
+  let busy = $state(false);
 
   const errors = $derived(lots?.errors ?? 1);
   const previewed = $derived(lots !== null);
@@ -51,7 +52,9 @@
   }
 
   async function commit() {
+    if (busy) return; // a second click while the backup runs
     error = null;
+    busy = true;
     try {
       const d = seedDate();
       if (d === null) return;
@@ -61,6 +64,8 @@
       await Promise.all([investState.loadSecurities(), investState.refresh()]);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
     }
   }
 </script>
@@ -75,7 +80,7 @@
     <label>Seeding date <input bind:value={date} placeholder={datePattern()} /></label>
     <div class="row">
       <button type="button" onclick={preview} disabled={!text.trim()}>Preview</button>
-      <button type="button" onclick={commit} disabled={!previewed || errors > 0}>Import</button>
+      <button type="button" onclick={commit} disabled={busy || !previewed || errors > 0}>Import</button>
       <button type="button" onclick={onclose}>Close</button>
     </div>
     {#if error}<p class="err" role="alert">{error}</p>{/if}

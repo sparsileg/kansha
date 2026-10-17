@@ -108,6 +108,8 @@
     typed = entered(r.entered[i]);
     rowMonth[String(r.category)] = i + 1;
   }
+  /** The last cell save, so a cell menu acts on the amount just typed. */
+  let saving: Promise<void> = Promise.resolve();
   async function commit(r: AnnualRow, i: number) {
     if (focusKey !== `${r.category}:${i}`) return;
     focusKey = null;
@@ -126,8 +128,12 @@
     }
   }
   /** Enter moves down, as a spreadsheet; Tab moves right natively. */
-  function onkey(e: KeyboardEvent, row: number, col: number) {
-    if (e.key === "Escape") {
+  function onkey(e: KeyboardEvent, row: number, col: number, r: AnnualRow) {
+    if (e.key === "ArrowDown" && e.altKey) {
+      // The cell's ▾ menu from the keyboard.
+      e.preventDefault();
+      showMenu(e.currentTarget as HTMLElement, cellItems(col + 1, r));
+    } else if (e.key === "Escape") {
       focusKey = null;
       (e.currentTarget as HTMLInputElement).blur();
     } else if (e.key === "Enter") {
@@ -142,23 +148,64 @@
 
   async function copyMonth(month: number, scope: CopyScope, category: number | null) {
     try {
+      await saving;
       await call(commands.budgetCopyMonth(w.budget, w.year, month, scope, category));
       await load();
     } catch (e) {
       statusState.show(e instanceof Error ? e.message : String(e), "alert");
     }
   }
-  function copyItems(month: number, category: number | null): MenuItem[] {
-    const name = view?.columns[month - 1]?.long ?? "";
+  async function setAverage(month: number, category: number) {
+    try {
+      await saving;
+      await call(commands.budgetSetAverage(w.budget, category, w.year, month));
+      await load();
+    } catch (e) {
+      statusState.show(e instanceof Error ? e.message : String(e), "alert");
+    }
+  }
+  const monthName = (month: number) => view?.columns[month - 1]?.long ?? "";
+  /** The header Budget ▾: every category's budgets for `month`. */
+  function copyItems(month: number): MenuItem[] {
+    const name = monthName(month);
     return [
-      { label: `Copy ${name} budget to all future months in ${w.year}`, action: () => void copyMonth(month, "future", category) },
-      { label: `Copy ${name} budget to all past months in ${w.year}`, action: () => void copyMonth(month, "past", category) },
-      { label: `Copy ${name} budget to all months in ${w.year}`, action: () => void copyMonth(month, "all", category) },
+      { label: `Copy ${name} budgets to all future months in ${w.year}`, action: () => void copyMonth(month, "future", null) },
+      { label: `Copy ${name} budgets to all past months in ${w.year}`, action: () => void copyMonth(month, "past", null) },
+      { label: `Copy ${name} budgets to all months in ${w.year}`, action: () => void copyMonth(month, "all", null) },
     ];
   }
-  function openMenu(e: MouseEvent, items: MenuItem[]) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  /** A row's ⇉: one category, the month last edited or focused in it. */
+  function rowItems(month: number, r: AnnualRow): MenuItem[] {
+    const name = monthName(month);
+    const cat = `${r.prefix}${r.name}`;
+    const c = r.category!;
+    return [
+      { label: `Copy ${name} ${cat} budget to all future months in ${w.year}`, action: () => void copyMonth(month, "future", c) },
+      { label: `Copy ${name} ${cat} budget to all past months in ${w.year}`, action: () => void copyMonth(month, "past", c) },
+      { label: `Copy ${name} ${cat} budget to all months in ${w.year}`, action: () => void copyMonth(month, "all", c) },
+    ];
+  }
+  /** A Budget cell's ▾ (BUD-070). */
+  function cellItems(month: number, r: AnnualRow): MenuItem[] {
+    const c = r.category!;
+    return [
+      { label: `Apply forward to the end of ${w.year}`, action: () => void copyMonth(month, "future", c) },
+      { label: `Apply to all ${w.year}`, action: () => void copyMonth(month, "all", c) },
+      {
+        label: `Set ${monthName(month)} budget based on average monthly values in this category`,
+        action: () => void setAverage(month, c),
+      },
+    ];
+  }
+  function showMenu(el: HTMLElement, items: MenuItem[]) {
+    const r = el.getBoundingClientRect();
     menu = menu ? null : { x: r.left, y: r.bottom, items };
+  }
+  function openMenu(e: MouseEvent, items: MenuItem[]) {
+    // The click stays here, so the menu's own window listener does not
+    // close it at once (as GearButton does).
+    e.stopPropagation();
+    showMenu(e.currentTarget as HTMLElement, items);
   }
 
   // ---- Gear (BUD-040) ----
@@ -302,31 +349,32 @@
       <table class="grid">
         <thead>
           <tr>
-            <th rowspan={w.show === "details" ? 2 : 1} class="label-col">Category</th>
+            <th rowspan="2" class="label-col">Category</th>
             {#each view.columns as c (c.month)}
-              <th colspan={parts(c).length} class:shade={view.current === c.month} class="month">
-                {c.short}
-                {#if editable && (w.show === "details" || w.show === "budget")}
-                  <button
-                    type="button"
-                    class="drop"
-                    aria-label="{c.long} budget copy options"
-                    onclick={(e) => openMenu(e, copyItems(c.month, null))}>▾</button>
-                {/if}
-              </th>
+              <th colspan={parts(c).length} class:shade={view.current === c.month} class="month mstart">{c.short}</th>
               {#if showToDate && c.month === view.current}
-                <th rowspan={w.show === "details" ? 2 : 1} class="todate">To Date</th>
+                <th rowspan="2" class="todate">To Date</th>
               {/if}
             {/each}
-            <th rowspan={w.show === "details" ? 2 : 1} class="year-col">{view.year} Summary</th>
+            <th rowspan="2" class="year-col">{view.year} Summary</th>
           </tr>
-          {#if w.show === "details"}
-            <tr>
-              {#each view.columns as c (c.month)}
-                {#each parts(c) as p (p)}<th class="sub" class:shade={view.current === c.month}>{PART_LABEL[p]}</th>{/each}
+          <!-- The figure under each month, in every Show choice. -->
+          <tr>
+            {#each view.columns as c (c.month)}
+              {#each parts(c) as p, j (p)}
+                <th class="sub" class:mstart={j === 0} class:shade={view.current === c.month}>
+                  {PART_LABEL[p]}
+                  {#if p === "budget" && editable && (w.show === "details" || w.show === "budget")}
+                    <button
+                      type="button"
+                      class="drop"
+                      aria-label="{c.long} budget copy options"
+                      onclick={(e) => openMenu(e, copyItems(c.month))}>▾</button>
+                  {/if}
+                </th>
               {/each}
-            </tr>
-          {/if}
+            {/each}
+          </tr>
         </thead>
         <tbody>
           {#each rows as s (s.key)}
@@ -358,14 +406,14 @@
                       class="copy"
                       aria-label="Copy a month across this row"
                       title="Copy a month across this row"
-                      onclick={(e) => openMenu(e, copyItems(rowMonth[String(r.category)] ?? view!.current ?? 1, r.category))}
+                      onclick={(e) => openMenu(e, rowItems(rowMonth[String(r.category)] ?? view!.current ?? 1, r))}
                       >⇉</button>
                   {/if}
                 {/if}
               </th>
               {#each view.columns as c, i (c.month)}
-                {#each parts(c) as p (p)}
-                  <td class="num {p}" class:shade={view.current === c.month}>
+                {#each parts(c) as p, j (p)}
+                  <td class="num {p}" class:mstart={j === 0} class:shade={view.current === c.month}>
                     {#if actualOnly(s) && p !== "actual"}
                       <!-- Everything Else: actual only. -->
                     {:else if p === "budget" && s.kind === "row" && editable}
@@ -378,9 +426,18 @@
                         value={focusKey === k ? typed : dollars(r.months[i].budget)}
                         oninput={(e) => (typed = e.currentTarget.value)}
                         onfocus={() => onfocus(r, i)}
-                        onblur={() => void commit(r, i)}
-                        onkeydown={(e) => onkey(e, s.edit ?? 0, i)}
+                        onblur={() => (saving = commit(r, i))}
+                        onkeydown={(e) => onkey(e, s.edit ?? 0, i, r)}
                       />
+                      {#if w.show === "details" || w.show === "budget"}
+                        <!-- Shown on hover or focus; Alt+Down opens it from the cell. -->
+                        <button
+                          type="button"
+                          class="cell-drop"
+                          tabindex="-1"
+                          aria-label="{r.prefix}{r.name} {c.long} budget options"
+                          onclick={(e) => openMenu(e, cellItems(c.month, r))}>▾</button>
+                      {/if}
                     {:else if p === "actual" && s.kind !== "total" && s.kind !== "group"}
                       <button type="button" class="fig" onclick={() => drillMonth(r, i)} title="Show the transactions"
                         >{dollars(r.months[i].actual)}</button>
@@ -606,10 +663,12 @@
     padding: 0 0.2rem;
     cursor: pointer;
     font: inherit;
+    /* The text color, not WebKitGTK's pale button color. */
+    color: inherit;
   }
   .copy {
     margin-left: 0.3rem;
-    opacity: 0.6;
+    opacity: 0.75;
   }
   tr:hover .copy {
     opacity: 1;
@@ -639,5 +698,31 @@
   .cell:focus {
     border-color: var(--line);
     background: var(--bg);
+  }
+  /* A line before each month, so a Details month's Budget, Actual, and
+     Balance read as one group (BUD-070). */
+  .mstart {
+    border-left: 1px solid var(--line);
+  }
+  /* A Budget cell's ▾, at its left, shown on hover or focus. */
+  td.budget {
+    position: relative;
+  }
+  .cell-drop {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: none;
+    padding: 0 0.1rem;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    opacity: 0;
+  }
+  td.budget:hover .cell-drop,
+  td.budget:focus-within .cell-drop {
+    opacity: 1;
   }
 </style>

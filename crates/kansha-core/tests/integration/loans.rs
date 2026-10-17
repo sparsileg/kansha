@@ -539,3 +539,77 @@ fn every_loan_enum_value_is_accepted_by_the_schema() {
         assert_eq!(stored.fields.frequency, *f);
     }
 }
+
+/// Set up on 2026-01-20 while the 2026-01-15 payment is still due: the
+/// usual case, statement in hand (issue #30).
+fn overdue(fx: &Fx) -> LoanSave {
+    let mut s = mortgage(fx);
+    s.fields.opening_date = date("2025-12-15");
+    s.fields.rates[0].effective = date("2025-12-15");
+    s.next_due = date("2026-01-15");
+    s
+}
+
+fn first_split(fx: &Fx, id: ScheduleId, due: &str) -> (Money, Money) {
+    let entry = schedule::prefill_entry(fx.book.conn(), id, date(due)).unwrap();
+    (
+        line_amount(&entry.lines, Target::Category(fx.interest)),
+        line_amount(&entry.lines, Target::Account(fx.loan)),
+    )
+}
+
+#[test]
+fn an_overdue_next_payment_still_gets_its_reminder() {
+    let mut fx = fx();
+    let s = overdue(&fx);
+    let today = fx.book.clock().today();
+    let saved = fx.book.write(|tx| loan::save(tx, today, &s, true)).unwrap();
+    // Dated before the payment, so the projection sees it.
+    let txn = fx.book.txn(saved.adjustment.unwrap()).unwrap();
+    assert_eq!(txn.date, date("2026-01-14"));
+    let id = saved.loan.schedule.expect("a reminder");
+    let d = loan::details(fx.book.conn(), fx.loan).unwrap().unwrap();
+    assert_eq!(d.next_due, Some(date("2026-01-15")));
+    assert_eq!(
+        first_split(&fx, id, "2026-01-15"),
+        (m("-1500.00"), m("-298.65"))
+    );
+
+    // Saved again, still overdue: the reminder stays.
+    let again = fx
+        .book
+        .write(|tx| loan::save(tx, today, &s, false))
+        .unwrap();
+    assert_eq!(again.adjustment, None);
+    assert_eq!(again.loan.schedule, Some(id));
+    let d = loan::details(fx.book.conn(), fx.loan).unwrap().unwrap();
+    assert_eq!(d.next_due, Some(date("2026-01-15")));
+}
+
+#[test]
+fn entries_after_the_adjustment_date_stay_out_of_the_difference() {
+    let mut fx = fx();
+    let fees = fx
+        .book
+        .category("Loan Fees", CategoryKind::Expense)
+        .unwrap();
+    // A 50.00 fee added to the loan on 2026-01-18.
+    fx.book
+        .entry(fx.loan, date("2026-01-18"))
+        .amount(m("-50.00"))
+        .category(fees)
+        .save()
+        .unwrap();
+    let s = overdue(&fx);
+    let today = fx.book.clock().today();
+    let saved = fx.book.write(|tx| loan::save(tx, today, &s, true)).unwrap();
+    let txn = fx.book.txn(saved.adjustment.unwrap()).unwrap();
+    assert_eq!(txn.date, date("2026-01-14"));
+    // Owed the day before the payment is the balance typed.
+    assert_eq!(fx.book.balance(fx.loan).unwrap(), m("-300050.00"));
+    let id = saved.loan.schedule.expect("a reminder");
+    assert_eq!(
+        first_split(&fx, id, "2026-01-15"),
+        (m("-1500.00"), m("-298.65"))
+    );
+}

@@ -10,9 +10,16 @@
   import { openBookFile, switchBook } from "../lib/shell/books";
   import type { RecentBook } from "../lib/types/bindings";
   import { compactWindow, fullWindow } from "../lib/shell/windowsize";
+  import { loadVersions, type Versions } from "../lib/versions";
   import mark from "../assets/kansha-mark.png";
 
   const status = $derived(bookState.status);
+
+  // Same figures as About Kansha; the schema needs no open book.
+  let versions = $state<Versions | null>(null);
+  $effect(() => {
+    void loadVersions().then((v) => (versions = v));
+  });
 
   // Other books on this computer, to switch to instead.
   let recent = $state<RecentBook[]>([]);
@@ -116,6 +123,7 @@
       <div>
         <h1>Kansha</h1>
         <p class="meaning">Gratitude</p>
+        {#if versions}<p class="versions">Version {versions.app} · Schema {versions.schema}</p>{/if}
       </div>
     </header>
     {#if bookState.error}<p role="alert"><strong>{bookState.error}</strong></p>{/if}
@@ -306,6 +314,12 @@
   .meaning {
     margin: 0.25rem 0 0;
     opacity: 0.8;
+  }
+  .versions {
+    margin: 0.25rem 0 0;
+    font-size: var(--fs-small);
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
   }
   .compact {
     width: min(24rem, 92vw);

@@ -13,6 +13,7 @@
 //! through binary floating point (NFR-030), and rounded half-even to 4
 //! decimals (a provider's closes carry float noise: 312.4700012207031).
 
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use rusqlite::Connection;
@@ -153,6 +154,9 @@ struct YahooMeta<'a> {
     regular_market_price: Option<&'a RawValue>,
     regular_market_time: Option<i64>,
     gmtoffset: Option<i64>,
+    /// "USD", "CAD", "GBp" (pence), …
+    #[serde(borrow)]
+    currency: Option<Cow<'a, str>>,
 }
 
 #[derive(Deserialize)]
@@ -255,6 +259,15 @@ impl Provider {
                     .result
                     .and_then(|r| r.into_iter().next())
                     .ok_or("no data")?;
+                // Kansha keeps US dollars only (§1): a price in pence or
+                // another currency would be stored as dollars.
+                if let Some(c) = &result.meta.currency
+                    && !c.eq_ignore_ascii_case("USD")
+                {
+                    return Err(format!(
+                        "the price is in {c}, not US dollars; check the ticker"
+                    ));
+                }
                 if let Some(day) = on {
                     return close_on_or_before(&result, day);
                 }
@@ -360,6 +373,33 @@ mod tests {
         let q = Provider::Yahoo.parse(REPLY, None).unwrap();
         assert_eq!(q.price.to_string(), "182.65");
         assert_eq!(q.date.to_string(), "2026-09-29");
+    }
+
+    #[test]
+    fn a_price_in_another_currency_is_refused() {
+        // Kansha keeps US dollars only: pence stored as dollars would be
+        // 100× too high (issue #39).
+        let pence = REPLY.replace(r#""currency":"USD""#, r#""currency":"GBp""#);
+        assert_eq!(
+            Provider::Yahoo.parse(&pence, None).unwrap_err(),
+            "the price is in GBp, not US dollars; check the ticker"
+        );
+        let cad = DAILY.replace(r#""symbol":"VTI""#, r#""currency":"CAD","symbol":"VTI""#);
+        let e = Provider::Yahoo
+            .parse(&cad, Some(day("2026-09-25")))
+            .unwrap_err();
+        assert!(e.contains("CAD"), "{e}");
+        // USD in any case, or no currency at all, as before.
+        let lower = REPLY.replace(r#""currency":"USD""#, r#""currency":"usd""#);
+        assert!(Provider::Yahoo.parse(&lower, None).is_ok());
+        assert!(Provider::Yahoo.parse(REPLY, None).is_ok());
+        let usd = DAILY.replace(r#""symbol":"VTI""#, r#""currency":"USD","symbol":"VTI""#);
+        assert!(Provider::Yahoo.parse(&usd, Some(day("2026-09-25"))).is_ok());
+        assert!(
+            Provider::Yahoo
+                .parse(DAILY, Some(day("2026-09-25")))
+                .is_ok()
+        );
     }
 
     #[test]

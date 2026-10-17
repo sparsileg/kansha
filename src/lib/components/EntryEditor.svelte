@@ -396,25 +396,24 @@
       return;
     }
     status = null;
-    busy = true;
-    const settled = await settleSums();
-    busy = false;
-    if (!settled) return;
-    const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today, labels);
-    if (!built.ok) {
-      error = built.error;
-      return;
-    }
-    // A sum just worked out may not have reached the live remainder yet.
-    if (isSplit) remainder = await freshRemainder();
-    if (isSplit && (remainder === null || !isZeroMoney(remainder))) {
-      error = `Split lines must add up to the total${
-        remainder !== null ? ` (remainder ${formatMoney(remainder)})` : ""
-      }.`;
-      return;
-    }
+    // Busy from here to the end: a second Enter while a sum or the split
+    // remainder is worked out must not save twice.
     busy = true;
     try {
+      if (!(await settleSums())) return;
+      const built = buildEntry($state.snapshot(d) as Draft, account, listsState.today, labels);
+      if (!built.ok) {
+        error = built.error;
+        return;
+      }
+      // A sum just worked out may not have reached the live remainder yet.
+      if (isSplit) remainder = await freshRemainder();
+      if (isSplit && (remainder === null || !isZeroMoney(remainder))) {
+        error = `Split lines must add up to the total${
+          remainder !== null ? ` (remainder ${formatMoney(remainder)})` : ""
+        }.`;
+        return;
+      }
       if (!(await confirmSave(built.entry))) return;
       const name = built.payeeName;
       let savedId: number = txn ?? -1;

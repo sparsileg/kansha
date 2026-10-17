@@ -14,8 +14,13 @@
 //! Otherwise it is refused, so it can never undo more than it says.
 //! Deleting a transaction entered from a schedule gives the occurrence
 //! back (REC-160), a schedule change that undo does not cover, so it
-//! offers none. Undoing a change to a reconciled transaction asks for
+//! offers none. Nor does a change that also changed other transactions
+//! (an investment change re-plans the holding's later sales): their
+//! snapshots are not taken, so undo could only put back part of it.
+//! Undoing a change to a reconciled transaction asks for
 //! confirmation (TXN-050).
+
+use std::collections::HashSet;
 
 use rusqlite::Connection;
 
@@ -31,6 +36,9 @@ use crate::persistence::{Tx, categories, invest as inv_repo, ledger as ledger_re
 pub struct Before {
     rows: Option<TxnRows>,
     scheduled: bool,
+    /// The audit mark before the change; `None` when taken after it
+    /// ([`created_txns`]).
+    mark: Option<i64>,
 }
 
 impl Before {
@@ -112,14 +120,17 @@ impl Undo {
 
 /// Take before changing transaction `txn`; `None` before creating one.
 pub fn before(conn: &Connection, txn: Option<TxnId>) -> Result<Before> {
+    let mark = Some(rows::audit_mark(conn)?);
     Ok(match txn {
         None => Before {
             rows: None,
             scheduled: false,
+            mark,
         },
         Some(id) => Before {
             rows: Some(rows::read(conn, id)?),
             scheduled: rows::is_scheduled(conn, id)?,
+            mark,
         },
     })
 }
@@ -145,6 +156,18 @@ pub fn after_many(
     befores: Vec<(TxnId, Before)>,
     label: &str,
 ) -> Result<Option<Undo>> {
+    // A change that also changed other transactions cannot be put back
+    // from these snapshots alone: offer no undo rather than a partial
+    // one. A created transaction is among `befores` (its new ID).
+    if let Some(since) = befores.iter().filter_map(|(_, b)| b.mark).min() {
+        let ours: HashSet<i64> = befores.iter().map(|(t, _)| t.0).collect();
+        if rows::txns_audited_since(conn, since)?
+            .iter()
+            .any(|t| !ours.contains(t))
+        {
+            return Ok(None);
+        }
+    }
     let mut items = Vec::with_capacity(befores.len());
     let single = befores.len() == 1;
     for (txn, before) in befores {
@@ -184,6 +207,7 @@ pub fn created_txns(conn: &Connection, txns: &[TxnId], label: &str) -> Result<Op
                 Before {
                     rows: None,
                     scheduled: false,
+                    mark: None,
                 },
             )
         })

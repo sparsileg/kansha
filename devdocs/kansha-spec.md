@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.100 (draft) |
+| **Document version** | 0.7.106 (draft) |
 | **Target release** | Kansha 1.0.0 |
 | **Last updated** | 2026-10-14 |
 | **Owner** | Stan |
@@ -253,12 +253,18 @@ splits into principal and interest and drive the payment reminder
     date, counting back from the next due date by the payment
     schedule. Days are counted between nominal due dates, before
     any weekend shift.
-- **LOAN-040** [1.0][S] The current balance: when it differs from
-  the register's balance, saving asks, then adds a transaction dated
-  today to Opening Balance (the built-in equity category) for the
+- **LOAN-040** [1.0][S] The current balance, what is owed before
+  the next payment: when it differs from the register's balance the
+  day before the next due date, saving asks, then adds a transaction
+  to Opening Balance (the built-in equity category) for the
   difference, so the register's past is left as it is and no expense
-  or income is recorded. A new loan with an empty register gets its
-  whole balance this way.
+  or income is recorded. It is dated today or, when the next payment
+  is overdue (the usual case when setting up from a statement), the
+  day before it, so the reminder's first split starts from the
+  balance typed (0.7.106). Entries after that day are not counted
+  into the difference. A new loan with an empty register gets its
+  whole balance this way. Saving never ends the reminder while a
+  balance is owed.
 - **LOAN-050** [1.0][S] Rates are kept as a history: each rate has
   the date it takes effect (the first is the opening date). A
   payment uses the rate in effect on its due date. The screen shows
@@ -774,7 +780,11 @@ common patterns.
   sources change or disappear: Yahoo Finance's chart service now (no
   key; stocks, ETFs, mutual funds), a keyed provider later (D-40). The
   status bar reports the prices stored and names the tickers that got
-  none. Manual entry and PRC-030 remain the fallback.
+  none. A quote in a currency other than US dollars (a `.TO` or `.L`
+  listing; London quotes in pence) is not stored: its ticker is named
+  with "the price is in GBp, not US dollars; check the ticker"
+  (0.7.104). A reply without a currency is taken as dollars. Manual
+  entry and PRC-030 remain the fallback.
 - **PRC-050** [1.0][R] Market value uses the most recent price on or
   before the valuation date; reports show the price date used and flag
   stale prices (older than the stale-price setting, SET-040, unless the
@@ -958,12 +968,12 @@ income and fees) is its own row, so the rows add up to the account.
   each, its current equities, then its cash; under each equity, its open
   lots. Columns: Name (always), Ticker Symbol, Quote/Price, Shares, Cost
   Basis, Market Value, Gain/Loss, Gain/Loss % (0.7.54), Day Gain/Loss,
-  Price Day Change (%). Gain/Loss % is gain ÷ cost basis, two places,
-  half-even; on an account row and Totals it counts only priced equities
-  (cash and equities with no price are left out); on a sale it is
-  realized gain ÷ basis; it is blank with no price or a basis of zero or
-  less. An account row, collapsed or expanded, shows rolled-up Cost
-  Basis, Market Value (cash included), Gain/Loss, Gain/Loss %, Day
+  Day Change (%) (0.7.105). Gain/Loss % is gain ÷ cost basis, two
+  places, half-even; on an account row and Totals it counts only priced
+  equities (cash and equities with no price are left out); on a sale
+  it is realized gain ÷ basis; it is blank with no price or a basis of
+  zero or less. An account row, collapsed or expanded, shows rolled-up
+  Cost Basis, Market Value (cash included), Gain/Loss, Gain/Loss %, Day
   Gain/Loss, and Day % (0.7.13); a collapsed equity shows every column
   it has data for; an expanded equity shows its lots instead; Totals
   close the list. An as-of date (default today) sets the valuation; a
@@ -1560,9 +1570,9 @@ Annual View; the Graph View's figures are built, its screen is next.
   Create Budget… and then the budgets by name (opens one). Create
   Budget… asks the name and makes the current year with the
   categories used in the last 12 months, each month at the
-  category's monthly average for the last calendar year (that year's
-  actual ÷ 12, whole dollars, half-even; 0 with no actual), then
-  opens the budget view. Balance Adjustment (RCN-040) is never picked;
+  category's monthly average over the 12 whole months before the
+  current one (their actual ÷ 12, whole dollars, half-even; 0 with no
+  actual; 0.7.101), then opens the budget view. Balance Adjustment (RCN-040) is never picked;
   it can be ticked by hand.
 - **BUD-030** [1.0][S] Actual: per split posting to a category, in all
   accounts (investment accounts included); transfers and Opening Balance
@@ -1615,13 +1625,25 @@ Annual View; the Graph View's figures are built, its screen is next.
   Details and Balance, Budget for Budget, Actual for Actual. Budget
   cells are edited in place (Enter and Tab move as in a spreadsheet).
   Actual figures open their transactions. Balance is bold, negative in
-  the negative color. Each month's Budget heading has a ▾ menu: Copy
-  <Month> budget to all future months in <year>, to all past months in
-  <year>, to all months in <year>. A row's copy icon copies a month
-  across the row the same three ways. The To Date column shows only in
-  the current year. A row's copy icon copies the month last edited in
-  the row (the current month at first), and shows only with Details
-  and Budget. Category rows are indented under their group's toggle.
+  the negative color. A line runs before each month: between every
+  column in Budget, Balance, and Actual; in Details only at month
+  boundaries, so a month's Budget, Actual, and Balance sit together. A
+  second header row names the figure under each month in every Show
+  choice. In Details and Budget, each month's "Budget" heading has a ▾
+  menu: Copy <Month> budgets to all future months in <year>, to all
+  past months in <year>, to all months in <year> (every category). A
+  row's copy icon copies a month across that row the same three ways,
+  its items naming the category. Each Budget cell has a ▾, shown on
+  hover or focus and opened by click or Alt+Down: Apply forward to the
+  end of <year>, Apply to all <year> (that category only), and Set
+  <Month> budget based on average monthly values in this category,
+  which sets that cell to the category's monthly average over the 12
+  whole months before <Month>, none after the last whole month before
+  today (as BUD-020). The To Date column shows only in the current
+  year. A row's copy icon copies the month last edited in the row (the
+  current month at first). The ▾ menus and the copy icon show only
+  with Details and Budget (0.7.101). Category rows are indented under
+  their group's toggle.
 - **BUD-080** [1.0][S] Deleting a category removes its budget amounts;
   merging one adds them into the target's.
 - **BUD-090** [Later] Budget reports (Current budget, Historical
@@ -1808,9 +1830,10 @@ platform has one.
   passphrase is asked again. "Show database key" in Settings asks for
   the passphrase, then shows the key, which opens the database in DB
   Browser for SQLite (SQLCipher build). The passphrase screen opens
-  in a small window with the 感謝 mark and what *kansha* means; the
-  window grows to its working size when the book opens, or at once
-  for setup, restore, or a new book. Each size is the one last used
+  in a small window with the 感謝 mark and what *kansha* means. Every
+  start screen shows the app and schema versions, as About Kansha
+  does (UI-047, 0.7.101). The window grows to its working size when
+  the book opens, or at once for setup, restore, or a new book. Each size is the one last used
   on that screen (SET-070, 0.7.41), else 520×760 for the small window
   and 1280×800 for the working one.
 - **SECU-030** [1.0][R] Clear warning at setup: a lost passphrase
@@ -1900,9 +1923,12 @@ platform has one.
   old one. Back Up Now, report exports (CSV, PDF), and the automatic
   integrity check report there rather than in windows.
 - **UI-047** [1.0][R] Help > About Kansha shows the 感謝 mark and
-  what *kansha* means, the app version, the schema version (the newest
-  this build opens), a short description, and the address for
-  suggestions and bug reports, kansha@sparsile.org, as plain text.
+  what *kansha* means ("Japanese for gratitude"), the app version, the
+  schema version (the newest this build opens), a short description,
+  the line "© 2026 sparsile. MIT License." with a License button that
+  shows the bundled LICENSE text, and the address for suggestions and
+  bug reports, feedback@astryx.tools, as plain text. The installers
+  carry the license too (0.7.101).
 - **UI-048** [1.0][S] Help > User's Guide (0.7.95), above About
   Kansha, opens the Kansha User's Guide, a PDF bundled with the app,
   in the system's PDF viewer. If it cannot open, the status bar says
@@ -1930,7 +1956,10 @@ platform has one.
   occurrence back, REC-160). A Find/Replace (REG-170) is one change:
   one Undo puts back every transaction it changed. Approving an entry
   from the review list (CLI-040) is a change too: Undo removes the
-  transaction and puts the entry back as pending.
+  transaction and puts the entry back as pending. An investment change
+  that rewrites other transactions (editing or deleting one re-plans
+  the holding's later sales, transfers, splits, and returns of
+  capital) cannot be undone: undo would put back only part of it.
 - **UI-070** [1.0][R] Search box in the navigation bar: finds
   transactions by payee, category, memo, note, check number, account
   name, or amount, across all accounts or (from a register) in that
@@ -2840,8 +2869,10 @@ Modeling choices that affect other sections:
   place, so a schedule occurrence's link holds) and records a `create`,
   `update`, or `delete` audit entry with origin `ui`. It runs only
   while the newest audit entry is still the change's own and the rows
-  are still as the change left them; otherwise it is refused. The undo
-  lives in the running app, not the book. No schema change.
+  are still as the change left them; otherwise it is refused. No undo
+  is offered when the change wrote `txn` audit entries for any
+  transaction other than its own (0.7.103). The undo lives in the
+  running app, not the book. No schema change.
 - **Prices (0.4):** the price list import (PRC-030) and price
   download (PRC-040) store prices with source `csv` and `download`. A
   download's date is the provider's market time in the exchange's time
@@ -3219,6 +3250,12 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.106 | 2026-10-17 | LOAN-040 (closes #30): the current balance is what is owed before the next payment; the difference is worked out against the register the day before the next due date and dated today or, when that payment is overdue, the day before it. A loan set up after a payment fell due now gets its reminder and the right first split, instead of no reminder (or an existing one ended). Saving refuses rather than ends the reminder while a balance is owed. No schema change. No API change (doc comment of `LoanSave.current_balance` only). |
+| 0.7.105 | 2026-10-16 | POS-040: the Investments column "Price Day Change (%)" is now "Day Change (%)", to save width; saved views keep it (they store the column ID). No schema change. No API change. |
+| 0.7.104 | 2026-10-16 | PRC-040 (closes #39): a downloaded quote in a currency other than USD (CAD, GBp pence, …) is refused and its ticker listed as failed, not stored as dollars; a reply without a currency is accepted as before. No schema change. No API change. |
+| 0.7.103 | 2026-10-16 | UI-060 (closes #31, fix 1): no Undo for an investment edit or delete that re-plans the holding's later lot events; undoing only the edited transaction left lots over-sold. The engine refuses an undo whose change audited any other transaction. No schema change. No API change. |
+| 0.7.102 | 2026-10-16 | BUD-020: Create Budget… averages the 12 whole months before the current one, not last calendar year. BUD-070: a line before each month; the figure header row in every Show choice; the month ▾ moves to the "Budget" heading and copies every category; the row copy icon's items name the category; each Budget cell has a ▾ (Apply forward, Apply to all, Set from the 12-month average). The month ▾ and row icon menus no longer close on the click that opens them, and both icons take the text color. **API change:** new command `budget_set_average`. No schema change. |
+| 0.7.101 | 2026-10-16 | UI-047: About Kansha says "Japanese for gratitude", shows "© 2026 sparsile. MIT License." with a License button for the full text, and gives feedback@astryx.tools. LICENSE holder is sparsile; Cargo, npm, and the installers say MIT. SECU-020: the start screen shows the app and schema versions. No schema or API change. |
 | 0.7.100 | 2026-10-14 | ACCT-220, LOAN-090: deleting a loan account deletes its terms and payment reminder (the loan's reminder could not be deleted, so the account could not be either); deleting an account with transactions says to delete them first or close it. No schema or API change. |
 | 0.7.99 | 2026-10-13 | LOAN-025: the payment shows as soon as the terms are typed (new command `loan_payment`); the lender's figure is typed in a field that opens beside "Use the lender's payment figure". Loan screen fields narrowed; a save error clears on the next edit; "the next payment must be due after the opening date" reworded. **API change:** new command `loan_payment`. No schema change. |
 | 0.7.98 | 2026-10-13 | BUD-020: Create Budget… never picks Balance Adjustment. BUD-030: Balance Adjustment counts only when budgeted, never in Everything Else. BUD-070: the row copy icon shows only with Details and Budget; category rows indented under their group. No schema or API change. |

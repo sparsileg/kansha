@@ -26,7 +26,7 @@ export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: "gain", label: "Gain/Loss" },
   { id: "gain_percent", label: "Gain/Loss %" },
   { id: "day_gain", label: "Day Gain/Loss" },
-  { id: "day_percent", label: "Price Day Change (%)" },
+  { id: "day_percent", label: "Day Change (%)" },
 ];
 
 export const columnLabel = (id: ColumnId): string => COLUMNS.find((c) => c.id === id)?.label ?? id;

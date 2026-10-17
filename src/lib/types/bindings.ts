@@ -291,6 +291,11 @@ export const commands = {
 	budgetYearCreate: (id: BudgetId, year: number, copyFrom: number | null) => typedError<Budget, IpcError>(__TAURI_INVOKE("budget_year_create", { id, year, copyFrom })),
 	/**  One month's budget for one category (BUD-070). */
 	budgetSet: (id: BudgetId, category: CategoryId, year: number, month: number, amount: string) => typedError<null, IpcError>(__TAURI_INVOKE("budget_set", { id, category, year, month, amount })),
+	/**
+	 *  A Budget cell's "Set <Month> budget based on average monthly values"
+	 *  (BUD-070): the 12 whole months before it. Returns the amount set.
+	 */
+	budgetSetAverage: (id: BudgetId, category: CategoryId, year: number, month: number) => typedError<string, IpcError>(__TAURI_INVOKE("budget_set_average", { id, category, year, month })),
 	/**  A Graph View row's budget for its whole period (BUD-060). */
 	budgetSetPeriod: (id: BudgetId, category: CategoryId, period: GraphPeriod, at: {
 	year: number,
@@ -2375,8 +2380,10 @@ export type LoanSave = {
 	/**  The next payment's due date. */
 	next_due: string,
 	/**
-	 *  What is owed now, positive. When it differs from the register,
-	 *  saving adds the difference to Opening Balance, dated today.
+	 *  What is owed before the next payment, positive. When it differs
+	 *  from the register the day before that payment, saving adds the
+	 *  difference to Opening Balance, dated today or, when the payment
+	 *  is overdue, that day.
 	 */
 	current_balance: string,
 };

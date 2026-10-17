@@ -84,6 +84,21 @@ pub fn budget_set(
     state.write(|tx| budget::set(tx, id, category, year, month, amount))
 }
 
+/// A Budget cell's "Set <Month> budget based on average monthly values"
+/// (BUD-070): the 12 whole months before it. Returns the amount set.
+#[tauri::command]
+#[specta::specta]
+pub fn budget_set_average(
+    state: State<'_, AppState>,
+    id: BudgetId,
+    category: CategoryId,
+    year: i32,
+    month: u32,
+) -> CmdResult<Money> {
+    let today = state.clock().today();
+    state.write(|tx| budget::set_average(tx, today, id, category, year, month))
+}
+
 /// A Graph View row's budget for its whole period (BUD-060).
 #[tauri::command]
 #[specta::specta]

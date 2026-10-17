@@ -97,7 +97,7 @@ describe("Investments view", () => {
     const heads = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/ [▲▼⇅]$/, ""));
     expect(heads).toEqual([
       "Name", "Ticker Symbol", "Quote/Price", "Shares", "Market Value", "Gain/Loss",
-      "Day Gain/Loss", "Price Day Change (%)",
+      "Day Gain/Loss", "Day Change (%)",
     ]);
     expect(screen.getAllByText("10,050.00")).toHaveLength(2); // account row and Totals
     expect(screen.getByText("Totals:")).toBeTruthy();
@@ -160,7 +160,7 @@ describe("Investments view", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const heads = screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/ [▲▼⇅]$/, ""));
     expect(heads.at(-2)).toBe("Cost Basis");
-    expect(heads.at(-1)).toBe("Price Day Change (%)");
+    expect(heads.at(-1)).toBe("Day Change (%)");
     expect(screen.getByRole("option", { name: "Mine" })).toBeTruthy();
   });
 

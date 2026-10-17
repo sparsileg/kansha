@@ -1,5 +1,5 @@
-//! Budget writes (BUD-020 … BUD-080): creating one from last year's
-//! spending, copying, years, and the amount edits of both views.
+//! Budget writes (BUD-020 … BUD-080): creating one from the last 12
+//! months' spending, copying, years, and the amount edits of both views.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,15 +29,46 @@ fn monthly_average(total: Money) -> Result<Money> {
     Money::from_decimal(avg)?.round_to_dollars()
 }
 
+/// The 12 whole months before `year`-`month`, moved back so that none
+/// is after the last whole month before `today` (BUD-020, BUD-070): a
+/// month still to come has no spending to average.
+fn average_window(year: i32, month: u32, today: Date) -> Result<(Date, Date)> {
+    let (y, m) = (year, month).min((today.year(), today.month()));
+    let first = Date::from_ymd(y, m, 1)?.naive();
+    let to = first
+        .checked_sub_days(Days::new(1))
+        .map(Date::from_naive)
+        .ok_or(Error::Overflow("budget dates"))?;
+    let from = first
+        .checked_sub_months(Months::new(12))
+        .map(Date::from_naive)
+        .ok_or(Error::Overflow("budget dates"))?;
+    Ok((from, to))
+}
+
+/// Each category's actual from `from` to `to`, in report sign.
+fn totals(
+    conn: &rusqlite::Connection,
+    from: Date,
+    to: Date,
+) -> Result<BTreeMap<CategoryId, Money>> {
+    let mut out: BTreeMap<CategoryId, Money> = BTreeMap::new();
+    for ((c, ..), amount) in budget_actuals(conn, from, to)? {
+        let v = out.entry(c).or_insert(Money::ZERO);
+        *v = v.checked_add(amount).ok_or(Error::Overflow("budget"))?;
+    }
+    Ok(out)
+}
+
 /// Create Budget… (BUD-020): the current year, with every income and
 /// expense category used in the last 12 months, each month at the
-/// category's monthly average for last calendar year (0 with none).
-/// Balance Adjustment is left out; it can be added by hand.
+/// category's monthly average over the 12 whole months before this one
+/// (0 with none). Balance Adjustment is left out; it can be added by
+/// hand.
 pub fn create(tx: &Tx<'_>, today: Date, name: &str) -> Result<Budget> {
     let conn = tx.conn();
     let year = today.year();
-    let last_year_from = Date::from_ymd(year - 1, 1, 1)?;
-    let last_year_to = Date::from_ymd(year - 1, 12, 31)?;
+    let (avg_from, avg_to) = average_window(year, today.month(), today)?;
     let recent_from = today
         .naive()
         .checked_sub_months(Months::new(12))
@@ -58,15 +89,11 @@ pub fn create(tx: &Tx<'_>, today: Date, name: &str) -> Result<Budget> {
         .map(|(c, ..)| c)
         .filter(|c| !adjust.contains(c))
         .collect();
-    let mut last_year: BTreeMap<CategoryId, Money> = BTreeMap::new();
-    for ((c, ..), amount) in budget_actuals(conn, last_year_from, last_year_to)? {
-        let v = last_year.entry(c).or_insert(Money::ZERO);
-        *v = v.checked_add(amount).ok_or(Error::Overflow("budget"))?;
-    }
+    let past = totals(conn, avg_from, avg_to)?;
     let mut cells = Vec::new();
     for c in &used {
         let kind = kinds.get(c).copied().unwrap_or(CategoryKind::Expense);
-        let total = usual(kind, last_year.get(c).copied().unwrap_or(Money::ZERO))?;
+        let total = usual(kind, past.get(c).copied().unwrap_or(Money::ZERO))?;
         let amount = monthly_average(total)?;
         for month in 1..=12 {
             cells.push(BudgetCell {
@@ -79,6 +106,37 @@ pub fn create(tx: &Tx<'_>, today: Date, name: &str) -> Result<Budget> {
     }
     let categories: Vec<CategoryId> = used.into_iter().collect();
     repo::insert(tx, name, &categories, &[year], &cells)
+}
+
+/// A Budget cell's "Set <Month> budget based on average monthly values"
+/// (BUD-070): the category's monthly average over the 12 whole months
+/// before `month` (none after the last whole month before `today`),
+/// whole dollars, 0 with none. Returns the amount set.
+pub fn set_average(
+    tx: &Tx<'_>,
+    today: Date,
+    id: BudgetId,
+    category: CategoryId,
+    year: i32,
+    month: u32,
+) -> Result<Money> {
+    if !(1..=12).contains(&month) {
+        return Err(Error::Invalid(format!("no month {month}")));
+    }
+    let conn = tx.conn();
+    let kind = categories::list(conn)?
+        .into_iter()
+        .find(|c| c.id == category)
+        .map(|c| c.fields.kind)
+        .ok_or_else(|| Error::Invalid("no such category".into()))?;
+    let (from, to) = average_window(year, month, today)?;
+    let total = totals(conn, from, to)?
+        .get(&category)
+        .copied()
+        .unwrap_or(Money::ZERO);
+    let amount = monthly_average(usual(kind, total)?)?;
+    set(tx, id, category, year, month, amount)?;
+    Ok(amount)
 }
 
 /// Copy this budget… (BUD-040): a new budget with this one's categories
@@ -191,7 +249,8 @@ pub fn set_period(
 }
 
 /// Copy `month`'s budget to the year's other months (BUD-070): every
-/// category's (the month heading's ▾ menu), or one's (a row's copy).
+/// category's (the header's Budget ▾ menu), or one's (a row's ⇉ or a
+/// Budget cell's ▾).
 pub fn copy_month(
     tx: &Tx<'_>,
     id: BudgetId,

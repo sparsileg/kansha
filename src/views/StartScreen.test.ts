@@ -4,7 +4,15 @@ import { tick } from "svelte";
 
 vi.mock("../lib/api", async (orig) => {
   const real = await orig<typeof import("../lib/api")>();
-  return { ...real, commands: { ...real.commands, bookRecent: () => Promise.resolve([]) } };
+  return {
+    ...real,
+    commands: {
+      ...real.commands,
+      bookRecent: () => Promise.resolve([]),
+      appVersion: () => Promise.resolve("0.15.0"),
+      schemaVersion: () => Promise.resolve(21),
+    },
+  };
 });
 
 const sizes: string[] = [];
@@ -39,6 +47,12 @@ describe("start screen", () => {
     render(StartScreen);
     expect(screen.getByRole("img", { name: /kansha/ })).toBeTruthy();
     expect(screen.getByText("Gratitude")).toBeTruthy();
+  });
+
+  it.each(["locked", "new", "key_missing", "unencrypted"] as const)("shows the app and schema versions (%s)", async (state) => {
+    status(state);
+    render(StartScreen);
+    expect(await screen.findByText("Version 0.15.0 · Schema 21")).toBeTruthy();
   });
 
   it("asks for the passphrase in a compact window", async () => {

@@ -66,6 +66,7 @@ vi.mock("./lib/api", async (orig) => {
     ...real,
     commands: {
       appVersion: () => Promise.resolve("x"),
+      schemaVersion: () => Promise.resolve(21),
       bookStatus: () =>
         ok({
           state: book.state,

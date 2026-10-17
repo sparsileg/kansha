@@ -37,8 +37,10 @@ pub struct LoanSave {
     pub fields: LoanFields,
     /// The next payment's due date.
     pub next_due: Date,
-    /// What is owed now, positive. When it differs from the register,
-    /// saving adds the difference to Opening Balance, dated today.
+    /// What is owed before the next payment, positive. When it differs
+    /// from the register the day before that payment, saving adds the
+    /// difference to Opening Balance, dated today or, when the payment
+    /// is overdue, that day.
     pub current_balance: Money,
 }
 
@@ -689,15 +691,23 @@ fn schedule_fields(
 }
 
 /// Save the loan's terms (LOAN-010 … LOAN-060). When the current balance
-/// differs from the register's, an Opening Balance transaction dated
-/// `today` makes up the difference (LOAN-040); without `confirmed` that
-/// asks first. The reminder is added or updated to match; a paid-off
-/// loan's reminder ends.
+/// differs from the register's, an Opening Balance transaction makes up
+/// the difference (LOAN-040), dated today or, when the next payment is
+/// overdue, the day before it; without `confirmed` that asks first. The
+/// reminder is added or updated to match; a paid-off loan's reminder
+/// ends.
 pub fn save(tx: &Tx<'_>, today: Date, save: &LoanSave, confirmed: bool) -> Result<LoanSaved> {
     let f = normalized(&save.fields)?;
     check_terms(&f, save.next_due, save.current_balance)?;
     check_refs(tx.conn(), &f)?;
-    let register = owed(tx.conn(), f.account, None)?;
+    // The balance typed is what is owed before the next payment: the
+    // register the day before it, which the projection starts from.
+    // Entries after that day stay out of the difference.
+    let owed_on = day_before(save.next_due)?;
+    let register = owed(tx.conn(), f.account, Some(owed_on))?;
+    // Dated today, or on that day when the payment is overdue, so the
+    // projection sees it.
+    let dated = today.min(owed_on).max(f.opening_date);
     let difference = save
         .current_balance
         .checked_sub(register)
@@ -707,8 +717,8 @@ pub fn save(tx: &Tx<'_>, today: Date, save: &LoanSave, confirmed: bool) -> Resul
     } else {
         if !confirmed {
             return Err(Error::ConfirmationRequired(format!(
-                "The register says {register} is owed. Add {difference} to Opening Balance, \
-                 dated today, to make it {}?",
+                "The register says {register} is owed on {owed_on}, before the next \
+                 payment. Add {difference} to Opening Balance, dated {dated}, to make it {}?",
                 save.current_balance
             )));
         }
@@ -717,7 +727,7 @@ pub fn save(tx: &Tx<'_>, today: Date, save: &LoanSave, confirmed: bool) -> Resul
         let amount = difference
             .checked_neg()
             .ok_or(Error::Overflow("loan balance"))?;
-        let mut entry = Entry::new(f.account, today, amount);
+        let mut entry = Entry::new(f.account, dated, amount);
         entry.memo = "Loan balance".into();
         entry
             .lines
@@ -736,6 +746,15 @@ pub fn save(tx: &Tx<'_>, today: Date, save: &LoanSave, confirmed: bool) -> Resul
     } else {
         project_all(tx.conn(), &f, save.next_due, before, f.extra_principal)?
     };
+    // Never end the reminder while money is owed (a backstop: the
+    // adjustment makes the projection start from the balance typed).
+    if steps.is_empty() && save.current_balance.cents() > 0 {
+        return Err(Error::Invalid(format!(
+            "{} is owed but no payment from {} pays it; check the next due date \
+             and the register",
+            save.current_balance, save.next_due
+        )));
+    }
     match (steps.first(), existing) {
         (Some(first), existing) => {
             let left = i64::try_from(steps.len()).map_err(|_| Error::Overflow("loan payments"))?;

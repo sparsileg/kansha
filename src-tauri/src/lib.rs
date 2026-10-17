@@ -116,6 +116,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::budget::budget_categories_set,
             commands::budget::budget_year_create,
             commands::budget::budget_set,
+            commands::budget::budget_set_average,
             commands::budget::budget_set_period,
             commands::budget::budget_copy_month,
             commands::budget::budget_annual,

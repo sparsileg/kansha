@@ -31,9 +31,20 @@ describe("Help > About Kansha", () => {
   it("describes Kansha and gives the address, as plain text", () => {
     render(AboutModal);
     expect(screen.getByText(/personal finance app/)).toBeTruthy();
-    expect(screen.getByText(/gratitude/)).toBeTruthy();
-    const email = screen.getByText("kansha@sparsile.org");
+    expect(screen.getByText(/Japanese for gratitude\./)).toBeTruthy();
+    expect(screen.queryByText(/heartfelt thanks/)).toBeNull();
+    const email = screen.getByText("feedback@astryx.tools");
     expect(email.closest("a")).toBeNull();
+  });
+
+  it("shows the copyright and license, and the full text on request", async () => {
+    render(AboutModal);
+    expect(screen.getByText(/© 2026 sparsile\. MIT License\./)).toBeTruthy();
+    expect(screen.queryByText(/Permission is hereby granted/)).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "License" }));
+    expect(screen.getByText(/Permission is hereby granted/)).toBeTruthy();
+    // Text is whitespace-normalized: the next line follows a space.
+    expect(screen.getByText(/Copyright \(c\) 2026 sparsile Permission/)).toBeTruthy();
   });
 
   it("Close closes it", async () => {

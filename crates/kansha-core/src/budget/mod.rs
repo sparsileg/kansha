@@ -10,7 +10,8 @@ mod view;
 
 pub use period::{GraphAt, GraphPeriod};
 pub use service::{
-    copy, copy_month, create, create_year, delete, rename, set, set_categories, set_period,
+    copy, copy_month, create, create_year, delete, rename, set, set_average, set_categories,
+    set_period,
 };
 pub use view::{
     AnnualGroup, AnnualRow, AnnualView, Bar, BudgetFigures, GraphGroup, GraphRow, GraphView,

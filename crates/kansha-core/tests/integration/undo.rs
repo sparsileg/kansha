@@ -3,7 +3,7 @@
 //! transaction's rows back exactly as they were (same IDs), as an audited
 //! change, and only while nothing else has changed since.
 
-use kansha_core::accounts::{AccountId, AccountType};
+use kansha_core::accounts::{AccountId, AccountType, LotMethod};
 use kansha_core::categories::{CategoryId, CategoryKind};
 use kansha_core::invest::{self, InvAction, InvInput};
 use kansha_core::ledger::{self, Cleared, Entry, Target, TxnId, TxnStatus};
@@ -337,4 +337,103 @@ fn deleting_a_scheduled_transaction_cannot_be_undone() {
         })
         .unwrap();
     assert!(u.is_none());
+}
+
+/// Brokerage with two VTI buys (10 at 100.00, 10 at 200.00), sale A of
+/// 5 on 2026-04-01 and sale B of 10 on 2026-05-01, both FIFO.
+fn two_sales() -> (Book, InvInput, TxnId, AccountId) {
+    let mut book = Book::new(date("2026-06-30")).unwrap();
+    let brk = book.account("Brokerage", AccountType::Brokerage).unwrap();
+    let vti = book
+        .security("Total Stock Market", "VTI", SecurityType::Etf)
+        .unwrap();
+    let opening = book.find_category("Opening Balance").unwrap().unwrap();
+    let mut cash = InvInput::new(brk, InvAction::CashIn, date("2026-01-02"));
+    cash.amount = Some(m("10000.00"));
+    cash.counterpart = Some(Target::Category(opening));
+    book.invest(&cash).unwrap();
+    for (d, amount) in [("2026-02-01", "1000.00"), ("2026-03-01", "2000.00")] {
+        let mut buy = InvInput::new(brk, InvAction::Buy, date(d));
+        buy.security = Some(vti);
+        buy.quantity = Some("10".parse::<Quantity>().unwrap());
+        buy.amount = Some(m(amount));
+        book.invest(&buy).unwrap();
+    }
+    let sell = |d: &str, q: &str| {
+        let mut s = InvInput::new(brk, InvAction::Sell, date(d));
+        s.security = Some(vti);
+        s.quantity = Some(q.parse::<Quantity>().unwrap());
+        s.amount = Some(m("500.00"));
+        s.lot_method = Some(LotMethod::Fifo);
+        s
+    };
+    let a = sell("2026-04-01", "5");
+    let a_id = book.invest(&a).unwrap().txn.id;
+    book.invest(&sell("2026-05-01", "10")).unwrap();
+    (book, a, a_id, brk)
+}
+
+fn shares(book: &Book, brk: AccountId) -> Quantity {
+    invest::open_lots(book.conn(), brk, None, date("2026-06-30"))
+        .unwrap()
+        .iter()
+        .map(|l| l.open_quantity)
+        .sum()
+}
+
+/// The change's undo, `None` when none is offered.
+fn try_change(
+    book: &mut Book,
+    txn: Option<TxnId>,
+    f: impl FnOnce(&Tx<'_>) -> kansha_core::Result<TxnId>,
+) -> Option<Undo> {
+    book.write(|tx| {
+        let before = undo::before(tx.conn(), txn)?;
+        let id = f(tx)?;
+        undo::after(tx.conn(), id, before, "Edit")
+    })
+    .unwrap()
+}
+
+#[test]
+fn an_investment_change_that_replans_later_sales_offers_no_undo() {
+    // The change rewrites sale B's lots too; undoing sale A alone would
+    // over-sell lot 1 (issue #31).
+    let (mut book, a, a_id, brk) = two_sales();
+    let mut edited = a.clone();
+    edited.quantity = Some("2".parse::<Quantity>().unwrap());
+    let u = try_change(&mut book, Some(a_id), |tx| {
+        invest::update(tx, a_id, &edited, false).map(|t| t.txn.id)
+    });
+    assert!(u.is_none(), "edit");
+    assert_eq!(shares(&book, brk), "8".parse::<Quantity>().unwrap());
+    clean(&book);
+
+    let (mut book, _, a_id, _) = two_sales();
+    let u = try_change(&mut book, Some(a_id), |tx| {
+        invest::delete(tx, a_id, false).map(|()| a_id)
+    });
+    assert!(u.is_none(), "delete");
+    clean(&book);
+    // A new sale dated before sale B is refused (check_order), so
+    // create cannot re-plan later sales.
+}
+
+#[test]
+fn an_investment_edit_with_no_later_events_still_undoes() {
+    let (mut book, a, _, brk) = two_sales();
+    let mut last = a.clone();
+    last.date = date("2026-06-01");
+    last.quantity = Some("1".parse::<Quantity>().unwrap());
+    let id = book.invest(&last).unwrap().txn.id;
+    let mut edited = last.clone();
+    edited.quantity = Some("3".parse::<Quantity>().unwrap());
+    let u = try_change(&mut book, Some(id), |tx| {
+        invest::update(tx, id, &edited, false).map(|t| t.txn.id)
+    })
+    .expect("undoable");
+    assert_eq!(shares(&book, brk), "2".parse::<Quantity>().unwrap());
+    apply(&mut book, &u, false).unwrap();
+    assert_eq!(shares(&book, brk), "4".parse::<Quantity>().unwrap());
+    clean(&book);
 }

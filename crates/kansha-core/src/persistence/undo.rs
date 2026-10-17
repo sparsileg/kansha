@@ -111,6 +111,15 @@ pub fn audit_mark(conn: &Connection) -> Result<i64> {
         .query_row([], |r| r.get(0))?)
 }
 
+/// IDs of the transactions with audit entries after mark `since`.
+pub fn txns_audited_since(conn: &Connection, since: i64) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT DISTINCT entity_id FROM audit_log WHERE entity = 'txn' AND id > ?1",
+    )?;
+    let ids = stmt.query_map([since], |r| r.get(0))?;
+    Ok(ids.collect::<rusqlite::Result<Vec<i64>>>()?)
+}
+
 /// Make transaction `id`'s rows exactly `target` (no audit entry; the
 /// caller writes one). `None` removes the transaction.
 pub fn restore(tx: &Tx<'_>, id: TxnId, target: Option<&TxnRows>) -> Result<()> {

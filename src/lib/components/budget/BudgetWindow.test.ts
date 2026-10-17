@@ -53,6 +53,7 @@ const budgetAnnual = vi.fn(() => ok(view));
 const budgetSet = vi.fn(() => ok(null));
 const budgetCopyMonth = vi.fn(() => ok(null));
 const budgetYearCreate = vi.fn(() => ok(view.budget));
+const budgetSetAverage = vi.fn(() => ok("110.00"));
 
 vi.mock("../../api", async (orig) => {
   const real = await orig<typeof import("../../api")>();
@@ -63,6 +64,7 @@ vi.mock("../../api", async (orig) => {
       budgetSet: (...a: unknown[]) => budgetSet(...(a as [])),
       budgetCopyMonth: (...a: unknown[]) => budgetCopyMonth(...(a as [])),
       budgetYearCreate: (...a: unknown[]) => budgetYearCreate(...(a as [])),
+      budgetSetAverage: (...a: unknown[]) => budgetSetAverage(...(a as [])),
       budgetList: () => ok([view.budget]),
     },
   };
@@ -117,7 +119,8 @@ describe("BudgetWindow, Annual View", () => {
     await screen.findByText("Groceries");
     expect(screen.getByRole("button", { name: "Copy a month across this row" })).toBeTruthy();
     budgetState.win(id)!.show = "actual";
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Copy a month across this row" })).toBeNull());    budgetState.win(id)!.show = "details";
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Copy a month across this row" })).toBeNull());
+    budgetState.win(id)!.show = "details";
   });
 
   it("edits a month's budget as entered and saves it on blur", async () => {
@@ -130,11 +133,43 @@ describe("BudgetWindow, Annual View", () => {
     await waitFor(() => expect(budgetSet).toHaveBeenCalledWith(1, 3, 2026, 10, "120.00"));
   });
 
-  it("copies a month from its heading's menu", async () => {
+  it("copies a month from its Budget heading's menu", async () => {
     render(BudgetWindow, { id: open() });
     await fireEvent.click(await screen.findByRole("button", { name: "March budget copy options" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "Copy March budget to all future months in 2026" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Copy March budgets to all future months in 2026" }));
     await waitFor(() => expect(budgetCopyMonth).toHaveBeenCalledWith(1, 2026, 3, "future", null));
+  });
+
+  it("names the category in a row's copy menu", async () => {
+    render(BudgetWindow, { id: open() });
+    await screen.findByText("Groceries");
+    await fireEvent.click(screen.getByRole("button", { name: "Copy a month across this row" }));
+    expect(screen.getByRole("menuitem", { name: /^Copy October Food: Groceries budget to all future months in 2026$/ })).toBeTruthy();
+  });
+
+  it("a Budget cell's menu applies forward, to all, or sets the average", async () => {
+    render(BudgetWindow, { id: open() });
+    const opts = () => screen.findByRole("button", { name: "Food: Groceries October budget options" });
+    await fireEvent.click(await opts());
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Apply forward to the end of 2026" }));
+    await waitFor(() => expect(budgetCopyMonth).toHaveBeenCalledWith(1, 2026, 10, "future", 3));
+    await fireEvent.click(await opts());
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Apply to all 2026" }));
+    await waitFor(() => expect(budgetCopyMonth).toHaveBeenCalledWith(1, 2026, 10, "all", 3));
+    await fireEvent.click(await opts());
+    await fireEvent.click(
+      screen.getByRole("menuitem", { name: "Set October budget based on average monthly values in this category" }),
+    );
+    await waitFor(() => expect(budgetSetAverage).toHaveBeenCalledWith(1, 3, 2026, 10));
+  });
+
+  it("shows the figure header row in every Show choice", async () => {
+    const id = open();
+    render(BudgetWindow, { id });
+    await screen.findByText("Groceries");
+    budgetState.win(id)!.show = "actual";
+    await waitFor(() => expect(screen.getAllByRole("columnheader", { name: "Actual" }).length).toBe(12));
+    budgetState.win(id)!.show = "details";
   });
 
   it("asks before moving to a year the budget lacks", async () => {

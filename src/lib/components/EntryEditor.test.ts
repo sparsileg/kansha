@@ -620,6 +620,29 @@ describe("split remainder validation (TXN-020)", () => {
     expect(c.entryCreate).not.toHaveBeenCalled();
   });
 
+  it("a second Enter while the remainder is checked does not save twice", async () => {
+    await toSplit();
+    await fireEvent.input(field("Split 2 amount"), { target: { value: "40" } });
+    await screen.findByText(/Remainder: ✓/);
+    // Hold every remainder answer until released.
+    const held: (() => void)[] = [];
+    c.splitRemainder.mockImplementation(
+      () =>
+        new Promise((r) => held.push(() => r({ status: "ok", data: "0.00" }))),
+    );
+    const form = field("Date").closest("form")!;
+    await fireEvent.submit(form);
+    await waitFor(() => expect(held.length).toBeGreaterThan(0));
+    await fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 10));
+    for (const release of held.splice(0)) release();
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    for (const release of held.splice(0)) release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(c.entryCreate).toHaveBeenCalledTimes(1);
+  });
+
   it("lines that add up to more than the amount are refused, and the amount stays", async () => {
     render(EntryEditor, { account: 1 });
     await fireEvent.input(field("Payment"), { target: { value: "184.23" } });

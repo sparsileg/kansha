@@ -1,5 +1,5 @@
-//! Budgets: creating one from last year, the Annual and Graph figures,
-//! the amount edits, years, and category merge and delete
+//! Budgets: creating one from the last 12 months, the Annual and Graph
+//! figures, the amount edits, years, and category merge and delete
 //! (BUD-010 … BUD-080).
 
 use kansha_core::accounts::AccountType;
@@ -29,8 +29,8 @@ struct Fx {
     gift: CategoryId,
 }
 
-/// Today 2026-10-13. Food 1,230 and Salary 60,000 in 2025; Old only in
-/// June 2025, before the last 12 months; this year's spending, a
+/// Today 2026-10-13. Food 1,230 and Salary 60,000 in late 2025; Old
+/// only in June 2025, before the last 12 months; this year's spending, a
 /// transfer, an Opening Balance, and Balance Adjustments, which are
 /// left out.
 fn fx() -> Fx {
@@ -114,8 +114,9 @@ fn set(book: &mut Book, id: BudgetId, c: CategoryId, year: i32, month: u32, v: &
         .unwrap();
 }
 
-/// Food, Car, Car:Insurance, Returns, and Salary budgeted; Car's own
-/// October budget 100, Returns' −9.
+/// Food, Car, Car:Insurance, Returns, and Salary budgeted; Food 102 and
+/// Car:Insurance 0 every month (fixed here, not from Create Budget's
+/// average); Car's own October budget 100, Returns' −9.
 fn annual_fx() -> (Fx, BudgetId) {
     let mut fx = fx();
     let id = create(&mut fx, "Household");
@@ -123,13 +124,17 @@ fn annual_fx() -> (Fx, BudgetId) {
     fx.book
         .write(|tx| budget::set_categories(tx, id, &cats))
         .unwrap();
+    for month in 1..=12 {
+        set(&mut fx.book, id, fx.food, 2026, month, "102");
+        set(&mut fx.book, id, fx.insurance, 2026, month, "0");
+    }
     set(&mut fx.book, id, fx.car, 2026, 10, "100");
     set(&mut fx.book, id, fx.returns, 2026, 10, "-9");
     (fx, id)
 }
 
 #[test]
-fn create_takes_last_12_months_categories_at_last_years_average() {
+fn create_takes_last_12_months_categories_at_their_monthly_average() {
     let mut fx = fx();
     let id = create(&mut fx, "Household");
     let b = budgets::get(fx.book.conn(), id).unwrap();
@@ -149,12 +154,50 @@ fn create_takes_last_12_months_categories_at_last_years_average() {
         b.categories, want,
         "Old is too old; equity and Balance Adjustment left out"
     );
-    // 1,230 ÷ 12 = 102.50 → 102 (half-even); 60,000 ÷ 12 = 5,000.
+    // Averaged over October 2025 … September 2026, the 12 whole months
+    // before this one: Food (1,230 + 100) ÷ 12 = 110.83 → 111; Salary
+    // 60,000 ÷ 12 = 5,000 (October's 5,000 is this month); Insurance
+    // 300 ÷ 12 = 25; Gift 200 ÷ 12 = 16.67 → 17; Gas only this month, 0.
     for month in 1..=12 {
-        assert_eq!(amount(&fx, id, fx.food, 2026, month), m("102"));
+        assert_eq!(amount(&fx, id, fx.food, 2026, month), m("111"));
         assert_eq!(amount(&fx, id, fx.salary, 2026, month), m("5000"));
+        assert_eq!(amount(&fx, id, fx.insurance, 2026, month), m("25"));
+        assert_eq!(amount(&fx, id, fx.gift, 2026, month), m("17"));
         assert_eq!(amount(&fx, id, fx.gas, 2026, month), Money::ZERO);
     }
+}
+
+#[test]
+fn a_cells_average_is_the_12_whole_months_before_it_never_ahead_of_today() {
+    let (mut fx, id) = annual_fx();
+    let today = fx.book.clock().today();
+    let mut avg = |c: CategoryId, month: u32| {
+        fx.book
+            .write(|tx| budget::set_average(tx, today, id, c, 2026, month))
+            .unwrap()
+    };
+    // January: 2025 only, 1,230 ÷ 12 = 102.50 → 102 (half-even).
+    assert_eq!(avg(fx.food, 1), m("102"));
+    // March: March 2025 … February 2026, 1,330 ÷ 12 → 111.
+    assert_eq!(avg(fx.food, 3), m("111"));
+    // April: Insurance's March 300 ÷ 12 = 25.
+    assert_eq!(avg(fx.insurance, 4), m("25"));
+    // December is ahead of today: the window stops at September, so
+    // October's Salary and Car spending are not in it.
+    assert_eq!(avg(fx.salary, 12), m("5000"));
+    assert_eq!(avg(fx.car, 12), Money::ZERO);
+    assert_eq!(amount(&fx, id, fx.food, 2026, 1), m("102"));
+    assert_eq!(amount(&fx, id, fx.food, 2026, 3), m("111"));
+    assert_eq!(amount(&fx, id, fx.food, 2026, 2), m("102"), "one cell only");
+    assert_eq!(amount(&fx, id, fx.insurance, 2026, 4), m("25"));
+    assert_eq!(amount(&fx, id, fx.salary, 2026, 12), m("5000"));
+    // A category the budget does not hold is refused.
+    let gas = fx.gas;
+    assert!(
+        fx.book
+            .write(|tx| budget::set_average(tx, today, id, gas, 2026, 5))
+            .is_err()
+    );
 }
 
 #[test]
