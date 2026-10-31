@@ -15,6 +15,7 @@ pub mod csv;
 pub mod date;
 pub mod entries;
 pub mod error;
+pub mod fx;
 pub mod import;
 pub mod insights;
 pub mod integrity;

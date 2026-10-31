@@ -64,10 +64,18 @@ class ScheduleState {
     if (this.attention > 0 || this.failures.length > 0) dialogState.due = true;
   }
 
-  /** Enter an occurrence in its account's register: the entry row is
-   * prefilled and focused on the amount, so the user can always adjust it
-   * before saving (REC-110). Saving records the occurrence as entered. */
+  /** Enter an occurrence as scheduled, at once; the caller stays where it
+   * is (REC-110). An estimate goes to the register to check the amount. */
   async enterOccurrence(v: OccurrenceView): Promise<void> {
+    if (v.estimated) return this.openInRegister(v);
+    await call(commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, false));
+    await this.changed();
+  }
+
+  /** Open an occurrence in its account's register: the entry row is
+   * prefilled and focused on the amount, so the user can adjust it before
+   * saving (REC-110). Saving records the occurrence as entered. */
+  async openInRegister(v: OccurrenceView): Promise<void> {
     const row = this.row(v.schedule);
     if (row && this.movesInvestmentCash(row.schedule.fields)) {
       await this.enterAsScheduled(v, row.schedule.fields);

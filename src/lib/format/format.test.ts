@@ -188,7 +188,9 @@ describe("isAmountSum", () => {
 describe("sanitizeSumInput", () => {
   it.each([
     ["2.99+3.39", false, "2.99+3.39"],
-    ["$5 + $3x", false, "5 + 3"],
+    ["$5x + $3", false, "5 + 3"],
+    // Letters at the end are a currency code (REG-036).
+    ["$5 + $3 chf", false, "5 + 3 chf"],
     ["12.99*1.0825", false, "12.99*1.0825"],
     ["10/3", false, "10/3"],
     // Not a sum: cleaned as before.

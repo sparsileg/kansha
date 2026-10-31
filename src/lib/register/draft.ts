@@ -124,6 +124,11 @@ export function draftFromEntry(entry: Entry, payeeName: string): Draft {
   return d;
 }
 
+/** A memo with a note added after what it holds (REG-036). */
+export function withNote(memo: string, note: string): string {
+  return memo.trim() && note ? `${memo.trim()}; ${note}` : memo || note;
+}
+
 /** Nothing typed except (possibly) the date: Enter on it is a no-op. */
 export function isBlank(d: Draft): boolean {
   return [d.check_num, d.payee, d.payment, d.deposit, d.memo, d.tag].every(

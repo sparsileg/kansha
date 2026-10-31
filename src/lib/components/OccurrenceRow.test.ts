@@ -69,20 +69,35 @@ beforeEach(() => {
 });
 
 describe("OccurrenceRow", () => {
-  it("Enter opens the account register with the occurrence prefilled", async () => {
-    render(OccurrenceRow, { view: view() });
+  it("Enter records it at once and stays here", async () => {
+    enterNow.mockResolvedValueOnce({ status: "ok", data: { schedule: 1, nominal: "2026-10-01", txn: 77, date: "2026-10-01" } });
+    const onchange = vi.fn();
+    render(OccurrenceRow, { view: view(), onchange });
+    await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
+    await waitFor(() =>
+      expect(enterNow).toHaveBeenCalledWith(1, "2026-10-01", { date: null, amount: null, entry: null }, null, false),
+    );
+    await waitFor(() => expect(onchange).toHaveBeenCalled());
+    expect(prefill).not.toHaveBeenCalled();
+    expect(viewState.current).toBe("insights");
+  });
+
+  it("an estimate goes to the register, prefilled, to check the amount", async () => {
+    render(OccurrenceRow, { view: view({ estimated: true }) });
     await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
     await waitFor(() => expect(registerState.prefill).not.toBeNull());
+    expect(enterNow).not.toHaveBeenCalled();
     expect(prefill).toHaveBeenCalledWith(1, "2026-10-01");
     expect(viewState.current).toBe("account");
     expect(registerState.accountId).toBe(2);
     expect(registerState.prefill).toMatchObject({ schedule: 1, due: "2026-10-01" });
   });
 
-  it("an estimate is entered the same way (the register shows the amount)", async () => {
-    render(OccurrenceRow, { view: view({ estimated: true }) });
+  it("a failed Enter shows why", async () => {
+    enterNow.mockResolvedValueOnce({ status: "error", error: { kind: "invalid", message: "account is closed" } });
+    render(OccurrenceRow, { view: view() });
     await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
-    await waitFor(() => expect(prefill).toHaveBeenCalled());
+    expect(await screen.findByText(/account is closed/)).toBeTruthy();
   });
 
   it("a later occurrence offers no Enter or Skip", () => {
@@ -92,7 +107,7 @@ describe("OccurrenceRow", () => {
     expect(screen.getByRole("button", { name: "Edit…" })).toBeTruthy();
   });
 
-  it("a cash out of an investment account is entered as scheduled, after asking, then shown selected; a failure shows", async () => {
+  it("a cash out of an investment account enters at once with no question and no jump", async () => {
     listsState.accounts = [{ id: 2, name: "Brokerage", status: "open", investment: { cash_mode: "internal" } }] as never;
     scheduleState.rows = [
       { schedule: { id: 1, fields: { account: 2, payee: null, lines: [{ target: { kind: "account", id: 3 } }] } } },
@@ -101,25 +116,31 @@ describe("OccurrenceRow", () => {
     enterNow.mockResolvedValueOnce({ status: "ok", data: { schedule: 1, nominal: "2026-10-01", txn: 77, date: "2026-10-01" } });
     render(OccurrenceRow, { view: view() });
     await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
+    await waitFor(() => expect(enterNow).toHaveBeenCalled());
+    expect(ask).not.toHaveBeenCalled();
+    expect(viewState.current).toBe("insights");
+    scheduleState.rows = [];
+    listsState.accounts = [];
+    ask.mockRestore();
+  });
+
+  it("an estimated cash out of an investment account asks, then opens its register", async () => {
+    listsState.accounts = [{ id: 2, name: "Brokerage", status: "open", investment: { cash_mode: "internal" } }] as never;
+    scheduleState.rows = [
+      { schedule: { id: 1, fields: { account: 2, payee: null, lines: [{ target: { kind: "account", id: 3 } }] } } },
+    ] as never;
+    const ask = vi.spyOn(confirmState, "ask").mockResolvedValue(true);
+    enterNow.mockResolvedValueOnce({ status: "ok", data: { schedule: 1, nominal: "2026-10-01", txn: 77, date: "2026-10-01" } });
+    render(OccurrenceRow, { view: view({ estimated: true }) });
+    await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
     await waitFor(() =>
       expect(enterNow).toHaveBeenCalledWith(1, "2026-10-01", { date: null, amount: null, entry: null }, null, true),
     );
     expect(ask).toHaveBeenCalled();
-    expect(prefill).not.toHaveBeenCalled();
-    // The investment register opens with it selected, to change it there.
     await waitFor(() => expect(registerState.selected).toBe(77));
-    expect(viewState.current).toBe("account");
-    expect(registerState.accountId).toBe(2);
-
-    // Entering reloads the list (empty here): put the schedule back.
-    scheduleState.rows = [
-      { schedule: { id: 1, fields: { account: 2, payee: null, lines: [{ target: { kind: "account", id: 3 } }] } } },
-    ] as never;
-    enterNow.mockResolvedValueOnce({ status: "error", error: { kind: "invalid", message: "account is closed" } });
-    await fireEvent.click(screen.getByRole("button", { name: "Enter" }));
-    expect(await screen.findByText(/account is closed/)).toBeTruthy();
     scheduleState.rows = [];
     listsState.accounts = [];
+    ask.mockRestore();
   });
 
   it("an amount typed for a 0.00 payment goes out, not in", async () => {

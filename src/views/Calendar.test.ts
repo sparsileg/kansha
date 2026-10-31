@@ -7,6 +7,8 @@ let posted: unknown[] = [];
 const occCalls = vi.hoisted(() => vi.fn());
 const txnCalls = vi.hoisted(() => vi.fn());
 const skip = vi.hoisted(() => vi.fn());
+const enterNow = vi.hoisted(() => vi.fn());
+const prefill = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/api", async (orig) => {
   const real = await orig<typeof import("../lib/api")>();
@@ -16,6 +18,12 @@ vi.mock("../lib/api", async (orig) => {
       calendarOccurrences: (...a: unknown[]) => (occCalls(...a), ok(occurrences)),
       calendarTransactions: (...a: unknown[]) => (txnCalls(...a), ok(posted)),
       scheduleSkip: (...a: unknown[]) => (skip(...a), ok(null)),
+      scheduleEnter: (...a: unknown[]) => (enterNow(...a), ok({ schedule: 1, nominal: "2026-09-24", txn: 5, date: "2026-09-24" })),
+      schedulePrefill: (...a: unknown[]) => (
+        prefill(...a), ok({ account: 2, date: "2026-09-24", amount: "-10.00", lines: [], tags: [], payee: null, memo: "", notes: "", check_num: "", cleared: "unmarked" })
+      ),
+      registerQuery: () => ok({ rows: [], total: 0, today: "2026-09-24" }),
+      registerSummary: () => ok({ current: "0.00", cleared: "0.00", ending: "0.00", available_credit: null }),
       calendarProjection: () => ok([]),
       scheduleList: () => ok([]),
       scheduleDueList: () => ok([]),
@@ -26,9 +34,13 @@ vi.mock("../lib/api", async (orig) => {
   };
 });
 
-import { displayDate } from "../lib/format/date";
+import { addMonths, displayDate, monthLabel, monthStart } from "../lib/format/date";
+import { calendarState } from "../lib/state/calendar";
 import { dialogState } from "../lib/state/dialogs.svelte";
+import { registerState } from "../lib/state/register.svelte";
+import { viewState } from "../lib/state/view.svelte";
 import { listsState } from "../lib/state/lists.svelte";
+import { scheduleState } from "../lib/state/schedule.svelte";
 import Calendar from "./Calendar.svelte";
 
 const item = (schedule: number, over: Record<string, unknown> = {}) => ({
@@ -50,6 +62,9 @@ const item = (schedule: number, over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  calendarState.month = null;
+  registerState.prefill = null;
+  viewState.reset();
   cleanup();
   vi.clearAllMocks();
   dialogState.schedule = undefined;
@@ -83,6 +98,74 @@ describe("Calendar bar", () => {
     expect(box.disabled).toBe(true);
     await fireEvent.change(select, { target: { value: "4" } });
     await waitFor(() => expect(box.disabled).toBe(false));
+  });
+});
+
+describe("Calendar day dialog: Enter and Edit (REC-110)", () => {
+  async function open(over: Record<string, unknown> = {}) {
+    occurrences = [item(1, { actionable: true, ...over })];
+    render(Calendar);
+    const cell = await screen.findByRole("gridcell", { name: displayDate("2026-09-24") });
+    await fireEvent.click(await within(cell).findByText(/Payee 1/));
+    return screen.findByRole("dialog");
+  }
+
+  it("Enter records a fixed amount and stays on the Calendar", async () => {
+    const dialog = await open();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Enter" }));
+    await waitFor(() =>
+      expect(enterNow).toHaveBeenCalledWith(1, "2026-09-24", { date: null, amount: null, entry: null }, null, false),
+    );
+    expect(prefill).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeTruthy();
+    expect(viewState.current).toBe("insights");
+  });
+
+  it("Enter on an estimate opens the register prefilled", async () => {
+    const dialog = await open({ estimated: true });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Enter" }));
+    await waitFor(() => expect(prefill).toHaveBeenCalledWith(1, "2026-09-24"));
+    expect(enterNow).not.toHaveBeenCalled();
+  });
+
+  it("Edit on the next occurrence opens the register prefilled", async () => {
+    const dialog = await open();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Edit" }));
+    await waitFor(() => expect(prefill).toHaveBeenCalledWith(1, "2026-09-24"));
+    await waitFor(() => expect(registerState.prefill).toMatchObject({ schedule: 1, due: "2026-09-24" }));
+    expect(enterNow).not.toHaveBeenCalled();
+  });
+
+  it("a double click opens it in the register and records nothing", async () => {
+    const dialog = await open();
+    await fireEvent.dblClick(within(dialog).getByRole("option"));
+    await waitFor(() => expect(prefill).toHaveBeenCalled());
+    expect(enterNow).not.toHaveBeenCalled();
+  });
+
+  it("Edit on a later occurrence opens its schedule", async () => {
+    const edit = vi.spyOn(dialogState, "editSchedule").mockImplementation(() => {});
+    scheduleState.rows = [{ schedule: { id: 1, fields: {} }, loan: null }] as never;
+    const dialog = await open({ actionable: false });
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Edit" }));
+    await waitFor(() => expect(edit).toHaveBeenCalled());
+    expect(prefill).not.toHaveBeenCalled();
+    edit.mockRestore();
+    scheduleState.rows = [];
+  });
+});
+
+describe("Calendar month (CAL-010)", () => {
+  it("keeps the month last shown; Today returns to this month", async () => {
+    const first = render(Calendar);
+    await fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    const label = monthLabel(addMonths(monthStart(listsState.today), 1));
+    await waitFor(() => expect(screen.getByText(label)).toBeTruthy());
+    first.unmount();
+    render(Calendar);
+    expect(screen.getByText(label)).toBeTruthy();
+    await fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    await waitFor(() => expect(screen.getByText(monthLabel(monthStart(listsState.today)))).toBeTruthy());
   });
 });
 

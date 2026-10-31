@@ -28,6 +28,11 @@ use crate::money::Money;
 /// number is a sum of one term. Signed: the caller decides whether a
 /// negative result is allowed.
 pub fn eval_amount(text: &str) -> Result<Money> {
+    Money::from_decimal(eval_exact(text)?).map_err(|_| invalid(text, "the result is too large"))
+}
+
+/// A typed sum's exact value, before any rounding.
+pub(crate) fn eval_exact(text: &str) -> Result<Decimal> {
     let tokens = tokenize(text)?;
     let mut p = Parser {
         tokens: &tokens,
@@ -37,7 +42,7 @@ pub fn eval_amount(text: &str) -> Result<Money> {
     if p.pos < tokens.len() {
         return Err(invalid(text, "unexpected operator"));
     }
-    Money::from_decimal(value).map_err(|_| invalid(text, "the result is too large"))
+    Ok(value)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -14,6 +14,7 @@ vi.mock("../api", async (orig) => {
       payeeList: vi.fn(),
       splitRemainder: vi.fn(),
       amountEval: vi.fn(),
+      fxConvert: vi.fn(),
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       accountBalances: vi.fn(),
@@ -260,6 +261,24 @@ describe("editing an existing transaction", () => {
     await waitFor(() => expect(ondone).toHaveBeenCalled());
   });
 
+  it("a foreign amount typed over a saved one saves the dollars (REG-036)", async () => {
+    c.entryGet.mockImplementation(() => ok(entry));
+    c.entryUpdate.mockReset();
+    c.entryUpdate.mockImplementation(() => ok(null));
+    c.fxConvert.mockReset();
+    c.fxConvert.mockImplementation(() => ok({ amount: "12.15", memo: "CHF 10.00 @ 1.2151" }) as never);
+    const ondone = vi.fn();
+    render(EntryEditor, { account: 1, txn: 7, ondone });
+    await waitFor(() => expect(field("Payment").value).toBe("3,500.00"));
+    await fireEvent.input(field("Payment"), { target: { value: "10CHF" } });
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryUpdate).toHaveBeenCalledTimes(1));
+    const e = c.entryUpdate.mock.calls[0][1];
+    expect(e.amount).toBe("-12.15");
+    expect(e.memo).toContain("CHF 10.00 @ 1.2151");
+    await waitFor(() => expect(ondone).toHaveBeenCalled());
+  });
+
   it("Enter on an untouched edit writes nothing and closes as saved", async () => {
     c.entryGet.mockImplementation(() => ok(entry));
     const ondone = vi.fn();
@@ -363,9 +382,9 @@ describe("amount sums (REG-035)", () => {
     await waitFor(() => expect(field("Deposit").value).toBe("1,234.00"));
   });
 
-  it("other letters are still blocked", () => {
+  it("other characters are still blocked", () => {
     render(EntryEditor, { account: 1 });
-    const ev = new InputEvent("beforeinput", { data: "x", cancelable: true, bubbles: true });
+    const ev = new InputEvent("beforeinput", { data: "#", cancelable: true, bubbles: true });
     field("Payment").dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
     const op = new InputEvent("beforeinput", { data: "*", cancelable: true, bubbles: true });
@@ -408,6 +427,121 @@ describe("amount sums (REG-035)", () => {
     await fireEvent.input(field("Split 2 amount"), { target: { value: "-5+2" } });
     await fireEvent.blur(field("Split 2 amount"));
     await waitFor(() => expect(field("Split 2 amount").value).toBe("-3.00"));
+  });
+});
+
+describe("foreign amounts (REG-036)", () => {
+  beforeEach(() => {
+    c.amountEval.mockClear();
+    c.fxConvert.mockReset();
+    c.fxConvert.mockImplementation(() => ok({ amount: "95.14", memo: "EUR 85.00 @ 1.1193" }) as never);
+  });
+
+  const date = () => expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/);
+
+  it("letters can be typed; leaving Payment fills in dollars and the memo note", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "85 eur" } });
+    expect(field("Payment").value).toBe("85 eur");
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("95.14"));
+    expect(c.fxConvert).toHaveBeenCalledWith("85 eur", date());
+    expect(field("Memo").value).toBe("EUR 85.00 @ 1.1193");
+    expect(c.amountEval).not.toHaveBeenCalled();
+  });
+
+  const costco = async () => {
+    await fireEvent.input(field("Payee"), { target: { value: "Costco" } });
+    await fireEvent.change(field("Payee"));
+    await waitFor(() => expect(field("Memo").value).toBe("bulk"));
+  };
+
+  it("the note replaces a memo QuickFill recalled", async () => {
+    render(EntryEditor, { account: 1 });
+    await costco();
+    await fireEvent.input(field("Payment"), { target: { value: "85 eur" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("95.14"));
+    expect(field("Memo").value).toBe("EUR 85.00 @ 1.1193");
+  });
+
+  it("a recalled memo that was changed stays, with the note after it", async () => {
+    render(EntryEditor, { account: 1 });
+    await costco();
+    await fireEvent.input(field("Memo"), { target: { value: "bulk paper" } });
+    await fireEvent.input(field("Payment"), { target: { value: "85 eur" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("95.14"));
+    expect(field("Memo").value).toBe("bulk paper; EUR 85.00 @ 1.1193");
+  });
+
+  it("dollars leave a recalled memo alone", async () => {
+    c.fxConvert.mockImplementation(() => ok({ amount: "85.00", memo: "" }) as never);
+    render(EntryEditor, { account: 1 });
+    await costco();
+    await fireEvent.input(field("Payment"), { target: { value: "85 usd" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("85.00"));
+    expect(field("Memo").value).toBe("bulk");
+  });
+
+  it("a memo already typed stays, with the note after it", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Memo"), { target: { value: "Zurich lunch" } });
+    await fireEvent.input(field("Deposit"), { target: { value: "85 eur" } });
+    await fireEvent.blur(field("Deposit"));
+    await waitFor(() => expect(field("Deposit").value).toBe("95.14"));
+    expect(field("Memo").value).toBe("Zurich lunch; EUR 85.00 @ 1.1193");
+  });
+
+  it("a failed lookup keeps the text, shows why, and does not save", async () => {
+    c.fxConvert.mockImplementation(
+      () => Promise.resolve({ status: "error", error: { message: "rate lookup failed: no connection" } }) as never,
+    );
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payee"), { target: { value: "Shell" } });
+    await fireEvent.input(field("Payment"), { target: { value: "85 eur" } });
+    await pick("Category", "fuel");
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(screen.getByText(/no connection/)).toBeTruthy());
+    expect(field("Payment").value).toBe("85 eur");
+    expect(field("Memo").value).toBe("");
+    expect(c.entryCreate).not.toHaveBeenCalled();
+  });
+
+  it("changing the date afterwards leaves the amount and memo alone", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "85 eur" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("95.14"));
+    await fireEvent.input(field("Date"), { target: { value: "10/01/2026" } });
+    await fireEvent.blur(field("Date"));
+    await fireEvent.blur(field("Payment"));
+    expect(c.fxConvert).toHaveBeenCalledTimes(1);
+    expect(field("Payment").value).toBe("95.14");
+    expect(field("Memo").value).toBe("EUR 85.00 @ 1.1193");
+  });
+
+  it("a split line converts on its own, with the note in its memo", async () => {
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "200" } });
+    await pick("Category", "split");
+    await fireEvent.input(field("Split 1 amount"), { target: { value: "85 eur" } });
+    await fireEvent.blur(field("Split 1 amount"));
+    await waitFor(() => expect(field("Split 1 amount").value).toBe("95.14"));
+    expect(field("Split 1 memo").value).toBe("EUR 85.00 @ 1.1193");
+    expect(field("Memo").value).toBe("");
+  });
+
+  it("a plain amount or a sum makes no lookup", async () => {
+    c.amountEval.mockImplementation(() => ok("6.38") as never);
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "2.99+3.39" } });
+    await fireEvent.blur(field("Payment"));
+    await waitFor(() => expect(field("Payment").value).toBe("6.38"));
+    await fireEvent.input(field("Payment"), { target: { value: "12.50" } });
+    await fireEvent.blur(field("Payment"));
+    expect(c.fxConvert).not.toHaveBeenCalled();
   });
 });
 
@@ -466,9 +600,11 @@ describe("Category type-ahead (REG-030)", () => {
 });
 
 describe("amount fields accept only numeric characters", () => {
-  it("strips letters, signs, and extra decimals as they are entered", async () => {
+  it("strips letters (but a code at the end), signs, and extra decimals as they are entered", async () => {
     render(EntryEditor, { account: 1 });
     await fireEvent.input(field("Payment"), { target: { value: "12a.5x" } });
+    expect(field("Payment").value).toBe("12.5x");
+    await fireEvent.input(field("Payment"), { target: { value: "12a.5" } });
     expect(field("Payment").value).toBe("12.5");
     await fireEvent.input(field("Deposit"), { target: { value: "-1,000.999" } });
     expect(field("Deposit").value).toBe("1,000.99");
@@ -477,7 +613,7 @@ describe("amount fields accept only numeric characters", () => {
 
   it("blocks a non-numeric key before it is inserted", () => {
     render(EntryEditor, { account: 1 });
-    const ev = new InputEvent("beforeinput", { data: "a", cancelable: true, bubbles: true });
+    const ev = new InputEvent("beforeinput", { data: "#", cancelable: true, bubbles: true });
     field("Payment").dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
     const ok = new InputEvent("beforeinput", { data: "5", cancelable: true, bubbles: true });

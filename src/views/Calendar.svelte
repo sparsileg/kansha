@@ -5,6 +5,7 @@
   import { formatMoney } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
   import DayModal from "../lib/components/DayModal.svelte";
+  import { calendarState } from "../lib/state/calendar";
   import { listsState } from "../lib/state/lists.svelte";
   import { scheduleState } from "../lib/state/schedule.svelte";
   import { mergeItems, type CalItem } from "../lib/calendar/items";
@@ -14,7 +15,10 @@
   const weekStart = $derived<0 | 1>(bookSettings.value.week_start === "monday" ? 1 : 0);
   const WEEK = $derived(weekdayNames(weekStart));
 
-  let month = $state(monthStart(listsState.today || "2026-01-01"));
+  let month = $state(calendarState.month ?? monthStart(listsState.today || "2026-01-01"));
+  $effect(() => {
+    calendarState.month = month;
+  });
   let account = $state("");
   let showDone = $state(false);
   let projection = $state(false);

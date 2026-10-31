@@ -15,6 +15,7 @@ mod encryption;
 mod entries;
 mod find_replace;
 mod fixture;
+mod fx;
 mod import;
 mod input_checks;
 mod insights;

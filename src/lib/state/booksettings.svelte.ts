@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   stale_price_days: 7,
   default_lot_method: "fifo",
   price_download: false,
+  currency_lookup: false,
   upcoming_days: 14,
   spending_rows: 10,
   trend_years: 1,

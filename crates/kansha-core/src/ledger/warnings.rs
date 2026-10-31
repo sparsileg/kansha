@@ -17,7 +17,7 @@ use crate::settings;
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "snake_case")]
 pub enum EntryWarning {
-    /// Dated more than 7 days before today, or more than 30 after it.
+    /// Dated more than 30 days before or after today.
     OutOfDate,
     /// The check number is on another transaction in the account.
     CheckReused,
@@ -43,6 +43,9 @@ pub fn entry_warnings(
     let num = entry.check_num.trim();
     if s.warn_check_reuse
         && !num.is_empty()
+        && !NOT_CHECK_NUMBERS
+            .iter()
+            .any(|w| num.eq_ignore_ascii_case(w))
         && repo::check_num_in_use(conn, entry.account, num, txn)?
     {
         out.push(EntryWarning::CheckReused);
@@ -65,8 +68,11 @@ pub fn entry_warnings(
 /// attention card counts the same one).
 const UNCATEGORIZED: &str = "Uncategorized";
 
+/// Num field words that repeat by design: not check numbers (REG-140).
+const NOT_CHECK_NUMBERS: [&str; 2] = ["ATM", "DEP"];
+
 /// Days before today a date may be without a warning (REG-130).
-const PAST_DAYS: i64 = 7;
+const PAST_DAYS: i64 = 30;
 /// Days after today a date may be without a warning (REG-130).
 const FUTURE_DAYS: i64 = 30;
 

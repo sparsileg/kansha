@@ -154,6 +154,10 @@
         </label>
       {:else if category === "register"}
         <label>
+          <span>Allow currency rate lookup (internet)</span>
+          <input type="checkbox" bind:checked={s.currency_lookup} />
+        </label>
+        <label>
           <span>Gray reconciled transactions</span>
           <input type="checkbox" bind:checked={s.gray_reconciled} />
         </label>
@@ -175,7 +179,7 @@
         </label>
       {:else if category === "notifications"}
         <label>
-          <span>When entering out-of-date transactions (over 7 days past or 30 days ahead)</span>
+          <span>When entering out-of-date transactions (over 30 days past or ahead)</span>
           <input type="checkbox" bind:checked={s.warn_out_of_date} />
         </label>
         <label>

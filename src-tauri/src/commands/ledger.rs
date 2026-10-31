@@ -3,16 +3,17 @@
 use kansha_core::accounts::AccountId;
 use kansha_core::audit::{self, AuditEntity, AuditEntry};
 use kansha_core::backup::BackupKind;
+use kansha_core::fx::{self, Converted};
 use kansha_core::integrity::{self, IntegrityReport, IntegrityStatus};
 use kansha_core::ledger::{
     self, Cleared, Entry, EntryWarning, FindQuery, FindResult, FoundKey, RegisterPage,
     RegisterQuery, RegisterSummary, ReplaceResult, ReplaceSpec, SearchPage, SearchQuery, TxnId,
 };
 use kansha_core::persistence::payees;
-use kansha_core::{Clock, Money, Tx};
+use kansha_core::{Clock, Date, Error, Money, Tx};
 use tauri::State;
 
-use crate::state::{AppState, CmdResult};
+use crate::state::{AppState, CmdResult, IpcError};
 
 /// Register rows for an account with filters, sort, and paging (REG-040).
 /// The running balance is always the true one in date order (REG-020).
@@ -223,6 +224,55 @@ pub fn split_remainder(total: Money, parts: Vec<Money>) -> CmdResult<Money> {
 #[specta::specta]
 pub fn amount_eval(text: String) -> CmdResult<Money> {
     Ok(kansha_core::calc::eval_amount(&text)?)
+}
+
+/// Work out a foreign amount typed in an amount field (REG-036), once the
+/// book's setting allows the lookup (SECU-070): the dollars at the rate for
+/// `date`, or the last rate before it. The fetch runs off the main thread.
+#[tauri::command]
+#[specta::specta]
+pub async fn fx_convert(
+    state: State<'_, AppState>,
+    text: String,
+    date: Date,
+) -> CmdResult<Converted> {
+    let foreign = fx::parse(&text)?;
+    if foreign.is_dollars() {
+        return Ok(fx::dollars(&foreign)?);
+    }
+    let day = state.read(|db, today| {
+        fx::require_allowed(db.conn())?;
+        Ok(fx::rate_day(date, today))
+    })?;
+    let currency = foreign.currency.clone();
+    let quote = tauri::async_runtime::spawn_blocking(move || fetch_rate(&currency, day))
+        .await
+        .map_err(|e| IpcError::internal(format!("rate lookup stopped: {e}")))?
+        .map_err(Error::Invalid)?;
+    Ok(fx::convert(&foreign, &quote, date)?)
+}
+
+/// One request, 15 seconds at most. The service answers 404 for a currency
+/// it does not know and for a day before its rates begin.
+fn fetch_rate(currency: &str, day: Date) -> Result<fx::Quote, String> {
+    let body = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(concat!("Kansha/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .get(&fx::url(currency, day))
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::Status(404, _) => format!("no rate for {currency} on {day}"),
+            ureq::Error::Status(code, _) => {
+                format!("rate lookup failed: the server answered {code}")
+            }
+            ureq::Error::Transport(t) => {
+                format!("rate lookup failed: no connection ({})", t.kind())
+            }
+        })?
+        .into_string()
+        .map_err(|e| e.to_string())?;
+    fx::parse_reply(&body, currency)
 }
 
 /// What changed, when, and from where, for one record (AUD-020).

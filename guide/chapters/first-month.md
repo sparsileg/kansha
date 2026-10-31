@@ -67,8 +67,8 @@ time. Open **Reminders**, click **New schedule**, and fill in:
   last few bills.
 
 From then on, when a bill is due Kansha shows it under **Due and
-overdue**. Click **Enter**, check the amount against the real bill,
-and save. See [Scheduled Transactions](scheduled.md).
+overdue**. Click **Enter**. For an estimated bill, check the amount
+against the real bill in the register and save. See [Scheduled Transactions](scheduled.md).
 
 The **Calendar** shows the month with every bill and paycheck on its
 day. Tick **Projected balance** with checking chosen to see whether

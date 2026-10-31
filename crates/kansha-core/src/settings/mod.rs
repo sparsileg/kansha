@@ -75,6 +75,9 @@ pub struct Settings {
     /// Price download from the internet is allowed (PRC-040, SECU-070);
     /// off until the user turns it on.
     pub price_download: bool,
+    /// Exchange rates may be fetched for a foreign amount typed in the
+    /// register (REG-036, SECU-070); off until the user turns it on.
+    pub currency_lookup: bool,
     /// Days ahead the Due soon card lists scheduled items (CARD-020).
     pub upcoming_days: i64,
     /// Years the Net worth over time card shows (CARD-050).
@@ -103,7 +106,7 @@ pub struct Settings {
     /// Memorized payees not used in this many months are removed when the
     /// book opens (REG-120); 0 = never.
     pub purge_payees_months: i64,
-    /// Warn about a transaction dated over 7 days past or 30 days ahead
+    /// Warn about a transaction dated over 30 days past or ahead
     /// (REG-130).
     pub warn_out_of_date: bool,
     /// Warn when a check number is used twice in an account (REG-140).
@@ -133,6 +136,7 @@ impl Default for Settings {
             stale_price_days: DEFAULT_STALE_DAYS,
             default_lot_method: LotMethod::Fifo,
             price_download: false,
+            currency_lookup: false,
             upcoming_days: 14,
             trend_years: 1,
             spending_rows: 10,
@@ -211,6 +215,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         )?,
         default_lot_method: get(conn, "default_lot_method", d.default_lot_method)?,
         price_download: get(conn, "price_download", d.price_download)?,
+        currency_lookup: get(conn, "currency_lookup", d.currency_lookup)?,
         upcoming_days: get_in(conn, "upcoming_days", UPCOMING_DAYS, d.upcoming_days)?,
         trend_years: get_in(conn, "trend_years", TREND_YEARS, d.trend_years)?,
         spending_rows: get_in(conn, "spending_rows", SPENDING_ROWS, d.spending_rows)?,
@@ -314,6 +319,7 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
     repo::set(tx, "stale_price_days", &s.stale_price_days.to_string())?;
     repo::set(tx, "default_lot_method", s.default_lot_method.as_str())?;
     repo::set(tx, "price_download", &s.price_download.to_string())?;
+    repo::set(tx, "currency_lookup", &s.currency_lookup.to_string())?;
     repo::set(tx, "upcoming_days", &s.upcoming_days.to_string())?;
     repo::set(tx, "trend_years", &s.trend_years.to_string())?;
     repo::set(tx, "spending_rows", &s.spending_rows.to_string())?;

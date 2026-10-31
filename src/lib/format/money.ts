@@ -122,20 +122,29 @@ export function isAmountSum(text: string): boolean {
 }
 
 /**
- * A register amount field that also takes a sum (REG-035): a sum keeps
- * digits, commas, points, spaces, and `+ - * /` (each number's decimals
- * are checked when it is worked out); anything else is cleaned as
+ * A register amount field that also takes a sum (REG-035) or a currency
+ * code at its end (REG-036): those keep digits, commas, points, spaces,
+ * and `+ - * /` (each number's decimals are checked when it is worked
+ * out), and the code; anything else is cleaned as
  * `sanitizeAmountInput`, or `sanitizeSplitAmountInput` for a split line.
  */
 export function sanitizeSumInput(text: string, split = false): string {
-  if (isAmountSum(text)) return text.replace(/[^0-9.,+\-*/ ]/g, "");
-  return split ? sanitizeSplitAmountInput(text) : sanitizeAmountInput(text);
+  const code = /\s*[a-z]+\s*$/i.exec(text)?.[0] ?? "";
+  const body = text.slice(0, text.length - code.length);
+  if (code || isAmountSum(body)) return body.replace(/[^0-9.,+\-*/ ]/g, "") + code;
+  return split ? sanitizeSplitAmountInput(body) : sanitizeAmountInput(body);
 }
 
 /** Block a typed character that can never be part of an amount or a
  * sum. `=` is the caller's: it works the sum out. */
 export function blockNonSumChar(e: InputEvent): void {
-  if (e.data && /[^0-9.,+\-*/ ]/.test(e.data)) e.preventDefault();
+  if (e.data && /[^0-9.,+\-*/ a-z]/i.test(e.data)) e.preventDefault();
+}
+
+/** True when an amount field ends in letters: a currency code, "85 eur"
+ * (REG-036). Rust reads and converts it (`fxConvert`). */
+export function isForeignAmount(text: string): boolean {
+  return /[a-z]$/i.test(text.trim());
 }
 
 /** A whole-dollar canonical amount ("1235.00") as "1,235": for reports

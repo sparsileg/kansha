@@ -2,8 +2,8 @@
   // A calendar day's transactions: scheduled ones, open and done (entered
   // or skipped), and register transactions that did not come from a
   // schedule (CAL-020), whatever the calendar's "show entered" box says.
-  // Pick one, then Enter it (in its register, REC-110), Edit it, or Skip
-  // it; or start a new schedule on this day.
+  // Pick one, then Enter it (at once, REC-110), Edit it (in its register
+  // first), or Skip it; or start a new schedule on this day.
   import { untrack } from "svelte";
   import { call, commands } from "../api";
   import { displayDate } from "../format/date";
@@ -13,7 +13,7 @@
   import { scheduleState } from "../state/schedule.svelte";
   import { viewState } from "../state/view.svelte";
   import { mergeItems, type CalItem } from "../calendar/items";
-  import type { AccountId } from "../types/bindings";
+  import type { AccountId, OccurrenceView } from "../types/bindings";
   import AccountBalance from "./AccountBalance.svelte";
   import Modal from "./Modal.svelte";
 
@@ -87,17 +87,37 @@
             ? "Overdue"
             : "Due";
 
-  function enter() {
-    if (!sel?.occ || !canAct) return;
+  /** Open in the register, to change it before saving (REC-110). */
+  function openInRegister(occ: OccurrenceView) {
     // Props are gone once closed: act first.
-    void scheduleState.enterOccurrence(sel.occ).catch((e) => {
+    void scheduleState.openInRegister(occ).catch((e) => {
       scheduleState.error = e instanceof Error ? e.message : String(e);
     });
     onclose();
   }
 
+  /** Records it and stays on the Calendar; an estimate goes to the
+   * register to check the amount (REC-110). */
+  async function enter() {
+    if (!sel?.occ || !canAct || busy) return;
+    if (sel.occ.estimated) {
+      openInRegister(sel.occ);
+      return;
+    }
+    busy = true;
+    try {
+      await scheduleState.enterOccurrence(sel.occ);
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   /** One with a transaction (entered, or a register one) opens it in its
-   * register; otherwise the schedule. */
+   * register, and the next occurrence opens there prefilled; a later one
+   * cannot be entered yet, so it opens its schedule. */
   async function edit() {
     if (!sel) return;
     const v = sel;
@@ -108,6 +128,10 @@
       return;
     }
     if (!v.occ) return;
+    if (canAct) {
+      openInRegister(v.occ);
+      return;
+    }
     const row = scheduleState.row(v.occ.schedule);
     if (!row) {
       error = "This schedule no longer exists.";
@@ -171,8 +195,8 @@
           tabindex="-1"
           aria-selected={keyOf(v) === selected}
           onclick={() => (selected = keyOf(v))}
-          ondblclick={() => ((selected = keyOf(v)), canAct ? enter() : void edit())}
-          onkeydown={(e) => e.key === "Enter" && (canAct ? enter() : void edit())}
+          ondblclick={() => ((selected = keyOf(v)), void edit())}
+          onkeydown={(e) => e.key === "Enter" && void (canAct ? enter() : edit())}
         >
           <span class="st">{statusOf(v)}</span>
           <span class="who">{payeeOf(v)}</span>
@@ -185,7 +209,7 @@
   <div class="buttons">
     <button type="button" onclick={newSchedule}>New schedule</button>
     <span class="gap" aria-hidden="true"></span>
-    <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={enter}>Enter</button>
+    <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={() => void enter()}>Enter</button>
     <button type="button" disabled={!sel || busy} title={sel ? "" : why} onclick={() => void edit()}>Edit</button>
     <button type="button" disabled={!canAct || busy} title={canAct ? "" : why} onclick={() => void skip()}>Skip</button>
     <button type="button" onclick={onclose}>Close</button>

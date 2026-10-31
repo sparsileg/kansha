@@ -268,6 +268,12 @@ export const commands = {
 	 *  negative result fits the field.
 	 */
 	amountEval: (text: string) => typedError<string, IpcError>(__TAURI_INVOKE("amount_eval", { text })),
+	/**
+	 *  Work out a foreign amount typed in an amount field (REG-036), once the
+	 *  book's setting allows the lookup (SECU-070): the dollars at the rate for
+	 *  `date`, or the last rate before it. The fetch runs off the main thread.
+	 */
+	fxConvert: (text: string, date: string) => typedError<Converted, IpcError>(__TAURI_INVOKE("fx_convert", { text, date })),
 	/**  What changed, when, and from where, for one record (AUD-020). */
 	auditHistory: (entity: AuditEntity, id: number) => typedError<AuditEntry[], IpcError>(__TAURI_INVOKE("audit_history", { entity, id })),
 	/**  Run the integrity check (INT-030). */
@@ -1416,6 +1422,13 @@ export type ConversionTax = {
 	withheld_state: string,
 };
 
+/**  What goes in the register. */
+export type Converted = {
+	amount: string,
+	/**  The original amount and rate, for the memo; empty for dollars. */
+	memo: string,
+};
+
 /**  Each copied account's starting balance. */
 export type CopyBalances = 
 /**  Every account opens at 0. */
@@ -1661,7 +1674,7 @@ export type EntrySource =
 
 /**  Something to confirm before an entry is saved. */
 export type EntryWarning = 
-/**  Dated more than 7 days before today, or more than 30 after it. */
+/**  Dated more than 30 days before or after today. */
 "out_of_date" | 
 /**  The check number is on another transaction in the account. */
 "check_reused" | 
@@ -3667,6 +3680,11 @@ export type Settings = {
 	 *  off until the user turns it on.
 	 */
 	price_download: boolean,
+	/**
+	 *  Exchange rates may be fetched for a foreign amount typed in the
+	 *  register (REG-036, SECU-070); off until the user turns it on.
+	 */
+	currency_lookup: boolean,
 	/**  Days ahead the Due soon card lists scheduled items (CARD-020). */
 	upcoming_days: number,
 	/**  Years the Net worth over time card shows (CARD-050). */
@@ -3700,7 +3718,7 @@ export type Settings = {
 	 */
 	purge_payees_months: number,
 	/**
-	 *  Warn about a transaction dated over 7 days past or 30 days ahead
+	 *  Warn about a transaction dated over 30 days past or ahead
 	 *  (REG-130).
 	 */
 	warn_out_of_date: boolean,

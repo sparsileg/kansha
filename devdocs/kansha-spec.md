@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Document version** | 0.7.112 (draft) |
+| **Document version** | 0.7.114 (draft) |
 | **Target release** | Kansha 1.0.0 |
-| **Last updated** | 2026-10-14 |
+| **Last updated** | 2026-10-30 |
 | **Owner** | Stan |
 | **Status** | Draft — prototype built (Phases 0–8: schema, ledger engine, register UI, scheduling and calendar, reconciliation, investments, reports and dashboard, encryption, backup, restore, and settings) and reviewed (`devdocs/phase-notes/prototype-review.md`); D-20, D-40, D-50, D-60, D-100, D-110, D-120, D-140 decided. Phase 9, Quicken import (MIG): QIF import built (0.6); lot true-up (MIG-115) built (0.7); import verification (MIG-100) done (0.7.29) |
 
@@ -76,7 +76,8 @@ Once Stan accepts a recommendation, its tag changes from [R] to [S].
 - Financial and tax planning (projections, Roth conversion modeling,
   etc.).
 - Multi-user support, cloud sync, mobile apps.
-- Multi-currency (USD only) [R].
+- Multi-currency (USD only) [R]. Typing a foreign amount (REG-036)
+  is entry help: what is saved is in dollars.
 - Bill pay, invoicing, business features.
 
 ### 4. Glossary
@@ -447,6 +448,24 @@ investment account's: Cash out and Cash in).
   negative result in Payment or Deposit is an error; in a split line
   it is the line going the other way (TXN-020). Divide by zero or a
   malformed sum is an error, and the field keeps what was typed.
+- **REG-036** [1.0][S] **Foreign amounts** (0.7.113). The same fields
+  take an amount or sum then a three-letter currency code, in any case
+  ("85 eur", "60+25 CHF"). `=`, leaving the field, or Enter fetches the
+  rate for the transaction's date (the European Central Bank reference
+  rate through Frankfurter; the last rate before a weekend or holiday;
+  the latest for a date after today) and puts the dollars in the field.
+  Rust does the arithmetic: the exact amount times the rate as written,
+  rounded to cents half-even once, at the end. The memo (a split line's
+  own) gains the original amount and rate, "EUR 85.00 @ 1.1193", after
+  anything already there, with the rate's date in parentheses if it is
+  not the transaction's. A memo QuickFill recalled (PAY-020) and left
+  unchanged is replaced instead (0.7.114). Changing the date afterwards
+  changes nothing. USD needs no rate and adds no note. With "Allow currency rate lookup
+  (internet)" off, no connection, or an unknown code, the field shows
+  an error and keeps what was typed, and the transaction cannot be
+  saved until the amount is dollars. The figure is an estimate: a
+  card's real charge differs by the bank's rate and fee, and is typed
+  over it from the statement.
 - **REG-040** [1.0][R] Sort by any column; filter by date range,
   payee, category, tag, and cleared status. Text search is the
   navigation bar search (UI-070), which can be limited to the open
@@ -482,13 +501,14 @@ investment account's: Cash out and Cash in).
   since, loses those defaults. The payee stays, so old transactions keep
   their names.
 - **REG-130** [1.0][R] Settings > Notifications: warn, with a choice to
-  save anyway, when a transaction is dated more than 7 days before
-  today or more than 30 days after it (default on; 0.7.47, was any
-  past date or more than a year ahead). A scheduled item entered from
-  its occurrence is not warned about.
+  save anyway, when a transaction is dated more than 30 days before
+  or after today (default on; 0.7.113, was 7 days before; 0.7.47, was
+  any past date or more than a year ahead). A scheduled item entered
+  from its occurrence is not warned about.
 - **REG-140** [1.0][R] Warn, with a choice to save anyway, when a check
   number is already on another live transaction in the same account
-  (default on).
+  (default on). `ATM` and `DEP`, in any case, repeat by design and are
+  not check numbers (0.7.113).
 - **REG-150** [1.0][R] Ask "Save the changes to this transaction?"
   before saving a changed transaction (default off). Setting: "Ask
   before saving changes to an existing transaction".
@@ -613,12 +633,15 @@ common patterns.
   dedicated Scheduled Transactions list and from the calendar.
 - **REC-110** [1.0][R] For a single upcoming occurrence: **Enter**
   (with optional edits to amount/date), **Skip**, or **Edit this
-  occurrence only** without changing the series. Enter opens the
+  occurrence only** without changing the series. Enter, in the
+  Calendar's day dialog (CAL-030) and the Due and overdue dialog,
+  records the occurrence as scheduled at once and stays there
+  (0.7.113); a cash in or out of an investment account (REC-115) does
+  too, without asking. An estimated amount (REC-065) instead opens the
   account's register with the entry prefilled, focused on the amount;
-  saving it enters the occurrence and leaves it selected there. A
-  cash in or out of an investment account (REC-115), entered as
-  scheduled, opens the investment register with it selected, to
-  change it there (0.7.43).
+  saving it enters the occurrence and leaves it selected there. An
+  estimated cash in or out asks, is entered as scheduled, and opens
+  the investment register with it selected, to change it there.
 - **REC-115** [1.0][R] A schedule may be on an investment account, or
   transfer into one (a quarterly dividend moved to Savings, a monthly
   IRA contribution): one line, no split, and the investment account's
@@ -664,7 +687,8 @@ common patterns.
 #### 8.4 Calendar
 
 - **CAL-010** [1.0][S] Month calendar view showing upcoming scheduled
-  occurrences on their due dates.
+  occurrences on their due dates. It keeps the month it last showed
+  until the book closes; Today goes back to this month (0.7.113).
 - **CAL-020** [1.0][S] Toggle to also show completed (entered)
   transactions: entered and skipped occurrences, and every register
   transaction on its date, scheduled or not (investment accounts and
@@ -678,8 +702,12 @@ common patterns.
   transactions:
   scheduled ones, open and done (entered or skipped), and register
   transactions (CAL-020), with Enter, Edit, Skip, and Close, and New
-  Schedule set apart. Edit opens an entered or register transaction in
-  its register, otherwise its schedule. The month fills the window's
+  Schedule set apart. Enter records the occurrence (REC-110). Edit
+  opens an entered or register transaction in its register, the next
+  occurrence there prefilled to change it before saving, and otherwise
+  its schedule (0.7.113; a series is changed from Scheduled
+  Transactions or the Loan screen). A double click is Edit, so it
+  records nothing. The month fills the window's
   width and height; there is no day panel beside it (0.6.2).
 - **CAL-040** [1.0][R] Filter the calendar by account(s). The Account
   list offers All accounts and the open spending accounts: Checking,
@@ -1867,8 +1895,10 @@ platform has one.
   0.3.30; the desktop's screen lock serves). May return later.
 - **SECU-070** [1.0][R] No network access except explicitly enabled
   features: price download (PRC-040), off until "Allow price download"
-  is turned on in Settings. Requests go from Rust, never from the
-  webview, and carry only the ticker. No telemetry.
+  is turned on in Settings, and currency rate lookup (REG-036), off
+  until "Allow currency rate lookup" is. Requests go from Rust, never
+  from the webview, and carry only the ticker, or the currency and
+  date. No telemetry.
 - **SECU-080** [1.0][R] First-run setup, one screen in order: (1)
   create a new database (named, in a folder, UI-080) or restore from a
   backup (BAK-070); (2) choose
@@ -2130,7 +2160,8 @@ platform has one.
   week, startup view, account list side, show cents in account bar
   balances (ACCT-240). Data: integrity check at
   startup, Due soon look-ahead days. Investments: stale price days,
-  lot method, price download. Register: REG-070, REG-100 … REG-120.
+  lot method, price download. Register: REG-036, REG-070, REG-100 …
+  REG-120.
   Notifications: REG-130 … REG-160. Backups: SET-050.
 - **SET-070** [1.0][R] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
@@ -3277,6 +3308,8 @@ created, decisions made, known gaps.
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.114 | 2026-10-30 | REG-036: the foreign amount note replaces a memo QuickFill recalled and left unchanged, instead of following it; a typed or changed memo stays. |
+| 0.7.113 | 2026-10-30 | REG-036 (new, closes #50): a foreign amount typed in Payment, Deposit, or a split line ("85 eur") becomes dollars at the rate for the transaction's date, with the original amount and rate in the memo; the book stays USD. SECU-070: currency rate lookup, off until the new setting is on. REG-130 (closes #49): the date warning fires more than 30 days past, was 7. REG-140 (closes #48): `ATM` and `DEP` are not check numbers. REC-110, CAL-030, CAL-010 (closes #46): Enter in the day dialog and the Due and overdue dialog records at once and stays; an estimate goes to the register; Edit on the next occurrence opens the register prefilled; a double click in the day dialog is Edit; the Calendar keeps its month. No schema change. **API change:** new command `fx_convert`; `Settings` gains `currency_lookup`. |
 | 0.7.112 | 2026-10-17 | RPT-050 (closes #40): CSV text cells that start with `=`, `+`, `@`, tab, CR, or `-` plus text get a leading apostrophe so spreadsheets do not run them as formulas; numbers and dates unchanged. RPT-040 (closes #41): Include all dates and Custom with no start no longer fail when the first transaction is after the end (empty range instead), and void transactions no longer set the first date. No schema change. No API change. |
 | 0.7.111 | 2026-10-17 | UI-080 (closes #44): Rename Book moves the book's inbox and names copy to the new name (never overwriting a file there) and writes a fresh names copy, so waiting entries are read and `kansha add` checks names right away; the import archive stays. No schema change. No API change. |
 | 0.7.110 | 2026-10-17 | LOT-100 (closes #29): editing a buy or reinvestment whose lot a later specific-ID sale picked no longer fails with "lot N is not an open lot"; the rewritten lots keep their IDs (same holding and source lot), so the pick survives with basis from the new cost. No schema change. No API change. |

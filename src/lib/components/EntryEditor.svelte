@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import { DECLINED, call, commands, withConfirmation } from "../api";
-  import { completeDate, displayDate } from "../format/date";
+  import { completeDate, displayDate, parseDate } from "../format/date";
   import {
     blockNonSumChar,
     formatMoney,
     isAmountSum,
+    isForeignAmount,
     isZeroMoney,
     sanitizeSumInput,
   } from "../format/money";
@@ -18,6 +19,7 @@
     draftFromEntry,
     emptySplit,
     isBlank,
+    withNote,
     newDraft,
     setAmountField,
     setSplitTag,
@@ -62,6 +64,8 @@
   let formEl: HTMLFormElement | undefined;
   /** The draft as loaded, to tell an untouched edit from a changed one. */
   let original = "";
+  /** The memo QuickFill put in this new entry, if any. */
+  let recalledMemo = "";
 
   const listId = `payees-${Math.random().toString(36).slice(2)}`;
   const isSplit = $derived(d.category === SPLIT);
@@ -175,6 +179,12 @@
     }
   }
 
+  function quickFill(p: Payee) {
+    const before = d.memo;
+    d = applyQuickFill($state.snapshot(d) as Draft, p);
+    if (d.memo !== before) recalledMemo = d.memo;
+  }
+
   /** QuickFill (PAY-020): only when adding, and only into empty fields. */
   function onPayeeChange() {
     if (txn !== null || !bookSettings.value.recall_payees) return;
@@ -182,7 +192,7 @@
     const p =
       suggestions.find((x) => x.name.toLowerCase() === name) ??
       listsState.payees.find((x) => x.name.toLowerCase() === name);
-    if (p) d = applyQuickFill($state.snapshot(d) as Draft, p);
+    if (p) quickFill(p);
   }
 
   /** Hidden payees are not offered; prefix match, as `payee_search` does. */
@@ -205,7 +215,7 @@
     const p = uniquePayeeMatch();
     if (!p) return;
     d.payee = p.name;
-    if (txn === null) d = applyQuickFill($state.snapshot(d) as Draft, p);
+    if (txn === null) quickFill(p);
     if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
@@ -250,22 +260,36 @@
     };
   }
 
+  /** What a typed sum (REG-035) or foreign amount (REG-036) comes to, with
+   * the memo note a foreign amount leaves. Rust does the arithmetic. */
+  async function workOut(text: string): Promise<{ amount: string; memo: string }> {
+    if (!isForeignAmount(text)) return { amount: await call(commands.amountEval(text)), memo: "" };
+    const date = parseDate(d.date, listsState.today);
+    if (date === null) throw new Error("Enter a valid date.");
+    return call(commands.fxConvert(text, date));
+  }
+
   /**
-   * Work out a sum typed in Payment or Deposit (REG-035) and put the
-   * result in its place. Rust does the arithmetic. These fields hold
-   * amounts without sign, so a negative result is an error. False (with
-   * the error shown) when the sum cannot be worked out.
+   * Work out a sum (REG-035) or foreign amount (REG-036) typed in Payment
+   * or Deposit and put the result in its place. These fields hold amounts
+   * without sign, so a negative result is an error. False (with the error
+   * shown) when it cannot be worked out.
    */
   async function settleAmount(field: "payment" | "deposit"): Promise<boolean> {
     const text = d[field];
-    if (!isAmountSum(text)) return true;
+    if (!isAmountSum(text) && !isForeignAmount(text)) return true;
     try {
-      const r = await call(commands.amountEval(text));
-      if (r.startsWith("-") && !isZeroMoney(r)) {
-        error = `${field === "payment" ? labels.out : labels.in} ${text.trim()} = ${formatMoney(r)}: it cannot be negative.`;
+      const r = await workOut(text);
+      if (r.amount.startsWith("-") && !isZeroMoney(r.amount)) {
+        error = `${field === "payment" ? labels.out : labels.in} ${text.trim()} = ${formatMoney(r.amount)}: it cannot be negative.`;
         return false;
       }
-      if (d[field] === text) d = setAmountField(d, field, formatMoney(r));
+      if (d[field] === text) {
+        d = setAmountField(d, field, formatMoney(r.amount));
+        // A memo recalled and left as it was gives way to the note.
+        const kept = r.memo && d.memo === recalledMemo ? "" : d.memo;
+        d.memo = withNote(kept, r.memo);
+      }
       return true;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -277,10 +301,13 @@
    * line going the other way, as a typed leading `-` (TXN-020). */
   async function settleSplit(i: number): Promise<boolean> {
     const text = d.splits[i]?.amount ?? "";
-    if (!isAmountSum(text)) return true;
+    if (!isAmountSum(text) && !isForeignAmount(text)) return true;
     try {
-      const r = await call(commands.amountEval(text));
-      if (d.splits[i]?.amount === text) d.splits[i].amount = formatMoney(r);
+      const r = await workOut(text);
+      if (d.splits[i]?.amount === text) {
+        d.splits[i].amount = formatMoney(r.amount);
+        d.splits[i].memo = withNote(d.splits[i].memo, r.memo);
+      }
       return true;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -368,7 +395,7 @@
     if (!occ) {
       const found = await call(commands.entryWarnings(entry, txn));
       if (found.includes("out_of_date")) {
-        notes.push("The date is more than 7 days past or more than 30 days ahead.");
+        notes.push("The date is more than 30 days past or ahead.");
       }
       if (found.includes("check_reused")) {
         notes.push(`Check number ${entry.check_num.trim()} is already used in this account.`);
@@ -448,6 +475,7 @@
         // Ready for the next one; keep the date for fast entry.
         status = `Saved ${displayDate(built.entry.date)} ${name} ${formatMoney(built.entry.amount)}`;
         d = newDraft(listsState.today, built.entry.date);
+        recalledMemo = "";
         remainder = null;
         await tick();
         // Keep the saved row fully in view, even as this row's height
@@ -471,6 +499,7 @@
     status = null;
     if (txn === null) {
       d = newDraft(listsState.today);
+      recalledMemo = "";
       remainder = null;
     }
     ondone?.(false);

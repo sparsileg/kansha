@@ -130,8 +130,9 @@ Skip, and Edit… buttons.
 
 For each one:
 
-- **Enter** opens the account's register with the transaction filled
-  in. Check it, change the amount if it's an estimate, and save.
+- **Enter** records the transaction as scheduled, and the row goes
+  from the list. For an estimate, the account's register opens with
+  it filled in instead: check the amount and save.
 - **Skip** passes over this occurrence; the next one moves up.
 - **Edit…** opens the occurrence's **Date** and **Amount**. Change
   them and click **Set for this occurrence only** to change this one
@@ -158,7 +159,8 @@ at the end of the day under it.
 :::
 
 The month shows each scheduled transaction on the day it falls. Use
-the arrows to move a month, and **Today** to come back.
+the arrows to move a month, and **Today** to come back. It stays on
+the month you left it on when you go elsewhere and return.
 
 - **Account**: **All accounts**, or one checking, savings, cash, or
   credit card account.
@@ -170,6 +172,10 @@ the arrows to move a month, and **Today** to come back.
 
 Click a day to see what falls on it, and to **Enter**, **Edit**, or
 **Skip** a scheduled one, or make a **New schedule** on that date.
+**Enter** records it and leaves you on the Calendar; for an estimate
+it opens the register instead. **Edit** opens it in the register, to
+change it before saving. To change the whole series, use **Scheduled
+Transactions**.
 
 ::: tip
 Before a big purchase, open the Calendar on checking with Projected

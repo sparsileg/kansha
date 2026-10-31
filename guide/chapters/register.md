@@ -88,6 +88,15 @@ needed.
 sum: `12.50+3.25` or `3*4.99`. Type `=` or move on, and Kansha works
 it out.
 
+For a purchase in another currency, type the amount and its code:
+`85 eur` or `60+25 chf`. Kansha looks up that day's rate, fills in the
+dollars, and adds the original amount and rate to the memo, such as
+`EUR 85.00 @ 1.1193`. A memo filled in from last time gives way to
+this; one you typed stays. This needs **Allow currency rate lookup
+(internet)** ticked in **Settings > Register**. The dollars are an
+estimate: when the statement comes, type the real charge over them.
+Changing the date afterwards doesn't change the amount.
+
 **Category.** Kansha offers matches as you type, one level at a time:
 type `au`, take `Auto`, then `:`, and only Auto's subcategories are
 offered. To move money to another account, pick the account instead;
@@ -104,8 +113,9 @@ typed on the entry line.
 
 Kansha may ask before saving a transaction that looks like a mistake:
 
-- its date is more than 7 days ago or more than 30 days ahead;
-- its check number is already used in this account;
+- its date is more than 30 days ago or more than 30 days ahead;
+- its check number is already used in this account (`ATM` and `DEP`
+  don't count);
 - a line has no category.
 
 Each warning can be turned off in **Settings > Notifications** (see

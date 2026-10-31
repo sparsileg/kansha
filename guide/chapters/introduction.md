@@ -68,8 +68,9 @@ Start from your question and go to the screen that answers it.
 Everything you enter is stored on your own computer, in one file
 called a *book*. No account is needed, and nothing is sent anywhere.
 Kansha never connects to the internet unless you turn on **Allow
-price download** in Settings, and then it sends only the ticker
-symbols of the securities whose prices it fetches.
+price download** or **Allow currency rate lookup** in Settings. Then
+it sends only the ticker symbols of the securities whose prices it
+fetches, or a currency code and a date, never an amount.
 
 The book is encrypted. Without your passphrase, the file can't be
 read, by anyone.

@@ -61,13 +61,19 @@
     }
   }
 
-  /** Entering always goes through the register, where the whole
-   * transaction can be edited first (REC-110). */
-  function enter() {
+  /** Records it at once and stays here; an estimate goes to the register
+   * (REC-110). */
+  async function enter() {
+    busy = true;
     error = null;
-    void scheduleState.enterOccurrence(view).catch((e) => {
+    try {
+      await scheduleState.enterOccurrence(view);
+      onchange?.();
+    } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-    });
+    } finally {
+      busy = false;
+    }
   }
 
   function setOverride() {
@@ -108,7 +114,7 @@
     {#if !done}
       <span class="actions">
         {#if view.actionable}
-          <button type="button" disabled={busy} onclick={enter}>Enter</button>
+          <button type="button" disabled={busy} onclick={() => void enter()}>Enter</button>
           <button type="button" disabled={busy} onclick={skip}>Skip</button>
         {/if}
         <button type="button" disabled={busy} onclick={() => (panel = !panel)}>Edit…</button>

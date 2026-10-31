@@ -48,6 +48,7 @@ bar balances, and Rows shown on spending cards.
 
 | Setting | What it does |
 |:---|:---|
+| Allow currency rate lookup (internet) | Lets a foreign amount such as `85 eur` fetch that day's rate |
 | Gray reconciled transactions | Shows reconciled rows in gray |
 | Recall memorized payees | Fills in from a payee's last use |
 | Automatically memorize new payees | Remembers new payees as you enter them |
@@ -60,8 +61,8 @@ Each asks before saving a transaction that may be a mistake:
 
 | Setting | Asks when |
 |:---|:---|
-| When entering out-of-date transactions | The date is over 7 days past or 30 days ahead |
-| A check number is reused | The number is already used in the account |
+| When entering out-of-date transactions | The date is over 30 days past or ahead |
+| A check number is reused | The number is already used in the account (`ATM` and `DEP` don't count) |
 | When entering uncategorized transactions | A line, split lines included, has no category |
 | Ask before saving changes to an existing transaction | You change a transaction already saved |
 

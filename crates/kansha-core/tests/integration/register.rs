@@ -830,12 +830,12 @@ fn warnings_flag_old_far_future_and_reused_check_numbers() {
         vec![ledger::EntryWarning::CheckReused]
     );
     assert_eq!(warn(&f, &first, Some(id)), vec![]);
-    // 7 days back and 30 ahead are fine, a day more either way is not.
-    let week = build(&mut f, "2026-06-23", "");
-    let past = build(&mut f, "2026-06-22", "");
+    // 30 days either way is fine, a day more is not.
+    let back = build(&mut f, "2026-05-31", "");
+    let past = build(&mut f, "2026-05-30", "");
     let month = build(&mut f, "2026-07-30", "");
     let beyond = build(&mut f, "2026-07-31", "");
-    assert_eq!(warn(&f, &week, None), vec![]);
+    assert_eq!(warn(&f, &back, None), vec![]);
     assert_eq!(warn(&f, &past, None), vec![ledger::EntryWarning::OutOfDate]);
     assert_eq!(warn(&f, &month, None), vec![]);
     assert_eq!(
@@ -850,6 +850,45 @@ fn warnings_flag_old_far_future_and_reused_check_numbers() {
     assert_eq!(warn(&f, &first, None), vec![]);
     let old = build(&mut f, "2020-01-01", "9901");
     assert_eq!(warn(&f, &old, None), vec![]);
+}
+
+#[test]
+fn atm_and_dep_are_not_check_numbers() {
+    let mut f = fixture();
+    let groceries = f.book.find_category("Food:Groceries").unwrap().unwrap();
+    let today = date("2026-06-30");
+    for num in ["ATM", "DEP", "EFT", "1234"] {
+        let mut e = f
+            .book
+            .entry(f.chk, today)
+            .amount(m("-5.00"))
+            .category(groceries)
+            .build()
+            .unwrap();
+        e.check_num = num.into();
+        f.book.write(|tx| ledger::create_entry(tx, &e)).unwrap();
+    }
+    let warn = |f: &mut Fixture, num: &str| {
+        let mut e = f
+            .book
+            .entry(f.chk, today)
+            .amount(m("-5.00"))
+            .category(groceries)
+            .build()
+            .unwrap();
+        e.check_num = num.into();
+        ledger::entry_warnings(f.book.conn(), today, &e, None).unwrap()
+    };
+    for word in ["ATM", "atm", "Atm", " ATM ", "DEP", "dep"] {
+        assert_eq!(warn(&mut f, word), vec![], "{word}");
+    }
+    for repeat in ["EFT", "1234"] {
+        assert_eq!(
+            warn(&mut f, repeat),
+            vec![ledger::EntryWarning::CheckReused],
+            "{repeat}"
+        );
+    }
 }
 
 #[test]

@@ -105,6 +105,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ledger::undo_apply,
             commands::ledger::split_remainder,
             commands::ledger::amount_eval,
+            commands::ledger::fx_convert,
             commands::ledger::audit_history,
             commands::ledger::integrity_check,
             commands::sample::sample_data_load,
