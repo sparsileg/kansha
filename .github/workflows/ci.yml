@@ -2,7 +2,11 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - 'devdocs/**'
   pull_request:
+    paths-ignore:
+      - 'devdocs/**'
 
 jobs:
   rust:
