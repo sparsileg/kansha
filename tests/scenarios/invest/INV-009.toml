@@ -20,7 +20,7 @@ type = "etf"
 name = "Vanguard Total Bond Market"
 ticker = "BND"
 type = "etf"
-asset_class = "bond"
+asset_class = "bond_intermediate"
 
 [[actions]]
 type = "invest"

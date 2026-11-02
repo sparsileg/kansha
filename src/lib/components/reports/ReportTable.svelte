@@ -201,7 +201,10 @@
     };
   });
 
-  // Learn each look's height from the drawn lines.
+  // Learn each look's height from the drawn lines: the tallest seen.
+  // Lines of one look can differ (wrapped text); keeping the tallest only
+  // ever grows, so measuring settles instead of flipping between heights
+  // forever (that loop froze the app on a long flat Itemized list).
   $effect(() => {
     void shown;
     if (!windowed) return;
@@ -212,7 +215,7 @@
       for (const tr of trs) {
         const h = tr.getBoundingClientRect().height;
         const l = lines[Number(tr.dataset.i)];
-        if (h > 0 && l && next[look(l)] !== h) {
+        if (h > 0 && l && h > (next[look(l)] ?? 0)) {
           next[look(l)] = h;
           changed = true;
         }

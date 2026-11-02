@@ -5,7 +5,8 @@
   // worth over 1, 2, or 5 years, what is due, what needs attention, and
   // the user's spending cards.
   // The gear acts on the tab shown:
-  // Customize…, Create new insight…, Move left/right, Delete insight….
+  // Customize <name>…, New spending card…, Create new insight…, Move
+  // left/right, Delete insight….
   // Every figure comes from Rust.
   import { onMount, type Snippet } from "svelte";
   import { call, commands } from "../lib/api";
@@ -27,7 +28,7 @@
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight, SpendingCard, SpendingCardId } from "../lib/types/bindings";
+  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight, SpendingCard, SpendingCardId, SpendingColumn, TagId } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -93,12 +94,14 @@
 
   // Spending cards, each loaded only while it is shown, and again when the
   // cards are reloaded after a change (CARD-060). A card's gear has
-  // Customize… (name, accounts, categories) and Delete card….
+  // Customize… (name, accounts, categories, tags, columns) and Delete card….
   let spent = $state<Record<SpendingCardId, ExpenseCard>>({});
   let spentError = $state<Record<SpendingCardId, string>>({});
   const spentSeq: Record<SpendingCardId, number> = {};
   let cardMenu = $state<{ x: number; y: number; card: SpendingCard } | null>(null);
   let customizing = $state<SpendingCard | null>(null);
+  /** New spending card… is open: nothing exists until OK. */
+  let making = $state(false);
   const shownSpending = $derived(
     cards.flatMap((c) => listsState.spendingCards.filter((s) => s.id === c.spending)),
   );
@@ -129,17 +132,22 @@
   ];
   const cardMenuItems = $derived(cardMenu === null ? [] : cardItems(cardMenu.card));
 
-  async function saveCard(name: string, accounts: AccountId[], categories: CategoryId[]) {
+  // Only these columns include scheduled transactions.
+  const showsScheduled = (id: SpendingCardId) =>
+    listsState.spendingCards.find((s) => s.id === id)?.columns.some((c) => c === "year" || c === "month" || c === "monthly_avg") ?? false;
+
+  async function saveCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) {
     if (customizing === null) return;
-    await call(commands.spendingCardUpdate(customizing.id, name, accounts, categories));
+    await call(commands.spendingCardUpdate(customizing.id, name, accounts, categories, tags, columns));
     await listsState.loadInsights();
     customizing = null;
   }
 
-  async function newCard(name: string): Promise<string> {
-    const made = await call(commands.spendingCardCreate(name));
+  async function makeCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) {
+    if (selected === null) return;
+    await call(commands.spendingCardCreate(name, accounts, categories, tags, columns, selected.id));
     await listsState.loadInsights();
-    return spendingId(made.id);
+    making = false;
   }
 
   async function deleteCard(card: SpendingCard) {
@@ -207,7 +215,8 @@
   }
 
   const menuItems = $derived([
-    { label: "Customize…", action: () => (editing = selected), disabled: selected === null },
+    { label: selected === null ? "Customize…" : `Customize ${selected.name}…`, action: () => (editing = selected), disabled: selected === null },
+    { label: "New spending card…", action: () => (making = true), disabled: selected === null },
     { label: "Create new insight…", action: () => (editing = "new") },
     { label: "Move left", action: () => void move(-1), disabled: at <= 0 },
     { label: "Move right", action: () => void move(1), disabled: at < 0 || at >= insights.length - 1 },
@@ -260,12 +269,24 @@
     <ContextMenu x={menu.x} y={menu.y} onclose={() => (menu = null)} items={menuItems} />
   {/if}
   {#if editing === "new"}
-    <InsightModal title="New insight" name="" cards={[]} onsave={save} onnewcard={newCard} onclose={() => (editing = null)} />
+    <InsightModal title="New insight" name="" cards={[]} onsave={save} onclose={() => (editing = null)} />
   {:else if editing !== null}
-    <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onnewcard={newCard} onclose={() => (editing = null)} />
+    <InsightModal title="Customize insight" name={editing.name} cards={editing.cards} onsave={save} onclose={() => (editing = null)} />
   {/if}
   {#if cardMenu}
     <ContextMenu x={cardMenu.x} y={cardMenu.y} onclose={() => (cardMenu = null)} items={cardMenuItems} />
+  {/if}
+  {#if making}
+    <CardFilterModal
+      title="New spending card"
+      name=""
+      accounts={null}
+      categories={[]}
+      tags={[]}
+      columns={["year", "month", "monthly_avg"]}
+      onsave={makeCard}
+      onclose={() => (making = false)}
+    />
   {/if}
   {#if customizing}
     <CardFilterModal
@@ -273,6 +294,8 @@
       name={customizing.name}
       accounts={customizing.accounts}
       categories={customizing.categories}
+      tags={customizing.tags}
+      columns={customizing.columns}
       onsave={saveCard}
       onclose={() => (customizing = null)}
     />
@@ -286,7 +309,7 @@
           <article class="card sheet" class:wide={c.wide} class:double={c.double} data-card={c.id} aria-labelledby={`card-${c.id}`}>
             <header>
               <h2>
-                <span id={`card-${c.id}`}>{heading(c.id, c.label, d)}</span>{#if c.spending !== undefined}<span class="note"
+                <span id={`card-${c.id}`}>{heading(c.id, c.label, d)}</span>{#if c.spending !== undefined && showsScheduled(c.spending)}<span class="note"
                     >{" "}– Includes past and scheduled transactions</span
                   >{/if}
               </h2>
@@ -449,9 +472,9 @@
     <p class="err" role="alert">{spentError[id]}</p>
   {:else if auto}
     {#if auto.rows.length === 0 && auto.chosen === 0}
-      <p class="sub">Choose accounts and categories: the gear’s Customize….</p>
+      <p class="sub">Choose accounts, and categories or tags: the gear’s Customize….</p>
     {:else if auto.rows.length === 0}
-      <p class="sub">No spending this year in the chosen categories.</p>
+      <p class="sub">No spending in the columns shown for what is chosen.</p>
     {:else}
       <SpendingTable card={auto} rows={bookSettings.value.spending_rows} />
     {/if}

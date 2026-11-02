@@ -1,14 +1,17 @@
 <script lang="ts">
-  // A spending card's table (CARD-060): Year and Month count past and
+  // A spending card's table (CARD-060, CARD-070): the columns the card
+  // chose, in the order Rust gives them. Year and Month count past and
   // scheduled transactions; a figure with scheduled ones in it says how
-  // much in its tooltip. With more category rows than the
+  // much in its tooltip, Last Year gives the same period, and each
+  // average its months and total. ▲/▼ is Rust's comparison of Monthly
+  // Avg with the longer average. With more category rows than the
   // setting allows (`spending_rows`), the rows scroll between a fixed
   // header and Total row, with no scrollbar taking room: the edge with
   // more rows past it fades, and two letter-high arrows pulse there, a
   // third and two thirds across (clicking one scrolls a page). "Rows 1–10 of 24" under the table counts them;
   // clicking it shows every row until clicked again. Printing shows all.
   import { formatMoney, isZeroMoney } from "../../format/money";
-  import type { ExpenseCard, ExpenseRow } from "../../types/bindings";
+  import type { ExpenseCard, ExpenseRow, SpendingColumn } from "../../types/bindings";
 
   let { card, rows }: { card: ExpenseCard; rows: number } = $props();
 
@@ -51,10 +54,66 @@
     requestAnimationFrame(onscroll);
   });
 
-  // A figure with scheduled spending in it says how much.
-  function sched(r: ExpenseRow): string | undefined {
-    return isZeroMoney(r.scheduled) ? undefined : `${formatMoney(r.scheduled)} scheduled`;
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  /** "2025-10-31" as "Oct 2025". */
+  const monthYear = (iso: string) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+  const months = (n: number) => (n === 1 ? "1 month" : `${n} months`);
+
+  function head(c: SpendingColumn): string {
+    switch (c) {
+      case "last_year":
+        return "Last Year";
+      case "year":
+        return "Year";
+      case "last_month":
+        return "Last Month";
+      case "month":
+        return "Month";
+      case "monthly_avg":
+        return "Monthly Avg";
+      case "three_year_avg":
+        return card.avg_since === null ? "3 Yr Avg" : `Avg since ${monthYear(card.avg_since)}`;
+    }
   }
+
+  function figure(c: SpendingColumn, r: ExpenseRow): string {
+    switch (c) {
+      case "last_year":
+        return formatMoney(r.last_year);
+      case "year":
+        return formatMoney(r.ytd);
+      case "last_month":
+        return formatMoney(r.last_month);
+      case "month":
+        return formatMoney(r.mtd);
+      case "monthly_avg": {
+        const arrow = r.avg_trend === "up" ? "▲ " : r.avg_trend === "down" ? "▼ " : "";
+        return arrow + formatMoney(r.monthly_avg);
+      }
+      case "three_year_avg":
+        return formatMoney(r.three_year_avg);
+    }
+  }
+
+  function tip(c: SpendingColumn, r: ExpenseRow): string | undefined {
+    switch (c) {
+      case "last_year":
+        return `Through ${monthYear(card.same_period_to)}: ${formatMoney(r.same_period)}`;
+      case "year":
+      case "month":
+        // A figure with scheduled spending in it says how much.
+        return isZeroMoney(r.scheduled) ? undefined : `${formatMoney(r.scheduled)} scheduled`;
+      case "monthly_avg":
+        return `${months(card.year_months)}, ${formatMoney(r.ytd)} total`;
+      case "three_year_avg":
+        return card.avg_months === 0 ? "No earlier months" : `${months(card.avg_months)}, ${formatMoney(r.three_year_total)} total`;
+      default:
+        return undefined;
+    }
+  }
+
+  // Past four columns, the figures keep their room.
+  const labelWidth = $derived(card.columns.length > 3 ? `${100 - card.columns.length * 13}%` : undefined);
 
   function page(dir: -1 | 1) {
     scroller?.scrollBy({ top: dir * rows * rowH, behavior: "smooth" });
@@ -76,24 +135,23 @@
   >
     <table class="expenses">
       <thead>
-        <tr><th>Category</th><th class="num">Year</th><th class="num">Month</th><th class="num">Monthly Avg</th></tr>
+        <tr>
+          <th style:width={labelWidth}>Category</th>
+          {#each card.columns as c (c)}<th class="num">{head(c)}</th>{/each}
+        </tr>
       </thead>
       <tbody>
         {#each card.rows as r (r.category)}
           <tr>
             <td class="label" title={r.label}>{r.label}</td>
-            <td class="num" title={sched(r)}>{formatMoney(r.ytd)}</td>
-            <td class="num" title={sched(r)}>{formatMoney(r.mtd)}</td>
-            <td class="num">{formatMoney(r.monthly_avg)}</td>
+            {#each card.columns as c (c)}<td class="num" title={tip(c, r)}>{figure(c, r)}</td>{/each}
           </tr>
         {/each}
       </tbody>
       <tfoot>
         <tr class="net">
           <td>Total</td>
-          <td class="num" title={sched(card.total)}>{formatMoney(card.total.ytd)}</td>
-          <td class="num" title={sched(card.total)}>{formatMoney(card.total.mtd)}</td>
-          <td class="num">{formatMoney(card.total.monthly_avg)}</td>
+          {#each card.columns as c (c)}<td class="num" title={tip(c, card.total)}>{figure(c, card.total)}</td>{/each}
         </tr>
       </tfoot>
     </table>

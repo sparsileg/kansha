@@ -66,6 +66,33 @@ describe("ReportTable", () => {
     await waitFor(() => expect(drawn()).toBeLessThan(300));
   });
 
+  it("settles when same-look lines differ in height (wrapped text)", async () => {
+    // Detail lines alternate 20 and 36 px. Measuring must not loop; a
+    // loop froze the app on a flat Itemized list (RPT-200). Past the
+    // limit the mock reports 0 px, which ends any loop so the test fails
+    // instead of hanging.
+    let measures = 0;
+    const real = HTMLElement.prototype.getBoundingClientRect;
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const i = this.dataset?.i;
+      if (this.tagName !== "TR" || i === undefined) return real.call(this);
+      measures++;
+      const h = measures > 20000 ? 0 : Number(i) % 2 ? 36 : 20;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      render(ReportTable, { report: big(1500, false), inst: collapsible(), ondrill: vi.fn() });
+      await waitFor(() => expect(document.querySelectorAll("tbody tr[data-i]").length).toBeGreaterThan(0));
+      await new Promise((r) => setTimeout(r, 50));
+      const settled = measures;
+      await new Promise((r) => setTimeout(r, 50));
+      expect(measures).toBe(settled);
+      expect(measures).toBeLessThan(20000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("draws a short report whole", async () => {
     render(ReportTable, { report: big(10, false), inst: collapsible(), ondrill: vi.fn() });
     await waitFor(() => expect(document.querySelectorAll("tbody tr[data-i]")).toHaveLength(12));

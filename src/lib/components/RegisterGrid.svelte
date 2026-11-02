@@ -111,16 +111,41 @@
     return () => ro.disconnect();
   });
 
-  // After opening an account, show the bottom (newest) rows.
+  // Once a grid has rows, and after opening an account: go to where this
+  // account was left, else the bottom (newest) rows (#47). The grid is
+  // new each time the view is shown, so a return with no open() lands
+  // here too. A row to reveal wins.
+  let placed = false;
+  function place() {
+    if (!rowsEl) return;
+    rowsEl.scrollTop = registerState.savedScroll() ?? rowsEl.scrollHeight;
+    scrollTop = rowsEl.scrollTop;
+  }
   $effect(() => {
-    if (registerState.scrollToEnd && !registerState.loading && rows.length > 0) {
-      registerState.scrollToEnd = false;
-      if (rowsEl) {
-        rowsEl.scrollTop = rowsEl.scrollHeight;
-        scrollTop = rowsEl.scrollTop;
+    if ((registerState.scrollToEnd || !placed) && !registerState.loading && rows.length > 0 && rowsEl) {
+      placed = true;
+      if (registerState.reveal !== null) {
+        registerState.scrollToEnd = false;
+        return;
       }
+      place();
+      // Again once the real row height has sized the spacers.
+      void tick().then(() =>
+        requestAnimationFrame(() => {
+          place();
+          registerState.scrollToEnd = false;
+        }),
+      );
     }
   });
+
+  function onRowsScroll() {
+    if (!rowsEl) return;
+    scrollTop = rowsEl.scrollTop;
+    if (!placed) return;
+    const atEnd = scrollTop + rowsEl.clientHeight >= rowsEl.scrollHeight - rowH;
+    registerState.saveScroll(atEnd ? null : scrollTop);
+  }
 
   /** REG-070: the today line sits where `future` flips between rows. */
   function todayLineBefore(i: number): boolean {
@@ -331,7 +356,7 @@
   </div>
 
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-  <div class="rows" bind:this={rowsEl} role="grid" onscroll={() => (scrollTop = rowsEl?.scrollTop ?? 0)} onwheel={() => (registerState.reveal = null)} onpointerdown={() => (registerState.reveal = null)} aria-label="Register" tabindex="0" onkeydown={onKeydown} oncontextmenu={onRowsContextMenu}>
+  <div class="rows" bind:this={rowsEl} role="grid" onscroll={onRowsScroll} onwheel={() => (registerState.reveal = null)} onpointerdown={() => (registerState.reveal = null)} aria-label="Register" tabindex="0" onkeydown={onKeydown} oncontextmenu={onRowsContextMenu}>
     <div class="spacer-row" style="height: {range.from * rowH}px"></div>
     {#each visible as r, k (r.txn_id)}
       {@const i = range.from + k}

@@ -2,7 +2,8 @@
 //! parts, this month's income and spending, net worth over time, what is
 //! due, what needs attention, and spending cards.
 
-use std::collections::BTreeMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use rusqlite::Connection;
@@ -23,7 +24,7 @@ use crate::money::{Money, mul_div};
 use crate::persistence::{accounts, audit, reports as repo};
 use crate::schedule::{self, OccurrenceView};
 use crate::settings;
-use crate::spending::SpendingCard;
+use crate::spending::{SpendingCard, SpendingColumn};
 use crate::text_enum::text_enum;
 
 /// Uncleared transactions older than this many days are flagged.
@@ -388,8 +389,8 @@ pub fn net_worth_trend(conn: &Connection, today: Date, years: i64, fitted: bool)
     }
 }
 
-/// One row of a spending card (CARD-060): spent this year, this
-/// month, and per month, expenses positive.
+/// One row of a spending card (CARD-060, CARD-070): spent in each
+/// period, expenses positive. A column not shown stays zero.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct ExpenseRow {
@@ -407,6 +408,28 @@ pub struct ExpenseRow {
     /// The part of `ytd` and `mtd` still only scheduled: pending
     /// occurrences dated this month.
     pub scheduled: Money,
+    /// The whole of last calendar year.
+    pub last_year: Money,
+    /// Last year, January 1 through `same_period_to`: Year's period.
+    pub same_period: Money,
+    /// The whole of last month.
+    pub last_month: Money,
+    /// Spent in the last three full calendar years (CARD-070).
+    pub three_year_total: Money,
+    /// `three_year_total` over `avg_months`; zero with no months.
+    pub three_year_avg: Money,
+    /// `monthly_avg` against `three_year_avg`; `None` when equal, or
+    /// with no longer average to compare.
+    pub avg_trend: Option<AvgTrend>,
+}
+
+/// This year's monthly average against the longer one (CARD-070).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "snake_case")]
+pub enum AvgTrend {
+    Up,
+    Down,
 }
 
 /// What a spending card shows (CARD-060).
@@ -421,14 +444,85 @@ pub struct ExpenseCard {
     /// How many categories are chosen (0 when no account is), so an
     /// empty card can tell "choose some" from "no spending this year".
     pub chosen: u32,
+    /// The columns shown, in display order.
+    pub columns: Vec<SpendingColumn>,
+    /// The months behind Monthly Avg: those begun this year.
+    pub year_months: u32,
+    /// The months behind the three-year average: up to 36, those since
+    /// the book's first transaction; 0 when that is this year.
+    pub avg_months: u32,
+    /// The 1st of the month the three-year average starts in, when it
+    /// has fewer than 36 months to go on.
+    pub avg_since: Option<Date>,
+    /// Where `same_period` ends: this month's end, a year ago.
+    pub same_period_to: Date,
+}
+
+/// What one spending card row adds up.
+#[derive(Clone, Copy)]
+struct Tally {
+    ytd: Money,
+    mtd: Money,
+    scheduled: Money,
+    last_year: Money,
+    same_period: Money,
+    last_month: Money,
+    three_year: Money,
+}
+
+impl Tally {
+    const ZERO: Tally = Tally {
+        ytd: Money::ZERO,
+        mtd: Money::ZERO,
+        scheduled: Money::ZERO,
+        last_year: Money::ZERO,
+        same_period: Money::ZERO,
+        last_month: Money::ZERO,
+        three_year: Money::ZERO,
+    };
+
+    fn plus(self, o: Tally) -> Result<Tally> {
+        Ok(Tally {
+            ytd: add(self.ytd, o.ytd)?,
+            mtd: add(self.mtd, o.mtd)?,
+            scheduled: add(self.scheduled, o.scheduled)?,
+            last_year: add(self.last_year, o.last_year)?,
+            same_period: add(self.same_period, o.same_period)?,
+            last_month: add(self.last_month, o.last_month)?,
+            three_year: add(self.three_year, o.three_year)?,
+        })
+    }
+}
+
+/// The months a three-year average covers (CARD-070), ending last
+/// December: 36, or those since the book's first transaction, with the
+/// 1st of the month it starts in when fewer than 36.
+fn average_months(today: Date, first: Option<Date>) -> Result<(u32, Option<Date>)> {
+    let Some(first) = first.filter(|f| f.year() < today.year()) else {
+        return Ok((0, None));
+    };
+    let years_back = today.year() - first.year();
+    if years_back > 3 || (years_back == 3 && first.month() == 1) {
+        return Ok((36, None));
+    }
+    let months = (years_back.unsigned_abs() - 1) * 12 + 13 - first.month();
+    Ok((
+        months,
+        Some(Date::from_ymd(first.year(), first.month(), 1)?),
+    ))
 }
 
 /// A spending card (CARD-060): each spending category chosen on the
 /// card, on its own (subcategories are not added in), counting only the
-/// chosen accounts (every open one if never chosen). Past and scheduled:
+/// chosen accounts (every open one if never chosen) and lines with a
+/// chosen tag (every line if none). Tags and no category: every spending
+/// category. Year, Month, and Monthly Avg are past and scheduled:
 /// transactions through the end of this month (later-dated ones
 /// included) and this month's pending scheduled occurrences, so what
-/// is due later this month counts now.
+/// is due later this month counts now. Last Year, Last Month, and the
+/// three-year average (CARD-070) are transactions in those whole
+/// periods, and only the columns shown are worked out and decide which
+/// categories are listed.
 pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Result<ExpenseCard> {
     let lk = Lookups::load(conn)?;
     let accounts = card.accounts.clone().unwrap_or_else(|| {
@@ -438,58 +532,122 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
             .map(|a| a.id)
             .collect()
     });
-    let mut chosen: Vec<CategoryId> = card
-        .categories
-        .iter()
-        .copied()
-        .filter(|c| {
-            lk.category(*c)
-                .is_some_and(|x| x.fields.kind == CategoryKind::Expense)
-        })
-        .collect();
+    let spending = |c: &CategoryId| {
+        lk.category(*c)
+            .is_some_and(|x| x.fields.kind == CategoryKind::Expense)
+    };
+    let mut chosen: Vec<CategoryId> = if card.categories.is_empty() && !card.tags.is_empty() {
+        lk.categories
+            .iter()
+            .map(|c| c.id)
+            .filter(|c| spending(c))
+            .collect()
+    } else {
+        card.categories
+            .iter()
+            .copied()
+            .filter(|c| spending(c))
+            .collect()
+    };
     if accounts.is_empty() {
         chosen.clear();
     }
-    let months = i64::from(today.month());
-    let row = |category, label, ytd: Money, mtd, scheduled| -> Result<ExpenseRow> {
+
+    let shows = |c: SpendingColumn| card.columns.contains(&c);
+    let this_year = shows(SpendingColumn::Year) || shows(SpendingColumn::MonthlyAvg);
+    let this_month = shows(SpendingColumn::Month);
+    let past_year = shows(SpendingColumn::LastYear);
+    let past_month = shows(SpendingColumn::LastMonth);
+    let past_three = shows(SpendingColumn::ThreeYearAvg);
+
+    let year = today.year();
+    let year_from = Date::from_ymd(year, 1, 1)?;
+    let month_from = Date::from_ymd(year, today.month(), 1)?;
+    let month_to = month_end(today, 0)?;
+    let last_year_from = Date::from_ymd(year - 1, 1, 1)?;
+    let last_month_from = if today.month() == 1 {
+        Date::from_ymd(year - 1, 12, 1)?
+    } else {
+        Date::from_ymd(year, today.month() - 1, 1)?
+    };
+    let same_period_to = month_end(Date::from_ymd(year - 1, today.month(), 1)?, 0)?;
+    let three_from = Date::from_ymd(year - 3, 1, 1)?;
+    let (avg_months, avg_since) = if past_three {
+        average_months(today, repo::first_txn_date(conn)?)?
+    } else {
+        (0, None)
+    };
+    let year_months = today.month();
+
+    let row = |category, label, t: Tally| -> Result<ExpenseRow> {
+        let monthly_avg = Money::from_cents(mul_div(t.ytd.cents(), 1, i64::from(year_months))?);
+        let three_year_avg = if avg_months == 0 {
+            Money::ZERO
+        } else {
+            Money::from_cents(mul_div(t.three_year.cents(), 1, i64::from(avg_months))?)
+        };
+        let avg_trend = match monthly_avg.cmp(&three_year_avg) {
+            _ if avg_months == 0 => None,
+            Ordering::Greater => Some(AvgTrend::Up),
+            Ordering::Less => Some(AvgTrend::Down),
+            Ordering::Equal => None,
+        };
         Ok(ExpenseRow {
             category,
             label,
-            ytd,
-            mtd,
-            monthly_avg: Money::from_cents(mul_div(ytd.cents(), 1, months)?),
-            scheduled,
+            ytd: t.ytd,
+            mtd: t.mtd,
+            monthly_avg,
+            scheduled: t.scheduled,
+            last_year: t.last_year,
+            same_period: t.same_period,
+            last_month: t.last_month,
+            three_year_total: t.three_year,
+            three_year_avg,
+            avg_trend,
         })
     };
 
-    let mut ytd: BTreeMap<CategoryId, Money> = BTreeMap::new();
-    let mut mtd: BTreeMap<CategoryId, Money> = BTreeMap::new();
-    let mut sched: BTreeMap<CategoryId, Money> = BTreeMap::new();
+    let mut tally: BTreeMap<CategoryId, Tally> = BTreeMap::new();
+    let mut listed: BTreeSet<CategoryId> = BTreeSet::new();
     if !chosen.is_empty() {
-        let year_from = Date::from_ymd(today.year(), 1, 1)?;
-        let month_from = Date::from_ymd(today.year(), today.month(), 1)?;
-        let month_to = month_end(today, 0)?;
-        for (c, amount) in
+        for (c, tag, amount) in
             schedule::scheduled_by_category(conn, month_from, month_to, today, &accounts)?
         {
-            if !chosen.contains(&c) {
+            let tagged = card.tags.is_empty() || tag.is_some_and(|t| card.tags.contains(&t));
+            if !tagged || !chosen.contains(&c) {
                 continue;
             }
             // A payment line is negative; spent is shown positive.
             let spent = amount
                 .checked_neg()
                 .ok_or(Error::Overflow("insight cards"))?;
-            for m in [&mut ytd, &mut mtd, &mut sched] {
-                let v = m.entry(c).or_insert(Money::ZERO);
-                *v = add(*v, spent)?;
+            let t = tally.entry(c).or_insert(Tally::ZERO);
+            t.ytd = add(t.ytd, spent)?;
+            t.mtd = add(t.mtd, spent)?;
+            t.scheduled = add(t.scheduled, spent)?;
+            if this_year || this_month {
+                listed.insert(c);
             }
+        }
+        // Only as far back as a shown column needs.
+        let mut from = year_from;
+        if past_month {
+            from = from.min(last_month_from);
+        }
+        if past_year {
+            from = from.min(last_year_from);
+        }
+        if past_three {
+            from = from.min(three_from);
         }
         let mut rs = ReportSettings::defaults(ReportKind::IncomeExpense);
         rs.accounts = Some(accounts);
         rs.categories = Some(chosen.clone());
+        rs.tags = (!card.tags.is_empty()).then(|| card.tags.clone());
         rs.transfers = false;
         let range = ResolvedRange {
-            from: Some(year_from),
+            from: Some(from),
             to: month_to,
         };
         for l in facts::lines(&facts::load(conn, range)?, &rs, &lk, Want::All)? {
@@ -501,11 +659,34 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
                 .amount
                 .checked_neg()
                 .ok_or(Error::Overflow("insight cards"))?;
-            let y = ytd.entry(c).or_insert(Money::ZERO);
-            *y = add(*y, spent)?;
-            if l.date >= month_from {
-                let m = mtd.entry(c).or_insert(Money::ZERO);
-                *m = add(*m, spent)?;
+            let t = tally.entry(c).or_insert(Tally::ZERO);
+            let d = l.date;
+            if d >= year_from {
+                t.ytd = add(t.ytd, spent)?;
+                if this_year {
+                    listed.insert(c);
+                }
+            }
+            if d >= month_from {
+                t.mtd = add(t.mtd, spent)?;
+                if this_month {
+                    listed.insert(c);
+                }
+            }
+            if past_month && d >= last_month_from && d < month_from {
+                t.last_month = add(t.last_month, spent)?;
+                listed.insert(c);
+            }
+            if past_year && d >= last_year_from && d < year_from {
+                t.last_year = add(t.last_year, spent)?;
+                if d <= same_period_to {
+                    t.same_period = add(t.same_period, spent)?;
+                }
+                listed.insert(c);
+            }
+            if past_three && d >= three_from && d < year_from {
+                t.three_year = add(t.three_year, spent)?;
+                listed.insert(c);
             }
         }
     }
@@ -514,23 +695,25 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
     chosen.dedup();
     let count = u32::try_from(chosen.len()).unwrap_or(u32::MAX);
     let mut rows = Vec::new();
-    let (mut ty, mut tm, mut ts) = (Money::ZERO, Money::ZERO, Money::ZERO);
+    let mut total = Tally::ZERO;
     for c in chosen {
-        // No transactions this year: left out (one netting to zero stays).
-        let Some(&y) = ytd.get(&c) else {
+        // Nothing in a shown column: left out (one netting to zero stays).
+        if !listed.contains(&c) {
             continue;
-        };
-        let m = mtd.get(&c).copied().unwrap_or(Money::ZERO);
-        let s = sched.get(&c).copied().unwrap_or(Money::ZERO);
-        ty = add(ty, y)?;
-        tm = add(tm, m)?;
-        ts = add(ts, s)?;
-        rows.push(row(Some(c), lk.category_path(c), y, m, s)?);
+        }
+        let t = tally.get(&c).copied().unwrap_or(Tally::ZERO);
+        total = total.plus(t)?;
+        rows.push(row(Some(c), lk.category_path(c), t)?);
     }
     Ok(ExpenseCard {
         rows,
-        total: row(None, "Total".into(), ty, tm, ts)?,
+        total: row(None, "Total".into(), total)?,
         chosen: count,
+        columns: card.columns.clone(),
+        year_months,
+        avg_months,
+        avg_since,
+        same_period_to,
     })
 }
 

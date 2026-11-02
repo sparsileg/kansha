@@ -3,13 +3,15 @@
 //! lists (a category posting, or one side of a transfer).
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
 use super::{DetailSort, Drill, ReportSettings, ResolvedRange};
 use crate::accounts::{Account, AccountId, TaxTreatment};
-use crate::categories::{Category, CategoryId, CategoryKind, PayeeId, TagId, TaxLine, TaxLineId};
+use crate::categories::{
+    Category, CategoryId, CategoryKind, PayeeId, SystemCategory, TagId, TaxLine, TaxLineId,
+};
 use crate::date::Date;
 use crate::error::Result;
 use crate::invest::InvAction;
@@ -29,6 +31,11 @@ pub(super) struct Lookups {
     tags: HashMap<TagId, String>,
     securities: HashMap<SecurityId, Security>,
     pub tax_lines: Vec<TaxLine>,
+    /// Tax-deferred and tax-exempt accounts, with cash accounts linked
+    /// only to such accounts.
+    sheltered: HashSet<AccountId>,
+    /// Retirement Distributions.
+    distributions: Option<CategoryId>,
 }
 
 impl Lookups {
@@ -59,7 +66,29 @@ impl Lookups {
             names.reverse();
             paths.insert(c.id, names.join(":"));
         }
+        let taxable = |a: &Account| a.fields.tax_treatment == TaxTreatment::Taxable;
+        let mut sheltered: HashSet<AccountId> = accounts
+            .iter()
+            .filter(|a| !taxable(a))
+            .map(|a| a.id)
+            .collect();
+        let linked = |a: &Account| a.fields.investment.as_ref()?.linked_cash_account;
+        for cash in accounts.iter().filter_map(linked) {
+            if accounts
+                .iter()
+                .filter(|a| linked(a) == Some(cash))
+                .all(|a| !taxable(a))
+            {
+                sheltered.insert(cash);
+            }
+        }
+        let distributions = categories
+            .iter()
+            .find(|c| c.system == Some(SystemCategory::RetirementDistributions))
+            .map(|c| c.id);
         Ok(Lookups {
+            sheltered,
+            distributions,
             accounts,
             account_index,
             categories,
@@ -94,6 +123,11 @@ impl Lookups {
     pub fn taxable(&self, id: AccountId) -> bool {
         self.account(id)
             .is_some_and(|a| a.fields.tax_treatment == TaxTreatment::Taxable)
+    }
+
+    /// Money here is not yet the owner's to spend (BUD-030).
+    pub fn sheltered(&self, id: AccountId) -> bool {
+        self.sheltered.contains(&id)
     }
 
     pub fn category(&self, id: CategoryId) -> Option<&Category> {
@@ -277,6 +311,46 @@ impl TxnFacts {
             .map(|(i, a, _)| (i, a))
     }
 
+    /// Money leaving a tax-sheltered account for accounts outside them,
+    /// or as tax withheld (BUD-030): the posting to list it on, and the
+    /// amount. A trade's cash and a Roth conversion stay inside.
+    fn distribution(&self, lk: &Lookups) -> Result<Option<(usize, Money)>> {
+        let overflow = || crate::Error::Overflow("report");
+        if self.linked_cash().is_some()
+            || self
+                .inv
+                .as_ref()
+                .is_some_and(|i| i.action == InvAction::RothConversion)
+        {
+            return Ok(None);
+        }
+        let Some((source, ..)) = self
+            .account_postings()
+            .find(|(_, a, p)| lk.sheltered(*a) && p.amount.is_negative())
+        else {
+            return Ok(None);
+        };
+        let mut first = None;
+        let mut gross = Money::ZERO;
+        for (i, a, p) in self.account_postings() {
+            if !lk.sheltered(a) && p.amount > Money::ZERO {
+                first = first.or(Some(i));
+                gross = gross.checked_add(p.amount).ok_or_else(overflow)?;
+            }
+        }
+        for p in &self.postings {
+            let withheld = p
+                .category
+                .and_then(|c| lk.category(c))
+                .is_some_and(|c| c.system == Some(SystemCategory::TaxWithheld));
+            if withheld {
+                first = first.or(Some(source));
+                gross = gross.checked_add(p.amount).ok_or_else(overflow)?;
+            }
+        }
+        Ok(first.map(|i| (i, gross)))
+    }
+
     /// The main account (the register the entry was written in): the
     /// first cash account posting.
     pub fn main(&self) -> Option<(usize, AccountId)> {
@@ -333,13 +407,16 @@ impl TxnFacts {
     }
 
     /// The Clr column for `account`'s posting.
-    pub fn clr(&self, account: AccountId) -> String {
-        let cleared = self
-            .postings
+    /// Cleared status of the account's own posting.
+    pub fn cleared(&self, account: AccountId) -> Cleared {
+        self.postings
             .iter()
             .find(|p| p.account == Some(account) && p.security.is_none())
-            .map_or(Cleared::Unmarked, |p| p.cleared);
-        match cleared {
+            .map_or(Cleared::Unmarked, |p| p.cleared)
+    }
+
+    pub fn clr(&self, account: AccountId) -> String {
+        match self.cleared(account) {
             Cleared::Reconciled => "R".into(),
             Cleared::Cleared => "c".into(),
             Cleared::Unmarked => String::new(),
@@ -422,6 +499,7 @@ pub(super) struct Line {
     pub tags: Vec<TagId>,
     pub tax_line: Option<TaxLineId>,
     pub clr: String,
+    pub cleared: Cleared,
     /// The transaction is a split ([`TxnFacts::is_split`]).
     pub split: bool,
     pub amount: Money,
@@ -453,6 +531,9 @@ pub(super) enum Want {
     TaxRelated,
     /// Tax Schedule: lines with a tax line, from taxable accounts.
     TaxLines,
+    /// What a budget counts (BUD-030): as `All`, without the income and
+    /// investment fees of tax-sheltered accounts.
+    Budget,
 }
 
 /// The lines of `txns` a report lists.
@@ -467,7 +548,8 @@ pub(super) fn lines(
         if !t.payee_ok(s) {
             continue;
         }
-        if want != Want::All
+        let by_tax = matches!(want, Want::TaxRelated | Want::TaxLines);
+        if by_tax
             && let Some(inv) = t
                 .inv
                 .as_ref()
@@ -496,13 +578,15 @@ pub(super) fn lines(
             tags: t.tags_for(p),
             tax_line: None,
             clr: t.clr(account),
+            cleared: t.cleared(account),
             split,
             amount: Money::ZERO,
         };
 
         // Category lines.
         if let Some(home) = t.home(s) {
-            let tax_ok = want == Want::All || lk.taxable(home);
+            let tax_ok = !by_tax || lk.taxable(home);
+            let sheltered = lk.sheltered(home);
             for p in &t.postings {
                 let Some(cid) = p.category else { continue };
                 let Some(cat) = lk.category(cid) else {
@@ -517,9 +601,14 @@ pub(super) fn lines(
                 {
                     continue;
                 }
-                let realized = cat.system == Some(crate::categories::SystemCategory::RealizedGain);
+                let realized = cat.system == Some(SystemCategory::RealizedGain);
+                let fee = cat.system == Some(SystemCategory::InvestmentFees);
                 let keep = match want {
-                    Want::All => true,
+                    // A gain is realized when its owner can reach it.
+                    Want::All => !(sheltered && realized),
+                    Want::Budget => {
+                        !(sheltered && (fee || cat.fields.kind == CategoryKind::Income))
+                    }
                     Want::TaxRelated => cat.fields.tax_related || cat.fields.tax_line.is_some(),
                     // Schedule D comes from the lots, not the category.
                     Want::TaxLines => cat.fields.tax_line.is_some() && !realized,
@@ -546,7 +635,29 @@ pub(super) fn lines(
         // Transfer lines.
         let cash: Vec<(usize, AccountId)> = t.account_postings().map(|(i, a, _)| (i, a)).collect();
         match want {
-            Want::All => {
+            Want::All | Want::Budget => {
+                if let Some(d) = lk.distributions
+                    && let Some((i, gross)) = t.distribution(lk)?
+                {
+                    let p = &t.postings[i];
+                    if let Some(a) = p.account
+                        && s.account_ok(a)
+                        && ReportSettings::includes(&s.categories, &d)
+                        && tags_ok(s, &t.tags_for(p))
+                    {
+                        let mut line = base(
+                            a,
+                            p,
+                            Section::Income,
+                            Target::Category(d),
+                            lk.category_path(d),
+                        );
+                        line.amount = gross;
+                        line.clr = t.clr(a);
+                        out.push(line);
+                    }
+                    continue;
+                }
                 if !s.transfers {
                     continue;
                 }
@@ -767,6 +878,7 @@ fn conversion_lines(
         tags: t.tags_for(first),
         tax_line,
         clr: t.clr(inv.account),
+        cleared: t.cleared(inv.account),
         split: false,
         amount,
     };

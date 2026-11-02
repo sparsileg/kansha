@@ -224,11 +224,13 @@ fn itemized_categories_groups_income_expenses_and_transfers() {
     assert_eq!(
         text(&r),
         "\
-# INCOME |  |  |  |  |  |  |  | 3550.00
+# INCOME |  |  |  |  |  |  |  | 8550.00
   + Dividends |  |  |  |  |  |  |  | 50.00
     -  | 2026-03-31 | Brokerage | Dividend | Total Stock Market |  |  |  | 50.00
   + Realized Gain/Loss |  |  |  |  |  |  |  | 500.00
     -  | 2026-05-01 | Brokerage | Sell | 15 Total Stock Market |  |  |  | 500.00
+  + Retirement Distributions |  |  |  |  |  |  |  | 5000.00
+    -  | 2026-04-01 | Checking | Cash out |  |  |  |  | 5000.00
   + Salary |  |  |  |  |  |  |  | 3000.00
     -  | 2026-01-15 | Checking |  | Employer |  |  |  | 3000.00
 # EXPENSES |  |  |  |  |  |  |  | -1410.00
@@ -243,14 +245,11 @@ fn itemized_categories_groups_income_expenses_and_transfers() {
     + Real Estate |  |  |  |  |  |  |  | -1200.00
       -  | 2026-03-15 | Checking |  | County |  |  |  | -1200.00
 # TRANSFERS |  |  |  |  |  |  |  | 0.00
-  + Checking |  |  |  |  |  |  |  | -4500.00
+  + Checking |  |  |  |  |  |  |  | 500.00
     -  | 2026-03-01 | Savings |  |  |  |  |  | 500.00
-    -  | 2026-04-01 | IRA | Cash out |  |  |  |  | -5000.00
   + Savings |  |  |  |  |  |  |  | -500.00
     -  | 2026-03-01 | Checking |  |  |  |  |  | -500.00
-  + IRA |  |  |  |  |  |  |  | 5000.00
-    -  | 2026-04-01 | Checking | Cash out |  |  |  |  | 5000.00
-= OVERALL TOTAL |  |  |  |  |  |  |  | 2140.00"
+= OVERALL TOTAL |  |  |  |  |  |  |  | 7140.00"
     );
 }
 
@@ -323,12 +322,13 @@ fn itemized_payees_groups_by_payee() {
     assert_eq!(
         text(&r),
         "\
-# INCOME |  |  |  |  |  |  |  | 3550.00
+# INCOME |  |  |  |  |  |  |  | 8550.00
   + Employer |  |  |  |  |  |  |  | 3000.00
     -  | 2026-01-15 | Checking |  | Salary |  |  |  | 3000.00
-  + (No payee) |  |  |  |  |  |  |  | 550.00
+  + (No payee) |  |  |  |  |  |  |  | 5550.00
     -  | 2026-03-31 | Brokerage | Dividend | Dividends |  |  |  | 50.00
     -  | 2026-05-01 | Brokerage | Sell | Realized Gain/Loss |  |  |  | 500.00
+    -  | 2026-04-01 | Checking | Cash out | Retirement Distributions |  |  |  | 5000.00
 # EXPENSES |  |  |  |  |  |  |  | -1410.00
   + Cafe |  |  |  |  |  |  |  | -50.00
     -  | 2026-02-10 | Visa |  | Food:Dining |  |  |  | -50.00
@@ -338,7 +338,7 @@ fn itemized_payees_groups_by_payee() {
     -  | 2026-02-03 | Checking |  | Food:Dining |  |  |  | -20.00
   + County |  |  |  |  |  |  |  | -1200.00
     -  | 2026-03-15 | Checking |  | Tax:Real Estate |  |  |  | -1200.00
-= OVERALL TOTAL |  |  |  |  |  |  |  | 2140.00"
+= OVERALL TOTAL |  |  |  |  |  |  |  | 7140.00"
     );
 }
 
@@ -354,9 +354,10 @@ fn income_expense_by_month_rolls_up_subcategories() {
     assert_eq!(
         text(&r),
         "\
-# INCOME | 3050.00 | 500.00 | 3550.00
+# INCOME | 3050.00 | 5500.00 | 8550.00
   - Dividends | 50.00 | 0.00 | 50.00
   - Realized Gain/Loss | 0.00 | 500.00 | 500.00
+  - Retirement Distributions | 0.00 | 5000.00 | 5000.00
   - Salary | 3000.00 | 0.00 | 3000.00
 # EXPENSES | -1410.00 | 0.00 | -1410.00
   + Food | -210.00 | 0.00 | -210.00
@@ -364,7 +365,7 @@ fn income_expense_by_month_rolls_up_subcategories() {
     - Groceries | -140.00 | 0.00 | -140.00
   + Tax | -1200.00 | 0.00 | -1200.00
     - Real Estate | -1200.00 | 0.00 | -1200.00
-= OVERALL TOTAL | 1640.00 | 500.00 | 2140.00"
+= OVERALL TOTAL | 1640.00 | 5500.00 | 7140.00"
     );
     let food = &r.rows[1].children[0];
     let cat = fx.book.find_category("Food").unwrap().unwrap();
@@ -385,7 +386,8 @@ fn income_expense_cash_flow_counts_transfers_to_accounts_not_chosen() {
     assert_eq!(
         text(&r),
         "\
-# INCOME | 3000.00 | 0.00 | 3000.00
+# INCOME | 3000.00 | 5000.00 | 8000.00
+  - Retirement Distributions | 0.00 | 5000.00 | 5000.00
   - Salary | 3000.00 | 0.00 | 3000.00
 # EXPENSES | -1360.00 | 0.00 | -1360.00
   + Food | -160.00 | 0.00 | -160.00
@@ -393,9 +395,8 @@ fn income_expense_cash_flow_counts_transfers_to_accounts_not_chosen() {
     - Groceries | -140.00 | 0.00 | -140.00
   + Tax | -1200.00 | 0.00 | -1200.00
     - Real Estate | -1200.00 | 0.00 | -1200.00
-# TRANSFERS | -500.00 | 5000.00 | 4500.00
+# TRANSFERS | -500.00 | 0.00 | -500.00
   - Savings | -500.00 | 0.00 | -500.00
-  - IRA | 0.00 | 5000.00 | 5000.00
 = OVERALL TOTAL | 1140.00 | 5000.00 | 6140.00"
     );
     let savings = &r.rows[2].children[0];
@@ -409,16 +410,17 @@ fn income_expense_cash_flow_counts_transfers_to_accounts_not_chosen() {
     // Savings chosen too: money between the two is not cash flow.
     s.accounts = Some(vec![fx.checking, fx.savings]);
     let r = run(&fx, &s);
-    assert!(text(&r).contains(
+    assert!(text(&r).ends_with(
         "\
-# TRANSFERS | 0.00 | 5000.00 | 5000.00
-  - IRA | 0.00 | 5000.00 | 5000.00
+    - Real Estate | -1200.00 | 0.00 | -1200.00
 = OVERALL TOTAL | 1640.00 | 5000.00 | 6640.00"
     ));
+    assert!(!text(&r).contains("TRANSFERS"));
 
     // By payee: the same TRANSFERS section.
     s.kind = ReportKind::IncomeExpensePayee;
-    assert!(text(&run(&fx, &s)).contains("# TRANSFERS | 0.00 | 5000.00 | 5000.00"));
+    s.accounts = Some(vec![fx.checking]);
+    assert!(text(&run(&fx, &s)).contains("# TRANSFERS | -500.00 | 0.00 | -500.00"));
 
     // Off, or every account chosen: no transfers.
     s.kind = ReportKind::IncomeExpense;
@@ -527,14 +529,14 @@ fn income_expense_by_payee_totals_each_payee() {
     assert_eq!(
         text(&r),
         "\
-# INCOME | 3050.00 | 500.00 | 3550.00
+# INCOME | 3050.00 | 5500.00 | 8550.00
   - Employer | 3000.00 | 0.00 | 3000.00
-  - (No payee) | 50.00 | 500.00 | 550.00
+  - (No payee) | 50.00 | 5500.00 | 5550.00
 # EXPENSES | -1410.00 | 0.00 | -1410.00
   - Cafe | -50.00 | 0.00 | -50.00
   - Costco | -160.00 | 0.00 | -160.00
   - County | -1200.00 | 0.00 | -1200.00
-= OVERALL TOTAL | 1640.00 | 500.00 | 2140.00"
+= OVERALL TOTAL | 1640.00 | 5500.00 | 7140.00"
     );
     let costco = fx.book.payee("Costco").unwrap();
     assert_eq!(
@@ -982,7 +984,7 @@ fn every_figure_drills_to_a_transaction_or_account() {
         check(&r.rows, *kind);
     }
     let r = run(&fx, &settings(ReportKind::ItemizedCategories));
-    let salary = &r.rows[0].children[2].children[0];
+    let salary = &r.rows[0].children[3].children[0];
     let Some(Drill::Txn {
         account,
         txn,
@@ -1367,8 +1369,8 @@ fn net_worth_trend_covers_the_years_asked_for() {
         |fitted| reports::net_worth_trend(fx.book.conn(), date("2027-01-31"), 1, fitted).unwrap();
     let (plain, fitted) = (later(false), later(true));
     assert_eq!(plain.series[0].values, fitted.series[0].values);
-    assert_eq!(plain.ticks[0].label, "0");
-    assert_ne!(fitted.ticks[0].label, "0");
+    assert_eq!(plain.ticks[0].label, "$0");
+    assert_ne!(fitted.ticks[0].label, "$0");
 }
 
 /// The card's years and fit are book settings; years out of 1 to 5 are
@@ -1811,4 +1813,54 @@ fn all_dates_in_a_book_dated_ahead_is_empty_not_an_error() {
     let mut s = ReportSettings::defaults(ReportKind::ItemizedCategories);
     s.range.preset = DatePreset::AllDates;
     reports::run(book.conn(), &s, today).unwrap();
+}
+
+#[test]
+fn itemized_reports_list_flat_and_filter_by_cleared_and_amount() {
+    let fx = fixture();
+    // One list, no groups, one total (RPT-200).
+    let mut s = settings(ReportKind::ItemizedCategories);
+    s.transfers = false;
+    s.flat = true;
+    s.by_tag = true;
+    s.amount_min = Some("40".parse().unwrap());
+    s.amount_max = Some("100".parse().unwrap());
+    let r = run(&fx, &s);
+    assert_eq!(
+        text(&r),
+        "\
+-  | 2026-01-20 | Checking |  | Costco |  | Food:Groceries |  | c | -100.00
+-  | 2026-02-03 | Checking |  | Costco |  | Food:Groceries |  |  | -40.00
+-  | 2026-02-10 | Visa |  | Cafe |  | Food:Dining |  |  | -50.00
+-  | 2026-03-31 | Brokerage | Dividend | Total Stock Market |  | Dividends |  |  | 50.00
+= OVERALL TOTAL |  |  |  |  |  |  |  |  | -140.00"
+    );
+    assert!(
+        r.columns.iter().any(|c| c.id == "category"),
+        "a flat list names the category"
+    );
+    // Cleared status of the account's posting.
+    let mut c = settings(ReportKind::ItemizedPayees);
+    c.cleared = Some(vec![Cleared::Cleared]);
+    let r = run(&fx, &c);
+    assert_eq!(
+        text(&r),
+        "\
+# EXPENSES |  |  |  |  |  |  |  | -100.00
+  + Costco |  |  |  |  |  |  |  | -100.00
+    -  | 2026-01-20 | Checking |  | Food:Groceries |  |  | c | -100.00
+= OVERALL TOTAL |  |  |  |  |  |  |  | -100.00"
+    );
+    // Uncleared or reconciled: everything but that one.
+    c.cleared = Some(vec![Cleared::Unmarked, Cleared::Reconciled]);
+    c.flat = true;
+    let r = run(&fx, &c);
+    assert!(r.rows.iter().all(|row| row.cells.iter().all(|x| x != "c")));
+    assert_eq!(r.rows.last().unwrap().cells.last().unwrap(), "7240.00");
+    // The tax reports ignore these filters.
+    let mut t = settings(ReportKind::TaxSummary);
+    let all = run(&fx, &t);
+    t.amount_max = Some("1".parse().unwrap());
+    t.cleared = Some(vec![Cleared::Reconciled]);
+    assert_eq!(run(&fx, &t), all);
 }

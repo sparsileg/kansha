@@ -11,7 +11,7 @@ use super::{
     ScheduleStatus, add_days,
 };
 use crate::accounts::{Account, AccountId, CashMode};
-use crate::categories::CategoryId;
+use crate::categories::{CategoryId, TagId};
 use crate::date::{Clock, Date};
 use crate::error::{Error, Result};
 use crate::invest::{self, InvAction, InvInput};
@@ -1178,7 +1178,7 @@ pub fn scheduled_by_category(
     to: Date,
     today: Date,
     accounts: &[AccountId],
-) -> Result<Vec<(CategoryId, Money)>> {
+) -> Result<Vec<(CategoryId, Option<TagId>, Money)>> {
     let mut out = Vec::new();
     for s in repo::list(conn)? {
         if !accounts.contains(&s.fields.account) {
@@ -1187,13 +1187,13 @@ pub fn scheduled_by_category(
         for (v, lines) in pending_lines_until(conn, &s, Some(from), to, today)? {
             if let [line] = lines.as_slice() {
                 if let Target::Category(c) = line.target {
-                    out.push((c, v.amount));
+                    out.push((c, line.tag, v.amount));
                 }
                 continue;
             }
             for l in &lines {
                 if let Target::Category(c) = l.target {
-                    out.push((c, l.amount));
+                    out.push((c, l.tag, l.amount));
                 }
             }
         }

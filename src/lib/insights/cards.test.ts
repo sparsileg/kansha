@@ -3,7 +3,7 @@ import { CARDS, cardsNotIn, cardsOf } from "./cards";
 import type { SpendingCard } from "../types/bindings";
 
 const ids = (l: { id: string }[]) => l.map((c) => c.id);
-const car: SpendingCard = { id: 3, name: "Car", accounts: null, categories: [] };
+const car: SpendingCard = { id: 3, name: "Car", accounts: null, categories: [], tags: [], columns: ["year"] };
 
 describe("insight cards (INS-020)", () => {
   it("keeps the stored order; drops unknown and repeated IDs", () => {

@@ -327,7 +327,7 @@ fn rollback_removes_the_batch_and_what_it_created() {
         .run(&mut db, &clock(), &skipping(), false, None)
         .unwrap();
     let batch = r.batch.unwrap();
-    let categories_before = 11;
+    let categories_before = 12;
     let rb = rollback(&mut db, &clock(), batch).unwrap();
     assert_eq!(rb.transactions, 22);
     assert_eq!(rb.kept, 0);

@@ -243,7 +243,10 @@
           ...s,
           range: { preset: "custom", from: null, to: report.to },
           accounts: base.accounts,
-          securities: investState.securities.filter((x) => x.asset_class === d.asset_class).map((x) => x.id),
+          // A security split across classes is in each of them (SEC-050).
+          securities: investState.securities
+            .filter((x) => x.asset_class === d.asset_class || x.class_mix.some((c) => c.asset_class === d.asset_class))
+            .map((x) => x.id),
           title: `Holdings: ${line.label}`,
         });
         break;

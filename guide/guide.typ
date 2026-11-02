@@ -49,6 +49,58 @@
 #show figure.where(kind: image): set block(above: 1.3em, below: 1.3em)
 #show figure.caption: set text(font: sans, size: 9pt, fill: muted)
 
+// The index (index.lua marks the terms; this draws them): entries in
+// letter groups, two columns, each page number a link to its page. A
+// "Main, sub" term is indented under Main; a "see" entry names the
+// entry to look under. Page numbers are as printed (the counter), not
+// the PDF's.
+#let make-index(see: ()) = context {
+  let entries = (:)
+  let empty = (pages: (), subs: (:), see: none)
+  for m in query(<kidx>) {
+    let n = counter(page).at(m.location()).first()
+    let parts = m.value.split(", ")
+    let main = parts.first()
+    let e = entries.at(main, default: empty)
+    if parts.len() > 1 {
+      let sub = parts.slice(1).join(", ")
+      let ps = e.subs.at(sub, default: ())
+      if ps.len() == 0 or ps.last().at(0) != n { ps.push((n, m.location())) }
+      e.subs.insert(sub, ps)
+    } else if e.pages.len() == 0 or e.pages.last().at(0) != n {
+      e.pages.push((n, m.location()))
+    }
+    entries.insert(main, e)
+  }
+  for (from, to) in see {
+    let e = entries.at(from, default: empty)
+    e.see = to
+    entries.insert(from, e)
+  }
+  let pages(ps) = ps.map(((n, loc)) => link(loc, str(n))).join(", ")
+  set par(justify: false, hanging-indent: 1.2em, spacing: 0.45em)
+  set text(size: 9.5pt)
+  columns(2, gutter: 1.5em)[
+    #let letter = none
+    #for name in entries.keys().sorted(key: k => lower(k)) {
+      let e = entries.at(name)
+      let first = upper(name.first())
+      if first != letter {
+        letter = first
+        block(above: 1.1em, below: 0.5em, sticky: true, text(font: sans, weight: "semibold", fill: accent, first))
+      }
+      if e.see != none {
+        par[#name, _see_ #e.see]
+      } else {
+        par[#name#if e.pages.len() > 0 [, #pages(e.pages)]]
+        for (sub, ps) in e.subs.pairs().sorted(key: p => lower(p.at(0))) {
+          pad(left: 1em, par[#sub, #pages(ps)])
+        }
+      }
+    }
+  ]
+}
+
 #set document(title: "Kansha User's Guide", author: "Kansha")
 #set text(font: "IBM Plex Serif", size: 10.5pt, fill: ink, lang: "en")
 #set par(justify: true, leading: 0.7em, spacing: 1.15em)
@@ -99,7 +151,9 @@
     #image("/kansha-mark.png", height: 7cm)
     #v(0.9cm)
     #text(font: sans, size: 32pt, weight: "semibold", fill: accent)[Kansha]
-    #v(0.1cm)
+    #v(0.05cm)
+    #text(size: 12pt, style: "italic", fill: muted)[Be grateful for what you have]
+    #v(0.5cm)
     #text(font: sans, size: 16pt, fill: muted)[User's Guide]
     #v(1.2cm)
     #text(font: sans, size: 10.5pt, fill: muted)[

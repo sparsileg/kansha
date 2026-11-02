@@ -1,14 +1,14 @@
 # The Entry File Format {.appendix}
 
 The `kansha-entries 1` format, used by `kansha add`, `kansha run`,
-**File > Import Entries…**, and files sent from a phone (see
+**File > Import Entries…**, and files typed on a phone (see
 [Entering from the Command Line](command-line.md)).
 
 ## A File
 
 ```
 kansha-entries 1
-from "Stan's phone"
+from "My phone"
 # Ohio trip
 2026-10-12 Shell 45.20 Auto:Fuel acct "Double Cash" memo "Ohio trip"
 2026-10-12 Costco 182.40 split acct Checking

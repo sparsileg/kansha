@@ -4,7 +4,7 @@ use kansha_core::Date;
 use kansha_core::accounts::{
     Account, AccountFields, AccountId, AccountType, GroupOrder, masked_account_number,
 };
-use kansha_core::ledger::{self, AccountBalance, AccountBar};
+use kansha_core::ledger::{self, AccountBar};
 use kansha_core::persistence::accounts;
 use tauri::State;
 
@@ -15,14 +15,6 @@ use crate::state::{AppState, CmdResult};
 #[specta::specta]
 pub fn account_list(state: State<'_, AppState>) -> CmdResult<Vec<Account>> {
     state.read(|db, _| accounts::list(db.conn()))
-}
-
-/// Current and ending balance of every account (ACCT-230), as the
-/// account bar shows them: without cents if the setting says so.
-#[tauri::command(async)]
-#[specta::specta]
-pub fn account_balances(state: State<'_, AppState>) -> CmdResult<Vec<AccountBalance>> {
-    state.read(|db, today| ledger::account_bar_balances(db.conn(), today))
 }
 
 /// Balances, section totals, and net worth for the account bar in one

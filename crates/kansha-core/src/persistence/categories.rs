@@ -247,6 +247,7 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
         .execute("DELETE FROM category WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "category", id.0))?;
     reports::saved_replace_id(tx, FilterList::Categories, id.0, None)?;
+    super::spending::replace_id(tx, FilterList::Categories, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Category,
@@ -259,7 +260,7 @@ pub fn delete(tx: &Tx<'_>, id: CategoryId) -> Result<()> {
 }
 
 /// Merge `source` into `target` (CAT-020): postings, schedule lines, payee
-/// defaults, subcategories, and saved report filters move to `target`;
+/// defaults, subcategories, spending cards, and saved report filters move to `target`;
 /// `source` is deleted. Both must have the same kind; a built-in category
 /// can't be the source; `target` can't be inside `source`'s subtree.
 pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merged> {
@@ -346,6 +347,7 @@ pub fn merge(tx: &Tx<'_>, source: CategoryId, target: CategoryId) -> Result<Merg
     super::budgets::category_merged(tx, source, target)?;
     conn.execute("DELETE FROM category WHERE id = ?1", [source])?;
     reports::saved_replace_id(tx, FilterList::Categories, source.0, Some(target.0))?;
+    super::spending::replace_id(tx, FilterList::Categories, source.0, Some(target.0))?;
     audit::record(
         tx,
         AuditEntity::Category,

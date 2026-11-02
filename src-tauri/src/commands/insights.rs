@@ -2,12 +2,12 @@
 //! cards they can show (CARD-060).
 
 use kansha_core::accounts::AccountId;
-use kansha_core::categories::CategoryId;
+use kansha_core::categories::{CategoryId, TagId};
 use kansha_core::insights::{Insight, InsightId};
 use kansha_core::persistence::insights as repo;
 use kansha_core::persistence::spending;
 use kansha_core::reports::{self, ExpenseCard};
-use kansha_core::spending::{SpendingCard, SpendingCardId};
+use kansha_core::spending::{SpendingCard, SpendingCardId, SpendingColumn};
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -68,15 +68,33 @@ pub fn spending_card_list(state: State<'_, AppState>) -> CmdResult<Vec<SpendingC
     state.read(|db, _| spending::list(db.conn()))
 }
 
-/// A new spending card: every open account, no category.
+/// A new spending card with its choices, put last on `insight`.
 #[tauri::command]
 #[specta::specta]
-pub fn spending_card_create(state: State<'_, AppState>, name: String) -> CmdResult<SpendingCard> {
-    state.write(|tx| spending::insert(tx, &name))
+pub fn spending_card_create(
+    state: State<'_, AppState>,
+    name: String,
+    accounts: Option<Vec<AccountId>>,
+    categories: Vec<CategoryId>,
+    tags: Vec<TagId>,
+    columns: Vec<SpendingColumn>,
+    insight: InsightId,
+) -> CmdResult<SpendingCard> {
+    state.write(|tx| {
+        spending::create(
+            tx,
+            &name,
+            accounts.as_deref(),
+            &categories,
+            &tags,
+            &columns,
+            insight,
+        )
+    })
 }
 
 /// Rename a spending card and set its accounts (`None` = every open
-/// one) and spending categories.
+/// one), spending categories, tags, and columns.
 #[tauri::command]
 #[specta::specta]
 pub fn spending_card_update(
@@ -85,8 +103,20 @@ pub fn spending_card_update(
     name: String,
     accounts: Option<Vec<AccountId>>,
     categories: Vec<CategoryId>,
+    tags: Vec<TagId>,
+    columns: Vec<SpendingColumn>,
 ) -> CmdResult<SpendingCard> {
-    state.write(|tx| spending::update(tx, id, &name, accounts.as_deref(), &categories))
+    state.write(|tx| {
+        spending::update(
+            tx,
+            id,
+            &name,
+            accounts.as_deref(),
+            &categories,
+            &tags,
+            &columns,
+        )
+    })
 }
 
 /// Delete a spending card; it leaves every insight showing it.

@@ -1,0 +1,207 @@
+# The User's Guide index (index.lua reads this; build-guide.sh runs it).
+#
+# One entry per line:
+#   Term                     marks each section's first mention of "term"
+#   Term = word; other word  marks the first mention of any of these
+#                            (the term itself only if listed)
+#   Main, sub = word         a subentry, indented under Main
+#   Quicken word => Term     a "see" entry: no pages, points to Term
+# Words match whole words, any case, with a plural s or es. A word
+# starting with # matches only a heading. Lines starting with # are
+# comments.
+#
+# Very common words (account, category, register, report) match only in
+# headings or as longer phrases, or every page would be listed.
+
+# Accounts
+Accounts = #accounts; account type; new account
+Accounts, closing = close an account; closed account; #change, close, or delete
+Accounts, deleting = delete an account; #change, close, or delete
+Accounts, starting balance = starting balance; #the starting balance
+Accounts panel
+Asset = asset; assets
+Liability = liability; liabilities
+Other assets = #other assets; other asset
+Tax treatment = tax treatment; tax-deferred; tax-exempt
+Credit card = credit card account; #pay the credit card; credit card payment
+Checking account = checking account
+Savings account = savings account
+Cash account = cash account
+Opening Balance = opening balance
+Opening balance changed = opening balance changed
+
+# Book, files, settings
+Book = #your first book; #set up your first book; book file; new book; open another book
+Book, new = new book; #new books and year-end
+Book, moving = #move to another computer; two computers
+Key file = key file; .key
+Passphrase = #3. backup passphrase; backup passphrase; change the passphrase; forgot
+Encryption = encrypt; encrypted
+Sample data = sample data
+Settings = #settings; edit > settings
+Themes = theme; themes
+Font size = font size; text size
+Navigation bar = navigation bar
+Dock = dock
+Back and Forward = #moving around; forward
+Undo = undo; ctrl+z
+Keyboard shortcuts = keyboard shortcut; #keyboard shortcuts
+Date fields = date field
+Amount fields = amount field
+Install = #install kansha; install
+Kubuntu = kubuntu; ubuntu; linux
+Windows (Microsoft) = windows 10; windows 11; #windows; on windows
+Data folder = #where kansha keeps things; data folder
+
+# Backups
+Backups = #backups; #backups and restore; #how backups work; back up now
+Backups, folder = backup folder
+Backups, verifying = verify backup
+Backups, restoring = restore; #restore
+Integrity check = integrity check
+History = #history; history…
+Year-end = year-end
+
+# Categories, payees, tags
+Categories = #categories; category list; standard categories
+Categories, built-in = built-in category; built-in categories
+Categories, merging = merge; #merge, hide, or delete
+Categories, hiding = hide a category; hidden categor; #merge, hide, or delete
+Subcategory = subcategory; subcategories
+Uncategorized = uncategorized
+Payees = #payees; payee list
+Memorized payees = memorized payee; tools > memorized payees
+Tags = #tags; tools > tags; a tag; by tag; tag set
+Tax lines = tax line; tax lines; #tax lines
+
+# Register
+Register = #the register; #open a register; register columns
+Register, footer = #the footer
+Register, filter = #filter the register; filter
+Entry line = entry line
+Splits = #splits; split transaction; split line; split a store receipt
+Transfers = #transfers; a transfer; transfers between
+Find and Replace = find and replace; find/replace
+Currency conversion = another currency; currency rate; foreign amount; exchange rate
+Cleared = cleared
+Reconciled = reconciled
+Void = void
+Warnings = #warnings; warning
+Check number = check number
+Projected balance = projected balance
+Duplicate payees = duplicate payee
+
+# Reconciling
+Reconciling = reconcile; reconciling; statement date; statement balance
+
+# Schedules
+Schedules = #scheduled transactions; #make a schedule; scheduled transaction; schedule this; new schedule
+Reminders = reminder; reminders; remind me
+Due and overdue = due and overdue; overdue
+Calendar = calendar
+Estimate = estimate; average of past payments
+
+# Loans
+Loans = loan; loans; mortgage
+Amortization table = amortization
+Interest rate = rate changes; interest rate
+
+# Investments
+Stale price = stale price; stale
+Investments = #investments; investments screen; investment account
+Investment register = investment register
+Securities = security; securities; tools > securities
+Asset class = asset class; asset classes; split across classes
+Bonds = bond; bonds; tips; muni
+Lots = lot; lots
+Lot method = lot method; lot methods; fifo; specific lot; choose lots
+True up lots = true up; true-up
+Cost basis = cost basis; cost-basis
+Capital gains = capital gain; capital gains; realized gain; unrealized gain
+Prices = #prices; download prices; price history; enter a price
+Dividends = dividend; dividends
+Reinvest = reinvest; reinvested
+Buy and sell = buy; sell; sold
+Gifts of shares = gift of shares; gifts of shares; give shares; charity; form 8283
+Roth conversion = roth conversion; roth conversions
+Required minimum distribution = required distribution; rmd
+IRA = ira; 401(k); 401k
+Fit graph to data = fit graph to data
+
+# Reports
+Reports = #reports; reports menu; report window
+Reports, customizing = customize; customize…
+Reports, saved = saved report; saved reports
+Reports, printing = print; printing; save pdf
+Reports, drill down = #see the transactions behind a number
+Reports, subtotal by = subtotal by
+Reports, one list = one list
+Reports, date ranges = date range; date ranges
+Reports, compare to = compare to; comparison
+Reports, totals only = totals only
+Reports, cleared and amount filters = amount from …
+Graphs = graph; graphs
+Asset Allocation report = asset allocation
+Net Worth report = net worth
+Cash Flow report = cash flow
+Itemized Categories report = itemized categories
+Itemized Payees report = itemized payees
+Spending report = spending by
+Tax reports = #tax reports; tax summary; tax schedule; #tax
+Capital Gains report = capital gains report; schedule d
+Investment Income report = investment income
+Performance report = performance
+
+# Insights
+Insights = #insights; #open insights; #arrange insights
+Cards = #the cards; insights card
+Needs attention = needs attention
+Spending cards = spending card; spending cards; new spending card
+Net worth over time = net worth over time
+
+# Budgets
+Budgets = budget; budgets
+Graph View = graph view
+Annual View = annual view
+Actuals = actual; actuals
+
+# Importing
+Quicken = #coming from quicken; quicken 2013; quicken words
+Importing from Quicken = qif; #import the file; #export from quicken; test, then import
+Importing from Quicken, undoing = #undo an import; undo the import
+
+# Command line
+Command line = command line; #entering from the command line
+kansha add = kansha add
+Entry files = entry file; entry files; .kentry
+Inbox = inbox
+Unverified = unverified; review entries; approve
+Phone entry = phone; phones; export names for phones
+Names file = names file
+
+# Taxes
+Taxes = #get ready for taxes; tax-related; tax return; tax time
+
+# Help
+Troubleshooting = #something doesn't look right; #still stuck
+Recipes = #recipes
+Glossary = #glossary
+
+# Quicken words
+Data file => Book
+Class => Tags
+QuickFill => Memorized payees
+Scheduled bill => Schedules
+Bills and Income Reminders => Due and overdue
+Home page => Insights
+Investing Center => Investments
+Account Bar => Accounts panel
+Toolbar => Navigation bar
+Tax line item => Tax lines
+Restore from backup => Backups, restoring
+Statement => Reconciling
+Mortgage => Loans
+RMD => Required minimum distribution
+Classes, asset => Asset class
+Foreign currency => Currency conversion
+Exchange rate => Currency conversion

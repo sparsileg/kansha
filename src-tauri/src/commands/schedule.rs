@@ -2,7 +2,7 @@
 
 use kansha_core::accounts::AccountId;
 use kansha_core::ledger::{self, Entry, TxnId};
-use kansha_core::persistence::{payees, schedules};
+use kansha_core::persistence::payees;
 use kansha_core::schedule::{
     self, AutoEnterReport, CalendarTxn, DayBalance, EnterEdits, Entered, Occurrence,
     OccurrenceView, Schedule, ScheduleFields, ScheduleId, ScheduleRow,
@@ -17,12 +17,6 @@ use crate::state::{AppState, CmdResult};
 #[specta::specta]
 pub fn schedule_list(state: State<'_, AppState>) -> CmdResult<Vec<ScheduleRow>> {
     state.read(|db, _| schedule::list_rows(db.conn()))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn schedule_get(state: State<'_, AppState>, id: ScheduleId) -> CmdResult<Schedule> {
-    state.read(|db, _| schedules::get(db.conn(), id))
 }
 
 /// `payee_name`, when given, is looked up (or created) in the same

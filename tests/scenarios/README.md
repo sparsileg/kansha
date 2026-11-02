@@ -53,8 +53,11 @@ Payees and tags are created the first time an action names them.
 name = "Vanguard Total Stock Market ETF"
 ticker = "VTI"                    # optional; actions name a security by ticker or name
 type = "etf"                      # stock, etf, mutual_fund, bond, money_market, cd, other
-asset_class = "us_equity"         # optional: us_equity, intl_equity, bond, cash,
+asset_class = "us_equity"         # optional: us_equity, intl_equity, bond_short,
+                                  # bond_intermediate, bond_long, bond_intl, cash,
                                   # real_estate, commodity, other (default by type)
+class_mix = [{ class = "us_equity", percent = "60" }, { class = "bond_intermediate", percent = "40" }]
+                                  # optional (SEC-050): two or more classes, total 100
 lot_method = "specific"           # optional: overrides the account's default
 
 [[prices]]

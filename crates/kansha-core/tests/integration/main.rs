@@ -36,6 +36,7 @@ mod repositories;
 mod roth_conversion;
 mod schedule;
 mod schema;
+mod sheltered_income;
 mod standard_categories;
 mod true_up;
 mod undo;

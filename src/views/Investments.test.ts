@@ -36,7 +36,6 @@ vi.mock("../lib/api", async (orig) => {
       invPortfolio: (...a: unknown[]) => invPortfolio(...a),
       pricesDownload: (...a: unknown[]) => pricesDownload(...a),
       invAccounts: () => ok([]),
-      accountBalances: () => ok([]),
       accountBar: () => ok({ balances: [], section_totals: [], net_worth: "0.00" }),
       securityList: () => ok([{ id: 1, name: "Total Stock Market", ticker: "VTI", hidden: false, security_type: "etf" }]),
       securityTransactions: () => ok([]),

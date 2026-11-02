@@ -962,7 +962,7 @@ const SECURITIES: &[SampleSecurity] = &[
         "Vanguard Total Bond Market ETF",
         "BND",
         SecurityType::Etf,
-        AssetClass::Bond,
+        AssetClass::BondIntermediate,
         [7_200, 1, 12, 240],
     ),
     sec(

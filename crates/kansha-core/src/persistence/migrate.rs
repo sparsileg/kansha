@@ -153,6 +153,30 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0021_budgets.sql"),
         foreign_keys_off: false,
     },
+    Migration {
+        version: 22,
+        description: "spending card tags and columns",
+        sql: include_str!("migrations/0022_spending_card_tags_columns.sql"),
+        foreign_keys_off: false,
+    },
+    Migration {
+        version: 23,
+        description: "retirement distributions category",
+        sql: include_str!("migrations/0023_retirement_distributions.sql"),
+        foreign_keys_off: false,
+    },
+    Migration {
+        version: 24,
+        description: "bond classes",
+        sql: include_str!("migrations/0024_bond_classes.sql"),
+        foreign_keys_off: true,
+    },
+    Migration {
+        version: 25,
+        description: "security class mix",
+        sql: include_str!("migrations/0025_security_class_mix.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

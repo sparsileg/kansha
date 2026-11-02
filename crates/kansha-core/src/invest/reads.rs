@@ -22,6 +22,7 @@ use crate::money::{Money, Price, Quantity, extended_value};
 use crate::persistence::{accounts, invest as repo, securities};
 use crate::securities::{
     AssetClass, DEFAULT_STALE_DAYS, MONEY_MARKET_PRICE, Security, SecurityId, SecurityType,
+    split_value,
 };
 
 // ---------------------------------------------------------------------------
@@ -932,14 +933,23 @@ pub fn allocation(conn: &Connection, accounts_: &[AccountId], as_of: Date) -> Re
         e.1 = e.1.checked_add(m).ok_or_else(overflow)?;
         Ok(())
     };
+    let secs = labels(conn)?;
     for &a in &chosen {
         if internal_cash(conn, a)? {
             add(AssetClass::Cash, repo::cash_balance(conn, a, Some(as_of))?)?;
         }
         for p in positions(conn, Some(a), as_of, DEFAULT_STALE_DAYS)? {
-            match p.market_value {
-                Some(mv) => add(p.asset_class, mv)?,
-                None => missing = true,
+            let Some(mv) = p.market_value else {
+                missing = true;
+                continue;
+            };
+            // A security split across classes counts in each (SEC-050).
+            let mix = secs
+                .get(&p.security)
+                .map(|s| s.fields.class_mix.as_slice())
+                .unwrap_or_default();
+            for (class, part) in split_value(mv, p.asset_class, mix)? {
+                add(class, part)?;
             }
         }
     }

@@ -10,8 +10,9 @@ lot with its cost basis, so capital gains come out right at tax
 time. Reports and the Insights cards show where the money went, what
 you're worth, and what goes on your tax return.
 
-Kansha was built to replace Quicken 2013. It reads the QIF files
-Quicken exports, so years of history come with you (see [Coming from
+Kansha is an open-source personal finance app similar to Quicken,
+but without subscription fees. It reads the QIF files Quicken
+exports, so years of history come with you (see [Coming from
 Quicken](coming-from-quicken.md)).
 
 *Kansha* is Japanese for *gratitude*; the brushstrokes on the
@@ -56,10 +57,12 @@ Start from your question and go to the screen that answers it.
 | Have Kansha remember bills and paychecks | [Scheduled Transactions](scheduled.md) |
 | See what's coming up and what my balance will be | [Scheduled Transactions](scheduled.md), the Calendar |
 | Check an account against its statement | [Reconciling](reconciling.md) |
+| Split loan payments into principal and interest | [Loans](loans.md) |
 | Record buying, selling, and dividends | [Investments](investments.md) |
 | See where my money went | [Reports](reports.md), [Insights](insights.md) |
+| Plan my spending and track it by category | [Budgets](budgets.md) |
 | Get the numbers for my tax return | [Reports](reports.md), Tax reports |
-| Enter a purchase from the terminal or my phone | [Entering from the Command Line](command-line.md) |
+| Enter a purchase from the terminal or a text file | [Entering from the Command Line](command-line.md) |
 | Keep my data safe, or move it to another computer | [Backups and Restore](backups.md) |
 | Change dates, colors, or what opens at startup | [Settings and Themes](settings.md) |
 

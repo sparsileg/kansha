@@ -2,7 +2,7 @@
 
 ::: {.note title="At a glance"}
 `kansha add` enters a purchase from a terminal without opening the
-app. Entries also come as files, from a script or sent from a phone.
+app. Entries also come as files, from a script or typed on a phone.
 None of them touches your accounts until you approve it in Kansha,
 under **File > Review Entries…**.
 :::
@@ -95,7 +95,7 @@ A file of entries starts with the line `kansha-entries 1`:
 
 ```
 kansha-entries 1
-from "Stan's phone"
+from "My phone"
 2026-10-12 Shell 45.20 Auto:Fuel acct "Double Cash"
 2026-10-12 Costco 182.40 split acct Checking
   120.00 Food:Groceries
@@ -111,11 +111,19 @@ lists each bad line by its number and takes none of them.
 
 ### From a phone
 
+Type entries in any notes app on your phone, in the format above
+(one line per purchase; [The Entry File Format](appendix-kansha-add.md)
+has every rule). Send the note to yourself by email, a chat app, or a
+synced folder, save it on the computer, and use **File > Import
+Entries…**. A line with a mistake is listed by its number, and
+nothing is taken until it's fixed.
+
 **File > Export Names for Phones…** writes a `kansha-names 1` file:
 your expense categories and open spending accounts, no payees and no
-amounts. A phone app can use it to offer the right names, then send
-back an entries file by email or a chat app. Save the file and use
-**File > Import Entries…**.
+amounts. Keep it on the phone to spell names exactly as Kansha has
+them.
+
+A Kansha phone app is planned; it will use these same files.
 
 ::: note
 Entry files and the names file are plain text, not encrypted, until

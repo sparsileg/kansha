@@ -25,12 +25,6 @@ vi.mock("../../api", async (orig) => {
         ]),
       securityList: () => ok([]),
       invRegister: () => ok({ account: 2, rows: [], cash: "0.00", negative_cash: false, today: "2026-06-30" }),
-      invHoldings: () => ok(null),
-      invIncome: () => ok(null),
-      invPerformance: () => ok(null),
-      invGains: () => ok([]),
-      invAllocation: () => ok(null),
-      accountBalances: () => ok([]),
       accountBar: () => ok({ balances: [], section_totals: [], net_worth: "0.00" }),
     },
   };

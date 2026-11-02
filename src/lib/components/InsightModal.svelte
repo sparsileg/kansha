@@ -1,9 +1,7 @@
 <script lang="ts">
   // Name an insight and choose its cards, in order (INS-030). Laid out as
   // Edit > Navigation Bar: what is available on the left, what is on the
-  // insight on the right. Nothing changes until Save, except that New
-  // spending card… makes the card at once (CARD-060) and puts it on the
-  // right; Cancel leaves it available.
+  // insight on the right. Nothing changes until Save.
   import { catalog, cardsNotIn } from "../insights/cards";
   import { addNav, moveNav, removeNav } from "../shell/navitems";
   import { listsState } from "../state/lists.svelte";
@@ -14,7 +12,6 @@
     name: startName,
     cards: startCards,
     onsave,
-    onnewcard,
     onclose,
   }: {
     title: string;
@@ -22,8 +19,6 @@
     cards: string[];
     /** Rejects with the reason when Rust refuses (a name in use). */
     onsave: (name: string, cards: string[]) => Promise<void>;
-    /** Makes a spending card; its card ID. Rejects with the reason. */
-    onnewcard: (name: string) => Promise<string>;
     onclose: () => void;
   } = $props();
 
@@ -37,33 +32,9 @@
   let error = $state<string | null>(null);
   let saving = $state(false);
 
-  /** The name of a spending card being made, or null. */
-  let newCard = $state<string | null>(null);
-
   const available = $derived(cardsNotIn(draft, listsState.spendingCards));
   const at = $derived(draft.indexOf(right));
   const label = (id: string) => catalog(listsState.spendingCards).find((c) => c.id === id)?.label ?? id;
-
-  async function makeCard() {
-    if (newCard === null || !newCard.trim() || saving) return;
-    saving = true;
-    error = null;
-    try {
-      add(await onnewcard(newCard.trim()));
-      newCard = null;
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    } finally {
-      saving = false;
-    }
-  }
-  function cardKey(e: KeyboardEvent) {
-    // Enter makes the card, not the insight.
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void makeCard();
-    }
-  }
 
   function add(id = left) {
     if (!id) return;
@@ -108,16 +79,6 @@
         <select id="ins-available" size="10" bind:value={left} ondblclick={() => add()}>
           {#each available as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
-        {#if newCard === null}
-          <button type="button" class="new" onclick={() => ((newCard = ""), (error = null))}>New spending card…</button>
-        {:else}
-          <div class="newcard">
-            <!-- svelte-ignore a11y_autofocus -->
-            <input type="text" aria-label="Spending card name" placeholder="Card name" bind:value={newCard} maxlength="60" autofocus onkeydown={cardKey} />
-            <button type="button" disabled={!newCard.trim() || saving} onclick={() => void makeCard()}>Create</button>
-            <button type="button" onclick={() => ((newCard = null), (error = null))}>Cancel</button>
-          </div>
-        {/if}
       </div>
       <div class="mid">
         <button type="button" disabled={!left} onclick={() => add()}>Add ›</button>
@@ -176,17 +137,6 @@
   select {
     width: 100%;
     flex: 1;
-  }
-  .new {
-    align-self: flex-start;
-  }
-  .newcard {
-    display: flex;
-    gap: 0.3rem;
-  }
-  .newcard input {
-    flex: 1;
-    min-width: 0;
   }
   .mid {
     display: flex;

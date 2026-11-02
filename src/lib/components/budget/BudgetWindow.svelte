@@ -1,16 +1,18 @@
 <script lang="ts">
   // A budget's window (BUD-040 … BUD-070). The window frame names it;
   // under that, the controls with the gear at the right, the summary
-  // band, and the Annual View grid. Every figure comes from Rust
+  // band, and the Annual View grid or the Graph View. Every figure comes from Rust
   // (`budget_annual`), in whole dollars; this file only lays them out.
   import { call, commands } from "../../api";
   import { budgetState, type BudgetShow } from "../../state/budget.svelte";
   import { confirmState } from "../../state/confirm.svelte";
   import { reportState } from "../../state/reports.svelte";
   import { statusState } from "../../state/status.svelte";
-  import { formatMoney, isZeroMoney, parseMoney } from "../../format/money";
-  import type { AnnualRow, AnnualView, BudgetFigures, CopyScope, MonthColumn } from "../../types/bindings";
+  import { isZeroMoney, parseMoney, formatMoneyWhole as dollars } from "../../format/money";
+  import type { AnnualRow, AnnualView, BudgetFigures, CopyScope, CategoryId, MonthColumn } from "../../types/bindings";
   import ContextMenu, { type MenuItem } from "../ContextMenu.svelte";
+  import BudgetGraph from "./BudgetGraph.svelte";
+  import BudgetSummary from "./BudgetSummary.svelte";
   import GearButton from "../GearButton.svelte";
 
   let { id }: { id: number } = $props();
@@ -47,39 +49,36 @@
   $effect(() => {
     void w.year;
     void budgetState.version;
-    void load();
+    if (w.view === "annual") void load();
   });
 
-  /** Whole dollars, as Rust rounded them: "1,234", "-56". */
-  function dollars(m: string): string {
-    return formatMoney(m).replace(/\.\d+$/, "");
-  }
   const neg = (m: string) => m.startsWith("-") && !isZeroMoney(m);
 
   // ---- Years (BUD-050) ----
   /** The held year nearest `year`, to copy from. */
-  function nearestHeld(year: number): number | null {
-    const years = view?.budget.years ?? [];
+  function nearestHeld(year: number, years: number[]): number | null {
     let best: number | null = null;
     for (const y of years) if (best === null || Math.abs(y - year) < Math.abs(best - year)) best = y;
     return best;
   }
-  async function goYear(year: number) {
-    const held = view?.budget.years ?? [];
-    if (!held.includes(year)) {
-      const from = nearestHeld(year);
-      const choices = from === null ? ["Create it"] : [`Copy ${from}'s budget`, `Copy only the categories`];
-      const pick = await confirmState.choose(`No budget for ${year}. Create one?`, choices);
-      if (pick === null) return;
-      try {
-        await call(commands.budgetYearCreate(w.budget, year, pick === choices[0] && from !== null ? from : null));
-        await budgetState.refresh();
-      } catch (e) {
-        statusState.show(e instanceof Error ? e.message : String(e), "alert");
-        return;
-      }
+  /** Whether `year` is held, after asking to create it. */
+  async function ensureYear(year: number, held: number[]): Promise<boolean> {
+    if (held.includes(year)) return true;
+    const from = nearestHeld(year, held);
+    const choices = from === null ? ["Create it"] : [`Copy ${from}'s budget`, `Copy only the categories`];
+    const pick = await confirmState.choose(`No budget for ${year}. Create one?`, choices);
+    if (pick === null) return false;
+    try {
+      await call(commands.budgetYearCreate(w.budget, year, pick === choices[0] && from !== null ? from : null));
+      await budgetState.refresh();
+      return true;
+    } catch (e) {
+      statusState.show(e instanceof Error ? e.message : String(e), "alert");
+      return false;
     }
-    w.year = year;
+  }
+  async function goYear(year: number) {
+    if (await ensureYear(year, view?.budget.years ?? [])) w.year = year;
   }
 
   // ---- Columns ----
@@ -240,7 +239,8 @@
   }
 
   // ---- Actual opens its transactions ----
-  async function drill(r: AnnualRow, from: string, to: string) {
+  type Drilled = { category: CategoryId | null; prefix: string; name: string; counted: CategoryId[] };
+  async function drill(r: Drilled, from: string, to: string) {
     if (r.counted.length === 0) return;
     const s = await commands.reportDefaults("itemized_categories");
     const label = r.category === null ? r.name : `${r.prefix}${r.name}`;
@@ -249,6 +249,7 @@
       range: { preset: "custom", from, to },
       categories: r.counted,
       transfers: false,
+      budget_lines: true,
       title: `Itemized Categories: ${label}`,
     });
   }
@@ -292,15 +293,25 @@
   });
 </script>
 
+{#snippet viewPick()}
+  <label
+    >View
+    <select bind:value={w.view}>
+      <option value="graph">Graph View</option>
+      <option value="annual">Annual View</option>
+    </select>
+  </label>
+{/snippet}
+{#snippet gearSlot()}
+  <span class="gear"><GearButton label="Budget actions" onclick={gear} /></span>
+{/snippet}
+
 <div class="budget-win">
+  {#if w.view === "graph"}
+    <BudgetGraph {w} {ensureYear} {drill} {viewPick} gear={gearSlot} />
+  {:else}
   <div class="controls">
-    <label
-      >View
-      <select bind:value={w.view}>
-        <option value="graph" disabled title="Next step">Graph View</option>
-        <option value="annual">Annual View</option>
-      </select>
-    </label>
+    {@render viewPick()}
     <span class="year">
       <button type="button" aria-label="Previous year" onclick={() => void goYear(w.year - 1)}>◀</button>
       <strong>{w.year}</strong>
@@ -312,7 +323,7 @@
         {#each SHOW as [v, label] (v)}<option value={v}>{label}</option>{/each}
       </select>
     </label>
-    <span class="gear"><GearButton label="Budget actions" onclick={gear} /></span>
+    {@render gearSlot()}
   </div>
 
   {#if error}<p class="err" role="alert">⚠ {error}</p>{/if}
@@ -324,26 +335,7 @@
       </p>
     {/if}
 
-    <div class="summary" aria-label="Spending summary">
-      <div class="spent">
-        <span class="cap">SPENDING</span>
-        <strong>${dollars(view.summary.spending)}</strong>
-        <span class="range">{view.summary.range}</span>
-      </div>
-      <div class="meter">
-        <span class="budget-label">Budget: ${dollars(view.summary.budget)}</span>
-        <div class="track">
-          {#if view.summary.bar}
-            {@const b = view.summary.bar}
-            <div class="fill" class:over={b.split !== null} style:width="{b.fill / 10}%"></div>
-            {#if b.split !== null}<div class="mark" style:left="{b.split / 10}%"></div>{/if}
-          {/if}
-        </div>
-        <span class:over-text={view.summary.over}>
-          {#if view.summary.over}⚠ ${dollars(view.summary.amount)} OVER{:else}${dollars(view.summary.amount)} LEFT{/if}
-        </span>
-      </div>
-    </div>
+    <BudgetSummary summary={view.summary} />
 
     <div class="grid-wrap">
       <table class="grid">
@@ -477,6 +469,7 @@
       </table>
     </div>
   {/if}
+  {/if}
   {#if menu}
     <ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />
   {/if}
@@ -509,65 +502,13 @@
   .gear {
     margin-left: auto;
   }
-  .err,
-  .over-text {
+  .err {
     color: var(--bad);
     font-weight: 700;
   }
   .err,
   .note {
     margin: 0;
-  }
-  .summary {
-    display: flex;
-    gap: 1.5rem;
-    align-items: center;
-    padding: 0.4rem 0.6rem;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-  }
-  .spent {
-    display: grid;
-  }
-  .cap {
-    font-size: var(--fs-header);
-    letter-spacing: 0.05em;
-  }
-  .range {
-    font-size: var(--fs-register);
-    opacity: 0.85;
-  }
-  .meter {
-    flex: 1;
-    display: grid;
-    gap: 0.15rem;
-  }
-  .budget-label {
-    justify-self: end;
-  }
-  .track {
-    position: relative;
-    height: 1.1rem;
-    border: 1px solid var(--line);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .fill {
-    height: 100%;
-    background: var(--good);
-  }
-  /* Over budget: the whole bar in the "bad" color, crossed with
-     stripes so it reads without color; the budget's end marked. */
-  .fill.over {
-    background: repeating-linear-gradient(45deg, var(--bad) 0 6px, transparent 6px 9px), var(--bad);
-    opacity: 0.85;
-  }
-  .mark {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background: var(--fg);
   }
   .grid-wrap {
     flex: 1;

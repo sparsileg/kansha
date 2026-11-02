@@ -7,30 +7,19 @@
   import { dateExample, datePattern, displayDate, parseDate } from "../../format/date";
   import { formatPrice, parsePrice } from "../../format/quantity";
   import { LOT_METHODS } from "../../invest/form";
-  import { SECURITY_TYPES as TYPES } from "../../invest/securityTypes";
+  import { ASSET_CLASSES as CLASSES, SECURITY_TYPES as TYPES, classText } from "../../invest/securityTypes";
   import { confirmState } from "../../state/confirm.svelte";
   import { dialogState } from "../../state/dialogs.svelte";
   import { investState } from "../../state/invest.svelte";
   import { hiddenLast } from "../../manage/order";
   import { listsState } from "../../state/lists.svelte";
   import type {
-    AssetClass,
     LotMethod,
     PricePoint,
     Security,
     SecurityFields,
     SecurityType,
   } from "../../types/bindings";
-
-  const CLASSES: [AssetClass, string][] = [
-    ["us_equity", "US equity"],
-    ["intl_equity", "International equity"],
-    ["bond", "Bonds"],
-    ["cash", "Cash"],
-    ["real_estate", "Real estate"],
-    ["commodity", "Commodities"],
-    ["other", "Other"],
-  ];
 
   /** `null` = a new security. */
   let selected = $state<Security | null | undefined>(undefined);
@@ -67,6 +56,7 @@
           ticker: s.ticker,
           security_type: s.security_type,
           asset_class: s.asset_class,
+          class_mix: s.class_mix.map((c) => ({ ...c })),
           cusip: s.cusip,
           default_lot_method: s.default_lot_method,
           hidden: s.hidden,
@@ -89,6 +79,27 @@
       f.asset_class = d.asset_class;
     }
     f.security_type = t;
+  }
+
+  /** Split across classes (SEC-050): starts with the class it has and
+   *  the next one, percents for the owner to fill in. */
+  function toggleMix(on: boolean) {
+    if (!f) return;
+    if (!on) {
+      f.class_mix = [];
+      return;
+    }
+    const other = CLASSES.find(([c]) => c !== f!.asset_class)![0];
+    f.class_mix = [
+      { asset_class: f.asset_class, percent: "" },
+      { asset_class: other, percent: "" },
+    ];
+  }
+
+  function addMixRow() {
+    if (!f) return;
+    const unused = CLASSES.find(([c]) => !f!.class_mix.some((m) => m.asset_class === c));
+    if (unused) f.class_mix.push({ asset_class: unused[0], percent: "" });
   }
 
   async function save(e: Event) {
@@ -170,7 +181,7 @@
               <td>{s.ticker ?? ""}</td>
               <td>{s.name}{s.hidden ? " (hidden)" : ""}</td>
               <td>{TYPES.find((t) => t[0] === s.security_type)?.[1]}</td>
-              <td>{CLASSES.find((c) => c[0] === s.asset_class)?.[1]}</td>
+              <td>{classText(s)}</td>
             </tr>
           {:else}
             <tr><td colspan="4">No securities yet.</td></tr>
@@ -191,12 +202,37 @@
             {#each TYPES as [v, l] (v)}<option value={v}>{l}</option>{/each}
           </select>
         </label>
-        <label>
-          Asset class
-          <select bind:value={f.asset_class}>
-            {#each CLASSES as [v, l] (v)}<option value={v}>{l}</option>{/each}
-          </select>
+        {#if f.class_mix.length === 0}
+          <label>
+            Asset class
+            <select bind:value={f.asset_class}>
+              {#each CLASSES as [v, l] (v)}<option value={v}>{l}</option>{/each}
+            </select>
+          </label>
+        {/if}
+        <label class="check">
+          <input type="checkbox" checked={f.class_mix.length > 0} onchange={(e) => toggleMix(e.currentTarget.checked)} />
+          Split across classes
         </label>
+        {#if f.class_mix.length > 0}
+          <fieldset class="mix">
+            <legend>Class mix (percents total 100)</legend>
+            {#each f.class_mix as m, i (i)}
+              <div class="row">
+                <select bind:value={m.asset_class} aria-label={`Class ${i + 1}`}>
+                  {#each CLASSES as [v, l] (v)}<option value={v}>{l}</option>{/each}
+                </select>
+                <input bind:value={m.percent} inputmode="decimal" size="6" aria-label={`Percent ${i + 1}`} />%
+                {#if f.class_mix.length > 2}
+                  <button type="button" aria-label={`Remove class ${i + 1}`} onclick={() => f!.class_mix.splice(i, 1)}>×</button>
+                {/if}
+              </div>
+            {/each}
+            {#if f.class_mix.length < CLASSES.length}
+              <button type="button" onclick={addMixRow}>Add class</button>
+            {/if}
+          </fieldset>
+        {/if}
         <label>CUSIP (optional) <input value={f.cusip ?? ""} oninput={(e) => (f!.cusip = e.currentTarget.value || null)} /></label>
         <label>
           Lot selection
@@ -260,5 +296,14 @@
   }
   .row {
     align-items: end;
+  }
+  .mix {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    align-items: start;
+  }
+  .mix .row {
+    align-items: center;
   }
 </style>

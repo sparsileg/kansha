@@ -7,7 +7,6 @@ vi.mock("../api", async (orig) => {
     commands: {
       today: vi.fn(),
       accountList: vi.fn(),
-      accountBalances: vi.fn(),
       accountBar: vi.fn(),
       categoryList: vi.fn(),
       tagList: vi.fn(),
@@ -44,7 +43,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   c.registerQuery.mockImplementation(() => ok(page(3)));
   c.registerSummary.mockImplementation(() => ok(summary));
-  c.accountBalances.mockImplementation(() => ok([]));
   c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
 });
 
@@ -52,7 +50,6 @@ describe("listsState", () => {
   it("loads everything and flags an empty book", async () => {
     c.today.mockReturnValue(ok("2026-09-24"));
     c.accountList.mockReturnValue(ok([]));
-    c.accountBalances.mockReturnValue(ok([]));
     c.categoryList.mockReturnValue(ok([]));
     c.tagList.mockReturnValue(ok([]));
     c.payeeList.mockReturnValue(ok([]));
@@ -74,7 +71,6 @@ describe("listsState", () => {
       }),
     );
     c.accountList.mockReturnValue(ok([]));
-    c.accountBalances.mockReturnValue(ok([]));
     c.categoryList.mockReturnValue(ok([]));
     c.tagList.mockReturnValue(ok([]));
     c.payeeList.mockReturnValue(ok([]));

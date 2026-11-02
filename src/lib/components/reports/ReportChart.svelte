@@ -17,6 +17,13 @@
   const BOTTOM = 26;
   const plotW = W - LEFT - RIGHT;
   const plotH = $derived(height - TOP - BOTTOM);
+  // Bar names (asset classes) slant at 45°, ending under their bar; the
+  // graph grows by what the longest one needs, so the plot keeps its size.
+  const CHAR_W = 7;
+  const slant = $derived(chart.labels.length > 0);
+  const extra = $derived(
+    slant ? Math.max(0, Math.ceil(Math.max(...chart.labels.map((l) => l.length)) * CHAR_W * 0.71) + 12 - BOTTOM) : 0,
+  );
   const y = (pos: number) => TOP + plotH - (pos / 10000) * plotH;
 
   // A graph by category (asset class) names its bars; one over dates
@@ -33,9 +40,12 @@
   const every = $derived(Math.max(1, Math.ceil(n / 12)));
   const xLabels = $derived(
     byLabel
-      ? chart.labels.map((text, i) => ({ i, text })).filter((l) => l.i % every === 0)
+      ? chart.labels.map((text, i) => ({ i, text, sub: null })).filter((l) => l.i % every === 0)
       : dateLabels(chart.dates, chart.x_unit),
   );
+  // Dates naming a year on a second line need one more line.
+  const YEAR_LINE = 14;
+  const fullH = $derived(height + extra + (xLabels.some((l) => l.sub) ? YEAR_LINE : 0));
   // Many points: small marks, so the line shows between them.
   const markSize = $derived(n > 60 ? 3 : 8);
 
@@ -44,7 +54,7 @@
 </script>
 
 <figure class="chart">
-  <svg viewBox="0 0 {W} {height}" role="img" aria-label="Graph: {chart.series.map((s) => s.name).join(', ')}">
+  <svg viewBox="0 0 {W} {fullH}" role="img" aria-label="Graph: {chart.series.map((s) => s.name).join(', ')}">
     <defs>
       <pattern id="k-solid-1" width="6" height="6" patternUnits="userSpaceOnUse">
         <rect width="6" height="6" fill="var(--chart-1)" />
@@ -89,17 +99,26 @@
     {/each}
 
     {#each xLabels as l (l.i)}
-      <text class="tick" x={cx(l.i)} y={height - 8} text-anchor="middle">{l.text}</text>
+      {#if slant}
+        {@const ly = TOP + plotH + 14}
+        <text class="tick" x={cx(l.i)} y={ly} text-anchor="end" transform="rotate(-45 {cx(l.i)} {ly})">{l.text}</text>
+      {:else}
+        <text class="tick" x={cx(l.i)} y={height - 8} text-anchor="middle">{l.text}</text>
+        {#if l.sub}<text class="tick" x={cx(l.i)} y={height - 8 + YEAR_LINE} text-anchor="middle">{l.sub}</text>{/if}
+      {/if}
     {/each}
   </svg>
-  <figcaption class="legend">
-    {#each bars as s, b (s.name)}
-      <span><svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill={barFill(b)} stroke="currentColor" stroke-width="0.5" /></svg>{s.name}</span>
-    {/each}
-    {#each lines as s (s.name)}
-      <span><svg width="22" height="14" aria-hidden="true"><line class="line" x1="0" x2="22" y1="7" y2="7" /><rect class="mark" x="7" y="3" width="8" height="8" /></svg>{s.name}</span>
-    {/each}
-  </figcaption>
+  <!-- One series needs no key: the report names it (RPT-010). -->
+  {#if chart.series.length > 1}
+    <figcaption class="legend">
+      {#each bars as s, b (s.name)}
+        <span><svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill={barFill(b)} stroke="currentColor" stroke-width="0.5" /></svg>{s.name}</span>
+      {/each}
+      {#each lines as s (s.name)}
+        <span><svg width="22" height="14" aria-hidden="true"><line class="line" x1="0" x2="22" y1="7" y2="7" /><rect class="mark" x="7" y="3" width="8" height="8" /></svg>{s.name}</span>
+      {/each}
+    </figcaption>
+  {/if}
 </figure>
 
 <style>

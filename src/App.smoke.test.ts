@@ -140,8 +140,6 @@ vi.mock("./lib/api", async (orig) => {
       accountNumberMasked: () => Promise.resolve(""),
       accountDefaults: (name: string, t: string) =>
         ok({ ...acct, name, account_type: t, description: "", institution: "", account_number: "", notes: "", opening_date: null }),
-      accountBalances: () =>
-        ok([{ account: 1, current: "10.00", ending: "10.00" }]),
       accountBar: () =>
         ok({ balances: [{ account: 1, current: "10.00", ending: "10.00" }], section_totals: [], net_worth: "10.00" }),
       categoryList: () => ok([]),

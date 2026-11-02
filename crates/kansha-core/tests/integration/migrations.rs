@@ -44,6 +44,7 @@ const TABLES: &[&str] = &[
     "schedule_occurrence",
     "schema_version",
     "security",
+    "security_class_mix",
     "setting",
     "spending_card",
     "tag",
@@ -112,7 +113,8 @@ fn migration_0001_seeds_system_categories() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(n, 11);
+    // Eleven from 0001; Retirement Distributions from 0023.
+    assert_eq!(n, 12);
     assert_eq!(count(&db, "audit_log"), 0);
 }
 
@@ -653,7 +655,9 @@ fn migration_0008_drops_tithing_purges_price_audit_and_accepts_true_ups() {
     assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
     assert_eq!(rows(&db, inv), inv_before);
     assert_eq!(rows(&db, disp), disp_before);
-    assert_eq!(rows(&db, cat), cat_before);
+    let cat_after = rows(&db, cat);
+    assert_eq!(cat_after[..cat_before.len()], cat_before);
+    assert_eq!(cat_after.len(), cat_before.len() + 1, "0023 adds one");
     assert_eq!(count(&db, "audit_log"), audits - 2);
     let c = db.conn();
     let price_audits: i64 = c
@@ -999,6 +1003,30 @@ fn migration_0015_names_the_first_insight_status() {
 }
 
 #[test]
+fn migration_0022_keeps_each_spending_cards_columns() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 21).unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO spending_card (name, categories, created_at)
+             VALUES ('Car', '[1]', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+    db.migrate(&clock).unwrap();
+    let card = kansha_core::persistence::spending::list(db.conn()).unwrap();
+    assert!(card[0].tags.is_empty());
+    assert_eq!(
+        card[0].columns,
+        [
+            kansha_core::spending::SpendingColumn::Year,
+            kansha_core::spending::SpendingColumn::Month,
+            kansha_core::spending::SpendingColumn::MonthlyAvg,
+        ]
+    );
+}
+
+#[test]
 fn migration_0016_makes_auto_expenses_a_spending_card() {
     let clock = clock();
     // (cards on the first insight, the spending cards as
@@ -1256,4 +1284,310 @@ fn migration_0019_adds_pending_entries_and_keeps_the_audit_log() {
         )
         .is_ok()
     );
+}
+
+/// One buy, in an account and security made by raw SQL, for the
+/// `investment_txn` rebuilds.
+fn seed_a_buy(c: &Connection) {
+    c.execute_batch(
+        "INSERT INTO account (name, type, account_group, tax_treatment, created_at,
+                 cash_mode, mmf_mode, default_lot_method)
+             VALUES ('Brokerage', 'brokerage', 'investments', 'taxable', '2026-06-30T12:00:00Z',
+                 'internal', 'security', 'fifo');
+         INSERT INTO security (name, type, asset_class, created_at)
+             VALUES ('Fund', 'mutual_fund', 'us_equity', '2026-06-30T12:00:00Z');
+         INSERT INTO txn (txn_date, origin, created_at)
+             VALUES ('2026-01-01', 'manual', '2026-06-30T12:00:00Z');
+         INSERT INTO investment_txn (txn_id, account_id, security_id, action, quantity, price)
+             VALUES (1, 1, 1, 'buy', 10000000, 100000000);
+         INSERT INTO txn (txn_date, origin, created_at)
+             VALUES ('2026-01-02', 'manual', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+}
+
+fn kept_buy(c: &Connection) -> (i64, i64, String, i64, i64) {
+    c.query_row(
+        "SELECT account_id, security_id, action, quantity, price
+         FROM investment_txn WHERE txn_id = 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+    )
+    .unwrap()
+}
+
+#[test]
+fn migration_0011_accepts_a_dividend_without_a_security_and_keeps_rows() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 10).unwrap();
+    seed_a_buy(db.conn());
+    let dividend = "INSERT INTO investment_txn (txn_id, account_id, action)
+                    VALUES (2, 1, 'dividend')";
+    assert!(db.conn().execute(dividend, []).is_err());
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    assert_eq!(kept_buy(c), (1, 1, "buy".into(), 10_000_000, 100_000_000));
+    assert!(c.execute(dividend, []).is_ok());
+}
+
+#[test]
+fn migration_0012_accepts_a_reinvested_dividend_in_the_cash_only() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 11).unwrap();
+    seed_a_buy(db.conn());
+    let reinvest = |action: &str| {
+        format!("INSERT INTO investment_txn (txn_id, account_id, action) VALUES (2, 1, '{action}')")
+    };
+    assert!(
+        db.conn()
+            .execute(&reinvest("reinvest_dividend"), [])
+            .is_err()
+    );
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    assert_eq!(kept_buy(c), (1, 1, "buy".into(), 10_000_000, 100_000_000));
+    assert!(c.execute(&reinvest("reinvest_cg_long"), []).is_err());
+    assert!(c.execute(&reinvest("reinvest_dividend"), []).is_ok());
+}
+
+/// An audit row, written before the `audit_log` rebuild.
+const AUDIT_ROW: &str = "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+     VALUES ('2026-06-30T12:00:00Z', 'account', 7, 'create', '{\"name\":\"C\"}', 'ui')";
+
+fn audit_insert(entity: &str) -> String {
+    format!(
+        "INSERT INTO audit_log (at, entity, entity_id, action, after_json, origin)
+         VALUES ('2026-06-30T12:00:00Z', '{entity}', 1, 'create', '{{}}', 'ui')"
+    )
+}
+
+/// The rebuilt log kept its row and is still append-only.
+fn assert_audit_kept(c: &Connection) {
+    let kept: (String, i64, String) = c
+        .query_row(
+            "SELECT entity, entity_id, after_json FROM audit_log WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(kept, ("account".into(), 7, "{\"name\":\"C\"}".into()));
+    assert!(c.execute("UPDATE audit_log SET entity_id = 8", []).is_err());
+    assert!(c.execute("DELETE FROM audit_log", []).is_err());
+}
+
+#[test]
+fn migration_0020_adds_loans_and_keeps_the_audit_log() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 19).unwrap();
+    db.conn().execute(AUDIT_ROW, []).unwrap();
+    assert!(db.conn().execute(&audit_insert("loan"), []).is_err());
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    assert_audit_kept(c);
+    assert!(c.execute(&audit_insert("loan"), []).is_ok());
+    c.execute_batch(
+        "INSERT INTO account (name, type, account_group, tax_treatment, created_at) VALUES
+             ('Loan', 'loan', 'liabilities', 'taxable', '2026-06-30T12:00:00Z'),
+             ('C', 'checking', 'banking', 'taxable', '2026-06-30T12:00:00Z');
+         INSERT INTO category (kind, name, created_at)
+             VALUES ('expense', 'Loan Interest', '2026-06-30T12:00:00Z');",
+    )
+    .unwrap();
+    let cat: i64 = c
+        .query_row("SELECT max(id) FROM category", [], |r| r.get(0))
+        .unwrap();
+    let loan = |paying: i64| {
+        c.execute(
+            "INSERT INTO loan (account_id, loan_type, opening_date, original_balance,
+                 length_months, compounding, frequency, paying_account_id,
+                 interest_category_id)
+             VALUES (1, 'auto', '2026-01-01', 1000000, 60, 'monthly', 'monthly', ?1, ?2)",
+            rusqlite::params![paying, cat],
+        )
+    };
+    assert!(loan(1).is_err(), "a loan can't pay itself");
+    assert!(loan(2).is_ok());
+    c.execute(
+        "INSERT INTO loan_rate (loan_id, effective_date, rate)
+         VALUES (1, '2026-01-01', 6000000)",
+        [],
+    )
+    .unwrap();
+    c.execute("DELETE FROM loan WHERE account_id = 1", [])
+        .unwrap();
+    assert_eq!(count(&db, "loan_rate"), 0, "its rates go with it");
+}
+
+#[test]
+fn migration_0023_adds_retirement_distributions_or_takes_up_a_book_category() {
+    let key = "SELECT id, name FROM category WHERE system_key = 'retirement_distributions'";
+    let row = |c: &Connection| {
+        c.query_row(key, [], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })
+        .unwrap()
+    };
+    let up = |sql: &str| {
+        let clock = clock();
+        let mut db = Db::open_in_memory_at(&clock, 22).unwrap();
+        db.conn().execute_batch(sql).unwrap();
+        assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+        db
+    };
+    let plain = up("");
+    assert_eq!(row(plain.conn()).1, "Retirement Distributions");
+
+    let income = up("INSERT INTO category (id, kind, name, created_at)
+         VALUES (900, 'income', 'retirement distributions', '2026-06-30T12:00:00Z')");
+    assert_eq!(row(income.conn()).0, 900);
+
+    let expense = up("INSERT INTO category (id, kind, name, created_at)
+         VALUES (900, 'expense', 'Retirement Distributions', '2026-06-30T12:00:00Z')");
+    assert_eq!(row(expense.conn()).1, "Retirement Distributions (built-in)");
+}
+
+#[test]
+fn migration_0021_adds_budgets_and_keeps_the_audit_log() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 20).unwrap();
+    db.conn().execute(AUDIT_ROW, []).unwrap();
+    assert!(db.conn().execute(&audit_insert("budget"), []).is_err());
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    assert_audit_kept(c);
+    assert!(c.execute(&audit_insert("budget"), []).is_ok());
+    c.execute_batch(
+        "INSERT INTO category (kind, name, created_at)
+             VALUES ('expense', 'Food', '2026-06-30T12:00:00Z');
+         INSERT INTO budget (name, created_at) VALUES ('Home', '2026-06-30T12:00:00Z');
+         INSERT INTO budget_year (budget_id, year) VALUES (1, 2026);",
+    )
+    .unwrap();
+    let cat: i64 = c
+        .query_row("SELECT max(id) FROM category", [], |r| r.get(0))
+        .unwrap();
+    c.execute(
+        "INSERT INTO budget_category (budget_id, category_id) VALUES (1, ?1)",
+        [cat],
+    )
+    .unwrap();
+    let amount = |cents: i64| {
+        c.execute(
+            "INSERT INTO budget_amount (budget_id, year, category_id, month, amount)
+             VALUES (1, 2026, ?1, 3, ?2)",
+            [cat, cents],
+        )
+    };
+    assert!(
+        c.execute(
+            "INSERT INTO budget (name, created_at) VALUES ('HOME', '2026-06-30T12:00:00Z')",
+            []
+        )
+        .is_err(),
+        "names are unique in any case"
+    );
+    assert!(amount(0).is_err(), "zero is not stored");
+    assert!(amount(-500).is_ok(), "a refund budget may be negative");
+    c.execute("DELETE FROM budget_year", []).unwrap();
+    assert_eq!(
+        count(&db, "budget_amount"),
+        0,
+        "its amounts go with the year"
+    );
+}
+
+#[test]
+fn migration_0024_makes_bonds_intermediate_and_keeps_securities() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 23).unwrap();
+    db.conn()
+        .execute_batch(
+            "INSERT INTO security (id, name, ticker, type, asset_class, hidden, notes, created_at)
+                 VALUES (7, 'Bond Fund', 'BND', 'etf', 'bond', 1, 'n', '2026-06-30T12:00:00Z');
+             INSERT INTO security (id, name, type, asset_class, created_at)
+                 VALUES (8, 'Stocks', 'etf', 'us_equity', '2026-06-30T12:00:00Z');
+             INSERT INTO price (security_id, price_date, price, source)
+                 VALUES (7, '2026-06-30', 26000000, 'manual');",
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let rows: Vec<(i64, String, Option<String>, i64, String)> = c
+        .prepare("SELECT id, asset_class, ticker, hidden, notes FROM security ORDER BY id")
+        .unwrap()
+        .query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            (
+                7,
+                "bond_intermediate".into(),
+                Some("BND".into()),
+                1,
+                "n".into()
+            ),
+            (8, "us_equity".into(), None, 0, String::new()),
+        ]
+    );
+    assert_eq!(count(&db, "price"), 1);
+    let insert = |class: &str| {
+        c.execute(
+            "INSERT INTO security (name, type, asset_class, created_at)
+             VALUES ('New', 'bond', ?1, '2026-06-30T12:00:00Z')",
+            [class],
+        )
+    };
+    assert!(insert("bond").is_err(), "the old class is gone");
+    for class in [
+        "bond_short",
+        "bond_long",
+        "bond_intl",
+        "us_small_mid",
+        "emerging",
+        "bond_tips",
+        "bond_muni",
+    ] {
+        assert!(insert(class).is_ok(), "{class}");
+        c.execute("DELETE FROM security WHERE name = 'New'", [])
+            .unwrap();
+    }
+}
+
+#[test]
+fn migration_0025_adds_the_class_mix() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 24).unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO security (id, name, type, asset_class, created_at)
+             VALUES (1, 'Balanced', 'mutual_fund', 'us_equity', '2026-06-30T12:00:00Z')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let c = db.conn();
+    let mix = |sec: i64, class: &str, pct: i64| {
+        c.execute(
+            "INSERT INTO security_class_mix (security_id, asset_class, percent) VALUES (?1, ?2, ?3)",
+            rusqlite::params![sec, class, pct],
+        )
+    };
+    assert!(mix(1, "us_equity", 60_000_000).is_ok());
+    assert!(
+        mix(1, "us_equity", 40_000_000).is_err(),
+        "one row per class"
+    );
+    assert!(
+        mix(1, "bond", 40_000_000).is_err(),
+        "only the current classes"
+    );
+    assert!(mix(1, "cash", 0).is_err(), "above 0");
+    assert!(mix(1, "cash", 100_000_000).is_err(), "below 100");
+    assert!(mix(1, "cash", 12_345_678).is_err(), "two decimals");
+    assert!(mix(9, "cash", 40_000_000).is_err(), "needs a security");
 }

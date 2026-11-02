@@ -71,6 +71,26 @@ pub(super) fn columns(by: By) -> Vec<Column> {
         .collect()
 }
 
+/// A flat list has no groups to name the category or payee, so it shows
+/// the column the groups stood for (RPT-200): Category after Memo in
+/// Itemized Categories, Description after S in Itemized Payees.
+fn flat_columns(mut cols: Vec<Column>, by: By, flat: bool) -> Vec<Column> {
+    if !flat {
+        return cols;
+    }
+    let (after, id, label) = match by {
+        By::Category => ("memo", "category", "Category"),
+        By::Payee => ("split", "description", "Description"),
+        By::TaxSummary => return cols,
+    };
+    let at = cols
+        .iter()
+        .position(|c| c.id == after)
+        .map_or(cols.len(), |i| i + 1);
+    cols.insert(at, column(id, label, ColumnKind::Text));
+    cols
+}
+
 pub(super) fn build(
     conn: &Connection,
     s: &ReportSettings,
@@ -81,11 +101,16 @@ pub(super) fn build(
     let txns = facts::load(conn, range)?;
     let want = if by == By::TaxSummary {
         Want::TaxRelated
+    } else if s.budget_lines {
+        Want::Budget
     } else {
         Want::All
     };
-    let lines = facts::lines(&txns, s, &lk, want)?;
-    let columns = columns(by);
+    let mut lines = facts::lines(&txns, s, &lk, want)?;
+    if by != By::TaxSummary {
+        lines.retain(|l| wanted(l, s));
+    }
+    let columns = flat_columns(columns(by), by, s.flat);
     let rows = grouped(&lines, &columns, s, &lk, by)?;
     Ok(Report {
         kind: s.kind,
@@ -101,6 +126,19 @@ pub(super) fn build(
         totals_on_heading: false,
         compact: false,
     })
+}
+
+/// The Itemized reports' own filters (RPT-200): cleared status, and the
+/// amount's size between the smallest and largest given.
+fn wanted(l: &Line, s: &ReportSettings) -> bool {
+    let size = if l.amount.is_negative() {
+        l.amount.checked_neg().unwrap_or(l.amount)
+    } else {
+        l.amount
+    };
+    s.cleared.as_ref().is_none_or(|c| c.contains(&l.cleared))
+        && s.amount_min.is_none_or(|m| size >= m)
+        && s.amount_max.is_none_or(|m| size <= m)
 }
 
 /// Lines to sections and groups, totals filled, the overall total last.
@@ -128,6 +166,8 @@ fn grouped(
     let all = || lines.iter().collect::<Vec<&Line>>();
     let tax_group = if by == By::TaxSummary {
         s.tax_group
+    } else if s.flat {
+        TaxGroup::None
     } else {
         TaxGroup::Category
     };

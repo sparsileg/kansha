@@ -28,7 +28,9 @@ use kansha_core::schedule::{
     self, AmountType, Direction, End, EnterEdits, EntryMode, Frequency, Recurrence, ScheduleFields,
     ScheduleId, ScheduleLine, WeekendRule,
 };
-use kansha_core::securities::{AssetClass, PricePoint, PriceSource, SecurityFields, SecurityId};
+use kansha_core::securities::{
+    AssetClass, ClassShare, PricePoint, PriceSource, SecurityFields, SecurityId,
+};
 use kansha_core::testkit::Book;
 use kansha_core::{Clock, Date, FixedClock, Money, integrity};
 use serde::Deserialize;
@@ -89,7 +91,16 @@ struct SecuritySpec {
     #[serde(rename = "type")]
     security_type: String,
     asset_class: Option<String>,
+    /// SEC-050: `[{ class = "us_equity", percent = "60" }, …]`.
+    class_mix: Option<Vec<ClassMixSpec>>,
     lot_method: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClassMixSpec {
+    class: String,
+    percent: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1640,6 +1651,12 @@ fn setup(s: &Scenario, clock: FixedClock) -> Result<Ctx<'_>, Failure> {
             f.ticker = sp.ticker.clone();
             if let Some(c) = &sp.asset_class {
                 f.asset_class = parse::<AssetClass>("asset_class", c)?;
+            }
+            for m in sp.class_mix.iter().flatten() {
+                f.class_mix.push(ClassShare {
+                    asset_class: parse("class", &m.class)?,
+                    percent: parse("percent", &m.percent)?,
+                });
             }
             if let Some(m) = &sp.lot_method {
                 f.default_lot_method = Some(parse::<LotMethod>("lot_method", m)?);

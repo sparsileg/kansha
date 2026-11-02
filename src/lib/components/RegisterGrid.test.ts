@@ -1,3 +1,4 @@
+import { tick } from "svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 
@@ -8,7 +9,6 @@ vi.mock("../api", async (orig) => {
     commands: {
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
-      accountBalances: vi.fn(),
       accountBar: vi.fn(),
       payeeSearch: vi.fn(),
       txnSetCleared: vi.fn(),
@@ -55,7 +55,6 @@ beforeEach(async () => {
     }),
   );
   c.registerSummary.mockImplementation(() => ok({ current: "1234.5", cleared: "0.00", ending: "1.00", available_credit: null }));
-  c.accountBalances.mockImplementation(() => ok([]));
   c.accountBar.mockImplementation(() => ok({ balances: [], section_totals: [], net_worth: "0.00" }));
   c.payeeSearch.mockImplementation(() => ok([]));
   c.txnSetCleared.mockImplementation(() => ok(null));
@@ -215,8 +214,66 @@ describe("RegisterGrid", () => {
 
     beforeEach(async () => {
       c.registerQuery.mockImplementation(() => ok({ rows: many(1000), total: 1000, today: "2026-09-24" }));
+      registerState.forgetScroll();
       await registerState.open(1);
       registerState.scrollToEnd = false;
+    });
+
+    describe("scroll position (#47, REG-010)", () => {
+      const size = (grid: HTMLElement, h: number) => {
+        Object.defineProperty(grid, "scrollHeight", { value: h, configurable: true });
+        Object.defineProperty(grid, "clientHeight", { value: 800, configurable: true });
+      };
+      /** A fresh grid over the same state, as going back to the view makes. */
+      const mount = async () => {
+        const { unmount } = render(RegisterGrid, { account: 1 });
+        const grid = screen.getByRole("grid");
+        size(grid, 24000);
+        await tick();
+        await new Promise((r) => setTimeout(r, 30));
+        return { grid, unmount };
+      };
+
+      it("opens at the newest rows when going back to an account never scrolled", async () => {
+        registerState.forgetScroll();
+        const { grid, unmount } = await mount();
+        expect(grid.scrollTop).toBe(24000);
+        unmount();
+      });
+
+      it("returns to where it was left", async () => {
+        registerState.forgetScroll();
+        const first = await mount();
+        await scrollTo(first.grid, 2400);
+        first.unmount();
+        const { grid, unmount } = await mount();
+        expect(grid.scrollTop).toBe(2400);
+        unmount();
+      });
+
+      it("forgets a position left under other filters", async () => {
+        registerState.forgetScroll();
+        const first = await mount();
+        await scrollTo(first.grid, 2400);
+        first.unmount();
+        await registerState.setFilters({ payee: "Acme" } as never);
+        const { grid, unmount } = await mount();
+        expect(grid.scrollTop).toBe(24000);
+        unmount();
+        await registerState.clearFilters();
+      });
+
+      it("a row to reveal wins over a saved position", async () => {
+        registerState.forgetScroll();
+        const first = await mount();
+        await scrollTo(first.grid, 2400);
+        first.unmount();
+        registerState.reveal = 500;
+        const { grid, unmount } = await mount();
+        expect(grid.scrollTop).not.toBe(24000);
+        registerState.reveal = null;
+        unmount();
+      });
     });
 
     it("loads every row in one query, with no paging", () => {

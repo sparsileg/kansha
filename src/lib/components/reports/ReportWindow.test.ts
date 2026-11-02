@@ -683,7 +683,7 @@ describe("Investing reports", () => {
       dates: [],
       labels: ["Cash", "US equity"],
       series: [{ name: "Market Value", style: "bar", values: ["12920.00", "3630.00"], pos: [7807, 2193] }],
-      ticks: [{ label: "0", pos: 0 }, { label: "20K", pos: 10000 }],
+      ticks: [{ label: "$0", pos: 0 }, { label: "$20K", pos: 10000 }],
       zero: 0,
     },
   };
@@ -691,9 +691,14 @@ describe("Investing reports", () => {
   beforeEach(async () => {
     run.mockImplementation(() => ok(allocation));
     investState.securities = [
-      { id: 1, name: "Total Stock Market", ticker: "VTI", asset_class: "us_equity" },
-      { id: 2, name: "S&P 500", ticker: "VOO", asset_class: "us_equity" },
-      { id: 3, name: "Bond Fund", ticker: "BND", asset_class: "bond" },
+      { id: 1, name: "Total Stock Market", ticker: "VTI", asset_class: "us_equity", class_mix: [] },
+      { id: 2, name: "S&P 500", ticker: "VOO", asset_class: "us_equity", class_mix: [] },
+      { id: 3, name: "Bond Fund", ticker: "BND", asset_class: "bond_intermediate", class_mix: [] },
+      // Mostly bonds, so its class is bonds; part of it is US equity (SEC-050).
+      {
+        id: 4, name: "Conservative", ticker: "CON", asset_class: "bond_intermediate",
+        class_mix: [{ asset_class: "bond_intermediate", percent: "70" }, { asset_class: "us_equity", percent: "30" }],
+      },
     ] as never;
     inst = await reportState.open("asset_allocation");
   });
@@ -702,10 +707,16 @@ describe("Investing reports", () => {
     show();
     const graph = await screen.findByRole("img", { name: /Market Value/ });
     expect(within(graph).getByText("US equity")).toBeTruthy();
+    // Bar names slant at 45°, ending under their bar.
+    const name = within(graph).getByText("US equity");
+    expect(name.getAttribute("transform")).toMatch(/^rotate\(-45 /);
+    expect(name.getAttribute("text-anchor")).toBe("end");
+    // One series: no legend under the graph.
+    expect(document.querySelector("figcaption.legend")).toBeNull();
     expect(screen.getByText("21.93%")).toBeTruthy();
   });
 
-  it("a class opens Holdings limited to that class's securities", async () => {
+  it("a class opens Holdings limited to that class's securities, mixed ones included", async () => {
     show();
     const before = windowState.wins.length;
     await fireEvent.click(await screen.findByRole("button", { name: "3,630.00" }));
@@ -713,7 +724,7 @@ describe("Investing reports", () => {
     expect(reportState.current?.settings).toMatchObject({
       kind: "holdings",
       range: { preset: "custom", from: null, to: "2025-12-31" },
-      securities: [1, 2],
+      securities: [1, 2, 4],
       title: "Holdings: US equity",
     });
   });

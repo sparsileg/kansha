@@ -242,7 +242,15 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     let card = db
         .write(&clock, Origin::System, |tx| {
             let c = kansha_core::persistence::spending::insert(tx, "Everything")?;
-            kansha_core::persistence::spending::update(tx, c.id, &c.name, None, &cats)
+            kansha_core::persistence::spending::update(
+                tx,
+                c.id,
+                &c.name,
+                None,
+                &cats,
+                &[],
+                kansha_core::spending::SpendingColumn::ALL,
+            )
         })
         .unwrap();
     let t = Instant::now();

@@ -47,11 +47,15 @@ balances.
 under INCOME, EXPENSES, and TRANSFERS by category and subcategory,
 with totals on each heading. **Sort by**: Date/Account,
 Account/Date, or Amount; the Date, Account, and Num headings sort
-too. **Subtotal by** (Customize): Category, or Tag, then category.
-Transfers are off until you turn them on in Customize. Filters:
-Accounts, Categories, Payees, Tags.
+too. **Subtotal by** (Customize): Category, Tag then category, or
+None (one list): every transaction in a single list with one total,
+and a Category column to name each one. Transfers are off until you
+turn them on in Customize. Filters: Accounts, Categories, Payees,
+Tags, and under **Customize… > Display > Transactions**, cleared
+status and an amount range.
 
-**Itemized Payees.** The same, grouped by payee.
+**Itemized Payees.** The same, grouped by payee. With Subtotal by
+None, a Description column names each payee.
 
 **Income/Expense by Category.** Totals for each category, with
 subcategories folded into their parents, for the range. **Interval**

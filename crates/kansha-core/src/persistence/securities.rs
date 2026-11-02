@@ -6,7 +6,11 @@ use super::Tx;
 use super::audit::{self, AuditAction, AuditEntity};
 use crate::date::Date;
 use crate::error::{Error, Result};
-use crate::securities::{PricePoint, Security, SecurityFields, SecurityId};
+use std::collections::HashMap;
+
+use crate::securities::{
+    ClassShare, PricePoint, Security, SecurityFields, SecurityId, normalize_mix,
+};
 
 const COLUMNS: &str =
     "id, name, ticker, type, asset_class, cusip, default_lot_method, hidden, notes, created_at";
@@ -19,6 +23,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Security> {
             ticker: r.get("ticker")?,
             security_type: r.get("type")?,
             asset_class: r.get("asset_class")?,
+            class_mix: Vec::new(),
             cusip: r.get("cusip")?,
             default_lot_method: r.get("default_lot_method")?,
             hidden: r.get("hidden")?,
@@ -45,6 +50,10 @@ fn normalize(f: &SecurityFields) -> Result<SecurityFields> {
     f.cusip = clean(&f.cusip);
     if f.cusip.as_ref().is_some_and(|c| c.chars().count() != 9) {
         return Err(Error::Invalid("a CUSIP has 9 characters".into()));
+    }
+    f.class_mix = normalize_mix(&f.class_mix)?;
+    if let Some(first) = f.class_mix.first() {
+        f.asset_class = first.asset_class;
     }
     Ok(f)
 }
@@ -78,7 +87,11 @@ pub fn insert(tx: &Tx<'_>, f: &SecurityFields) -> Result<Security> {
             },
         )
         .map_err(|e| unique_ticker(e.into(), &f.ticker))?;
-    let s = get(tx.conn(), SecurityId(tx.conn().last_insert_rowid()))?;
+    let id = SecurityId(tx.conn().last_insert_rowid());
+    if !f.class_mix.is_empty() {
+        write_mix(tx, id, &f.class_mix)?;
+    }
+    let s = get(tx.conn(), id)?;
     audit::record::<(), _>(
         tx,
         AuditEntity::Security,
@@ -112,6 +125,7 @@ pub fn update(tx: &Tx<'_>, id: SecurityId, f: &SecurityFields) -> Result<Securit
             },
         )
         .map_err(|e| unique_ticker(e.into(), &f.ticker))?;
+    write_mix(tx, id, &f.class_mix)?;
     let after = get(tx.conn(), id)?;
     if after != before {
         audit::record(
@@ -138,6 +152,7 @@ pub fn delete(tx: &Tx<'_>, id: SecurityId) -> Result<()> {
     }
     tx.conn()
         .execute("DELETE FROM price WHERE security_id = ?1", [id.0])?;
+    write_mix(tx, id, &[])?;
     tx.conn()
         .execute("DELETE FROM security WHERE id = ?1", [id.0])
         .map_err(|e| super::accounts::in_use_or(e.into(), "security", id.0))?;
@@ -173,18 +188,27 @@ pub fn get(conn: &Connection, id: SecurityId) -> Result<Security> {
 
 pub fn find(conn: &Connection, id: SecurityId) -> Result<Option<Security>> {
     let sql = format!("SELECT {COLUMNS} FROM security WHERE id = ?1");
-    Ok(conn
+    let found = conn
         .prepare_cached(&sql)?
         .query_row([id.0], from_row)
-        .optional()?)
+        .optional()?;
+    with_mix(conn, found)
 }
 
 /// All securities, hidden ones included, by name.
 pub fn list(conn: &Connection) -> Result<Vec<Security>> {
     let sql = format!("SELECT {COLUMNS} FROM security ORDER BY name COLLATE NOCASE, id");
     let mut stmt = conn.prepare_cached(&sql)?;
-    let rows = stmt.query_map([], from_row)?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    let mut all = stmt
+        .query_map([], from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut mixes = all_mixes(conn)?;
+    for s in &mut all {
+        if let Some(m) = mixes.remove(&s.id) {
+            s.fields.class_mix = m;
+        }
+    }
+    Ok(all)
 }
 
 /// The security whose ticker, or else name, is `text` (ignoring case).
@@ -195,10 +219,11 @@ pub fn find_by_label(conn: &Connection, text: &str) -> Result<Option<Security>> 
          WHERE ticker = ?1 COLLATE NOCASE OR name = ?1 COLLATE NOCASE
          ORDER BY ticker IS NULL OR ticker <> ?1 COLLATE NOCASE, id LIMIT 1"
     );
-    Ok(conn
+    let found = conn
         .prepare_cached(&sql)?
         .query_row([text], from_row)
-        .optional()?)
+        .optional()?;
+    with_mix(conn, found)
 }
 
 /// The security whose ticker is `text` (ignoring case).
@@ -206,10 +231,108 @@ pub fn find_by_ticker(conn: &Connection, text: &str) -> Result<Option<Security>>
     let sql = format!(
         "SELECT {COLUMNS} FROM security WHERE ticker = ?1 COLLATE NOCASE ORDER BY id LIMIT 1"
     );
-    Ok(conn
+    let found = conn
         .prepare_cached(&sql)?
         .query_row([text.trim()], from_row)
-        .optional()?)
+        .optional()?;
+    with_mix(conn, found)
+}
+
+// ---------------------------------------------------------------------------
+// Class mix (SEC-050)
+// ---------------------------------------------------------------------------
+
+/// Replace a security's class mix (already normalized).
+fn write_mix(tx: &Tx<'_>, id: SecurityId, mix: &[ClassShare]) -> Result<()> {
+    tx.conn().execute(
+        "DELETE FROM security_class_mix WHERE security_id = ?1",
+        [id.0],
+    )?;
+    let mut stmt = tx.conn().prepare_cached(
+        "INSERT INTO security_class_mix (security_id, asset_class, percent)
+         VALUES (?1, ?2, ?3)",
+    )?;
+    for c in mix {
+        stmt.execute(params![id.0, c.asset_class, c.percent])?;
+    }
+    Ok(())
+}
+
+/// Largest share first, ties in class order (as `normalize_mix`).
+fn sort_mix(mix: &mut [ClassShare]) {
+    mix.sort_by(|a, b| {
+        b.percent
+            .cmp(&a.percent)
+            .then(a.asset_class.order().cmp(&b.asset_class.order()))
+    });
+}
+
+fn with_mix(conn: &Connection, found: Option<Security>) -> Result<Option<Security>> {
+    let Some(mut s) = found else {
+        return Ok(None);
+    };
+    let Some(mut stmt) = mix_query(
+        conn,
+        "SELECT asset_class, percent FROM security_class_mix WHERE security_id = ?1",
+    )?
+    else {
+        return Ok(Some(s));
+    };
+    let mut mix = stmt
+        .query_map([s.id.0], |r| {
+            Ok(ClassShare {
+                asset_class: r.get(0)?,
+                percent: r.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    sort_mix(&mut mix);
+    s.fields.class_mix = mix;
+    Ok(Some(s))
+}
+
+/// A query on `security_class_mix`; `None` in a book older than
+/// migration 0025, where no security has a mix. Only the migration tests
+/// read such a book with this code.
+fn mix_query<'c>(conn: &'c Connection, sql: &str) -> Result<Option<rusqlite::CachedStatement<'c>>> {
+    match conn.prepare_cached(sql) {
+        Ok(stmt) => Ok(Some(stmt)),
+        Err(rusqlite::Error::SqliteFailure(_, Some(msg)))
+            if msg.contains("no such table: security_class_mix") =>
+        {
+            Ok(None)
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Every security's class mix, by security.
+fn all_mixes(conn: &Connection) -> Result<HashMap<SecurityId, Vec<ClassShare>>> {
+    let Some(mut stmt) = mix_query(
+        conn,
+        "SELECT security_id, asset_class, percent FROM security_class_mix",
+    )?
+    else {
+        return Ok(HashMap::new());
+    };
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            SecurityId(r.get(0)?),
+            ClassShare {
+                asset_class: r.get(1)?,
+                percent: r.get(2)?,
+            },
+        ))
+    })?;
+    let mut out: HashMap<SecurityId, Vec<ClassShare>> = HashMap::new();
+    for row in rows {
+        let (id, c) = row?;
+        out.entry(id).or_default().push(c);
+    }
+    for mix in out.values_mut() {
+        sort_mix(mix);
+    }
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------

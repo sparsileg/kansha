@@ -40,7 +40,8 @@ The bar across the top holds the choices you change most:
   Net Worth has its Interval under **Customize… > Display**.
 - **Subtotal by** (Capital Gains, Tax Summary, the comparisons): how
   the rows are grouped. The itemized reports have theirs under
-  **Customize… > Display**: by category (or payee), or by tag first.
+  **Customize… > Display**: by category (or payee), by tag first, or
+  None (one list).
 - **Sort by** (the itemized and tax reports): the order of the rows.
 - **Compare to** (the comparisons): the past periods to average.
 
@@ -85,6 +86,15 @@ report.
   (Income/Expense): whether money moved between accounts shows.
   With Cash flow, money moved to or from accounts not chosen on the
   Accounts tab is listed in a TRANSFERS section.
+  Money leaving an IRA, 401(k), Roth, HSA, or DAF for your own
+  accounts isn't a transfer here: it's income, under **Retirement
+  Distributions**. Gains realized inside those accounts are left out
+  of the Realized Gain/Loss category.
+- **Transactions** (the itemized reports): which cleared statuses to
+  list (Uncleared, Cleared, Reconciled; all ticked lists every one),
+  and **Amount from … to …**: only amounts of that size, whether money
+  in or out. Leave an amount blank for no limit. For example, every
+  payment of $500 or more: Amount from 500, to blank.
 - **Show columns**: which columns appear; **Reset columns** puts them
   back.
 

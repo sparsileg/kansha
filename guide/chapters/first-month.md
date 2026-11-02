@@ -50,8 +50,9 @@ of the entry line and give each part its own line. See [The
 Register](register.md).
 :::
 
-Away from the computer? Enter it from a terminal or your phone, and
-approve it the next time Kansha is open (see [Entering from the
+Away from the computer? Enter it from a terminal, or type it in a
+note on your phone and send it to yourself, and approve it the next
+time Kansha is open (see [Entering from the
 Command Line](command-line.md)).
 
 ## Week 1: Set Up Reminders
@@ -102,7 +103,8 @@ See [Reports](reports.md).
 
 The rhythm settles into a few minutes a week:
 
-1. Enter what you spend, or approve what you entered on your phone.
+1. Enter what you spend, or approve what you entered away from the
+   computer.
 2. Enter the reminders as they come due.
 3. Reconcile each statement when it arrives.
 4. Glance at Insights. Anything under **Needs attention** says what's

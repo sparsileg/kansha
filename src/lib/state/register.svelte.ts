@@ -84,10 +84,41 @@ class RegisterState {
    * scrolls or navigates; the grid re-applies it when its size changes. */
   reveal = $state<TxnId | null>(null);
 
-  /** Set on open; the grid scrolls to the bottom once, then clears it. */
+  /** Set on open; the grid places the rows once, then clears it. */
   scrollToEnd = $state(false);
 
-  /** Switch account: filters reset; opens date-ascending at the bottom. */
+  /** Where each account was left this session (#47, REG-010), and under
+   * which filters and sort. An account at its newest rows has no entry. */
+  #scroll = new Map<AccountId, { top: number; view: string }>();
+
+  #viewKey(): string {
+    return JSON.stringify([$state.snapshot(this.filters), this.sort, this.descending]);
+  }
+
+  /** The open account's saved position, unless its filters or sort
+   * have changed since. */
+  savedScroll(): number | null {
+    if (this.accountId === null) return null;
+    const s = this.#scroll.get(this.accountId);
+    return s && s.view === this.#viewKey() ? s.top : null;
+  }
+
+  /** Called as the rows scroll; `null` at the newest rows. Ignored while
+   * loading or before placing, when the browser clamps the old offset. */
+  saveScroll(top: number | null): void {
+    if (this.accountId === null || this.loading || this.scrollToEnd) return;
+    if (top === null) this.#scroll.delete(this.accountId);
+    else this.#scroll.set(this.accountId, { top, view: this.#viewKey() });
+  }
+
+  /** Forget every position. Opening another book reloads the page, which
+   * clears them; this is for a fresh start without that. */
+  forgetScroll(): void {
+    this.#scroll.clear();
+  }
+
+  /** Switch account: filters reset; opens date-ascending, at its saved
+   * position or the bottom. */
   async open(account: AccountId): Promise<void> {
     entriesState.reopenAfter = null;
     this.accountId = account;

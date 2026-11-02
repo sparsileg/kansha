@@ -278,6 +278,7 @@ fn a_rate_change_changes_splits_from_its_date() {
 }
 
 #[test]
+/// REC-200: a loan schedule splits each payment, and ends when paid off.
 fn the_last_payment_pays_it_off_and_the_reminder_ends() {
     let mut fx = fx();
     let mut s = mortgage(&fx);

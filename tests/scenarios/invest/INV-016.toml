@@ -1,0 +1,45 @@
+id = "INV-016"
+description = "A balanced fund split across two classes: the allocation splits its value by the mix, to the cent"
+requirements = ["SEC-050", "POS-020"]
+as_of = "2026-06-30"
+
+[[accounts]]
+name = "Brokerage"
+type = "brokerage"
+
+[[securities]]
+name = "Balanced Fund"
+ticker = "BAL"
+type = "mutual_fund"
+class_mix = [{ class = "bond_intermediate", percent = "40" }, { class = "us_equity", percent = "60" }]
+
+[[prices]]
+security = "BAL"
+date = "2026-06-30"
+price = "33.335"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "cash_in"
+date = "2026-01-02"
+amount = "1000.00"
+category = "Opening Balance"
+
+[[actions]]
+type = "invest"
+account = "Brokerage"
+action = "buy"
+date = "2026-01-10"
+security = "BAL"
+quantity = "10"
+price = "33.33"
+
+# Market value 333.35: 60% is 200.01, 40% is 133.34.
+[[expect.allocation]]
+total = "1000.05"
+rows = [
+    { class = "cash", value = "666.70", percent = "66.67" },
+    { class = "us_equity", value = "200.01", percent = "20.00" },
+    { class = "bond_intermediate", value = "133.34", percent = "13.33" },
+]

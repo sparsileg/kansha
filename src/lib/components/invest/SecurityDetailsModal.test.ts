@@ -9,7 +9,7 @@ const priceDelete = vi.hoisted(() => vi.fn());
 const asked = vi.hoisted(() => vi.fn());
 const chart = { dates: ["2026-01-02", "2026-06-30"], labels: [], series: [{ name: "Market value", style: "line", values: ["1.00", "2.00"], pos: [5000, 10000] }], ticks: [], zero: 0, x_unit: "month" };
 const sec = (id: number, name: string, ticker: string | null) => ({
-  id, name, ticker, security_type: "mutual_fund", asset_class: "us_equity", cusip: null,
+  id, name, ticker, security_type: "mutual_fund", asset_class: "us_equity", class_mix: [], cusip: null,
   default_lot_method: null, hidden: false, notes: "", created_at: "",
 });
 
@@ -138,6 +138,8 @@ describe("Security details", () => {
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][0]).toBe(1);
     expect(update.mock.calls[0][1]).toMatchObject({ name: "Total Market", ticker: "VTSAX", security_type: "mutual_fund" });
+    // Editing the name keeps the class mix (SEC-050).
+    expect(update.mock.calls[0][1]).toHaveProperty("class_mix", []);
     await fireEvent.change(screen.getByRole("combobox", { name: "Security" }), { target: { value: "2" } });
     await waitFor(() => expect(chartCalls).toHaveBeenLastCalledWith(2, "market_value", "year", null, null, true));
     expect(await screen.findByText("No transactions.")).toBeTruthy();

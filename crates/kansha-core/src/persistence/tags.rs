@@ -104,6 +104,7 @@ pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
         .execute("DELETE FROM tag WHERE id = ?1", [id])
         .map_err(|e| in_use_or(e.into(), "tag", id.0))?;
     reports::saved_replace_id(tx, FilterList::Tags, id.0, None)?;
+    super::spending::replace_id(tx, FilterList::Tags, id.0, None)?;
     audit::record::<_, ()>(
         tx,
         AuditEntity::Tag,
@@ -116,7 +117,7 @@ pub fn delete(tx: &Tx<'_>, id: TagId) -> Result<()> {
 }
 
 /// Merge `source` into `target` (TAG-020): tagged postings, schedule
-/// lines, payee defaults, and saved report filters move to `target`;
+/// lines, payee defaults, spending cards, and saved report filters move to `target`;
 /// `source` is deleted. A posting that had both keeps one.
 pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
     let conn = tx.conn();
@@ -155,6 +156,7 @@ pub fn merge(tx: &Tx<'_>, source: TagId, target: TagId) -> Result<Merged> {
     };
     conn.execute("DELETE FROM tag WHERE id = ?1", [source])?;
     reports::saved_replace_id(tx, FilterList::Tags, source.0, Some(target.0))?;
+    super::spending::replace_id(tx, FilterList::Tags, source.0, Some(target.0))?;
     audit::record(
         tx,
         AuditEntity::Tag,

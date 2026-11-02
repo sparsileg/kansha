@@ -12,6 +12,13 @@ fn book() -> Book {
     Book::new(date("2026-06-30")).unwrap()
 }
 
+/// The columns every card starts with.
+const DEF: [kansha_core::spending::SpendingColumn; 3] = [
+    kansha_core::spending::SpendingColumn::Year,
+    kansha_core::spending::SpendingColumn::Month,
+    kansha_core::spending::SpendingColumn::MonthlyAvg,
+];
+
 fn cards(ids: &[&str]) -> Vec<String> {
     ids.iter().map(|s| s.to_string()).collect()
 }
@@ -175,7 +182,7 @@ fn a_spending_card_totals_the_chosen_categories() {
     let id = b.write(|tx| spending::insert(tx, "Car")).unwrap().id;
     let card = |b: &mut Book, accounts: Option<Vec<_>>, cats: Vec<_>| -> ExpenseCard {
         let c = b
-            .write(|tx| spending::update(tx, id, "Car", accounts.as_deref(), &cats))
+            .write(|tx| spending::update(tx, id, "Car", accounts.as_deref(), &cats, &[], &DEF))
             .unwrap();
         assert_eq!((c.accounts.clone(), c.categories.clone()), (accounts, cats));
         spending_card(b.conn(), date("2026-06-30"), &c).unwrap()
@@ -234,6 +241,315 @@ fn a_spending_card_totals_the_chosen_categories() {
     assert_eq!(c.total.ytd, kansha_core::Money::ZERO);
 }
 
+/// The columns beyond this year (CARD-060, CARD-070), and what a tag
+/// does to a card: past periods are transactions only, whole periods,
+/// and a category with activity in any shown column stays listed.
+#[test]
+fn spending_card_columns_and_tags() {
+    use kansha_core::Money;
+    use kansha_core::accounts::AccountType;
+    use kansha_core::categories::CategoryKind;
+    use kansha_core::persistence::spending;
+    use kansha_core::persistence::tags;
+    use kansha_core::reports::{AvgTrend, spending_card};
+    use kansha_core::spending::SpendingColumn as C;
+
+    let m = |s: &str| s.parse::<Money>().unwrap();
+    let mut b = book(); // today 2026-06-30
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let gas = b.category("Gas", CategoryKind::Expense).unwrap();
+    let food = b.category("Food", CategoryKind::Expense).unwrap();
+    let old = b.category("Old", CategoryKind::Expense).unwrap();
+    let trip = b.tag("Trip").unwrap();
+    let work = b.tag("Work").unwrap();
+
+    let spend = |b: &mut Book, d: &str, amt: &str, cat, tag: Option<_>| {
+        let mut e = b.entry(checking, date(d)).amount(m(amt)).category(cat);
+        if let Some(t) = tag {
+            e = e.tag(t);
+        }
+        e.save().unwrap();
+    };
+    spend(&mut b, "2022-12-31", "-1000.00", gas, None); // before the window
+    spend(&mut b, "2023-03-01", "-36.00", gas, None);
+    spend(&mut b, "2024-05-01", "-36.00", gas, None);
+    spend(&mut b, "2025-02-10", "-100.00", gas, Some(trip));
+    spend(&mut b, "2025-06-30", "-20.00", gas, None);
+    spend(&mut b, "2025-07-01", "-7.00", gas, None); // past the same period
+    spend(&mut b, "2025-08-01", "-9.00", old, None); // none this year
+    spend(&mut b, "2026-05-01", "-50.00", gas, None);
+    spend(&mut b, "2026-05-31", "-1.00", gas, Some(trip));
+    spend(&mut b, "2026-06-01", "-60.00", gas, None);
+    spend(&mut b, "2026-06-02", "-6.00", food, Some(work));
+
+    let id = b.write(|tx| spending::insert(tx, "All")).unwrap().id;
+    let set = |b: &mut Book, cats: Vec<_>, tags: Vec<_>, cols: &[C]| {
+        let c = b
+            .write(|tx| spending::update(tx, id, "All", None, &cats, &tags, cols))
+            .unwrap();
+        spending_card(b.conn(), date("2026-06-30"), &c).unwrap()
+    };
+
+    // Only spending categories chosen in the old way: nothing changes.
+    let c = set(&mut b, vec![gas, old], vec![], &DEF);
+    assert_eq!(c.columns, DEF);
+    assert_eq!(c.rows.len(), 1, "Old has nothing in Year or Month");
+
+    // Stored in display order whatever order they arrive in.
+    let every = [
+        C::ThreeYearAvg,
+        C::Month,
+        C::LastMonth,
+        C::MonthlyAvg,
+        C::Year,
+        C::LastYear,
+    ];
+    let c = set(&mut b, vec![gas, old], vec![], &every);
+    assert_eq!(c.columns, C::ALL);
+    assert_eq!(c.avg_since, None);
+    assert_eq!(c.avg_months, 36);
+    assert_eq!(c.year_months, 6);
+    assert_eq!(c.same_period_to, date("2025-06-30"));
+    let g = &c.rows[0];
+    assert_eq!(g.label, "Gas");
+    assert_eq!(g.last_year, m("127.00")); // the whole year
+    assert_eq!(g.same_period, m("120.00")); // January through June
+    assert_eq!(g.last_month, m("51.00")); // all of May
+    assert_eq!(g.three_year_total, m("199.00")); // 2023-2025 only
+    assert_eq!(g.three_year_avg, m("5.53")); // 199 / 36
+    assert_eq!(g.monthly_avg, m("18.50")); // 111 / 6
+    assert_eq!(g.avg_trend, Some(AvgTrend::Up));
+    // Old: none this year, but last year is shown.
+    let o = &c.rows[1];
+    assert_eq!(
+        (o.label.as_str(), o.ytd, o.last_year),
+        ("Old", Money::ZERO, m("9.00"))
+    );
+    assert_eq!(o.avg_trend, Some(AvgTrend::Down));
+    assert_eq!(c.total.last_year, m("136.00"));
+    assert_eq!(c.total.three_year_avg, m("5.78")); // 208 / 36
+
+    // Month alone: only what happened this month.
+    let c = set(&mut b, vec![gas, old], vec![], &[C::Month]);
+    assert_eq!(c.rows.len(), 1);
+    let e = b
+        .write(|tx| spending::update(tx, id, "All", None, &[gas], &[], &[]))
+        .unwrap_err();
+    assert!(e.to_string().contains("at least one column"), "{e}");
+
+    // A tag filter: only lines with a chosen tag, in every period.
+    let c = set(&mut b, vec![gas, food], vec![trip], &every);
+    assert_eq!(c.rows.len(), 1);
+    assert_eq!(
+        (c.rows[0].ytd, c.rows[0].last_year, c.rows[0].last_month),
+        (m("1.00"), m("100.00"), m("1.00"))
+    );
+
+    // Tags and no category: every spending category with a tagged line.
+    let c = set(&mut b, vec![], vec![trip, work], &DEF);
+    let labels: Vec<_> = c.rows.iter().map(|r| r.label.as_str()).collect();
+    assert_eq!(labels, ["Food", "Gas"]);
+    assert_eq!(c.total.ytd, m("7.00"));
+
+    // Deleting or merging a tag follows on the card.
+    let t = b.tag("Spare").unwrap();
+    let on = |b: &Book| spending::get(b.conn(), id).unwrap().tags;
+    set(&mut b, vec![], vec![t, trip], &DEF);
+    b.write(|tx| tags::delete(tx, t)).unwrap();
+    assert_eq!(on(&b), [trip]);
+    b.write(|tx| tags::merge(tx, trip, work)).unwrap();
+    assert_eq!(on(&b), [work]);
+
+    // January: Last Month is December; less history says when it began.
+    let mut n = Book::new(date("2027-01-15")).unwrap();
+    let acct = n.account("Checking", AccountType::Checking).unwrap();
+    let cat = n.category("Gas", CategoryKind::Expense).unwrap();
+    n.entry(acct, date("2026-03-20"))
+        .amount(m("-100.00"))
+        .category(cat)
+        .save()
+        .unwrap();
+    n.entry(acct, date("2026-12-31"))
+        .amount(m("-20.00"))
+        .category(cat)
+        .save()
+        .unwrap();
+    let id = n.write(|tx| spending::insert(tx, "New")).unwrap().id;
+    let card = n
+        .write(|tx| spending::update(tx, id, "New", None, &[cat], &[], C::ALL))
+        .unwrap();
+    let c = spending_card(n.conn(), date("2027-01-15"), &card).unwrap();
+    assert_eq!(c.avg_months, 10); // March through December
+    assert_eq!(c.avg_since, Some(date("2026-03-01")));
+    assert_eq!(c.rows[0].last_month, m("20.00"));
+    assert_eq!(c.rows[0].three_year_avg, m("12.00"));
+
+    // Nothing before this year: no longer average, so no arrow.
+    let c = spending_card(n.conn(), date("2026-06-30"), &card).unwrap();
+    assert_eq!(c.avg_months, 0);
+    assert_eq!(c.rows[0].three_year_avg, Money::ZERO);
+    assert_eq!(c.rows[0].avg_trend, None);
+}
+
+/// A new card arrives whole, on its insight and in the global list; a
+/// refused one leaves nothing (CARD-060, INS-030).
+#[test]
+fn a_new_spending_card_goes_on_its_insight_at_once() {
+    use kansha_core::accounts::AccountType;
+    use kansha_core::categories::CategoryKind;
+    use kansha_core::persistence::spending;
+
+    let mut b = book();
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let gas = b.category("Gas", CategoryKind::Expense).unwrap();
+    let trip = b.tag("Trip").unwrap();
+    let on = b
+        .write(|tx| repo::insert(tx, "Plans", &cards(&["net_worth"])))
+        .unwrap();
+    let card = b
+        .write(|tx| spending::create(tx, " Car ", Some(&[checking]), &[gas], &[trip], &DEF, on.id))
+        .unwrap();
+    assert_eq!(card.name, "Car");
+    assert_eq!(card.accounts, Some(vec![checking]));
+    assert_eq!((card.categories, card.tags), (vec![gas], vec![trip]));
+    assert_eq!(
+        repo::get(b.conn(), on.id).unwrap().cards,
+        ["net_worth".to_string(), card.id.card_id()]
+    );
+
+    // No column: refused, so no card and no change to the insight.
+    let e = b
+        .write(|tx| spending::create(tx, "Home", None, &[gas], &[], &[], on.id))
+        .unwrap_err();
+    assert!(e.to_string().contains("at least one column"), "{e}");
+    assert_eq!(spending::list(b.conn()).unwrap().len(), 1);
+    assert_eq!(repo::get(b.conn(), on.id).unwrap().cards.len(), 2);
+}
+
+/// Merging or deleting what a card lists changes the card: a merged
+/// category's spending stays on it (issue #6).
+#[test]
+fn spending_cards_follow_category_and_account_merges_and_deletes() {
+    use kansha_core::accounts::AccountType;
+    use kansha_core::categories::CategoryKind;
+    use kansha_core::persistence::{accounts, categories, spending};
+    use kansha_core::reports::spending_card;
+
+    let m = |s: &str| s.parse::<kansha_core::Money>().unwrap();
+    let mut b = book();
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let spare = b.account("Spare", AccountType::Checking).unwrap();
+    let a = b.category("Gas", CategoryKind::Expense).unwrap();
+    let c = b.category("Fuel", CategoryKind::Expense).unwrap();
+    let d = b.category("Parts", CategoryKind::Expense).unwrap();
+    let unused = b.category("Unused", CategoryKind::Expense).unwrap();
+    let keep = b.category("Keep", CategoryKind::Expense).unwrap();
+    for (cat, amt) in [(a, "-30.00"), (c, "-5.00"), (d, "-7.00")] {
+        b.entry(checking, date("2026-06-02"))
+            .amount(m(amt))
+            .category(cat)
+            .save()
+            .unwrap();
+    }
+    let new_card = |b: &mut Book, name: &str, accts: Option<&[_]>, cats: &[_]| {
+        b.write(|tx| {
+            let n = spending::insert(tx, name)?;
+            spending::update(tx, n.id, name, accts, cats, &[], &DEF)
+        })
+        .unwrap()
+        .id
+    };
+    let one = new_card(&mut b, "One", Some(&[checking, spare]), &[a, unused]);
+    let both = new_card(&mut b, "Both", None, &[a, c]);
+    let other = new_card(&mut b, "Other", None, &[keep]);
+    let get = |b: &Book, id| spending::get(b.conn(), id).unwrap();
+    let audits = |b: &Book, id: kansha_core::spending::SpendingCardId| {
+        audit::history(b.conn(), AuditEntity::SpendingCard, id.0)
+            .unwrap()
+            .len()
+    };
+    let total = |b: &Book, id| {
+        spending_card(b.conn(), date("2026-06-30"), &get(b, id))
+            .unwrap()
+            .total
+            .ytd
+    };
+    assert_eq!(total(&b, one), m("30.00"));
+    let (one_n, both_n, other_n) = (audits(&b, one), audits(&b, both), audits(&b, other));
+
+    // Merged: the card lists the target, once, and loses no spending.
+    b.write(|tx| categories::merge(tx, a, d)).unwrap();
+    assert_eq!(get(&b, one).categories, [d, unused]);
+    assert_eq!(total(&b, one), m("37.00"));
+    b.write(|tx| categories::merge(tx, c, d)).unwrap();
+    assert_eq!(get(&b, both).categories, [d]);
+    assert_eq!(total(&b, both), m("42.00"));
+
+    // Deleted: gone from every card.
+    b.write(|tx| categories::delete(tx, unused)).unwrap();
+    assert_eq!(get(&b, one).categories, [d]);
+    b.write(|tx| accounts::delete(tx, spare)).unwrap();
+    assert_eq!(get(&b, one).accounts, Some(vec![checking]));
+    assert_eq!(get(&b, both).accounts, None, "every open account stays so");
+
+    // One audit entry per change; a card not touched has none.
+    assert_eq!(audits(&b, one), one_n + 3);
+    assert_eq!(audits(&b, both), both_n + 2);
+    assert_eq!(audits(&b, other), other_n);
+}
+
+/// A scheduled line counts on a tagged card only with a chosen tag.
+#[test]
+fn spending_card_tags_limit_scheduled_lines() {
+    use kansha_core::accounts::AccountType;
+    use kansha_core::categories::CategoryKind;
+    use kansha_core::ledger::Target;
+    use kansha_core::persistence::spending;
+    use kansha_core::reports::spending_card;
+    use kansha_core::schedule::{
+        self, AmountType, Direction, End, EntryMode, Frequency, Recurrence, ScheduleFields,
+        ScheduleLine,
+    };
+
+    let m = |s: &str| s.parse::<kansha_core::Money>().unwrap();
+    let today = date("2026-06-10");
+    let mut b = Book::new(today).unwrap();
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let gas = b.category("Gas", CategoryKind::Expense).unwrap();
+    let trip = b.tag("Trip").unwrap();
+    let sched = |b: &mut Book, day: i64, amount: &str, tag| {
+        let mut rec = Recurrence::new(Frequency::Monthly, date("2026-06-01"));
+        rec.day1 = Some(day);
+        let f = ScheduleFields {
+            account: checking,
+            payee: None,
+            memo: String::new(),
+            direction: Direction::Payment,
+            amount_type: AmountType::Fixed,
+            lines: vec![ScheduleLine {
+                target: Target::Category(gas),
+                amount: m(amount),
+                memo: String::new(),
+                tag,
+            }],
+            recurrence: rec,
+            end: End::Never,
+            remind_days: 3,
+            mode: EntryMode::Remind,
+            average_of: None,
+        };
+        b.write(|tx| schedule::create(tx, &f)).unwrap();
+    };
+    sched(&mut b, 20, "-40.00", Some(trip));
+    sched(&mut b, 21, "-7.00", None);
+    let id = b.write(|tx| spending::insert(tx, "Trip")).unwrap().id;
+    let c = b
+        .write(|tx| spending::update(tx, id, "Trip", None, &[gas], &[trip], &DEF))
+        .unwrap();
+    let c = spending_card(b.conn(), today, &c).unwrap();
+    assert_eq!((c.total.ytd, c.total.scheduled), (m("40.00"), m("40.00")));
+}
+
 /// Spending cards (CARD-060): unique names, spending categories only,
 /// and deleting one takes it off every insight; each change audited.
 #[test]
@@ -251,13 +567,13 @@ fn spending_cards_are_named_kept_to_spending_and_deleted_from_insights() {
     assert!(matches!(e, Error::Invalid(m) if m.contains("already exists")));
     assert!(b.write(|tx| spending::insert(tx, "  ")).is_err());
     let e = b
-        .write(|tx| spending::update(tx, home.id, "CAR", None, &[]))
+        .write(|tx| spending::update(tx, home.id, "CAR", None, &[], &[], &DEF))
         .unwrap_err();
     assert!(matches!(e, Error::Invalid(m) if m.contains("already exists")));
 
     // Income categories and repeats are dropped.
     let c = b
-        .write(|tx| spending::update(tx, car.id, "Cars", None, &[pay, gas, gas]))
+        .write(|tx| spending::update(tx, car.id, "Cars", None, &[pay, gas, gas], &[], &DEF))
         .unwrap();
     assert_eq!(c.categories, [gas]);
     let all: Vec<String> = spending::list(b.conn())
@@ -405,7 +721,9 @@ fn a_spending_card_counts_this_months_scheduled_transactions() {
     let id = b.write(|tx| spending::insert(tx, "Car")).unwrap().id;
     let card = |b: &mut Book, accounts: Option<Vec<_>>| -> ExpenseCard {
         let c = b
-            .write(|tx| spending::update(tx, id, "Car", accounts.as_deref(), &[gas, food]))
+            .write(|tx| {
+                spending::update(tx, id, "Car", accounts.as_deref(), &[gas, food], &[], &DEF)
+            })
             .unwrap();
         spending_card(b.conn(), today, &c).unwrap()
     };

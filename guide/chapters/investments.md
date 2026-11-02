@@ -38,13 +38,23 @@ prices…, Seed lots…, and True up lots… below.
 | Name | The security's name |
 | Ticker | Its symbol, such as `VTI`; price downloads use it |
 | Type | Stock, ETF, mutual fund, bond, money market, CD, or other |
-| Class | Its asset class, for the Asset Allocation report |
+| Class | Its asset class, for the Asset Allocation report: US equity, US small/mid, Intl (international) equity, Emerging mkts, Short-term, Intermed (intermediate), Long-term, and Intl bonds, TIPS (inflation-protected), Muni bonds, Cash, Real estate, Commodities, Other |
 | CUSIP | Optional |
 | Notes | Anything you like |
 | Hidden | Keeps an old security out of the lists and price downloads |
 
 **New security** adds one; a new security takes its type's usual
 asset class.
+
+**Split across classes** is for a fund that holds several kinds of
+investment, such as a balanced fund (60% stocks, 40% bonds) or a
+target-date fund. Tick it, then list each class with its percent;
+**Add class** adds a row and **×** removes one. The percents must
+add up to exactly 100, with at most two decimals. The Asset
+Allocation report then splits the fund's value across those classes.
+The securities list shows its mix, such as "US equity 60%, Intermed
+bonds 40%". A target-date fund's mix changes over the years; update
+it when the fund publishes a new one.
 
 **Delete** works only for a security no transaction uses; hide it
 otherwise.

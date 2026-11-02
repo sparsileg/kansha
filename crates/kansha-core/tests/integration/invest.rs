@@ -11,7 +11,7 @@ use kansha_core::persistence::audit::{self, AuditAction, AuditEntity};
 use kansha_core::persistence::imports::{self, BatchStatus, ImportFormat};
 use kansha_core::persistence::{accounts, securities};
 use kansha_core::securities::{
-    AssetClass, PricePoint, PriceSource, SecurityFields, SecurityId, SecurityType,
+    AssetClass, ClassShare, PricePoint, PriceSource, SecurityFields, SecurityId, SecurityType,
 };
 use kansha_core::testkit::Book;
 use kansha_core::{Error, Money, Price, Quantity};
@@ -1500,7 +1500,7 @@ fn security_details_list_its_transactions_and_graph_them() {
         vec![m("100.00"), m("110.00"), m("120.12")]
     );
     // Not fitted: the axis reaches zero. Fitted: it starts near the data.
-    assert_eq!(px.ticks[0].label, "0");
+    assert_eq!(px.ticks[0].label, "$0");
     let fit = reports::security_chart(
         b.conn(),
         vti,
@@ -1511,7 +1511,7 @@ fn security_details_list_its_transactions_and_graph_them() {
     )
     .unwrap();
     assert_eq!(fit.series[0].values, px.series[0].values);
-    assert_ne!(fit.ticks[0].label, "0");
+    assert_ne!(fit.ticks[0].label, "$0");
     assert!(fit.series[0].pos[0] > 0);
     // No price in the span: its two ends.
     let empty = reports::security_chart(
@@ -1691,4 +1691,67 @@ fn lot_view_values_each_open_lot() {
         ]
     );
     assert!(lots.iter().all(|l| l.security_label == "VTI"));
+}
+
+#[test]
+fn a_class_mix_is_stored_in_order_audited_and_removed() {
+    let mut b = book();
+    let share = |c: AssetClass, p: &str| ClassShare {
+        asset_class: c,
+        percent: p.parse().unwrap(),
+    };
+    let mut f = SecurityFields::new("Balanced", SecurityType::MutualFund);
+    f.class_mix = vec![
+        share(AssetClass::BondIntermediate, "40"),
+        share(AssetClass::IntlEquity, "15.5"),
+        share(AssetClass::UsEquity, "44.5"),
+    ];
+    let id = b.security_with(&f).unwrap();
+    let s = securities::get(b.conn(), id).unwrap();
+    let classes: Vec<AssetClass> = s.fields.class_mix.iter().map(|c| c.asset_class).collect();
+    assert_eq!(
+        classes,
+        [
+            AssetClass::UsEquity,
+            AssetClass::BondIntermediate,
+            AssetClass::IntlEquity
+        ],
+        "largest share first"
+    );
+    assert_eq!(
+        s.fields.asset_class,
+        AssetClass::UsEquity,
+        "class of the largest share"
+    );
+    let listed = securities::list(b.conn()).unwrap();
+    assert_eq!(
+        listed.iter().find(|x| x.id == id).unwrap().fields.class_mix,
+        s.fields.class_mix
+    );
+
+    // A mix that does not total 100 is refused and changes nothing.
+    let mut bad = s.fields.clone();
+    bad.class_mix[0].percent = "40".parse().unwrap();
+    let err = b.write(|tx| securities::update(tx, id, &bad)).unwrap_err();
+    assert!(err.to_string().contains("total 95.5%"), "{err}");
+    assert_eq!(securities::get(b.conn(), id).unwrap(), s);
+
+    // Clearing the mix leaves the class it had; the audit shows the change.
+    let mut plain = s.fields.clone();
+    plain.class_mix.clear();
+    b.write(|tx| securities::update(tx, id, &plain)).unwrap();
+    let after = securities::get(b.conn(), id).unwrap();
+    assert!(after.fields.class_mix.is_empty());
+    assert_eq!(after.fields.asset_class, AssetClass::UsEquity);
+    let history = audit::history(b.conn(), AuditEntity::Security, id.0).unwrap();
+    assert_eq!(history.len(), 2, "create and update");
+
+    // Deleting an unused security removes its mix.
+    b.write(|tx| securities::update(tx, id, &s.fields)).unwrap();
+    b.write(|tx| securities::delete(tx, id)).unwrap();
+    let rows: i64 = b
+        .conn()
+        .query_row("SELECT count(*) FROM security_class_mix", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 0);
 }

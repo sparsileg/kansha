@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { call, commands } from "../../api";
   import { displayDate } from "../../format/date";
+  import { formatMoney, parseMoney } from "../../format/money";
   import {
     INTERVALS,
     PERIOD_PRESETS,
@@ -21,7 +22,7 @@
   } from "../../reports/meta";
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
-  import type { Column, CompareTo, PeriodChoice, ReportSettings, ResolvedRange } from "../../types/bindings";
+  import type { Cleared, Column, CompareTo, PeriodChoice, ReportSettings, ResolvedRange } from "../../types/bindings";
   import DatePicker from "../invest/DatePicker.svelte";
   import Modal from "../Modal.svelte";
 
@@ -49,6 +50,16 @@
   let showHidden = $state(false);
   let contains = $state("");
   let error = $state<string | null>(null);
+  /** Itemized reports' amount range as typed (RPT-200). */
+  // svelte-ignore state_referenced_locally
+  let amountMin = $state(settings.amount_min ? formatMoney(settings.amount_min) : "");
+  // svelte-ignore state_referenced_locally
+  let amountMax = $state(settings.amount_max ? formatMoney(settings.amount_max) : "");
+  const CLEARED: [Cleared, string][] = [
+    ["unmarked", "Uncleared"],
+    ["cleared", "Cleared"],
+    ["reconciled", "Reconciled"],
+  ];
 
   // svelte-ignore state_referenced_locally
   const meta = REPORTS[settings.kind];
@@ -203,8 +214,32 @@
     draft.hidden_columns = on ? hidden.filter((c) => c !== id) : [...hidden, id];
   }
 
+  /** Every status ticked is no filter. */
+  function setCleared(c: Cleared, on: boolean) {
+    const now = draft.cleared ?? CLEARED.map(([k]) => k);
+    const next = on ? [...now.filter((k) => k !== c), c] : now.filter((k) => k !== c);
+    draft.cleared = next.length === CLEARED.length ? null : CLEARED.map(([k]) => k).filter((k) => next.includes(k));
+  }
+
+  /** Blank is no limit; the sign is ignored. */
+  function amountLimit(text: string): string | null | undefined {
+    if (!text.trim()) return null;
+    const m = parseMoney(text);
+    return m === null ? undefined : m.replace(/^-/, "");
+  }
+
   function save(e: Event) {
     e.preventDefault();
+    if (meta.byTag) {
+      const lo = amountLimit(amountMin);
+      const hi = amountLimit(amountMax);
+      if (lo === undefined || hi === undefined) {
+        error = "Enter amounts like 100.00, or leave them blank.";
+        return;
+      }
+      draft.amount_min = lo;
+      draft.amount_max = hi;
+    }
     if (!draft.title.trim()) draft.title = meta.name;
     onsave($state.snapshot(draft));
   }
@@ -285,9 +320,16 @@
             {@const plain = draft.kind === "itemized_payees" ? "Payee" : "Category"}
             <label>
               Subtotal by
-              <select value={draft.by_tag ? "tag" : "plain"} onchange={(e) => (draft.by_tag = e.currentTarget.value === "tag")}>
+              <select
+                value={draft.flat ? "none" : draft.by_tag ? "tag" : "plain"}
+                onchange={(e) => {
+                  draft.flat = e.currentTarget.value === "none";
+                  draft.by_tag = e.currentTarget.value === "tag";
+                }}
+              >
                 <option value="plain">{plain}</option>
                 <option value="tag">Tag, then {plain.toLowerCase()}</option>
+                <option value="none">None (one list)</option>
               </select>
             </label>
           {/if}
@@ -324,6 +366,19 @@
               >{/if}
             {#if meta.showZero}<label class="check"><input type="checkbox" bind:checked={draft.show_zero} /> Accounts with zero balances</label>{/if}
           </fieldset>
+          {#if meta.byTag}
+            <fieldset class="show">
+              <legend>Transactions</legend>
+              {#each CLEARED as [c, label] (c)}
+                <label class="check"
+                  ><input type="checkbox" checked={draft.cleared?.includes(c) ?? true} onchange={(e) => setCleared(c, e.currentTarget.checked)} /> {label}</label
+                >
+              {/each}
+              <label>Amount from <input bind:value={amountMin} inputmode="decimal" size="9" placeholder="any" /></label>
+              <label>to <input bind:value={amountMax} inputmode="decimal" size="9" placeholder="any" /></label>
+              <span class="hint">Amounts by size, sign ignored.</span>
+            </fieldset>
+          {/if}
         </fieldset>
         {#if columns.length}
           <fieldset>

@@ -6,8 +6,8 @@ release notes and tick each step. A step that is skipped says why.
 
 Release: X.Y.Z · last release: A.B.C · date: ______
 
-No release is tagged yet. Until one is, use the commit of the build
-installed on the book as the last release (BASE below).
+The last release is the latest version tag (`git describe --tags
+--abbrev=0`); BASE below defaults to it.
 
 Commands run from the repository folder. `release-check` and
 `version` are bash scripts on Kubuntu and PowerShell scripts
@@ -44,8 +44,8 @@ picks the right one.
    just release-check BASE
    ```
 
-   BASE is the last release's tag or commit. Leave it out once tags
-   exist; the latest tag is used. It takes several minutes, since it
+   BASE is the last release's tag or commit. Leave it out to use the
+   latest tag. It takes several minutes, since it
    runs the tests three times (plain, coverage, and the release
    build for timings).
 

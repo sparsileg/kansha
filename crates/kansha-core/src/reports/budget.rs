@@ -29,7 +29,7 @@ pub(crate) fn budget_actuals(
         to,
     };
     let mut out: BTreeMap<(CategoryId, i32, u32), Money> = BTreeMap::new();
-    for l in facts::lines(&facts::load(conn, range)?, &s, &lk, Want::All)? {
+    for l in facts::lines(&facts::load(conn, range)?, &s, &lk, Want::Budget)? {
         let Target::Category(c) = l.target else {
             continue;
         };

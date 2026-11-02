@@ -4,8 +4,8 @@
 use kansha_core::accounts::AccountId;
 use kansha_core::backup::BackupKind;
 use kansha_core::invest::{
-    self, Allocation, Holdings, IncomeReport, InvAction, InvInput, InvRegister, InvTxn, LotView,
-    Performance, Portfolio, PortfolioSort, RealizedGain, SeedPreview, TrueUpPreview,
+    self, InvAction, InvInput, InvRegister, InvTxn, LotView, Portfolio, PortfolioSort, SeedPreview,
+    TrueUpPreview,
 };
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
@@ -200,12 +200,6 @@ pub fn inv_register(state: State<'_, AppState>, account: AccountId) -> CmdResult
     state.read(|db, today| invest::register(db.conn(), account, today))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn inv_get(state: State<'_, AppState>, txn: TxnId) -> CmdResult<InvTxn> {
-    state.read(|db, _| invest::get(db.conn(), txn))
-}
-
 /// The stored transaction as an input, to edit and send back.
 #[tauri::command]
 #[specta::specta]
@@ -266,17 +260,6 @@ pub fn inv_trade_amount(
     Ok(invest::trade_amount(action, quantity, price, commission)?)
 }
 
-/// Holdings on `as_of` (today when left out) (POS-010).
-#[tauri::command]
-#[specta::specta]
-pub fn inv_holdings(
-    state: State<'_, AppState>,
-    account: AccountId,
-    as_of: Option<Date>,
-) -> CmdResult<Holdings> {
-    state.read(|db, today| invest::holdings(db.conn(), account, as_of.unwrap_or(today), None))
-}
-
 /// Open lots on `as_of` (today when left out), one security or all
 /// (LOT-150; the lot picker for specific identification).
 #[tauri::command]
@@ -288,36 +271,6 @@ pub fn inv_lots(
     as_of: Option<Date>,
 ) -> CmdResult<Vec<LotView>> {
     state.read(|db, today| invest::open_lots(db.conn(), account, security, as_of.unwrap_or(today)))
-}
-
-/// Realized gains in one account or all, between two dates (LOT-040).
-#[tauri::command]
-#[specta::specta]
-pub fn inv_gains(
-    state: State<'_, AppState>,
-    account: Option<AccountId>,
-    from: Option<Date>,
-    to: Option<Date>,
-) -> CmdResult<Vec<RealizedGain>> {
-    state.read(|db, _| invest::realized_gains(db.conn(), account, from, to))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn inv_income(
-    state: State<'_, AppState>,
-    account: AccountId,
-    from: Option<Date>,
-    to: Option<Date>,
-) -> CmdResult<IncomeReport> {
-    state.read(|db, _| invest::income(db.conn(), account, from, to))
-}
-
-/// Simple performance as of today (POS-030).
-#[tauri::command]
-#[specta::specta]
-pub fn inv_performance(state: State<'_, AppState>, account: AccountId) -> CmdResult<Performance> {
-    state.read(|db, today| invest::performance(db.conn(), account, today))
 }
 
 /// The investments overview on `as_of` (today when left out): `accounts`
@@ -349,17 +302,6 @@ pub fn inv_portfolio(
         }
         Ok(pf)
     })
-}
-
-/// Asset allocation today across `accounts` (every open investment
-/// account when empty) (POS-020).
-#[tauri::command]
-#[specta::specta]
-pub fn inv_allocation(
-    state: State<'_, AppState>,
-    accounts: Vec<AccountId>,
-) -> CmdResult<Allocation> {
-    state.read(|db, today| invest::allocation(db.conn(), &accounts, today))
 }
 
 // ---------------------------------------------------------------------------

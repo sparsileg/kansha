@@ -17,9 +17,11 @@ chapters=(
     chapters/register.md
     chapters/scheduled.md
     chapters/reconciling.md
+    chapters/loans.md
     chapters/investments.md
     chapters/reports.md
     chapters/insights.md
+    chapters/budgets.md
     chapters/command-line.md
     chapters/backups.md
     chapters/settings.md
@@ -38,7 +40,7 @@ mkdir -p build "$(dirname "$output")"
 # The chapters often start a list on the line after a paragraph, with no
 # blank line between; --file-scope turns links between chapter files into
 # links inside the PDF
-pandoc -f markdown+lists_without_preceding_blankline --file-scope --lua-filter chapter-links.lua --lua-filter callouts.lua --lua-filter appendices.lua --template guide.typ -V version="$version" \
+pandoc -f markdown+lists_without_preceding_blankline --file-scope --lua-filter chapter-links.lua --lua-filter callouts.lua --lua-filter appendices.lua --lua-filter index.lua --template guide.typ -V version="$version" \
     -t typst -o build/kansha-guide.typ "${chapters[@]}"
 typst compile --root . --font-path fonts --ignore-system-fonts \
     build/kansha-guide.typ "$output"

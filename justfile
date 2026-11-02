@@ -57,7 +57,7 @@ version V:
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set-version.ps1 {{V}}
 
 # Formatting, lints, type-checking, and tests: what CI runs
-check: fmt-check clippy typecheck test
+check: fmt-check clippy typecheck test trace
 
 # Format all Rust code
 fmt:

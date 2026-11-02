@@ -189,6 +189,7 @@
           ticker: edit.ticker.trim() || null,
           security_type: edit.security_type,
           asset_class: s.asset_class,
+          class_mix: s.class_mix,
           cusip: s.cusip,
           default_lot_method: s.default_lot_method,
           hidden: s.hidden,

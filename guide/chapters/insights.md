@@ -61,9 +61,20 @@ A spending card totals the categories you choose: everything for the
 house, or food in all its subcategories. It shows the **Year**, the
 **Month**, and the **Monthly Avg**, one row per category.
 
-To make one, open the insight's gear, choose **Customize…**, and click
-**New spending card…**. Give it a **Name**, then tick its
-**Categories**, and on the **Accounts** tab the accounts it counts.
+To make one, open the insight's gear and choose **New spending
+card…**. Give it a **Name**, then tick its **Categories**, and on the
+**Accounts** tab the accounts it counts. **OK** puts it on the insight
+you are looking at. To show it on another insight, add it from that
+insight's **Available cards**.
+
+Its **Tags** tab counts only lines with a checked tag. Check tags and
+no categories, and the card lists every spending category with those
+tags. Its **Columns** tab picks what the card shows: **Last Year**
+(the whole year; its tooltip gives the same months as **Year**),
+**Year**, **Last Month**, **Month**, **Monthly Avg**, and **3 Yr Avg**,
+the monthly average over the last three full calendar years. With both
+averages shown, ▲ or ▼ says this year's is above or below the longer
+one.
 
 A spending card has its own gear with **Customize…** and **Delete
 card…**. **Settings > Interface** sets how many rows a spending card
@@ -73,10 +84,11 @@ shows before it scrolls (10 to start with).
 
 The gear at the end of the tabs holds:
 
-- **Customize…**: the insight's **Name**, and its cards. **Available
+- **Customize** and the insight's name: its **Name**, and its cards. **Available
   cards** lists the cards not on it; **On this insight (in order)**
   lists those on it. **Add ›** and **‹ Remove** move a card between
   the two; **▲ Up** and **▼ Down** change the order.
+- **New spending card…**: see above.
 - **Create new insight…**: a new tab.
 - **Move left**, **Move right**: the tab's place.
 - **Delete insight…**: removes the tab.

@@ -116,11 +116,6 @@ export const commands = {
 	/**  All accounts, open and closed, in display order. */
 	accountList: () => typedError<Account[], IpcError>(__TAURI_INVOKE("account_list")),
 	/**
-	 *  Current and ending balance of every account (ACCT-230), as the
-	 *  account bar shows them: without cents if the setting says so.
-	 */
-	accountBalances: () => typedError<AccountBalance[], IpcError>(__TAURI_INVOKE("account_balances")),
-	/**
 	 *  Balances, section totals, and net worth for the account bar in one
 	 *  call (ACCT-230, ACCT-240), as it shows them.
 	 */
@@ -354,7 +349,6 @@ export const commands = {
 	loanSave: (save: LoanSave, lenderName: string | null, confirmed: boolean) => typedError<LoanSaved, IpcError>(__TAURI_INVOKE("loan_save", { save, lenderName, confirmed })),
 	/**  The Scheduled Transactions list, next due first (REC-300). */
 	scheduleList: () => typedError<ScheduleRow[], IpcError>(__TAURI_INVOKE("schedule_list")),
-	scheduleGet: (id: ScheduleId) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_get", { id })),
 	/**  Create a schedule (REC-100). `payee_name` works as in `entry_create`. */
 	scheduleCreate: (fields: ScheduleFields, payeeName: string | null) => typedError<Schedule, IpcError>(__TAURI_INVOKE("schedule_create", { fields, payeeName })),
 	/**  Edit a schedule for this and all future occurrences (REC-120). */
@@ -514,7 +508,6 @@ export const commands = {
 	pricesDownload: (date: string) => typedError<DownloadSummary, IpcError>(__TAURI_INVOKE("prices_download", { date })),
 	/**  An investment account's register (INV-030). */
 	invRegister: (account: AccountId) => typedError<InvRegister, IpcError>(__TAURI_INVOKE("inv_register", { account })),
-	invGet: (txn: TxnId) => typedError<InvTxn, IpcError>(__TAURI_INVOKE("inv_get", { txn })),
 	/**  The stored transaction as an input, to edit and send back. */
 	invInput: (txn: TxnId) => typedError<InvInput, IpcError>(__TAURI_INVOKE("inv_input", { txn })),
 	invCreate: (input: InvInput) => typedError<TxnId, IpcError>(__TAURI_INVOKE("inv_create", { input })),
@@ -529,23 +522,11 @@ export const commands = {
 	 *  arithmetic.
 	 */
 	invTradeAmount: (action: InvAction, quantity: string, price: string, commission: string) => typedError<string, IpcError>(__TAURI_INVOKE("inv_trade_amount", { action, quantity, price, commission })),
-	/**  Holdings on `as_of` (today when left out) (POS-010). */
-	invHoldings: (account: AccountId, asOf: string | null) => typedError<Holdings, IpcError>(__TAURI_INVOKE("inv_holdings", { account, asOf })),
 	/**
 	 *  Open lots on `as_of` (today when left out), one security or all
 	 *  (LOT-150; the lot picker for specific identification).
 	 */
 	invLots: (account: AccountId, security: number | null, asOf: string | null) => typedError<LotView[], IpcError>(__TAURI_INVOKE("inv_lots", { account, security, asOf })),
-	/**  Realized gains in one account or all, between two dates (LOT-040). */
-	invGains: (account: number | null, from: string | null, to: string | null) => typedError<RealizedGain[], IpcError>(__TAURI_INVOKE("inv_gains", { account, from, to })),
-	invIncome: (account: AccountId, from: string | null, to: string | null) => typedError<IncomeReport, IpcError>(__TAURI_INVOKE("inv_income", { account, from, to })),
-	/**  Simple performance as of today (POS-030). */
-	invPerformance: (account: AccountId) => typedError<Performance, IpcError>(__TAURI_INVOKE("inv_performance", { account })),
-	/**
-	 *  Asset allocation today across `accounts` (every open investment
-	 *  account when empty) (POS-020).
-	 */
-	invAllocation: (accounts: AccountId[]) => typedError<Allocation, IpcError>(__TAURI_INVOKE("inv_allocation", { accounts })),
 	/**
 	 *  The investments overview on `as_of` (today when left out): `accounts`
 	 *  in the order given, their positions and lots, day changes, and totals;
@@ -684,13 +665,13 @@ export const commands = {
 	insightMove: (id: InsightId, delta: number) => typedError<Insight[], IpcError>(__TAURI_INVOKE("insight_move", { id, delta })),
 	/**  Every spending card, by name (CARD-060). */
 	spendingCardList: () => typedError<SpendingCard[], IpcError>(__TAURI_INVOKE("spending_card_list")),
-	/**  A new spending card: every open account, no category. */
-	spendingCardCreate: (name: string) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_create", { name })),
+	/**  A new spending card with its choices, put last on `insight`. */
+	spendingCardCreate: (name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], insight: InsightId) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_create", { name, accounts, categories, tags, columns, insight })),
 	/**
 	 *  Rename a spending card and set its accounts (`None` = every open
-	 *  one) and spending categories.
+	 *  one), spending categories, tags, and columns.
 	 */
-	spendingCardUpdate: (id: SpendingCardId, name: string, accounts: AccountId[] | null, categories: CategoryId[]) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_update", { id, name, accounts, categories })),
+	spendingCardUpdate: (id: SpendingCardId, name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_update", { id, name, accounts, categories, tags, columns })),
 	/**  Delete a spending card; it leaves every insight showing it. */
 	spendingCardDelete: (id: SpendingCardId) => typedError<null, IpcError>(__TAURI_INVOKE("spending_card_delete", { id })),
 	/**  What a spending card shows today (CARD-060). */
@@ -877,22 +858,6 @@ export type AdjustmentKind = "split" | "return_of_capital" |
  */
 "average";
 
-export type Allocation = {
-	as_of: string,
-	accounts: AccountId[],
-	rows: AllocationRow[],
-	total: string,
-	/**  Holdings with no price are left out. */
-	missing_prices: boolean,
-};
-
-export type AllocationRow = {
-	asset_class: AssetClass,
-	market_value: string,
-	/**  Share of the total, percent with two decimals. */
-	percent: string,
-};
-
 /**
  *  Fixed amounts enter as scheduled; estimated ones are confirmed on
  *  entry (REC-060).
@@ -973,7 +938,7 @@ export type Approved = {
 };
 
 /**  Asset class for allocation (SEC-010, POS-020). */
-export type AssetClass = "us_equity" | "intl_equity" | "bond" | "cash" | "real_estate" | "commodity" | "other";
+export type AssetClass = "us_equity" | "us_small_mid" | "intl_equity" | "emerging" | "bond_short" | "bond_intermediate" | "bond_long" | "bond_intl" | "bond_tips" | "bond_muni" | "cash" | "real_estate" | "commodity" | "other";
 
 /**  Kind of an Other Asset account (ACCT-140). */
 export type AssetSubtype = "house" | "vehicle" | "other";
@@ -1037,6 +1002,9 @@ export type AutoEnterReport = {
 	 */
 	failed: AutoEnterFailure[],
 };
+
+/**  This year's monthly average against the longer one (CARD-070). */
+export type AvgTrend = "up" | "down";
 
 /**  The last backup and verification, and the folder backups go to. */
 export type BackupInfo = {
@@ -1347,6 +1315,13 @@ export type Check =
  *  they are listed.
  */
 export type CheckKind = "integrity" | "backup" | "verification" | "backup_folder" | "prices" | "overdue" | "uncleared" | "reconcile" | "uncategorized" | "investment_cash";
+
+/**  One class's part of a security split across classes (SEC-050). */
+export type ClassShare = {
+	asset_class: AssetClass,
+	/**  Percent, at most two decimals (`"60"`, `"12.5"`). */
+	percent: string,
+};
 
 /**  Cleared status of an account posting (glossary; RCN-020). */
 export type Cleared = "unmarked" | "cleared" | 
@@ -1714,11 +1689,27 @@ export type ExpenseCard = {
 	 *  empty card can tell "choose some" from "no spending this year".
 	 */
 	chosen: number,
+	/**  The columns shown, in display order. */
+	columns: SpendingColumn[],
+	/**  The months behind Monthly Avg: those begun this year. */
+	year_months: number,
+	/**
+	 *  The months behind the three-year average: up to 36, those since
+	 *  the book's first transaction; 0 when that is this year.
+	 */
+	avg_months: number,
+	/**
+	 *  The 1st of the month the three-year average starts in, when it
+	 *  has fewer than 36 months to go on.
+	 */
+	avg_since: string | null,
+	/**  Where `same_period` ends: this month's end, a year ago. */
+	same_period_to: string,
 };
 
 /**
- *  One row of a spending card (CARD-060): spent this year, this
- *  month, and per month, expenses positive.
+ *  One row of a spending card (CARD-060, CARD-070): spent in each
+ *  period, expenses positive. A column not shown stays zero.
  */
 export type ExpenseRow = {
 	/**  `None` on the Total row. */
@@ -1739,6 +1730,21 @@ export type ExpenseRow = {
 	 *  occurrences dated this month.
 	 */
 	scheduled: string,
+	/**  The whole of last calendar year. */
+	last_year: string,
+	/**  Last year, January 1 through `same_period_to`: Year's period. */
+	same_period: string,
+	/**  The whole of last month. */
+	last_month: string,
+	/**  Spent in the last three full calendar years (CARD-070). */
+	three_year_total: string,
+	/**  `three_year_total` over `avg_months`; zero with no months. */
+	three_year_avg: string,
+	/**
+	 *  `monthly_avg` against `three_year_avg`; `None` when equal, or
+	 *  with no longer average to compare.
+	 */
+	avg_trend: AvgTrend | null,
 };
 
 /**
@@ -1930,26 +1936,6 @@ export type HistoryRow = {
 	items_total: string,
 };
 
-/**  An investment account's holdings (POS-010, POS-040 Holdings tab). */
-export type Holdings = {
-	account: AccountId,
-	as_of: string,
-	positions: Position[],
-	/**  `None` with linked cash. */
-	cash: string | null,
-	/**  Σ cost basis of the positions. */
-	basis: string,
-	/**  Σ market value of the positions that have a price. */
-	market_value: string,
-	/**  Market value plus cash. */
-	total_value: string,
-	/**  Σ unrealized gain of the positions that have a price. */
-	unrealized: string,
-	/**  Some position has no price, so the totals leave it out. */
-	missing_prices: boolean,
-	stale_prices: boolean,
-};
-
 export type ImportBatch = {
 	id: number,
 	source_file: string,
@@ -2082,29 +2068,6 @@ export type ImportResult = {
 export type InboxReport = {
 	received: Received[],
 	refused: Refused[],
-};
-
-/**  Income by security, with totals. */
-export type IncomeReport = {
-	rows: IncomeRow[],
-	total: IncomeRow,
-};
-
-/**
- *  Investment income from one security (or none: interest and other
- *  income not tied to a security).
- */
-export type IncomeRow = {
-	security: SecurityId | null,
-	security_label: string,
-	/**  Cash and reinvested dividends. */
-	dividends: string,
-	interest: string,
-	cg_short: string,
-	cg_long: string,
-	/**  Miscellaneous income. */
-	other: string,
-	total: string,
 };
 
 /**  One insight, a tab of cards. */
@@ -2730,35 +2693,6 @@ export type PendingView = {
 };
 
 /**
- *  Simple performance of one security in an account, or the account's
- *  total (`security` `None`).
- */
-export type PerfRow = {
-	security: SecurityId | null,
-	security_label: string,
-	/**  Open cost basis. */
-	basis: string,
-	market_value: string | null,
-	unrealized: string | null,
-	realized: string,
-	income: string,
-	/**  Unrealized + realized + income. */
-	total_gain: string | null,
-	/**
-	 *  Total gain ÷ (open basis + basis of shares sold), in percent, two
-	 *  decimals.
-	 */
-	total_return: string | null,
-};
-
-export type Performance = {
-	account: AccountId,
-	as_of: string,
-	rows: PerfRow[],
-	total: PerfRow,
-};
-
-/**
  *  One period offered for Monthly, Quarterly, or Yearly: its dates and
  *  its name ("Oct 2026", "Q4 2026", "2026").
  */
@@ -2872,29 +2806,6 @@ export type PortfolioTotals = {
 	stale_prices: boolean,
 };
 
-/**  One security held in one account (POS-010). */
-export type Position = {
-	account: AccountId,
-	security: SecurityId,
-	name: string,
-	ticker: string | null,
-	security_type: SecurityType,
-	asset_class: AssetClass,
-	shares: string,
-	basis: string,
-	/**
-	 *  Latest price on or before the valuation date; `None` if there is
-	 *  none.
-	 */
-	price: string | null,
-	/**  `None` for a money market fund valued at $1.00 without a price. */
-	price_date: string | null,
-	/**  The price is older than the stale threshold (PRC-050). */
-	stale: boolean,
-	market_value: string | null,
-	unrealized: string | null,
-};
-
 /**  A stored posting. */
 export type Posting = {
 	id: PostingId,
@@ -2960,32 +2871,6 @@ export type PricePoint = {
 
 /**  Where a price came from (PRC-010 … PRC-040). */
 export type PriceSource = "manual" | "csv" | "qif" | "download";
-
-/**  One realized gain or loss. */
-export type RealizedGain = {
-	txn_id: TxnId,
-	account: AccountId,
-	security: SecurityId,
-	security_label: string,
-	/**
-	 *  `None` for return of capital beyond basis (LOT-130), which has no
-	 *  lot record.
-	 */
-	lot: LotId | null,
-	sale_date: string,
-	acquired: string | null,
-	quantity: string | null,
-	proceeds: string,
-	basis: string,
-	gain: string,
-	/**  `None` for return of capital beyond basis. */
-	term: Term | null,
-	/**
-	 *  From a taxable account; gains in tax-deferred and tax-exempt
-	 *  accounts are kept but left out of taxable totals (LOT-160).
-	 */
-	taxable: boolean,
-};
 
 /**  What [`receive`] did. */
 export type Received = {
@@ -3293,10 +3178,35 @@ export type ReportSettings = {
 	/**  Itemized reports: tag sets as the outer groups (TAG-030). */
 	by_tag?: boolean,
 	/**
+	 *  Itemized reports: one list, no groups, one total (RPT-200,
+	 *  0.7.122). Wins over `by_tag`.
+	 */
+	flat?: boolean,
+	/**
+	 *  Itemized reports: only these cleared statuses of the account's
+	 *  posting; `None` is any (RPT-200).
+	 */
+	cleared?: Cleared[] | null,
+	/**
+	 *  Itemized reports: only amounts at least this size, sign ignored
+	 *  (RPT-200).
+	 */
+	amount_min?: string | null,
+	/**
+	 *  Itemized reports: only amounts at most this size, sign ignored
+	 *  (RPT-200).
+	 */
+	amount_max?: string | null,
+	/**
 	 *  Income and expense: also count transfers to and from accounts
 	 *  not chosen, as cash flow does (RPT-190).
 	 */
 	cash_flow?: boolean,
+	/**
+	 *  Itemized Categories: list what a budget counts (BUD-030), for a
+	 *  budget figure's transactions.
+	 */
+	budget_lines?: boolean,
 	/**
 	 *  `None` is every account, except Capital Gains, where it is every
 	 *  taxable investment account.
@@ -3526,7 +3436,13 @@ export type SecurityFields = {
 	/**  Unique when present; CDs and some bonds have none. */
 	ticker: string | null,
 	security_type: SecurityType,
+	/**  The class it counts in; with a mix, the class of its largest share. */
 	asset_class: AssetClass,
+	/**
+	 *  Split across several classes (SEC-050): empty for none, else two or
+	 *  more distinct classes whose percents total 100.
+	 */
+	class_mix: ClassShare[],
 	/**  Nine characters (SEC-020). */
 	cusip: string | null,
 	/**  Overrides the account's default lot selection (SEC-030, LOT-100). */
@@ -3748,12 +3664,22 @@ export type SpendingCard = {
 	 *  customized).
 	 */
 	accounts: AccountId[] | null,
-	/**  The spending categories listed, each on its own. */
+	/**
+	 *  The spending categories listed, each on its own. Empty with
+	 *  `tags` chosen: every spending category with a tagged line.
+	 */
 	categories: CategoryId[],
+	/**  A line counts when it has any of these; empty counts every line. */
+	tags: TagId[],
+	/**  The columns shown, in display order; never empty. */
+	columns: SpendingColumn[],
 };
 
 /**  Row ID of a spending card. */
 export type SpendingCardId = number;
+
+/**  A column a spending card can show, in display order. */
+export type SpendingColumn = "last_year" | "year" | "last_month" | "month" | "monthly_avg" | "three_year_avg";
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */
 export type SplitRatio = {
@@ -3822,8 +3748,16 @@ export type Summary = {
 	bar: Bar | null,
 };
 
-/**  Built-in categories seeded by migration 0001 (CAT-060, RCN-040). */
-export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance";
+/**
+ *  Built-in categories seeded by migrations 0001 and 0023 (CAT-060,
+ *  RCN-040).
+ */
+export type SystemCategory = "dividends" | "interest" | "cg_dist_short" | "cg_dist_long" | "realized_gain" | "investment_income" | "investment_fees" | "investment_expense" | "tax_withheld" | "balance_adjustment" | "opening_balance" | 
+/**
+ *  Listed by reports for money leaving a tax-sheltered account
+ *  (BUD-030); it is a transfer in the ledger.
+ */
+"retirement_distributions";
 
 /**  A stored tag. */
 export type Tag = {

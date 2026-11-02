@@ -135,13 +135,15 @@ vi.mock("../lib/api", async (orig) => {
           },
         ),
       spendingCardList: () => ok(listsState.spendingCards),
-      spendingCardCreate: (name: string) => sc.create(name),
+      spendingCardCreate: (...args: unknown[]) => sc.create(...args),
       spendingCardUpdate: (
         id: number,
         name: string,
         accounts: number[] | null,
         categories: number[],
-      ) => sc.update(id, name, accounts, categories),
+        tags: number[],
+        columns: string[],
+      ) => sc.update(id, name, accounts, categories, tags, columns),
       spendingCardDelete: (id: number) => sc.remove(id),
       attention: () => {
         attentionCall();
@@ -215,7 +217,11 @@ import { confirmState } from "../lib/state/confirm.svelte";
 import { dialogState } from "../lib/state/dialogs.svelte";
 import { listsState } from "../lib/state/lists.svelte";
 import { viewState } from "../lib/state/view.svelte";
-import type { Insight, SpendingCard } from "../lib/types/bindings";
+import type {
+  Insight,
+  SpendingCard,
+  SpendingColumn,
+} from "../lib/types/bindings";
 
 const ALL = CARDS.map((c) => c.id);
 const status: Insight = { id: 1, name: "Status", cards: ALL };
@@ -536,7 +542,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {
     );
     render(Insights);
     await screen.findAllByText("10,019,506.27");
-    await gear("Customize…");
+    await gear("Customize Status…");
     const dlg = screen.getByRole("dialog", { name: "Customize insight" });
     const name = within(dlg).getByRole("textbox", {
       name: "Name",
@@ -603,7 +609,7 @@ describe("Insights: tabs and the gear (INS-010 … INS-030)", () => {
       off("Move right"),
       off("Delete insight…"),
     ]).toEqual([true, true, true]);
-    expect(off("Customize…")).toBe(false);
+    expect(off("Customize Status…")).toBe(false);
   });
 
   it("Move right reorders the tabs", async () => {
@@ -685,12 +691,34 @@ describe("Insights: spending cards (CARD-060)", () => {
     ytd: string,
     mtd: string,
     monthly_avg: string,
-  ) => ({ category, label, ytd, mtd, monthly_avg, scheduled: "0.00" });
+  ) => ({
+    category,
+    label,
+    ytd,
+    mtd,
+    monthly_avg,
+    scheduled: "0.00",
+    last_year: "0.00",
+    same_period: "0.00",
+    last_month: "0.00",
+    three_year_total: "0.00",
+    three_year_avg: "0.00",
+    avg_trend: null,
+  });
+  const extras = {
+    columns: ["year", "month", "monthly_avg"],
+    year_months: 9,
+    avg_months: 0,
+    avg_since: null,
+    same_period_to: "2025-09-30",
+  };
   const carCard = (): SpendingCard => ({
     id: 4,
     name: "Car costs",
     accounts: null,
     categories: [],
+    tags: [],
+    columns: ["year", "month", "monthly_avg"],
   });
   const auto = (): Insight => ({ id: 3, name: "Car", cards: ["spending:4"] });
   const shown = (insights: Insight[] = [auto()]) => {
@@ -704,7 +732,7 @@ describe("Insights: spending cards (CARD-060)", () => {
     render(Insights);
     const card = await screen.findByRole("article", { name: "Car costs" });
     expect(card.classList.contains("double")).toBe(true);
-    await within(card).findByText(/Choose accounts and categories/);
+    await within(card).findByText(/Choose accounts, and categories or tags/);
     expect(autoCall).toHaveBeenCalledWith(4);
   });
 
@@ -713,15 +741,16 @@ describe("Insights: spending cards (CARD-060)", () => {
       rows: [],
       total: row(null, "Total", "0.00", "0.00", "0.00"),
       chosen: 2,
+      ...extras,
     });
     shown();
     render(Insights);
     const card = await screen.findByRole("article", { name: "Car costs" });
     await within(card).findByText(
-      "No spending this year in the chosen categories.",
+      "No spending in the columns shown for what is chosen.",
     );
     expect(
-      within(card).queryByText(/Choose accounts and categories/),
+      within(card).queryByText(/Choose accounts, and categories or tags/),
     ).toBeNull();
   });
 
@@ -733,6 +762,7 @@ describe("Insights: spending cards (CARD-060)", () => {
       ],
       total: row(null, "Total", "2235.69", "0.00", "223.57"),
       chosen: 2,
+      ...extras,
     });
     shown();
     render(Insights);
@@ -763,14 +793,24 @@ describe("Insights: spending cards (CARD-060)", () => {
   });
 
   it("the gear's Customize… names the card and chooses accounts (open ones first) and spending categories", async () => {
+    listsState.tags = [{ id: 3, name: "Trip", hidden: false }] as never;
     listsState.categories = [
       { id: 5, name: "Car", parent: null, kind: "expense", hidden: false },
       { id: 7, name: "Gas", parent: 5, kind: "expense", hidden: false },
       { id: 9, name: "Salary", parent: null, kind: "income", hidden: false },
     ] as never;
     sc.update.mockImplementation(
-      (id: number, name: string, accounts: number[], categories: number[]) => {
-        listsState.spendingCards = [{ id, name, accounts, categories }];
+      (
+        id: number,
+        name: string,
+        accounts: number[],
+        categories: number[],
+        tags: number[],
+        columns: SpendingColumn[],
+      ) => {
+        listsState.spendingCards = [
+          { id, name, accounts, categories, tags, columns },
+        ];
         return ok(listsState.spendingCards[0]);
       },
     );
@@ -825,10 +865,37 @@ describe("Insights: spending cards (CARD-060)", () => {
     await fireEvent.click(
       within(dialog).getByRole("checkbox", { name: "Car:Gas" }),
     );
-    await fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+
+    await fireEvent.click(within(dialog).getByRole("tab", { name: "Tags" }));
+    await fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Trip" }),
+    );
+
+    await fireEvent.click(within(dialog).getByRole("tab", { name: "Columns" }));
+    const ok_ = within(dialog).getByRole("button", {
+      name: "OK",
+    }) as HTMLButtonElement;
+    await fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Last Year" }),
+    );
+    for (const name of ["Last Year", "Year", "Month", "Monthly Avg"]) {
+      await fireEvent.click(within(dialog).getByRole("checkbox", { name }));
+    }
+    expect(ok_.disabled).toBe(true); // none left
+    await fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "3 Yr Avg" }),
+    );
+    await fireEvent.click(ok_);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(sc.update).toHaveBeenCalledWith(4, "Auto", [1], [7]);
+    expect(sc.update).toHaveBeenCalledWith(
+      4,
+      "Auto",
+      [1],
+      [7],
+      [3],
+      ["three_year_avg"],
+    );
     expect(await screen.findByRole("article", { name: "Auto" })).toBeTruthy();
     await waitFor(() => expect(autoCall.mock.calls.length).toBeGreaterThan(1));
   });
@@ -884,45 +951,72 @@ describe("Insights: spending cards (CARD-060)", () => {
     );
   });
 
-  it("New spending card… in the insight dialog makes the card and puts it on the insight", async () => {
+  it("New spending card… opens a blank card window; OK makes the card on this insight", async () => {
+    listsState.categories = [
+      { id: 7, name: "Gas", parent: null, kind: "expense", hidden: false },
+    ] as never;
     sc.create.mockImplementation((name: string) => {
-      listsState.spendingCards = [
-        carCard(),
-        { id: 6, name, accounts: null, categories: [] },
+      listsState.spendingCards = [carCard(), { ...carCard(), id: 6, name }];
+      listsState.insights = [
+        { ...auto(), cards: ["spending:4", "spending:6"] },
       ];
       return ok(listsState.spendingCards[1]);
     });
-    ins.update.mockImplementation((id: number, name: string, cards: string[]) =>
-      ok({ id, name, cards }),
-    );
     shown();
     render(Insights);
     await screen.findByRole("article", { name: "Car costs" });
-    await gear("Customize…");
-    const dlg = screen.getByRole("dialog", { name: "Customize insight" });
-    expect(within(dlg).getByRole("option", { name: "Car costs" })).toBeTruthy();
+    await gear("New spending card…");
+
+    const dlg = screen.getByRole("dialog", { name: "New spending card" });
+    const name = within(dlg).getByRole("textbox", {
+      name: "Name",
+    }) as HTMLInputElement;
+    expect(name.value).toBe("");
+    const ok_ = within(dlg).getByRole("button", {
+      name: "OK",
+    }) as HTMLButtonElement;
+    expect(ok_.disabled).toBe(true);
+    await fireEvent.input(name, { target: { value: "Home" } });
+    await fireEvent.click(within(dlg).getByRole("tab", { name: "Categories" }));
+    await fireEvent.click(within(dlg).getByRole("checkbox", { name: "Gas" }));
+    await fireEvent.click(ok_);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(sc.create).toHaveBeenCalledWith(
+      "Home",
+      [1],
+      [7],
+      [],
+      ["year", "month", "monthly_avg"],
+      3,
+    );
+    expect(await screen.findByRole("article", { name: "Home" })).toBeTruthy();
+  });
+
+  it("Cancel on New spending card… makes nothing", async () => {
+    shown();
+    render(Insights);
+    await screen.findByRole("article", { name: "Car costs" });
+    await gear("New spending card…");
     await fireEvent.click(
-      within(dlg).getByRole("button", { name: "New spending card…" }),
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
     );
-    await fireEvent.input(
-      within(dlg).getByRole("textbox", { name: "Spending card name" }),
-      { target: { value: " Home " } },
-    );
-    await fireEvent.click(within(dlg).getByRole("button", { name: "Create" }));
-    await waitFor(() => expect(sc.create).toHaveBeenCalledWith("Home"));
-    const right = within(dlg).getByRole("listbox", {
-      name: "On this insight (in order)",
-    });
-    await waitFor(() =>
-      expect(within(right).getByRole("option", { name: "Home" })).toBeTruthy(),
-    );
-    await fireEvent.click(within(dlg).getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(ins.update).toHaveBeenCalledWith(3, "Car", [
-        "spending:4",
-        "spending:6",
-      ]),
-    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(sc.create).not.toHaveBeenCalled();
+  });
+
+  it("the insight dialog no longer makes cards", async () => {
+    shown();
+    render(Insights);
+    await screen.findByRole("article", { name: "Car costs" });
+    await gear("Customize Car…");
+    expect(
+      within(screen.getByRole("dialog")).queryByRole("button", {
+        name: "New spending card…",
+      }),
+    ).toBeNull();
   });
 
   it("is not loaded for an insight without the card", async () => {

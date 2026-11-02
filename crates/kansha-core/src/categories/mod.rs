@@ -59,7 +59,8 @@ text_enum! {
 }
 
 text_enum! {
-    /// Built-in categories seeded by migration 0001 (CAT-060, RCN-040).
+    /// Built-in categories seeded by migrations 0001 and 0023 (CAT-060,
+    /// RCN-040).
     pub enum SystemCategory {
         Dividends = "dividends",
         Interest = "interest",
@@ -72,6 +73,9 @@ text_enum! {
         TaxWithheld = "tax_withheld",
         BalanceAdjustment = "balance_adjustment",
         OpeningBalance = "opening_balance",
+        /// Listed by reports for money leaving a tax-sheltered account
+        /// (BUD-030); it is a transfer in the ledger.
+        RetirementDistributions = "retirement_distributions",
     }
 }
 

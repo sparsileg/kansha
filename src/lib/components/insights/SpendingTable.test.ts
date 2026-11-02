@@ -4,6 +4,14 @@ import SpendingTable from "./SpendingTable.svelte";
 import type { ExpenseCard } from "../../types/bindings";
 
 const ROW = 20;
+const PAST = {
+  last_year: "12.00",
+  same_period: "9.00",
+  last_month: "3.00",
+  three_year_total: "72.00",
+  three_year_avg: "2.00",
+  avg_trend: null,
+};
 const card = (n: number): ExpenseCard => {
   const row = (i: number) => ({
     category: i,
@@ -12,6 +20,7 @@ const card = (n: number): ExpenseCard => {
     mtd: "0.00",
     monthly_avg: "0.10",
     scheduled: i === 2 ? "0.50" : "0.00",
+    ...PAST,
   });
   return {
     rows: Array.from({ length: n }, (_, i) => row(i + 1)),
@@ -22,8 +31,14 @@ const card = (n: number): ExpenseCard => {
       mtd: "0.00",
       monthly_avg: "0.00",
       scheduled: "0.50",
+      ...PAST,
     },
     chosen: n,
+    columns: ["year", "month", "monthly_avg"],
+    year_months: 10,
+    avg_months: 36,
+    avg_since: null,
+    same_period_to: "2025-10-31",
   };
 };
 
@@ -121,11 +136,42 @@ describe("spending card rows (CARD-060)", () => {
       "Cat 2",
       "0.50 scheduled",
       "0.50 scheduled",
-      null,
+      "10 months, 1.00 total",
     ]);
     expect(cells(0)[1].getAttribute("title")).toBeNull();
     expect(container.querySelector("tfoot td.num")?.getAttribute("title")).toBe(
       "0.50 scheduled",
     );
+  });
+
+  it("shows the chosen columns in order; past ones give their period, averages their months and total, and ▲ this year's average above the longer one", async () => {
+    const c = card(1);
+    c.columns = ["last_year", "year", "last_month", "monthly_avg", "three_year_avg"];
+    c.avg_months = 19;
+    c.avg_since = "2024-06-01";
+    c.rows[0].avg_trend = "up";
+    const { container } = render(SpendingTable, { card: c, rows: 10 });
+    await frame();
+    expect(
+      [...container.querySelectorAll("thead th")].map((x) => x.textContent),
+    ).toEqual([
+      "Category",
+      "Last Year",
+      "Year",
+      "Last Month",
+      "Monthly Avg",
+      "Avg since Jun 2024",
+    ]);
+    const cells = [...container.querySelectorAll("tbody td")];
+    expect(cells.map((x) => x.textContent)).toEqual([
+      "Cat 1",
+      "12.00",
+      "1.00",
+      "3.00",
+      "▲ 0.10",
+      "2.00",
+    ]);
+    expect(cells[1].getAttribute("title")).toBe("Through Oct 2025: 9.00");
+    expect(cells[5].getAttribute("title")).toBe("19 months, 72.00 total");
   });
 });

@@ -30,7 +30,7 @@ mod tree;
 
 pub(crate) use budget::budget_actuals;
 pub use cards::{
-    Attention, AttentionCheck, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding,
+    Attention, AttentionCheck, AvgTrend, CardData, CheckKind, ExpenseCard, ExpenseRow, Finding,
     GroupBalances, Notice, Session, account_bar_net_worth, age, attention, card_data, net_worth,
     net_worth_trend, spending_card,
 };
@@ -48,7 +48,8 @@ use crate::accounts::AccountId;
 use crate::categories::{CategoryId, PayeeId, TagId};
 use crate::date::Date;
 use crate::error::Result;
-use crate::ledger::TxnId;
+use crate::ledger::{Cleared, TxnId};
+use crate::money::Money;
 use crate::securities::{AssetClass, SecurityId};
 use crate::text_enum::text_enum;
 
@@ -375,10 +376,30 @@ pub struct ReportSettings {
     /// Itemized reports: tag sets as the outer groups (TAG-030).
     #[serde(default)]
     pub by_tag: bool,
+    /// Itemized reports: one list, no groups, one total (RPT-200,
+    /// 0.7.122). Wins over `by_tag`.
+    #[serde(default)]
+    pub flat: bool,
+    /// Itemized reports: only these cleared statuses of the account's
+    /// posting; `None` is any (RPT-200).
+    #[serde(default)]
+    pub cleared: Option<Vec<Cleared>>,
+    /// Itemized reports: only amounts at least this size, sign ignored
+    /// (RPT-200).
+    #[serde(default)]
+    pub amount_min: Option<Money>,
+    /// Itemized reports: only amounts at most this size, sign ignored
+    /// (RPT-200).
+    #[serde(default)]
+    pub amount_max: Option<Money>,
     /// Income and expense: also count transfers to and from accounts
     /// not chosen, as cash flow does (RPT-190).
     #[serde(default)]
     pub cash_flow: bool,
+    /// Itemized Categories: list what a budget counts (BUD-030), for a
+    /// budget figure's transactions.
+    #[serde(default)]
+    pub budget_lines: bool,
     /// `None` is every account, except Capital Gains, where it is every
     /// taxable investment account.
     #[serde(default)]
@@ -480,7 +501,12 @@ impl ReportSettings {
             // the tax reports need them (an IRA distribution, CAT-050).
             transfers: !matches!(kind, K::ItemizedCategories | K::ItemizedPayees),
             by_tag: false,
+            flat: false,
+            cleared: None,
+            amount_min: None,
+            amount_max: None,
             cash_flow: false,
+            budget_lines: false,
             accounts: None,
             categories: None,
             payees: None,

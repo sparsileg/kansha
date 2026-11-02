@@ -113,10 +113,11 @@ fn step_for(span: i128, min_step: i128) -> i128 {
     candidates.into_iter().find(|c| *c >= raw).unwrap_or(10 * p)
 }
 
-/// A tick label in dollars: millions as "M", thousands as "K".
+/// A tick label in dollars: millions as "M", thousands as "K", with
+/// the dollar sign after any minus ("$5M", "-$400", "$0").
 fn tick_label(cents: i128, step: i128) -> String {
     if cents == 0 {
-        return "0".into();
+        return "$0".into();
     }
     let dollars = Decimal::from_i128_with_scale(cents, 2);
     let (value, suffix) = if step >= 100_000_000 {
@@ -126,7 +127,9 @@ fn tick_label(cents: i128, step: i128) -> String {
     } else {
         (dollars, "")
     };
-    format!("{}{suffix}", value.round_dp(2).normalize())
+    let text = value.round_dp(2).normalize().abs();
+    let sign = if cents < 0 { "-" } else { "" };
+    format!("{sign}${text}{suffix}")
 }
 
 fn to_i64(v: i128) -> Result<i64> {
@@ -249,7 +252,7 @@ mod tests {
         )
         .unwrap();
         let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
-        assert_eq!(labels, ["0", "2.5M", "5M", "7.5M", "10M", "12.5M"]);
+        assert_eq!(labels, ["$0", "$2.5M", "$5M", "$7.5M", "$10M", "$12.5M"]);
         assert_eq!(c.zero, 0);
         assert_eq!(c.ticks.last().unwrap().pos, SCALE);
         // 9.4M of 12.5M.
@@ -269,7 +272,10 @@ mod tests {
         .unwrap();
         // Axis -400 .. 800 in steps of 200.
         let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
-        assert_eq!(labels, ["-400", "-200", "0", "200", "400", "600", "800"]);
+        assert_eq!(
+            labels,
+            ["-$400", "-$200", "$0", "$200", "$400", "$600", "$800"]
+        );
         assert_eq!(c.zero, 3333);
         assert_eq!(c.series[0].pos[0], 1250);
         assert_eq!(c.series[1].pos[0], 9583);
@@ -294,7 +300,7 @@ mod tests {
         let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
         assert_eq!(
             labels,
-            ["10", "10.1", "10.2", "10.3", "10.4", "10.5", "10.6"]
+            ["$10", "$10.1", "$10.2", "$10.3", "$10.4", "$10.5", "$10.6"]
         );
         assert_eq!(c.ticks[0].pos, 0);
         assert_eq!(c.ticks.last().unwrap().pos, SCALE);
@@ -309,7 +315,7 @@ mod tests {
     fn a_fitted_axis_can_name_quarter_steps() {
         let c = prices(&["10.00", "11.25"]);
         let labels: Vec<_> = c.ticks.iter().map(|t| t.label.as_str()).collect();
-        assert!(labels.contains(&"10.25") || labels.contains(&"10.5"));
+        assert!(labels.contains(&"$10.25") || labels.contains(&"$10.5"));
         assert!(c.series[0].pos[0] > 0 && c.series[0].pos[1] < SCALE);
     }
 
