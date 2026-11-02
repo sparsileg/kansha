@@ -16,6 +16,8 @@ use tauri_specta::{Builder, collect_commands};
 
 use crate::state::AppState;
 
+#[cfg(debug_assertions)]
+mod bridge;
 mod cli;
 mod commands;
 mod inbox_watch;
@@ -264,6 +266,12 @@ fn database_path(
 
 /// The per-computer config file (SET-070).
 fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Screenshot runs (#63) keep their theme and recent books beside the
+    // throwaway book, never in this computer's own config.
+    #[cfg(debug_assertions)]
+    if let Some(path) = bridge::config_path() {
+        return Ok(path);
+    }
     Ok(app.path().app_config_dir()?.join("config.json"))
 }
 
@@ -310,6 +318,9 @@ pub fn run() {
                 app.package_info().version.to_string(),
             );
             app.manage(state);
+            // Screenshot automation (#63): off unless KANSHA_BRIDGE is set.
+            #[cfg(debug_assertions)]
+            bridge::start(handle);
             Ok(())
         })
         .on_window_event(|window, event| {

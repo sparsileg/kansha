@@ -136,3 +136,13 @@ sweep:
         fi
     done
     echo "sweep: removed $n incremental dirs; target $before -> $(du -sh target | cut -f1)"
+
+# Capture the User's Guide screenshots into guide/images through the dev-only bridge (#63); optionally some: just ui-guide-shots register calendar
+ui-guide-shots *ids:
+    cargo build -p kansha
+    PLAYWRIGHT_DIR=$HOME/.local/share/astryx-playwright node tests/ui/guide-shots.mjs {{ids}}
+
+# Capture the astryx.tools walkthrough screenshots (Nordic theme) into OUT (default target/walkthrough)
+ui-walkthrough-shots OUT="target/walkthrough" *ids:
+    cargo build -p kansha
+    PLAYWRIGHT_DIR=$HOME/.local/share/astryx-playwright node tests/ui/walkthrough-shots.mjs {{OUT}} {{ids}}

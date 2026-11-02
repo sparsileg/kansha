@@ -211,6 +211,15 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn today(&self) -> Date {
+        // Screenshot runs (#63) pin "today" so sample data and shots are
+        // the same every time. Debug builds only; never in a release.
+        #[cfg(debug_assertions)]
+        if let Some(day) = std::env::var("KANSHA_TODAY")
+            .ok()
+            .and_then(|s| s.parse::<Date>().ok())
+        {
+            return day;
+        }
         Date(chrono::Local::now().date_naive())
     }
 
