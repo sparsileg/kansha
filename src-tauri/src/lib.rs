@@ -100,6 +100,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::ledger::txn_void,
             commands::ledger::txn_delete,
             commands::ledger::txn_set_cleared,
+            commands::ledger::txn_move,
             commands::ledger::find_transactions,
             commands::ledger::replace_transactions,
             commands::ledger::undo_status,

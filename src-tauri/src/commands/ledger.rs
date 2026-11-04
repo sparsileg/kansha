@@ -209,6 +209,25 @@ pub fn txn_set_cleared(
     )
 }
 
+/// Move a transaction from `from` to `to` (REG-085). Another side
+/// reconciled fails with `confirmation_required` until `confirmed`.
+#[tauri::command]
+#[specta::specta]
+pub fn txn_move(
+    state: State<'_, AppState>,
+    txn: TxnId,
+    from: AccountId,
+    to: AccountId,
+    confirmed: bool,
+) -> CmdResult<()> {
+    state.write_undoable(
+        Some(txn),
+        "Move",
+        |tx| ledger::move_txn(tx, txn, from, to, confirmed).map(|_| ()),
+        |()| txn,
+    )
+}
+
 /// `total` minus the sum of `parts`: the unassigned amount of a split
 /// (TXN-020). The UI does no money arithmetic, so it asks here.
 #[tauri::command]

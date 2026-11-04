@@ -30,8 +30,8 @@ pub use find::{
 };
 
 pub use service::{
-    close_account, create, create_entry, delete, memorize_payee, set_cleared, update, update_entry,
-    void,
+    close_account, create, create_entry, delete, is_movable_type, memorize_payee, move_txn,
+    set_cleared, update, update_entry, void,
 };
 pub(crate) use service::{create_carried, create_with_source};
 pub use warnings::{EntryWarning, entry_warnings, forget_stale_payees};

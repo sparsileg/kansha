@@ -6,8 +6,10 @@ use std::collections::HashSet;
 
 use rusqlite::Connection;
 
-use super::{Cleared, Entry, Target, Txn, TxnId, TxnInput, TxnSource, TxnStatus, checked_sum};
-use crate::accounts::{Account, AccountId, AccountStatus};
+use super::{
+    Cleared, Entry, PostingInput, Target, Txn, TxnId, TxnInput, TxnSource, TxnStatus, checked_sum,
+};
+use crate::accounts::{Account, AccountId, AccountStatus, AccountType};
 use crate::date::Date;
 use crate::error::{Error, Result};
 use crate::persistence::{Origin, Tx, accounts, categories, invest, ledger as repo, payees};
@@ -100,6 +102,87 @@ pub fn delete(tx: &Tx<'_>, id: TxnId, confirmed: bool) -> Result<()> {
     check_changeable(tx.conn(), &before, confirmed)?;
     crate::schedule::release_txn(tx, id)?;
     repo::delete(tx, id)
+}
+
+/// Account types a transaction can be moved between (REG-085).
+pub fn is_movable_type(t: AccountType) -> bool {
+    matches!(
+        t,
+        AccountType::Checking | AccountType::Savings | AccountType::Cash | AccountType::CreditCard
+    )
+}
+
+/// Move a transaction from `from` to `to` (REG-085): the posting to
+/// `from` becomes a posting to `to`, unmarked; date, payee, memo, check
+/// number, the other lines, and the other side of a transfer stay. Both
+/// accounts are open checking, savings, cash, or credit card accounts.
+/// A void transaction, one reconciled in `from`, and a move to the
+/// transfer's other side are refused. Another side reconciled needs
+/// `confirmed` (TXN-050), as any edit does.
+pub fn move_txn(
+    tx: &Tx<'_>,
+    id: TxnId,
+    from: AccountId,
+    to: AccountId,
+    confirmed: bool,
+) -> Result<Txn> {
+    let before = repo::get(tx.conn(), id)?;
+    if before.status == TxnStatus::Void {
+        return Err(Error::Invalid("a void transaction cannot be moved".into()));
+    }
+    for a in [from, to] {
+        let acct = check_account_open(tx.conn(), a)?;
+        if !is_movable_type(acct.fields.account_type) {
+            return Err(Error::Invalid(format!(
+                "account {:?}: transactions move only between checking, savings, cash, or credit card accounts",
+                acct.fields.name
+            )));
+        }
+    }
+    if from == to {
+        return Err(Error::Invalid(
+            "the transaction is already in that account".into(),
+        ));
+    }
+    let posting = before.posting_for(from).ok_or_else(|| {
+        Error::Invalid(format!(
+            "transaction {} has no line in account {}",
+            id.0, from.0
+        ))
+    })?;
+    if posting.cleared == Cleared::Reconciled {
+        return Err(Error::Invalid(
+            "the transaction is reconciled; unreconcile it first".into(),
+        ));
+    }
+    if before.posting_for(to).is_some() {
+        return Err(Error::Invalid(
+            "that account is the other side of this transfer".into(),
+        ));
+    }
+    let input = TxnInput {
+        date: before.date,
+        payee: before.payee,
+        check_num: before.check_num.clone(),
+        memo: before.memo.clone(),
+        notes: before.notes.clone(),
+        postings: before
+            .postings
+            .iter()
+            .map(|p| {
+                let moved = p.target == Target::Account(from);
+                PostingInput {
+                    target: if moved { Target::Account(to) } else { p.target },
+                    amount: p.amount,
+                    memo: p.memo.clone(),
+                    cleared: if moved { Cleared::Unmarked } else { p.cleared },
+                    tags: p.tags.clone(),
+                    security: p.security,
+                }
+            })
+            .collect(),
+    };
+    update(tx, id, &input, confirmed)
 }
 
 /// Mark the posting to `account` unmarked or cleared (register Clr

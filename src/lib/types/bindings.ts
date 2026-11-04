@@ -231,6 +231,11 @@ export const commands = {
 	txnDelete: (txn: TxnId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_delete", { txn, confirmed })),
 	/**  Mark the posting to `account` unmarked or cleared (the Clr column). */
 	txnSetCleared: (txn: TxnId, account: AccountId, cleared: Cleared, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_set_cleared", { txn, account, cleared, confirmed })),
+	/**
+	 *  Move a transaction from `from` to `to` (REG-085). Another side
+	 *  reconciled fails with `confirmation_required` until `confirmed`.
+	 */
+	txnMove: (txn: TxnId, from: AccountId, to: AccountId, confirmed: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("txn_move", { txn, from, to, confirmed })),
 	/**  Edit > Find/Replace: rows matching the Find rows (REG-170). */
 	findTransactions: (query: FindQuery) => typedError<FindResult, IpcError>(__TAURI_INVOKE("find_transactions", { query })),
 	/**

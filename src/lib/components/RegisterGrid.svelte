@@ -16,6 +16,8 @@
   import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
   import EntryEditor from "./EntryEditor.svelte";
   import FilterBar from "./FilterBar.svelte";
+  import MoveTxnModal from "./MoveTxnModal.svelte";
+  import { isMovable } from "../register/move";
 
   let { account }: { account: number } = $props();
 
@@ -23,6 +25,8 @@
   let newEntry: EntryEditor | undefined;
   let rowsEl: HTMLDivElement | undefined;
   let actionError = $state<string | null>(null);
+  let moving = $state<number | null>(null);
+  const movable = $derived(isMovable(listsState.accountById.get(account)));
 
   const rows = $derived(registerState.rows);
   const dateSorted = $derived(registerState.sort === "date");
@@ -276,6 +280,11 @@
         action: () => void otherSide(r),
         disabled: r.counterpart.kind !== "transfer",
       },
+      {
+        label: "Move…",
+        action: () => (moving = r.txn_id),
+        disabled: !movable || r.status === "void" || r.cleared === "reconciled",
+      },
       { label: "Schedule this…", action: () => void scheduleThis(r) },
       { label: "History…", action: () => (dialogState.history = { entity: "txn", id: r.txn_id }) },
       { label: "Void", action: () => void voidTxn(r), disabled: r.status === "void" },
@@ -420,6 +429,18 @@
 
 {#if menu}
   <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.row)} onclose={() => (menu = null)} />
+{/if}
+
+{#if moving !== null}
+  <MoveTxnModal
+    txn={moving}
+    from={account}
+    onclose={() => (moving = null)}
+    onmoved={() => {
+      moving = null;
+      void run(async () => {});
+    }}
+  />
 {/if}
 
 <style>

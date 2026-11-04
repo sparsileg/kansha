@@ -183,13 +183,21 @@ Right-click a row, or press **Shift+F10** or the Menu key, for more:
 | Split | Opens it with the split panel |
 | Mark cleared / Mark unmarked | Sets or clears the `c` in Clr |
 | Go to other side of transfer | Opens the other account's register at this transaction |
+| Move… | Moves it to another account (see below) |
 | Schedule this… | Makes a schedule from it (see [Scheduled Transactions](scheduled.md)) |
 | History… | Every change made to it: the field, before, and after |
 | Void | Keeps the transaction but makes its amount zero |
 | Delete | Removes it |
 
 **Undo** (**Ctrl+Z**, or **Edit > Undo**) takes back the last change
-in a register: an entry, a change, or a delete.
+in a register: an entry, a change, a move, or a delete.
+
+**Move…** fixes a transaction entered in the wrong account, such as
+the wrong credit card. Choose the right account and click **OK**. The
+transaction leaves this register and appears in that one, unmarked;
+nothing else about it changes. Move works between checking, savings,
+cash, and credit card accounts. A reconciled transaction cannot be
+moved: unreconcile it first.
 
 ### The keyboard
 

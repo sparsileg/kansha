@@ -25,6 +25,7 @@ mod ipc_json;
 mod ledger;
 mod loans;
 mod migrations;
+mod move_txn;
 mod new_book;
 mod perf;
 mod performance;

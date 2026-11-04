@@ -17,12 +17,13 @@ vi.mock("../api", async (orig) => {
       entryWarnings: vi.fn(() => Promise.resolve({ status: "ok", data: [] })),
       payeeList: vi.fn(),
       splitRemainder: vi.fn(),
+      txnMove: vi.fn(),
     },
   };
 });
 
 import { commands } from "../api";
-import type { RegisterRow } from "../types/bindings";
+import type { Account, RegisterRow } from "../types/bindings";
 import { listsState } from "../state/lists.svelte";
 import { registerState } from "../state/register.svelte";
 import RegisterGrid from "./RegisterGrid.svelte";
@@ -41,6 +42,7 @@ beforeEach(async () => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.clearAllMocks();
   listsState.today = "2026-09-24";
+  listsState.accounts = [];
   // Newest first: two future rows, then two past.
   c.registerQuery.mockImplementation(() =>
     ok({
@@ -159,6 +161,31 @@ describe("RegisterGrid", () => {
     await waitFor(() => expect(screen.getByLabelText("Split 1 category")).toBeTruthy());
     expect(screen.getByLabelText("Split 2 category")).toBeTruthy();
     expect(registerState.editSplit).toBe(false);
+  });
+
+  it("context menu Move… moves the row to the chosen account (REG-085)", async () => {
+    listsState.accounts = [
+      { id: 1, name: "Visa", account_type: "credit_card", status: "open" },
+      { id: 2, name: "Amex", account_type: "credit_card", status: "open" },
+      { id: 3, name: "Car loan", account_type: "loan", status: "open" },
+    ] as Account[];
+    c.txnMove.mockImplementation(() => ok(null));
+    render(RegisterGrid, { account: 1 });
+    await fireEvent.contextMenu(document.getElementById("row-3")!, { clientX: 50, clientY: 50 });
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Move…" }));
+    const select = screen.getByLabelText("Account") as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Choose an account", "Amex"]);
+    await fireEvent.change(select, { target: { value: "2" } });
+    await fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(c.txnMove).toHaveBeenCalledWith(3, 1, 2, false));
+    await waitFor(() => expect(screen.queryByLabelText("Account")).toBeNull());
+  });
+
+  it("Move… is greyed out outside checking, savings, cash, and credit card registers", async () => {
+    listsState.accounts = [{ id: 1, name: "Car loan", account_type: "loan", status: "open" }] as Account[];
+    render(RegisterGrid, { account: 1 });
+    await fireEvent.contextMenu(document.getElementById("row-3")!, { clientX: 50, clientY: 50 });
+    expect((screen.getByRole("menuitem", { name: "Move…" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("Enter in an edited row saves and moves to the next row; the grid keeps focus", async () => {
