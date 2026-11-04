@@ -15,20 +15,19 @@ GitHub repository. Download the newest one for your system.
 
 ### Kubuntu and Ubuntu
 
-Download the file ending in `_amd64.deb`, open a terminal in the
-folder you saved it to, and install it:
+Download `Kansha_amd64.deb`, open a terminal in the folder you saved
+it to, and install it:
 
 ```
-sudo apt install ./Kansha_0.13.0_amd64.deb
+sudo apt install ./Kansha_amd64.deb
 ```
 
-Use the name of the file you downloaded. Kansha then appears in the
-application menu. To install a newer version, do the
+Kansha then appears in the application menu. To install a newer version, do the
 same with the newer file; your books and settings stay as they are.
 
 ### Windows
 
-Download the file ending in `_x64-setup.exe` and run it.
+Download `Kansha_x64-setup.exe` and run it.
 
 The installer isn't signed, so Windows may show a blue box saying
 **Windows protected your PC**. Click **More info**, then **Run

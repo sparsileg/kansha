@@ -105,4 +105,8 @@ jobs:
         with:
           releaseId: ${{ needs.prepare.outputs.release_id }}
           args: --bundles ${{ matrix.bundles }}
+          # Fixed names (Kansha_amd64.deb, Kansha_x64-setup.exe), so
+          # releases/latest/download/<name> on the downloads page
+          # always gets the newest release. The version is inside.
+          releaseAssetNamePattern: "[name]_[arch][setup][ext]"
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
