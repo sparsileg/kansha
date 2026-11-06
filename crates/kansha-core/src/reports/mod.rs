@@ -17,7 +17,7 @@ mod capital_gains;
 mod cards;
 mod chart;
 mod compare;
-mod csv;
+pub(crate) mod csv;
 mod facts;
 mod income_expense;
 mod investing;

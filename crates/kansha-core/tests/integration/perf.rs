@@ -152,6 +152,22 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
     );
     assert_eq!(reg.rows.len(), inv_rows);
 
+    // Export CSV… on that register, every date (INV-080).
+    let all = DateRange {
+        preset: DatePreset::AllDates,
+        from: None,
+        to: None,
+    };
+    let t = Instant::now();
+    let csv = kansha_core::invest::register_csv(db.conn(), trading, &all, today).unwrap();
+    check(
+        &format!("investment export CSV, {inv_rows} rows"),
+        t.elapsed(),
+        1000,
+        &mut failures,
+    );
+    assert!(csv.text.len() > inv_rows * 20);
+
     // Reports (NFR-040).
     let custom = |from: &str, to: &str| DateRange {
         preset: DatePreset::Custom,

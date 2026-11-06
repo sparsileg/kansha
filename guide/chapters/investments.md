@@ -84,6 +84,18 @@ bottom.
 A cash balance below zero shows **⚠ below zero**: usually a missing
 deposit or a sale entered after the buy it paid for.
 
+### Export to check against your broker
+
+To compare the register with your broker's activity download, click
+the gear at the top right of the register and choose **Export
+CSV…**. Pick a **Date range** (Year to date at first, or Custom
+dates) and click **Export**. Every transaction in the range goes to a
+CSV file in your Downloads folder, oldest first, with the register's
+columns; the status line says where. Shares and prices are written in
+full (104.144, 10.52308), not rounded as the register shows them, so
+a typo of a thousandth of a share stands out. Cash is the running
+balance, as in the register.
+
 ## Enter a Transaction
 
 Click the line **New transaction: type or click here**, or start
@@ -121,6 +133,10 @@ The fields every action shares:
 - **Shares**, **Price per share**, and **Commission**. Kansha works
   out shares × price, with the commission, and shows it under the
   amount; leave the amount empty to take it.
+- For a buy, sell, or reinvestment, changing **Shares** or the
+  amount, with both filled in, works out **Price per share** again
+  from them (and the commission), as Quicken does. Fix a share count
+  and the price follows. A price you type after that is kept.
 - **Memo**.
 
 The buttons at the bottom:

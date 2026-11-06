@@ -528,6 +528,18 @@ export const commands = {
 	 */
 	invTradeAmount: (action: InvAction, quantity: string, price: string, commission: string) => typedError<string, IpcError>(__TAURI_INVOKE("inv_trade_amount", { action, quantity, price, commission })),
 	/**
+	 *  Price per share from Amount and Shares ± commission, for the entry
+	 *  form when Shares or the Amount changes (INV-030); `None` when there
+	 *  is none to give.
+	 */
+	invTradePrice: (action: InvAction, quantity: string, amount: string, commission: string) => typedError<string | null, IpcError>(__TAURI_INVOKE("inv_trade_price", { action, quantity, amount, commission })),
+	/**
+	 *  Export CSV… (INV-080): the register's transactions in `range` to the
+	 *  Downloads folder; returns the file's path. An existing file is never
+	 *  overwritten.
+	 */
+	invExportCsv: (account: AccountId, range: DateRange) => typedError<string, IpcError>(__TAURI_INVOKE("inv_export_csv", { account, range })),
+	/**
 	 *  Open lots on `as_of` (today when left out), one security or all
 	 *  (LOT-150; the lot picker for specific identification).
 	 */

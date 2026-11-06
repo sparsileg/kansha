@@ -198,9 +198,16 @@ export function presetGroups(kind: ReportKind, current: DatePreset): [DatePreset
     if (!groups.some((g) => g.some(([p]) => p === current))) groups.push(labelled([current]));
     return groups;
   }
+  return rangeGroups(current, kind === "tax_schedule");
+}
+
+/** The reports' date ranges (RPT-040), in groups; `periods` adds
+ * Monthly, Quarterly, Yearly. Also Export CSV… on the investment
+ * register (INV-080). */
+export function rangeGroups(current: DatePreset, periods = false): [DatePreset, string][][] {
   const groups = [
     labelled(["all_dates"]),
-    ...(kind === "tax_schedule" ? [labelled(PERIOD_PRESETS)] : []),
+    ...(periods ? [labelled(PERIOD_PRESETS)] : []),
     labelled(["month_to_date", "quarter_to_date", "year_to_date"]),
     labelled(["last_month", "last_quarter", "last_year", "last_30_days", "last_12_months", "custom"]),
   ];

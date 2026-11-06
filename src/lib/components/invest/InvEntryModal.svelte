@@ -91,6 +91,29 @@
       .catch(() => {});
   });
 
+  /** Actions whose Price follows Shares and Amount (INV-030, #66). */
+  const PRICED = ["buy", "sell", "reinvest_dividend", "reinvest_cg_short", "reinvest_cg_long"];
+  /** The latest Price request; an older answer arriving late is dropped. */
+  let priceAsk = 0;
+
+  /** Shares or Amount typed: with both filled, Price per share becomes
+   * Amount ÷ Shares (± commission), worked out in Rust (INV-030). A
+   * price typed after that is kept until either changes again. */
+  function repriceFromAmount() {
+    const ask = ++priceAsk;
+    if (!PRICED.includes(form.action) || !info.shares || !info.price) return;
+    if (!form.quantity.trim() || !form.amount.trim()) return;
+    const q = parseQuantity(form.quantity);
+    const m = parseMoney(form.amount);
+    const c = form.commission.trim() ? parseMoney(form.commission) : "0.00";
+    if (q === null || m === null || c === null) return;
+    void call(commands.invTradePrice(form.action, q, m, c))
+      .then((p) => {
+        if (ask === priceAsk && p !== null) form.price = formatPrice(p);
+      })
+      .catch(() => {});
+  }
+
   // Chosen lots: the holding's open lots on the trade date.
   $effect(() => {
     lots = [];
@@ -194,10 +217,10 @@
       </label>
     {/if}
     {#if info.shares}
-      <label>Shares <input bind:value={form.quantity} inputmode="decimal" /></label>
+      <label>Shares <input bind:value={form.quantity} inputmode="decimal" oninput={repriceFromAmount} /></label>
     {/if}
     {#if info.price}
-      <label>Price per share <input bind:value={form.price} inputmode="decimal" /></label>
+      <label>Price per share <input bind:value={form.price} inputmode="decimal" oninput={() => priceAsk++} /></label>
     {/if}
     {#if info.commission}
       <label>Commission <input bind:value={form.commission} inputmode="decimal" /></label>
@@ -205,7 +228,7 @@
     {#if info.amount !== "none"}
       <label>
         {info.amountLabel}{info.amount === "optional" ? " (or shares × price)" : ""}
-        <input bind:value={form.amount} inputmode="decimal" placeholder={computed ? formatMoney(computed) : ""} />
+        <input bind:value={form.amount} inputmode="decimal" placeholder={computed ? formatMoney(computed) : ""} oninput={repriceFromAmount} />
       </label>
       {#if computed && !form.amount.trim()}<p class="note">Shares × price{info.commission ? " ± commission" : ""} = {formatMoney(computed)}</p>{/if}
     {/if}

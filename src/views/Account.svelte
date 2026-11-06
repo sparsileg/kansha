@@ -2,6 +2,7 @@
   import ContextMenu from "../lib/components/ContextMenu.svelte";
   import GearButton from "../lib/components/GearButton.svelte";
   import RegisterGrid from "../lib/components/RegisterGrid.svelte";
+  import InvExportModal from "../lib/components/invest/InvExportModal.svelte";
   import InvestmentAccount from "../lib/components/invest/InvestmentAccount.svelte";
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
@@ -14,6 +15,8 @@
   );
 
   let menu = $state<{ x: number; y: number } | null>(null);
+  /** Export CSV… open (INV-080); investment accounts only. */
+  let exporting = $state(false);
 
   function openMenu(e: MouseEvent) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -40,11 +43,13 @@
           ...(account.account_type === "loan"
             ? [{ label: "Loan details…", action: () => (dialogState.loan = account.id) }]
             : []),
+          ...(account.investment ? [{ label: "Export CSV…", action: () => (exporting = true) }] : []),
         ]}
       />
     {/if}
     {#if account.investment}
       {#key account.id}<InvestmentAccount {account} />{/key}
+      {#if exporting}<InvExportModal {account} onclose={() => (exporting = false)} />{/if}
     {:else}
       {#if registerState.error}<p class="err">{registerState.error}</p>{/if}
       {#key account.id}

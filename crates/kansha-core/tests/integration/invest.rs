@@ -782,6 +782,64 @@ fn trade_amount_is_computed_in_rust() {
     assert!(invest::trade_amount(InvAction::Dividend, q("1"), p("1"), Money::ZERO).is_err());
 }
 
+/// INV-030 (#66): Price per share worked out again from Amount and
+/// Shares, less or plus the commission, six decimals, half-even.
+#[test]
+fn trade_price_is_amount_over_shares() {
+    let price = |a, sh, amt, c| invest::trade_price(a, q(sh), m(amt), m(c)).unwrap();
+    // The VBILX reinvestment of #66: a non-terminating quotient.
+    // 1095.60 ÷ 104.144 = 10.5200491…
+    assert_eq!(
+        price(InvAction::ReinvestDividend, "104.144", "1095.60", "0.00"),
+        Some(p("10.520049"))
+    );
+    assert_eq!(
+        price(InvAction::ReinvestCgShort, "2", "21.00", "0.00"),
+        Some(p("10.5"))
+    );
+    assert_eq!(
+        price(InvAction::ReinvestCgLong, "3", "10.00", "0.00"),
+        Some(p("3.333333"))
+    );
+    // Buy: the commission is not part of the price.
+    assert_eq!(
+        price(InvAction::Buy, "10", "2005.00", "4.95"),
+        Some(p("200.005"))
+    );
+    // Sell: the commission came off the proceeds.
+    assert_eq!(
+        price(InvAction::Sell, "3", "99.00", "1.00"),
+        Some(p("33.333333"))
+    );
+    // Half-even at the sixth decimal: 0.05 ÷ 4000 = 0.0000125 →
+    // 0.000012; 54.00 ÷ 4000000 = 0.0000135 → 0.000014.
+    assert_eq!(
+        price(InvAction::Buy, "4000", "0.05", "0.00"),
+        Some(p("0.000012"))
+    );
+    assert_eq!(
+        price(InvAction::Buy, "4000000", "54.00", "0.00"),
+        Some(p("0.000014"))
+    );
+    // Round trip: the worked-out price gives the amount back.
+    let pr = price(InvAction::ReinvestDividend, "104.144", "1095.60", "0.00").unwrap();
+    assert_eq!(
+        invest::trade_amount(InvAction::ReinvestDividend, q("104.144"), pr, Money::ZERO).unwrap(),
+        m("1095.60")
+    );
+    // No shares, or a commission above a buy's amount: no price.
+    assert_eq!(price(InvAction::Buy, "0", "100.00", "0.00"), None);
+    assert_eq!(price(InvAction::Buy, "1", "4.00", "4.95"), None);
+    // Not a trade: Shares added, Shares removed (no amount), dividend.
+    for a in [
+        InvAction::SharesAdded,
+        InvAction::SharesRemoved,
+        InvAction::Dividend,
+    ] {
+        assert!(invest::trade_price(a, q("1"), m("1.00"), Money::ZERO).is_err());
+    }
+}
+
 #[test]
 fn portfolio_rolls_up_lots_and_day_change() {
     let mut b = book();
@@ -1754,4 +1812,78 @@ fn a_class_mix_is_stored_in_order_audited_and_removed() {
         .query_row("SELECT count(*) FROM security_class_mix", [], |r| r.get(0))
         .unwrap();
     assert_eq!(rows, 0);
+}
+
+/// INV-080 (#65): Export CSV… writes every transaction from From
+/// through To, both included, in date order, shares and prices as
+/// stored, Cash the register's running balance.
+#[test]
+fn register_csv_exports_the_range_as_stored() {
+    use kansha_core::reports::{DatePreset, DateRange};
+    let mut b = book();
+    let (brk, vti) = funded(&mut b);
+    // Before the range: counts in the first row's Cash.
+    b.invest(&buy(brk, vti, "2026-01-30", "10", "1000.00"))
+        .unwrap();
+    // From: a reinvestment at full precision.
+    let mut r = InvInput::new(brk, InvAction::ReinvestDividend, date("2026-02-01"));
+    r.security = Some(vti);
+    r.quantity = Some(q("104.144"));
+    r.price = Some(p("10.52308"));
+    r.amount = Some(m("1095.60"));
+    r.memo = "=HYPERLINK(\"x\"), \"quoted\"".into();
+    b.invest(&r).unwrap();
+    let mut sell = InvInput::new(brk, InvAction::Sell, date("2026-03-15"));
+    sell.security = Some(vti);
+    sell.quantity = Some(q("2.5"));
+    sell.price = Some(p("120"));
+    sell.commission = m("4.95");
+    b.invest(&sell).unwrap();
+    // To, then after it.
+    b.invest(&buy(brk, vti, "2026-03-31", "1", "130.00"))
+        .unwrap();
+    b.invest(&buy(brk, vti, "2026-04-01", "1", "140.00"))
+        .unwrap();
+
+    let range = DateRange {
+        preset: DatePreset::Custom,
+        from: Some(date("2026-02-01")),
+        to: Some(date("2026-03-31")),
+    };
+    let out = invest::register_csv(b.conn(), brk, &range, date("2026-06-30")).unwrap();
+    assert_eq!(out.title, "Brokerage transactions");
+    let lines: Vec<&str> = out.text.split("\r\n").collect();
+    assert_eq!(
+        lines,
+        vec![
+            "\"Brokerage transactions\"",
+            "\"2026-02-01 through 2026-03-31\"",
+            "\"Date\",\"Action\",\"Security\",\"Ticker\",\"Shares\",\"Price\",\"Comm.\",\"Amount\",\"Cash\",\"Clr\",\"Memo\"",
+            // Text quoted, so a spreadsheet splitting on spaces keeps
+            // "Total Stock Market" in one cell; numbers and dates bare.
+            // Cash 9,000.00: the cash in and the buy before From.
+            "2026-02-01,\"Reinvest div\",\"Total Stock Market\",\"VTI\",104.144,10.52308,,1095.60,9000.00,,\"'=HYPERLINK(\"\"x\"\"), \"\"quoted\"\"\"",
+            "2026-03-15,\"Sell\",\"Total Stock Market\",\"VTI\",2.5,120,4.95,295.05,9295.05,,",
+            "2026-03-31,\"Buy\",\"Total Stock Market\",\"VTI\",1,,,-130.00,9165.05,,",
+            "",
+        ]
+    );
+
+    // Year to date on 2026-06-30: from 2026-01-01, all rows.
+    let ytd = DateRange {
+        preset: DatePreset::YearToDate,
+        from: None,
+        to: None,
+    };
+    let all = invest::register_csv(b.conn(), brk, &ytd, date("2026-06-30")).unwrap();
+    assert!(
+        all.text
+            .starts_with("\"Brokerage transactions\"\r\n\"2026-01-01 through 2026-06-30\"\r\n")
+    );
+    // Six rows after the three heading lines, and a final line end.
+    assert_eq!(all.text.split("\r\n").count(), 3 + 6 + 1);
+
+    // Not an investment account: refused.
+    let chk = b.account("Checking", AccountType::Checking).unwrap();
+    assert!(invest::register_csv(b.conn(), chk, &ytd, date("2026-06-30")).is_err());
 }

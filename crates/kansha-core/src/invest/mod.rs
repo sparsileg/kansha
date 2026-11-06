@@ -28,6 +28,7 @@
 //! always change. Cash-only transactions (dividends, fees, cash
 //! transfers) have no such limit.
 
+mod export;
 mod lots;
 mod period;
 mod portfolio;
@@ -37,6 +38,7 @@ mod seed;
 mod service;
 mod true_up;
 
+pub use export::{RegisterCsv, register_csv};
 pub use period::{AccountPeriod, Track, account_period, combined};
 pub use portfolio::{
     Portfolio, PortfolioAccount, PortfolioColumn, PortfolioLot, PortfolioPosition, PortfolioSale,
@@ -49,7 +51,7 @@ pub use reads::{
 };
 pub use returns::{irr, percent_text, twr};
 pub use seed::{SeedPreview, SeedRow, commit_seed, preview_seed};
-pub use service::{create, delete, trade_amount, update};
+pub use service::{create, delete, trade_amount, trade_price, update};
 pub(crate) use service::{create_carried, create_with_source};
 pub use true_up::{
     TrueUpLine, TrueUpLot, TrueUpPreview, TrueUpReplay, TrueUpStatus, parse_true_up,

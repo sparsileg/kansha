@@ -4,6 +4,7 @@
 //! total line follows.
 //! Amounts are plain decimals and dates ISO, so spreadsheets read them
 //! exactly; text that would run as a formula gets a leading apostrophe.
+//! Every text field is quoted; numbers, percents, and dates are not.
 
 use super::{Report, ReportKind, Row, RowKind};
 
@@ -19,21 +20,34 @@ fn formula_like(text: &str) -> bool {
     }
 }
 
+/// A number ("-12.34", "104.144"), a percent ("12.34%"), or an ISO
+/// date: written bare, so the spreadsheet reads it as one.
+fn numeric(text: &str) -> bool {
+    // Kansha writes no "+": "+1" stays text, behind the formula guard.
+    if !text.starts_with(|c: char| c.is_ascii_digit() || c == '-') {
+        return false;
+    }
+    let n = text.strip_suffix('%').unwrap_or(text);
+    n.parse::<rust_decimal::Decimal>().is_ok() || text.parse::<crate::date::Date>().is_ok()
+}
+
 fn field(text: &str) -> String {
+    if text.is_empty() || numeric(text) {
+        return text.to_string();
+    }
     // A leading apostrophe makes the spreadsheet keep the cell as text.
     let text = if formula_like(text) {
         format!("'{text}")
     } else {
         text.to_string()
     };
-    if text.contains([',', '"', '\n', '\r']) || text.starts_with(' ') || text.ends_with(' ') {
-        format!("\"{}\"", text.replace('"', "\"\""))
-    } else {
-        text
-    }
+    // Every text field is quoted: a spreadsheet told to split on spaces
+    // (Calc remembers its last import's separators) keeps it whole.
+    format!("\"{}\"", text.replace('"', "\"\""))
 }
 
-fn line(out: &mut String, label: &str, cells: &[String]) {
+/// One CSV line: `label`, then `cells`, each quoted and guarded.
+pub(crate) fn line(out: &mut String, label: &str, cells: &[String]) {
     out.push_str(&field(label));
     for c in cells {
         out.push(',');
@@ -170,7 +184,7 @@ mod tests {
         let csv = to_csv(&report());
         assert_eq!(
             csv,
-            "\"Spending, 2026\"\r\n2026-01-01 through 2026-01-31\r\n,Memo,Amount\r\nFood,,\r\n,\"say \"\"hi\"\"\",-1.50\r\nTotal Food,,-1.50\r\nOVERALL TOTAL,,-1.50\r\n"
+            "\"Spending, 2026\"\r\n\"2026-01-01 through 2026-01-31\"\r\n,\"Memo\",\"Amount\"\r\n\"Food\",,\r\n,\"say \"\"hi\"\"\",-1.50\r\n\"Total Food\",,-1.50\r\n\"OVERALL TOTAL\",,-1.50\r\n"
         );
     }
 
@@ -180,28 +194,36 @@ mod tests {
         r.totals_on_heading = true;
         assert_eq!(
             to_csv(&r),
-            "\"Spending, 2026\"\r\n2026-01-01 through 2026-01-31\r\n,Memo,Amount\r\nFood,,-1.50\r\n,\"say \"\"hi\"\"\",-1.50\r\nOVERALL TOTAL,,-1.50\r\n"
+            "\"Spending, 2026\"\r\n\"2026-01-01 through 2026-01-31\"\r\n,\"Memo\",\"Amount\"\r\n\"Food\",,-1.50\r\n,\"say \"\"hi\"\"\",-1.50\r\n\"OVERALL TOTAL\",,-1.50\r\n"
         );
     }
 
     /// Text a spreadsheet would run as a formula gets a leading
-    /// apostrophe; amounts, dates, and indented labels do not.
+    /// apostrophe; amounts, dates, and indented labels do not. Every
+    /// text field is quoted, so a spreadsheet told to split on spaces
+    /// keeps it in one cell (INV-080, RPT-050); numbers, percents, and
+    /// dates are not, and an empty cell stays empty.
     #[test]
     fn formula_text_is_kept_as_text() {
         for (text, want) in [
-            ("=1+1", "'=1+1"),
-            ("@SUM(A1)", "'@SUM(A1)"),
-            ("+1", "'+1"),
-            ("-Refund", "'-Refund"),
-            ("-", "'-"),
-            ("\tx", "'\tx"),
+            ("=1+1", "\"'=1+1\""),
+            ("@SUM(A1)", "\"'@SUM(A1)\""),
+            ("+1", "\"'+1\""),
+            ("-Refund", "\"'-Refund\""),
+            ("-", "\"'-\""),
+            ("\tx", "\"'\tx\""),
             ("=a,b", "\"'=a,b\""),
             ("-12.34", "-12.34"),
             ("-1.500000", "-1.500000"),
             ("0.00", "0.00"),
+            ("104.144", "104.144"),
+            ("12.34%", "12.34%"),
             ("2026-10-12", "2026-10-12"),
+            ("", ""),
             ("  Food", "\"  Food\""),
-            ("Costco", "Costco"),
+            ("Costco", "\"Costco\""),
+            ("Vanguard Short Term Bond", "\"Vanguard Short Term Bond\""),
+            ("Reinvest div", "\"Reinvest div\""),
         ] {
             assert_eq!(field(text), want, "{text:?}");
         }

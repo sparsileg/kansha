@@ -174,6 +174,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::invest::inv_update,
             commands::invest::inv_delete,
             commands::invest::inv_trade_amount,
+            commands::invest::inv_trade_price,
+            commands::invest::inv_export_csv,
             commands::invest::inv_lots,
             commands::invest::inv_portfolio,
             commands::invest::lot_seed_preview,

@@ -264,10 +264,10 @@ fn csv_has_both_ranges_under_the_title() {
     assert_eq!(
         head,
         [
-            "Current Spending vs. Average by Category",
-            "Last quarter: 2026-07-01 - 2026-09-30",
-            "Last 4 quarters: 2025-10-01 - 2026-09-30",
-            ",Last quarter,\"Avg spending, Last 4 quarters\",Difference",
+            "\"Current Spending vs. Average by Category\"",
+            "\"Last quarter: 2026-07-01 - 2026-09-30\"",
+            "\"Last 4 quarters: 2025-10-01 - 2026-09-30\"",
+            ",\"Last quarter\",\"Avg spending, Last 4 quarters\",\"Difference\"",
         ]
     );
 }

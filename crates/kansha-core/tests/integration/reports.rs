@@ -1327,17 +1327,18 @@ fn csv_export_expands_every_group() {
     let r = run(&fx, &settings(ReportKind::CapitalGains));
     let csv = reports::to_csv(&r);
     let lines: Vec<&str> = csv.lines().collect();
-    assert_eq!(lines[0], "Capital Gains");
-    assert_eq!(lines[1], "2026-01-01 through 2026-06-30");
+    // Text quoted, numbers and dates bare (RPT-050).
+    assert_eq!(lines[0], "\"Capital Gains\"");
+    assert_eq!(lines[1], "\"2026-01-01 through 2026-06-30\"");
     assert_eq!(
         lines[2],
-        ",Account,Security,Shares,Bought,Sold,Gross Proceeds,Cost Basis,Realized Gain/Loss"
+        ",\"Account\",\"Security\",\"Shares\",\"Bought\",\"Sold\",\"Gross Proceeds\",\"Cost Basis\",\"Realized Gain/Loss\""
     );
-    assert_eq!(lines[3], "SHORT TERM,,,,,,,,");
-    assert_eq!(lines[5], "Total SHORT TERM,,,,,,700.00,600.00,100.00");
+    assert_eq!(lines[3], "\"SHORT TERM\",,,,,,,,");
+    assert_eq!(lines[5], "\"Total SHORT TERM\",,,,,,700.00,600.00,100.00");
     assert_eq!(
         *lines.last().unwrap(),
-        "OVERALL TOTAL,,,,,,2100.00,1600.00,500.00"
+        "\"OVERALL TOTAL\",,,,,,2100.00,1600.00,500.00"
     );
 }
 

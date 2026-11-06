@@ -4,11 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/sv
 const ok = <T,>(data: T) => Promise.resolve({ status: "ok" as const, data });
 const invCreate = vi.fn((_: unknown) => ok(99));
 const invUpdate = vi.fn((..._: unknown[]) => ok(null));
+const invTradePrice = vi.fn((..._: unknown[]) => ok<string | null>("10.520049"));
 const stored = {
   account: 2, action: "dividend", date: "2026-03-15", settle_date: null, security: 1, quantity: null,
   price: null, commission: "0.00", amount: "12.00", split: null, to_account: null, lot_method: null,
   lots: [], acquired: null, counterpart: null, memo: "Q1", conversion: null,
 };
+/** What `invInput` returns: the stored dividend unless a test says. */
+const input: { current: object } = { current: stored };
 
 vi.mock("../../api", async (orig) => {
   const real = await orig<typeof import("../../api")>();
@@ -17,7 +20,8 @@ vi.mock("../../api", async (orig) => {
     commands: {
       invCreate: (input: unknown) => invCreate(input),
       invUpdate: (...a: unknown[]) => invUpdate(...a),
-      invInput: () => ok(stored),
+      invInput: () => ok(input.current),
+      invTradePrice: (...a: unknown[]) => invTradePrice(...a),
       invTradeAmount: () => ok("2005.00"),
       invLots: () =>
         ok([
@@ -40,6 +44,8 @@ beforeEach(() => {
   cleanup();
   invCreate.mockClear();
   invUpdate.mockClear();
+  invTradePrice.mockClear();
+  input.current = stored;
   listsState.today = "2026-06-30";
   listsState.accounts = [account] as never;
   listsState.categories = [];
@@ -195,5 +201,38 @@ describe("Investment entry dialog (INV-030)", () => {
     // Reset now means the defaults.
     await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect((screen.getByLabelText("Action") as HTMLSelectElement).value).toBe("buy");
+  });
+
+  it("#66: editing Shares on a saved reinvestment works Price out again; a typed Price is kept", async () => {
+    input.current = {
+      ...stored, action: "reinvest_dividend", quantity: "104.114", price: "10.52308", amount: "1095.60", memo: "",
+    };
+    render(InvEntryModal, { account, txn: 7, onclose: () => {} });
+    const price = () => screen.getByLabelText("Price per share") as HTMLInputElement;
+    await waitFor(() => expect(price().value).toBe("10.52308"));
+    await fireEvent.input(screen.getByLabelText("Shares"), { target: { value: "104.144" } });
+    await waitFor(() => expect(price().value).toBe("10.520049"));
+    expect(invTradePrice).toHaveBeenLastCalledWith("reinvest_dividend", "104.144", "1095.60", "0.00");
+
+    // Amount changed: asked again. Then a Price typed by hand is saved.
+    await fireEvent.input(screen.getByLabelText(/^Amount reinvested/), { target: { value: "1,095.61" } });
+    expect(invTradePrice).toHaveBeenLastCalledWith("reinvest_dividend", "104.144", "1095.61", "0.00");
+    await fireEvent.input(price(), { target: { value: "10.52" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Enter/Done" }));
+    await waitFor(() => expect(invUpdate).toHaveBeenCalledTimes(1));
+    expect(invUpdate.mock.calls[0][1]).toMatchObject({ quantity: "104.144", price: "10.52", amount: "1095.61" });
+  });
+
+  it("#66: a buy passes its commission; no Amount, or a dividend, asks nothing", async () => {
+    render(InvEntryModal, { account, txn: null, onclose: () => {} });
+    await fireEvent.input(screen.getByLabelText("Shares"), { target: { value: "10" } });
+    expect(invTradePrice).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByLabelText("Commission"), { target: { value: "4.95" } });
+    await fireEvent.input(screen.getByLabelText(/^Total cost/), { target: { value: "2005" } });
+    expect(invTradePrice).toHaveBeenLastCalledWith("buy", "10", "2005.00", "4.95");
+    invTradePrice.mockClear();
+    await fireEvent.change(screen.getByLabelText("Action"), { target: { value: "dividend" } });
+    await fireEvent.input(screen.getByLabelText("Amount"), { target: { value: "12" } });
+    expect(invTradePrice).not.toHaveBeenCalled();
   });
 });

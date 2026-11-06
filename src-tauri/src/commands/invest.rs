@@ -10,7 +10,7 @@ use kansha_core::invest::{
 use kansha_core::ledger::TxnId;
 use kansha_core::persistence::imports::{self, ImportFormat};
 use kansha_core::persistence::securities as repo;
-use kansha_core::reports::{self, Chart, ChartSpan, SecurityChartKind, SecurityTxn};
+use kansha_core::reports::{self, Chart, ChartSpan, DateRange, SecurityChartKind, SecurityTxn};
 use kansha_core::securities::download::{self, DownloadSummary, Fetched, Provider};
 use kansha_core::securities::{
     self, PriceImportPreview, PricePoint, PriceSource, Security, SecurityFields, SecurityId,
@@ -258,6 +258,44 @@ pub fn inv_trade_amount(
     commission: Money,
 ) -> CmdResult<Money> {
     Ok(invest::trade_amount(action, quantity, price, commission)?)
+}
+
+/// Price per share from Amount and Shares ± commission, for the entry
+/// form when Shares or the Amount changes (INV-030); `None` when there
+/// is none to give.
+#[tauri::command]
+#[specta::specta]
+pub fn inv_trade_price(
+    action: InvAction,
+    quantity: Quantity,
+    amount: Money,
+    commission: Money,
+) -> CmdResult<Option<Price>> {
+    Ok(invest::trade_price(action, quantity, amount, commission)?)
+}
+
+/// Export CSV… (INV-080): the register's transactions in `range` to the
+/// Downloads folder; returns the file's path. An existing file is never
+/// overwritten.
+#[tauri::command(async)]
+#[specta::specta]
+pub fn inv_export_csv(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    account: AccountId,
+    range: DateRange,
+) -> CmdResult<String> {
+    let (csv, today) = state.read(|db, today| {
+        Ok((
+            invest::register_csv(db.conn(), account, &range, today)?,
+            today,
+        ))
+    })?;
+    let path = super::reports::download_path(&app, &csv.title, &today.to_string(), "csv")?;
+    std::fs::write(&path, csv.text).map_err(|e| {
+        super::reports::internal(format!("could not write {}: {e}", path.display()))
+    })?;
+    Ok(path.display().to_string())
 }
 
 /// Open lots on `as_of` (today when left out), one security or all

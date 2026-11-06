@@ -2,9 +2,9 @@
 
 |                      |                                                                                                                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Document version** | 0.7.125 (draft)                                                                                                                                                  |
+| **Document version** | 0.7.126 (draft)                                                                                                                                                  |
 | **Target release**   | Kansha 1.0.0                                                                                                                                                     |
-| **Last updated**     | 2026-11-04                                                                                                                                                       |
+| **Last updated**     | 2026-11-06                                                                                                                                                       |
 | **Owner**            | Stan                                                                                                                                                             |
 | **Status**           | Draft. Every [1.0] area is built and in daily use on Stan's book since 2026-10-01; §23 lists what is not built. 0.90.0 is the release preview before 1.0.0 (§21) |
 
@@ -936,7 +936,14 @@ common patterns.
   form saves only by its buttons: Enter/Next (save, then a new one
   with the same action and date), Enter/Done (save, close); Cancel;
   Reset (the stored values when editing, else the defaults). After a
-  new transaction the register shows its bottom (0.7.10).
+  new transaction the register shows its bottom (0.7.10). Buy, Sell,
+  and the reinvestments: when Shares or the Amount is changed and both
+  are filled, Price per share is worked out again as Amount ÷ Shares
+  (Buy: (Amount − Commission) ÷ Shares; Sell: (Amount + Commission) ÷
+  Shares), to six decimals, half-even, so a fixed share count does not
+  leave a price that no longer fits (#66, 0.7.126). A price typed
+  after that is kept. Only Price changes; amounts, shares, lots, and
+  basis are saved as entered.
 
 - **INV-040** [1.0][S] Every investment transaction that affects cash
   also produces the corresponding ledger postings, so investment
@@ -978,6 +985,22 @@ common patterns.
   (0.7.28).
   The registers show Roth conversion in the IRA and Conversion in in
   the Roth IRA.
+
+- **INV-080** [1.0][S] **Export CSV…** (built, 0.7.126, #65) on an
+  investment account's gear menu writes the register's transactions
+  in a date range to a CSV file, to check them against the broker's.
+  The dialog asks for the date range, with the reports' choices
+  (RPT-040), Year to date first. Every transaction from From through
+  To, both included, in date order, whatever the register shows. The
+  columns are the register's: Date, Action, Security, Ticker, Shares,
+  Price, Comm., Amount, Cash, Clr, Memo. Shares and prices at the
+  precision stored (104.144, 10.52308), not as displayed; amounts as
+  plain decimals; dates ISO. Cash is the register's running balance,
+  so the first row's includes everything before From; empty with
+  linked cash (INV-300). The file goes to the Downloads folder, never
+  over an existing file, with the quoting and formula guard of
+  RPT-050, and the app says where it went. Cash and bank registers
+  have none.
 
 #### 10.4 Cash handling
 
@@ -1366,7 +1389,9 @@ requirement says not built. P-02 is closed (0.7.29); P-04 is settled
   would run as a formula (starting with `=`, `+`, `@`, tab, carriage
   return, or `-` not followed by a number) gets a leading apostrophe,
   so it opens as text; amounts, shares, percents, and dates are
-  unchanged (0.7.112). Printing and PDF show only
+  unchanged (0.7.112). Every text field is in quote marks, so a
+  spreadsheet told to split on spaces keeps it in one cell; numbers,
+  percents, and dates are not (0.7.126). Printing and PDF show only
   the report. Save PDF… asks Portrait or Landscape (remembered while
   the report is open), saves the PDF to the Downloads folder, and
   opens it in the PDF viewer, which is the preview and prints to
@@ -3377,7 +3402,11 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
 - 0.90.0 is the release preview. From it to 1.0.0 only fixes and
   documents go in: no new feature, and a schema change only to fix a
   bug. Exception: Move (REG-085), a 1.0.0 need found after 0.90.0,
-  goes in as 0.91.0 (Stan, 2026-11-04). Fixes to how releases are
+  goes in as 0.91.0 (Stan, 2026-11-04). Exception: Export CSV…
+  on the investment register (INV-080, #65) and Price worked out
+  again in the investment entry form (INV-030, #66), oversights found
+  checking an IRA against the broker, go in as 0.92.0 (Stan,
+  2026-11-06). Fixes to how releases are
   built and downloaded also go in at once (Stan, 2026-11-04).
 - Database schema has its own version number; migrations run
   automatically at startup after an automatic backup (BAK-020), and
@@ -3515,6 +3544,7 @@ created, decisions made, known gaps.
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7.126 | 2026-11-06 | INV-080 (new, #65): Export CSV… on an investment account's gear menu writes its transactions in a date range (the reports' choices, Year to date first) to the Downloads folder: the register's columns, shares and prices as stored, Cash the running balance. INV-030 (#66): in the entry form, changing Shares or the Amount of a Buy, Sell, or reinvestment works Price per share out again from them (less or plus the commission), six decimals, half-even. RPT-050: CSV text fields are quoted (numbers, percents, dates not), so Calc set to split on spaces keeps "Vanguard Short Term Bond" in one cell; reports and the register export alike. §21: the freeze lifted for both, released as 0.92.0. No schema change. **API change:** new commands `inv_export_csv`, `inv_trade_price`. |
 | 0.7.125 | 2026-11-04 | §21: installer names carry no version, so the astryx.tools downloads page links to the latest release and shows its version (it was fixed at 0.90.0); fixes to building and downloading releases are exempt from the freeze. v0.91.0 also given the fixed-name copies. Guide: install by the fixed names. No schema change. No API change. |
 | 0.7.124 | 2026-11-04 | REG-085 (new, #64): Move… on the register's context menu moves a transaction to another open checking, savings, cash, or credit card account, unmarked; reconciled, void, and moves to a transfer's other side are refused; undoable. REG-080 lists Move…. §21: the freeze lifted for REG-085, released as 0.91.0. No schema change. **API change:** new command `txn_move`. |
 | 0.7.123 | 2026-11-02 | TEST-140 and NFR-010 proven (#52): CI is back on and green on Ubuntu and Windows, first on commit 699a3c5. §16.1 and §17.4 no longer say the workflow is disabled; §23 says it is proven. No schema change. No API change.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |

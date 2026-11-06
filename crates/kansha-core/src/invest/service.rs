@@ -288,6 +288,38 @@ pub fn trade_amount(
     }
 }
 
+/// Price per share from a trade's amount, for the entry form when
+/// Shares or the Amount changes (INV-030, #66): buy, (amount −
+/// commission) ÷ shares; sell, (amount + commission) ÷ shares;
+/// reinvest, amount ÷ shares; six decimals, half-even. `None` when
+/// there is no price to give: no shares, or the commission is more than
+/// a buy's amount.
+pub fn trade_price(
+    action: InvAction,
+    quantity: Quantity,
+    amount: Money,
+    commission: Money,
+) -> Result<Option<crate::money::Price>> {
+    let overflow = || Error::Overflow("trade price");
+    let value = match action {
+        InvAction::Buy => amount.checked_sub(commission).ok_or_else(overflow)?,
+        InvAction::Sell => amount.checked_add(commission).ok_or_else(overflow)?,
+        InvAction::ReinvestDividend | InvAction::ReinvestCgShort | InvAction::ReinvestCgLong => {
+            amount
+        }
+        other => {
+            return Err(Error::Invalid(format!(
+                "{} has no price worked out from its amount",
+                other.label()
+            )));
+        }
+    };
+    if value.is_negative() {
+        return Ok(None);
+    }
+    crate::money::Price::per_share(value, quantity)
+}
+
 // ---------------------------------------------------------------------------
 // Rules for existing transactions
 // ---------------------------------------------------------------------------
