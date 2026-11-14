@@ -11,7 +11,7 @@ use crate::categories::{CategoryId, CategoryKind, TagId};
 use crate::error::{Error, Result};
 use crate::insights::InsightId;
 use crate::reports::FilterList;
-use crate::spending::{SpendingCard, SpendingCardId, SpendingColumn};
+use crate::spending::{SpendingCard, SpendingCardId, SpendingColumn, SpendingRowsBy};
 
 type Raw = (
     SpendingCardId,
@@ -20,9 +20,10 @@ type Raw = (
     String,
     String,
     String,
+    SpendingRowsBy,
 );
 
-const COLUMNS: &str = "id, name, accounts, categories, tags, columns";
+const COLUMNS: &str = "id, name, accounts, categories, tags, columns, rows_by";
 
 fn from_row(r: &Row<'_>) -> rusqlite::Result<Raw> {
     Ok((
@@ -32,10 +33,11 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Raw> {
         r.get(3)?,
         r.get(4)?,
         r.get(5)?,
+        r.get(6)?,
     ))
 }
 
-fn decode((id, name, accounts, categories, tags, columns): Raw) -> Result<SpendingCard> {
+fn decode((id, name, accounts, categories, tags, columns, rows_by): Raw) -> Result<SpendingCard> {
     let bad =
         |e: serde_json::Error| Error::Invalid(format!("spending card {name:?} is unreadable: {e}"));
     let accounts = accounts
@@ -52,6 +54,7 @@ fn decode((id, name, accounts, categories, tags, columns): Raw) -> Result<Spendi
         categories,
         tags,
         columns,
+        rows_by,
     })
 }
 
@@ -126,6 +129,7 @@ pub fn insert(tx: &Tx<'_>, name: &str) -> Result<SpendingCard> {
 
 /// Make a spending card with its choices and put it last on `insight`,
 /// in one transaction (CARD-060). Refused choices leave nothing behind.
+#[allow(clippy::too_many_arguments)]
 pub fn create(
     tx: &Tx<'_>,
     name: &str,
@@ -133,11 +137,14 @@ pub fn create(
     categories: &[CategoryId],
     tags: &[TagId],
     columns: &[SpendingColumn],
+    rows_by: SpendingRowsBy,
     insight: InsightId,
 ) -> Result<SpendingCard> {
     let on = insights::get(tx.conn(), insight)?;
     let card = insert(tx, name)?;
-    let card = update(tx, card.id, &card.name, accounts, categories, tags, columns)?;
+    let card = update(
+        tx, card.id, &card.name, accounts, categories, tags, columns, rows_by,
+    )?;
     let mut cards = on.cards.clone();
     cards.push(card.id.card_id());
     insights::update(tx, insight, &on.name, &cards)?;
@@ -146,7 +153,9 @@ pub fn create(
 
 /// Rename a spending card and set what it counts and shows. Only
 /// spending categories and tags that exist are kept, each once; columns
-/// go in display order, and at least one is needed.
+/// go in display order, and at least one is needed. Rows are one per
+/// category or one per tag group (CARD-080).
+#[allow(clippy::too_many_arguments)]
 pub fn update(
     tx: &Tx<'_>,
     id: SpendingCardId,
@@ -155,6 +164,7 @@ pub fn update(
     categories: &[CategoryId],
     tags: &[TagId],
     columns: &[SpendingColumn],
+    rows_by: SpendingRowsBy,
 ) -> Result<SpendingCard> {
     let before = get(tx.conn(), id)?;
     let name = clean_name(tx.conn(), name, Some(id))?;
@@ -188,7 +198,8 @@ pub fn update(
     let accounts = accounts.map(json).transpose()?;
     tx.conn().execute(
         "UPDATE spending_card
-         SET name = ?2, accounts = ?3, categories = ?4, tags = ?5, columns = ?6
+         SET name = ?2, accounts = ?3, categories = ?4, tags = ?5, columns = ?6,
+             rows_by = ?7
          WHERE id = ?1",
         params![
             id,
@@ -196,7 +207,8 @@ pub fn update(
             accounts,
             json(&kept)?,
             json(&kept_tags)?,
-            json(&columns)?
+            json(&columns)?,
+            rows_by
         ],
     )?;
     let after = get(tx.conn(), id)?;

@@ -2,10 +2,11 @@
   // Customize a spending card (CARD-060, CARD-070): its name, then
   // Accounts, Categories (spending categories only), and Tags tabs, as a
   // report's Customize has, each with Select All and Clear All, and a
-  // Columns tab, where at least one must stay checked. Nothing changes
+  // Columns tab, where at least one must stay checked. Rows by: a row per
+  // category or per tag group (CARD-080). Nothing changes
   // until OK; a refused name keeps the dialog open with the reason.
   import { listsState } from "../../state/lists.svelte";
-  import type { AccountId, CategoryId, SpendingColumn, TagId } from "../../types/bindings";
+  import type { AccountId, CategoryId, SpendingColumn, SpendingRowsBy, TagId } from "../../types/bindings";
   import Modal from "../Modal.svelte";
 
   type Tab = "accounts" | "categories" | "tags";
@@ -32,6 +33,7 @@
     categories,
     tags,
     columns,
+    rowsBy: startRowsBy = "category",
     onsave,
     onclose,
   }: {
@@ -42,8 +44,16 @@
     categories: CategoryId[];
     tags: TagId[];
     columns: SpendingColumn[];
+    rowsBy?: SpendingRowsBy;
     /** Rejects with the reason when Rust refuses (a name in use). */
-    onsave: (name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) => Promise<void>;
+    onsave: (
+      name: string,
+      accounts: AccountId[],
+      categories: CategoryId[],
+      tags: TagId[],
+      columns: SpendingColumn[],
+      rowsBy: SpendingRowsBy,
+    ) => Promise<void>;
     onclose: () => void;
   } = $props();
 
@@ -60,6 +70,8 @@
   });
   // svelte-ignore state_referenced_locally
   let shownColumns = $state<SpendingColumn[]>([...columns]);
+  // svelte-ignore state_referenced_locally
+  let rowsBy = $state<SpendingRowsBy>(startRowsBy);
   let tab = $state<Tab | "columns">("accounts");
   let showHidden = $state(false);
   let contains = $state("");
@@ -126,7 +138,7 @@
     saving = true;
     error = null;
     try {
-      await onsave(name.trim(), [...draft.accounts], [...draft.categories], [...draft.tags], [...shownColumns]);
+      await onsave(name.trim(), [...draft.accounts], [...draft.categories], [...draft.tags], [...shownColumns], rowsBy);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -137,10 +149,19 @@
 
 <Modal {title} {onclose} wide>
   <form onsubmit={save}>
-    <label class="name">
-      <span>Name</span>
-      <input type="text" bind:value={name} maxlength="60" />
-    </label>
+    <div class="name">
+      <label class="name grow">
+        <span>Name</span>
+        <input type="text" bind:value={name} maxlength="60" />
+      </label>
+      <label class="name">
+        <span>Rows by</span>
+        <select bind:value={rowsBy}>
+          <option value="category">Category</option>
+          <option value="tag">Tag</option>
+        </select>
+      </label>
+    </div>
     <div class="tabs" role="tablist">
       {#each TABS as [t, label] (t)}
         <button type="button" role="tab" aria-selected={tab === t} class:on={tab === t} onclick={() => ((tab = t), (contains = ""))}>{label}</button>
@@ -179,7 +200,9 @@
             <label class="check"><input type="checkbox" bind:checked={showHidden} /> Show hidden and closed</label>
             {#if list === "categories"}<label>Contains <input bind:value={contains} size="14" /></label>{/if}
           </div>
-          {#if list === "tags"}<p class="hint">None checked counts every line. Tags with no category checked list every spending category that has them.</p>{/if}
+          {#if list === "tags" && rowsBy === "tag"}<p class="hint">None checked: a row for every tag group and one for “(No tag)”. Checked: only lines with one of them.</p>
+          {:else if list === "tags"}<p class="hint">None checked counts every line. Tags with no category checked list every spending category that has them.</p>
+          {:else if list === "categories" && rowsBy === "tag"}<p class="hint">None checked counts every spending category.</p>{/if}
         </div>
         <div class="side">
           <button type="button" onclick={() => (draft[list] = items(list).map((i) => i.id))}>Select all</button>

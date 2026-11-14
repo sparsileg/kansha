@@ -492,3 +492,45 @@ fn a_credit_cards_interest_is_entered_as_a_finance_charge() {
     start(&mut f, chk, salary);
     assert_eq!(memo(&f), "Interest");
 }
+
+/// New from Reconcile (RCN-080): a transaction entered during a session,
+/// saved cleared, comes back checked; one edited there shows its new
+/// amount, and the cleared balance and difference follow.
+#[test]
+fn entered_or_edited_during_a_session_shows_on_return() {
+    let mut f = fx();
+    let pay = f.payment("2026-01-10", "-100.00");
+    let rec = f.start("2026-01-31", "-130.00");
+    f.book
+        .write(|tx| reconcile::set_checked(tx, rec.id, &[pay], true))
+        .unwrap();
+
+    // New: entered from the register, cleared.
+    let (chk, food) = (f.chk, f.food);
+    let new = f
+        .book
+        .entry(chk, date("2026-01-20"))
+        .amount(m("-20.00"))
+        .category(food)
+        .cleared(Cleared::Cleared)
+        .save()
+        .unwrap()
+        .id;
+    let s = reconcile::session(f.book.conn(), rec.id).unwrap();
+    let added = s.payments.iter().find(|i| i.txn_id == new).unwrap();
+    assert!(added.checked);
+    assert_eq!(s.cleared_balance, m("-120.00"));
+    assert_eq!(s.difference, m("-10.00"));
+
+    // Edited in the register: the new amount, still checked.
+    let mut e = ledger::Entry::from_txn(&f.book.txn(pay).unwrap(), chk).unwrap();
+    e.amount = m("-110.00");
+    e.lines[0].amount = m("-110.00");
+    f.book
+        .write(|tx| ledger::update_entry(tx, pay, &e, false))
+        .unwrap();
+    let s = reconcile::session(f.book.conn(), rec.id).unwrap();
+    let edited = s.payments.iter().find(|i| i.txn_id == pay).unwrap();
+    assert_eq!((edited.amount, edited.checked), (m("-110.00"), true));
+    assert!(s.difference.is_zero());
+}

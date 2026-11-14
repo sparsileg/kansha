@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { dateExample, datePattern, displayDate, parseDate } from "../lib/format/date";
   import { formatMoney, isZeroMoney, parseMoney, splitPaymentDeposit } from "../lib/format/money";
   import AccountBalance from "../lib/components/AccountBalance.svelte";
   import { buildStart, emptyStartForm, isReconcilable, reconcileLabels } from "../lib/reconcile/form";
+  import { reconcileEdit, reconcileNew } from "../lib/reconcile/jump";
   import { listsState } from "../lib/state/lists.svelte";
   import { reconcileState } from "../lib/state/reconcile.svelte";
   import type { Item, OpeningCheck, ReconciliationId } from "../lib/types/bindings";
@@ -25,6 +26,45 @@
       .map((c) => ({ id: c.id, path: listsState.categoryPath(c.id) }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   );
+
+  // Shown again (Back, Back to Reconcile, RCN-080): a session kept from
+  // before reads its lists again, so what was added or changed in the
+  // register shows.
+  onMount(() => {
+    if (reconcileState.session !== null) void reconcileState.refresh();
+  });
+
+  // ---- Rows: click checks, double click or Enter opens (RCN-080) --------
+
+  /** How long a click waits for a second one before it checks. */
+  const DOUBLE_CLICK_MS = 250;
+  let pendingClick: ReturnType<typeof setTimeout> | undefined;
+  onDestroy(() => clearTimeout(pendingClick));
+
+  function rowClick(e: MouseEvent, i: Item) {
+    if (e.target instanceof HTMLInputElement || reconcileState.busy) return;
+    clearTimeout(pendingClick);
+    pendingClick = undefined;
+    // The second click of a double click checks nothing.
+    if (e.detail > 1) return;
+    pendingClick = setTimeout(() => {
+      pendingClick = undefined;
+      void reconcileState.check([i.txn_id], !i.checked);
+    }, DOUBLE_CLICK_MS);
+  }
+
+  function rowOpen(i: Item) {
+    clearTimeout(pendingClick);
+    pendingClick = undefined;
+    void reconcileEdit(i.txn_id);
+  }
+
+  function rowKey(e: KeyboardEvent, i: Item) {
+    // Enter opens; Space on the checkbox still checks.
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    rowOpen(i);
+  }
 
   // ---- Start form --------------------------------------------------------
 
@@ -129,14 +169,17 @@
           <tbody>
             {#each items as i (i.txn_id)}
               {@const cols = splitPaymentDeposit(i.amount)}
-              <!-- The whole row toggles; the checkbox is its keyboard control. -->
-              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <!-- The whole row toggles; double click opens it in the register.
+                   The checkbox is its keyboard control: Space checks, Enter opens. -->
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <tr
                 class:checked={i.checked}
-                onclick={(e) => {
-                  if (e.target instanceof HTMLInputElement || reconcileState.busy) return;
-                  void reconcileState.check([i.txn_id], !i.checked);
+                title="Click to check; double-click or Enter to open in the register"
+                onclick={(e) => rowClick(e, i)}
+                ondblclick={(e) => {
+                  if (!(e.target instanceof HTMLInputElement)) rowOpen(i);
                 }}
+                onkeydown={(e) => rowKey(e, i)}
               >
                 <td>{displayDate(i.date)}</td>
                 <td>{i.check_num}</td>
@@ -238,6 +281,14 @@
     <div class="actions">
       <button type="button" disabled={!ready || reconcileState.busy} onclick={() => void reconcileState.finish()}>
         Finish
+      </button>
+      <button
+        type="button"
+        title="Enter a transaction in the register; it comes back checked"
+        disabled={reconcileState.busy}
+        onclick={() => void reconcileNew()}
+      >
+        New
       </button>
       <button
         type="button"

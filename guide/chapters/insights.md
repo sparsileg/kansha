@@ -76,6 +76,13 @@ the monthly average over the last three full calendar years. With both
 averages shown, ▲ or ▼ says this year's is above or below the longer
 one.
 
+**Rows by**, next to the name, makes the rows tags instead of
+categories: one row per trip, say, across every category and account.
+A line with two tags is one row, "Trip, Work", counted once. With no
+tag checked, untagged spending is the last row, **(No tag)**, so the
+rows add up to the total; check tags to list only those. Check no
+categories to count every spending category.
+
 A spending card has its own gear with **Customize…** and **Delete
 card…**. **Settings > Interface** sets how many rows a spending card
 shows before it scrolls (10 to start with).

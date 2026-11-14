@@ -82,13 +82,27 @@ You can leave in the middle. The session is kept, marked **(in
 progress)** in the account list, and picks up where you left off the
 next time.
 
+## Add or Fix a Transaction
+
+**New** opens the account's register with the entry row ready and the
+date empty: type the date from the statement, then the rest. It saves
+cleared, so it comes back ticked.
+
+To fix a listed transaction, double-click its row, or press Enter on
+its box. The register opens on it, ready to edit. A single click still
+ticks the row, and Space still ticks its box.
+
+While the reconciliation is in progress, the register shows **Back to
+Reconcile**. It, or Back on the navigation bar, returns to the session
+with the change in the lists and the figures.
+
 ## When It Won't Balance
 
 Work through these, in order:
 
 1. **Missing transaction.** Something is on the statement but not in
-   Kansha. Go back to the register, enter it, and come back; it's in
-   the list, ready to tick.
+   Kansha. Click **New**, enter it, and click **Back to Reconcile**;
+   it's in the list, ticked.
 2. **Extra transaction.** Something is ticked that isn't on the
    statement. Compare the counts: the statement says how many
    checks and deposits it holds.

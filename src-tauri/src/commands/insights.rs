@@ -7,7 +7,7 @@ use kansha_core::insights::{Insight, InsightId};
 use kansha_core::persistence::insights as repo;
 use kansha_core::persistence::spending;
 use kansha_core::reports::{self, ExpenseCard};
-use kansha_core::spending::{SpendingCard, SpendingCardId, SpendingColumn};
+use kansha_core::spending::{SpendingCard, SpendingCardId, SpendingColumn, SpendingRowsBy};
 use tauri::State;
 
 use crate::state::{AppState, CmdResult};
@@ -71,6 +71,7 @@ pub fn spending_card_list(state: State<'_, AppState>) -> CmdResult<Vec<SpendingC
 /// A new spending card with its choices, put last on `insight`.
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub fn spending_card_create(
     state: State<'_, AppState>,
     name: String,
@@ -78,6 +79,7 @@ pub fn spending_card_create(
     categories: Vec<CategoryId>,
     tags: Vec<TagId>,
     columns: Vec<SpendingColumn>,
+    rows_by: SpendingRowsBy,
     insight: InsightId,
 ) -> CmdResult<SpendingCard> {
     state.write(|tx| {
@@ -88,15 +90,17 @@ pub fn spending_card_create(
             &categories,
             &tags,
             &columns,
+            rows_by,
             insight,
         )
     })
 }
 
 /// Rename a spending card and set its accounts (`None` = every open
-/// one), spending categories, tags, and columns.
+/// one), spending categories, tags, columns, and rows (CARD-080).
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub fn spending_card_update(
     state: State<'_, AppState>,
     id: SpendingCardId,
@@ -105,6 +109,7 @@ pub fn spending_card_update(
     categories: Vec<CategoryId>,
     tags: Vec<TagId>,
     columns: Vec<SpendingColumn>,
+    rows_by: SpendingRowsBy,
 ) -> CmdResult<SpendingCard> {
     state.write(|tx| {
         spending::update(
@@ -115,6 +120,7 @@ pub fn spending_card_update(
             &categories,
             &tags,
             &columns,
+            rows_by,
         )
     })
 }

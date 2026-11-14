@@ -1591,3 +1591,28 @@ fn migration_0025_adds_the_class_mix() {
     assert!(mix(1, "cash", 12_345_678).is_err(), "two decimals");
     assert!(mix(9, "cash", 40_000_000).is_err(), "needs a security");
 }
+
+#[test]
+fn migration_0026_gives_every_spending_card_rows_by_category() {
+    let clock = clock();
+    let mut db = Db::open_in_memory_at(&clock, 25).unwrap();
+    db.conn()
+        .execute(
+            "INSERT INTO spending_card (name, categories, created_at)
+             VALUES ('Car', '[1]', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(db.migrate(&clock).unwrap(), LATEST_VERSION);
+    let card = kansha_core::persistence::spending::list(db.conn()).unwrap();
+    assert_eq!(
+        card[0].rows_by,
+        kansha_core::spending::SpendingRowsBy::Category
+    );
+    assert!(
+        db.conn()
+            .execute("UPDATE spending_card SET rows_by = 'payee'", [])
+            .is_err(),
+        "only category or tag"
+    );
+}

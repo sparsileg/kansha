@@ -60,7 +60,6 @@ export interface Draft {
   cleared: Cleared;
   /** Carried through a simple (one-line) entry unchanged. */
   lineCleared: Cleared;
-  lineTags: TagId[];
   splits: SplitDraft[];
 }
 
@@ -77,7 +76,6 @@ export function newDraft(today: string, date?: string): Draft {
     notes: "",
     cleared: "unmarked",
     lineCleared: "unmarked",
-    lineTags: [],
     splits: [],
   };
 }
@@ -110,7 +108,9 @@ export function draftFromEntry(entry: Entry, payeeName: string): Draft {
     const l = entry.lines[0];
     d.category = targetValue(l.target);
     d.lineCleared = l.cleared;
-    d.lineTags = l.tags;
+    // A one-line entry's tag may sit on its line (#70); the Tag box shows
+    // it, and saving moves it to the entry's own side.
+    if (!d.tag && l.tags.length) d.tag = String(l.tags[0]);
   } else if (entry.lines.length > 1) {
     d.category = SPLIT;
     d.splits = entry.lines.map((l) => ({
@@ -324,7 +324,8 @@ export function buildEntry(
         amount,
         memo: "",
         cleared: target.kind === "account" ? d.lineCleared : "unmarked",
-        tags: d.lineTags,
+        // The Tag box holds a one-line entry's only tag (#70).
+        tags: [],
       },
     ];
   }

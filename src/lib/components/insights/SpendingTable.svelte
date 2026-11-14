@@ -1,5 +1,6 @@
 <script lang="ts">
-  // A spending card's table (CARD-060, CARD-070): the columns the card
+  // A spending card's table (CARD-060, CARD-070): a row per category or
+  // per tag group (CARD-080), in the columns the card
   // chose, in the order Rust gives them. Year and Month count past and
   // scheduled transactions; a figure with scheduled ones in it says how
   // much in its tooltip, Last Year gives the same period, and each
@@ -131,17 +132,17 @@
     style:max-height={maxHeight}
     tabindex={scrolls ? 0 : undefined}
     role={scrolls ? "region" : undefined}
-    aria-label={scrolls ? "Categories" : undefined}
+    aria-label={scrolls ? (card.rows_by === "tag" ? "Tags" : "Categories") : undefined}
   >
     <table class="expenses">
       <thead>
         <tr>
-          <th style:width={labelWidth}>Category</th>
+          <th style:width={labelWidth}>{card.rows_by === "tag" ? "Tag" : "Category"}</th>
           {#each card.columns as c (c)}<th class="num">{head(c)}</th>{/each}
         </tr>
       </thead>
       <tbody>
-        {#each card.rows as r (r.category)}
+        {#each card.rows as r (r.category ?? r.label)}
           <tr>
             <td class="label" title={r.label}>{r.label}</td>
             {#each card.columns as c (c)}<td class="num" title={tip(c, r)}>{figure(c, r)}</td>{/each}

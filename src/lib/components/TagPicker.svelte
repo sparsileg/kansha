@@ -1,12 +1,23 @@
+<script module lang="ts">
+  /** Tags being made from a name box left by a click or Tab (#67). */
+  const pending = new Set<Promise<void>>();
+
+  /** Wait for any tag still being made, so a Save sees its id. */
+  export async function tagsSettled(): Promise<void> {
+    while (pending.size > 0) await Promise.allSettled([...pending]);
+  }
+</script>
+
 <script lang="ts">
   import { call, commands } from "../api";
   import { listsState } from "../state/lists.svelte";
 
   /**
    * A tag dropdown that can also make a tag: "New tag…" at the end swaps
-   * it for a text box; Enter creates the tag and picks it, Esc or leaving
-   * the box goes back to the dropdown. `value` is a tag id as text, or ""
-   * for none.
+   * it for a text box; Enter, Tab, or leaving the box creates the tag and
+   * picks it (#67); Esc, or leaving it empty, goes back to the dropdown.
+   * `value` is a tag id as text, or "" for none. A form's Save first
+   * awaits `tagsSettled()`.
    */
   let {
     value = $bindable(),
@@ -39,7 +50,21 @@
     error = null;
   }
 
-  async function create() {
+  let creating: Promise<void> | null = null;
+
+  /** Make the typed tag once, however many of Enter and blur ask. */
+  function create(): Promise<void> {
+    if (creating) return creating;
+    const p = make().finally(() => {
+      pending.delete(p);
+      creating = null;
+    });
+    creating = p;
+    pending.add(p);
+    return p;
+  }
+
+  async function make() {
     const n = name.trim();
     if (n === "") return cancel();
     // An existing tag of that name is just picked.
@@ -79,7 +104,9 @@
     class:bad={error !== null}
     bind:value={name}
     onkeydown={onKey}
-    onblur={cancel}
+    onblur={() => {
+      if (adding) void create();
+    }}
   />
 {:else}
   <select class={className} class:hint={value === "" && empty !== "—"} aria-label={label} value={value} onchange={onSelect}>

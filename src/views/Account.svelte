@@ -7,6 +7,7 @@
   import { dialogState } from "../lib/state/dialogs.svelte";
   import { listsState } from "../lib/state/lists.svelte";
   import { registerState } from "../lib/state/register.svelte";
+  import { backToReconcile, reconciling } from "../lib/reconcile/jump";
 
   const account = $derived(
     registerState.accountId === null
@@ -30,6 +31,9 @@
       <h1>{account.name}{account.status === "closed" ? " (closed)" : ""}</h1>
       {#if account.account_type === "loan"}
         <button type="button" onclick={() => (dialogState.loan = account.id)}>Loan details…</button>
+      {/if}
+      {#if reconciling(account.id)}
+        <button type="button" onclick={() => void backToReconcile()}>Back to Reconcile</button>
       {/if}
       <span class="gear"><GearButton label="Account options" onclick={openMenu} /></span>
     </header>

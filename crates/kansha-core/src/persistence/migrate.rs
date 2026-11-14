@@ -177,6 +177,12 @@ pub const MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0025_security_class_mix.sql"),
         foreign_keys_off: false,
     },
+    Migration {
+        version: 26,
+        description: "spending card rows by",
+        sql: include_str!("migrations/0026_spending_card_rows_by.sql"),
+        foreign_keys_off: false,
+    },
 ];
 
 /// The newest schema version this build understands.

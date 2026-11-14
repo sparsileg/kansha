@@ -266,14 +266,40 @@ fn a_book_of_100000_transactions_over_12_accounts_stays_fast() {
                 &cats,
                 &[],
                 kansha_core::spending::SpendingColumn::ALL,
+                kansha_core::spending::SpendingRowsBy::Category,
             )
         })
         .unwrap();
     let t = Instant::now();
-    let card = reports::spending_card(db.conn(), today, &card).unwrap();
-    assert!(!card.rows.is_empty());
+    let shown = reports::spending_card(db.conn(), today, &card).unwrap();
+    assert!(!shown.rows.is_empty());
     check(
         "spending card, every category",
+        t.elapsed(),
+        2000,
+        &mut failures,
+    );
+
+    // The same card, a row per tag group (CARD-080).
+    let card = db
+        .write(&clock, Origin::System, |tx| {
+            kansha_core::persistence::spending::update(
+                tx,
+                card.id,
+                &card.name,
+                None,
+                &[],
+                &[],
+                kansha_core::spending::SpendingColumn::ALL,
+                kansha_core::spending::SpendingRowsBy::Tag,
+            )
+        })
+        .unwrap();
+    let t = Instant::now();
+    let shown = reports::spending_card(db.conn(), today, &card).unwrap();
+    assert!(!shown.rows.is_empty());
+    check(
+        "spending card, rows by tag",
         t.elapsed(),
         2000,
         &mut failures,

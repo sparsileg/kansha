@@ -102,7 +102,9 @@ type `au`, take `Auto`, then `:`, and only Auto's subcategories are
 offered. To move money to another account, pick the account instead;
 accounts are listed after the categories (see Transfers below).
 
-**Tag** and **Memo.** Optional.
+**Tag** and **Memo.** Optional. To make a tag, choose **New tag…**
+at the end of the Tag list and type its name; Enter, Tab, or clicking
+elsewhere (even **Save**) makes it. Escape goes back to the list.
 
 ::: tip
 Press **Escape**, or click **Cancel**, to throw away what you've

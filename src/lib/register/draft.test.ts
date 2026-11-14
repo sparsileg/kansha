@@ -255,3 +255,66 @@ describe("draftFromEntry round trip", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+// #70: a one-line entry keeps its tag in one place, the account side.
+describe("one-line entry tag", () => {
+  const tagged: Entry = {
+    account: 1, date: "2026-03-05", payee: 2, check_num: "", memo: "", notes: "",
+    amount: "-10.00", cleared: "unmarked", tags: [],
+    lines: [
+      { target: { kind: "category", id: 5 }, amount: "-10.00", memo: "", cleared: "unmarked", tags: [4] },
+    ],
+  };
+
+  it("loads a tag held on the category line into the Tag box", () => {
+    expect(draftFromEntry(tagged, "Acme").tag).toBe("4");
+  });
+
+  it("prefers the account side's tag", () => {
+    expect(draftFromEntry({ ...tagged, tags: [3] }, "Acme").tag).toBe("3");
+  });
+
+  it("saves the tag on the account side only", () => {
+    const r = buildEntry(draftFromEntry(tagged, "Acme"), 1, today);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.entry.tags).toEqual([4]);
+      expect(r.entry.lines[0].tags).toEqual([]);
+    }
+  });
+
+  it("— saves no tag on either line", () => {
+    const d = { ...draftFromEntry(tagged, "Acme"), tag: "" };
+    const r = buildEntry(d, 1, today);
+    if (r.ok) {
+      expect(r.entry.tags).toEqual([]);
+      expect(r.entry.lines[0].tags).toEqual([]);
+    }
+    expect(r.ok).toBe(true);
+  });
+
+  it("a new tag replaces it", () => {
+    const d = { ...draftFromEntry(tagged, "Acme"), tag: "9" };
+    const r = buildEntry(d, 1, today);
+    if (r.ok) {
+      expect(r.entry.tags).toEqual([9]);
+      expect(r.entry.lines[0].tags).toEqual([]);
+    }
+    expect(r.ok).toBe(true);
+  });
+
+  it("leaves split line tags alone", () => {
+    const split: Entry = {
+      ...tagged,
+      lines: [
+        { target: { kind: "category", id: 5 }, amount: "-6.00", memo: "", cleared: "unmarked", tags: [4] },
+        { target: { kind: "category", id: 6 }, amount: "-4.00", memo: "", cleared: "unmarked", tags: [] },
+      ],
+    };
+    const d = draftFromEntry(split, "Acme");
+    expect(d.tag).toBe("");
+    const r = buildEntry(d, 1, today);
+    if (r.ok) expect(r.entry.lines[0].tags).toEqual([4]);
+    expect(r.ok).toBe(true);
+  });
+});

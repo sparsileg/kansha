@@ -22,6 +22,8 @@ const NAMES = new Set([
   "To Date", // the budget's To Date column, as in Quicken (BUD-070)
   "Count money moved to or from accounts not chosen on the Accounts tab", // a tab's name
   "Enter creates the tag; Esc cancels", // key names
+  "Click to check; double-click or Enter to open in the register", // a key name (RCN-080)
+  "Back to Reconcile", // the Reconcile view, as in the Tools menu (RCN-080)
   "Fix the names marked ⚠ first (Edit)", // the Edit button's name
 ]);
 

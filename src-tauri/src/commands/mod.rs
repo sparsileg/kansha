@@ -12,6 +12,7 @@ pub mod ledger;
 pub mod lists;
 pub mod loan;
 pub mod pdf;
+pub mod popup;
 pub mod reconcile;
 pub mod reports;
 pub mod sample;

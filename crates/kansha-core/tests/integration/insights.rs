@@ -182,7 +182,18 @@ fn a_spending_card_totals_the_chosen_categories() {
     let id = b.write(|tx| spending::insert(tx, "Car")).unwrap().id;
     let card = |b: &mut Book, accounts: Option<Vec<_>>, cats: Vec<_>| -> ExpenseCard {
         let c = b
-            .write(|tx| spending::update(tx, id, "Car", accounts.as_deref(), &cats, &[], &DEF))
+            .write(|tx| {
+                spending::update(
+                    tx,
+                    id,
+                    "Car",
+                    accounts.as_deref(),
+                    &cats,
+                    &[],
+                    &DEF,
+                    kansha_core::spending::SpendingRowsBy::Category,
+                )
+            })
             .unwrap();
         assert_eq!((c.accounts.clone(), c.categories.clone()), (accounts, cats));
         spending_card(b.conn(), date("2026-06-30"), &c).unwrap()
@@ -285,7 +296,18 @@ fn spending_card_columns_and_tags() {
     let id = b.write(|tx| spending::insert(tx, "All")).unwrap().id;
     let set = |b: &mut Book, cats: Vec<_>, tags: Vec<_>, cols: &[C]| {
         let c = b
-            .write(|tx| spending::update(tx, id, "All", None, &cats, &tags, cols))
+            .write(|tx| {
+                spending::update(
+                    tx,
+                    id,
+                    "All",
+                    None,
+                    &cats,
+                    &tags,
+                    cols,
+                    kansha_core::spending::SpendingRowsBy::Category,
+                )
+            })
             .unwrap();
         spending_card(b.conn(), date("2026-06-30"), &c).unwrap()
     };
@@ -333,7 +355,18 @@ fn spending_card_columns_and_tags() {
     let c = set(&mut b, vec![gas, old], vec![], &[C::Month]);
     assert_eq!(c.rows.len(), 1);
     let e = b
-        .write(|tx| spending::update(tx, id, "All", None, &[gas], &[], &[]))
+        .write(|tx| {
+            spending::update(
+                tx,
+                id,
+                "All",
+                None,
+                &[gas],
+                &[],
+                &[],
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
+        })
         .unwrap_err();
     assert!(e.to_string().contains("at least one column"), "{e}");
 
@@ -376,7 +409,18 @@ fn spending_card_columns_and_tags() {
         .unwrap();
     let id = n.write(|tx| spending::insert(tx, "New")).unwrap().id;
     let card = n
-        .write(|tx| spending::update(tx, id, "New", None, &[cat], &[], C::ALL))
+        .write(|tx| {
+            spending::update(
+                tx,
+                id,
+                "New",
+                None,
+                &[cat],
+                &[],
+                C::ALL,
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
+        })
         .unwrap();
     let c = spending_card(n.conn(), date("2027-01-15"), &card).unwrap();
     assert_eq!(c.avg_months, 10); // March through December
@@ -407,7 +451,18 @@ fn a_new_spending_card_goes_on_its_insight_at_once() {
         .write(|tx| repo::insert(tx, "Plans", &cards(&["net_worth"])))
         .unwrap();
     let card = b
-        .write(|tx| spending::create(tx, " Car ", Some(&[checking]), &[gas], &[trip], &DEF, on.id))
+        .write(|tx| {
+            spending::create(
+                tx,
+                " Car ",
+                Some(&[checking]),
+                &[gas],
+                &[trip],
+                &DEF,
+                kansha_core::spending::SpendingRowsBy::Category,
+                on.id,
+            )
+        })
         .unwrap();
     assert_eq!(card.name, "Car");
     assert_eq!(card.accounts, Some(vec![checking]));
@@ -419,7 +474,18 @@ fn a_new_spending_card_goes_on_its_insight_at_once() {
 
     // No column: refused, so no card and no change to the insight.
     let e = b
-        .write(|tx| spending::create(tx, "Home", None, &[gas], &[], &[], on.id))
+        .write(|tx| {
+            spending::create(
+                tx,
+                "Home",
+                None,
+                &[gas],
+                &[],
+                &[],
+                kansha_core::spending::SpendingRowsBy::Category,
+                on.id,
+            )
+        })
         .unwrap_err();
     assert!(e.to_string().contains("at least one column"), "{e}");
     assert_eq!(spending::list(b.conn()).unwrap().len(), 1);
@@ -454,7 +520,16 @@ fn spending_cards_follow_category_and_account_merges_and_deletes() {
     let new_card = |b: &mut Book, name: &str, accts: Option<&[_]>, cats: &[_]| {
         b.write(|tx| {
             let n = spending::insert(tx, name)?;
-            spending::update(tx, n.id, name, accts, cats, &[], &DEF)
+            spending::update(
+                tx,
+                n.id,
+                name,
+                accts,
+                cats,
+                &[],
+                &DEF,
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
         })
         .unwrap()
         .id
@@ -544,7 +619,18 @@ fn spending_card_tags_limit_scheduled_lines() {
     sched(&mut b, 21, "-7.00", None);
     let id = b.write(|tx| spending::insert(tx, "Trip")).unwrap().id;
     let c = b
-        .write(|tx| spending::update(tx, id, "Trip", None, &[gas], &[trip], &DEF))
+        .write(|tx| {
+            spending::update(
+                tx,
+                id,
+                "Trip",
+                None,
+                &[gas],
+                &[trip],
+                &DEF,
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
+        })
         .unwrap();
     let c = spending_card(b.conn(), today, &c).unwrap();
     assert_eq!((c.total.ytd, c.total.scheduled), (m("40.00"), m("40.00")));
@@ -567,13 +653,35 @@ fn spending_cards_are_named_kept_to_spending_and_deleted_from_insights() {
     assert!(matches!(e, Error::Invalid(m) if m.contains("already exists")));
     assert!(b.write(|tx| spending::insert(tx, "  ")).is_err());
     let e = b
-        .write(|tx| spending::update(tx, home.id, "CAR", None, &[], &[], &DEF))
+        .write(|tx| {
+            spending::update(
+                tx,
+                home.id,
+                "CAR",
+                None,
+                &[],
+                &[],
+                &DEF,
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
+        })
         .unwrap_err();
     assert!(matches!(e, Error::Invalid(m) if m.contains("already exists")));
 
     // Income categories and repeats are dropped.
     let c = b
-        .write(|tx| spending::update(tx, car.id, "Cars", None, &[pay, gas, gas], &[], &DEF))
+        .write(|tx| {
+            spending::update(
+                tx,
+                car.id,
+                "Cars",
+                None,
+                &[pay, gas, gas],
+                &[],
+                &DEF,
+                kansha_core::spending::SpendingRowsBy::Category,
+            )
+        })
         .unwrap();
     assert_eq!(c.categories, [gas]);
     let all: Vec<String> = spending::list(b.conn())
@@ -722,7 +830,16 @@ fn a_spending_card_counts_this_months_scheduled_transactions() {
     let card = |b: &mut Book, accounts: Option<Vec<_>>| -> ExpenseCard {
         let c = b
             .write(|tx| {
-                spending::update(tx, id, "Car", accounts.as_deref(), &[gas, food], &[], &DEF)
+                spending::update(
+                    tx,
+                    id,
+                    "Car",
+                    accounts.as_deref(),
+                    &[gas, food],
+                    &[],
+                    &DEF,
+                    kansha_core::spending::SpendingRowsBy::Category,
+                )
             })
             .unwrap();
         spending_card(b.conn(), today, &c).unwrap()
@@ -772,4 +889,246 @@ fn a_spending_card_counts_this_months_scheduled_transactions() {
         rows(&card(&mut b, Some(vec![checking])))[0],
         "Car:Gas 105.00 105.00 17.50 30.00"
     );
+}
+
+/// Rows by Tag (CARD-080, #68): one row per tag group (TAG-030), a line
+/// counted once, "(No tag)" last when no tag is checked, so the rows add
+/// up to Total.
+#[test]
+fn spending_card_rows_by_tag() {
+    use kansha_core::Money;
+    use kansha_core::accounts::AccountType;
+    use kansha_core::categories::CategoryKind;
+    use kansha_core::ledger::{EntryLine, Target};
+    use kansha_core::persistence::spending;
+    use kansha_core::reports::spending_card;
+    use kansha_core::schedule::{
+        self, AmountType, Direction, End, EntryMode, Frequency, Recurrence, ScheduleFields,
+        ScheduleLine,
+    };
+    use kansha_core::spending::{SpendingColumn as C, SpendingRowsBy};
+
+    let m = |s: &str| s.parse::<Money>().unwrap();
+    let today = date("2026-06-10");
+    let mut b = Book::new(today).unwrap();
+    let checking = b.account("Checking", AccountType::Checking).unwrap();
+    let savings = b.account("Savings", AccountType::Savings).unwrap();
+    let visa = b.account("Visa", AccountType::CreditCard).unwrap();
+    let gas = b.category("Gas", CategoryKind::Expense).unwrap();
+    let food = b.category("Food", CategoryKind::Expense).unwrap();
+    let hotel = b.category("Hotel", CategoryKind::Expense).unwrap();
+    let pay = b.category("Salary", CategoryKind::Income).unwrap();
+    let trip = b.tag("Trip").unwrap();
+    let work = b.tag("Work").unwrap();
+    let paris = b.tag("Paris").unwrap();
+
+    let d = |s: &str| date(s);
+    // Trip: 10 gas, a 4 refund, and a split's 30 hotel line.
+    b.entry(checking, d("2026-05-01"))
+        .amount(m("-10.00"))
+        .category(gas)
+        .tag(trip)
+        .save()
+        .unwrap();
+    b.entry(checking, d("2026-05-02"))
+        .amount(m("4.00"))
+        .category(gas)
+        .tag(trip)
+        .save()
+        .unwrap();
+    let mut hotel_line = EntryLine::new(Target::Category(hotel), m("-30.00"));
+    hotel_line.tags = vec![trip];
+    b.entry(checking, d("2026-05-03"))
+        .amount(m("-35.00"))
+        .line(hotel_line)
+        .split(Target::Category(food), m("-5.00"))
+        .save()
+        .unwrap();
+    // Two tags, either order: one group "Trip, Work", counted once.
+    b.entry(checking, d("2026-05-04"))
+        .amount(m("-20.00"))
+        .category(food)
+        .tag(work)
+        .tag(trip)
+        .save()
+        .unwrap();
+    // Untagged.
+    b.entry(checking, d("2026-06-01"))
+        .amount(m("-7.00"))
+        .category(gas)
+        .save()
+        .unwrap();
+    // Not spending: income and a transfer, both tagged.
+    b.entry(checking, d("2026-06-02"))
+        .amount(m("500.00"))
+        .category(pay)
+        .tag(trip)
+        .save()
+        .unwrap();
+    b.entry(checking, d("2026-06-03"))
+        .amount(m("-50.00"))
+        .transfer(savings)
+        .tag(trip)
+        .save()
+        .unwrap();
+    // Another account.
+    b.entry(visa, d("2026-06-04"))
+        .amount(m("-100.00"))
+        .category(gas)
+        .tag(trip)
+        .save()
+        .unwrap();
+    // This month's scheduled food, tagged Paris.
+    let mut rec = Recurrence::new(Frequency::Monthly, d("2026-06-01"));
+    rec.day1 = Some(20);
+    let f = ScheduleFields {
+        account: checking,
+        payee: None,
+        memo: String::new(),
+        direction: Direction::Payment,
+        amount_type: AmountType::Fixed,
+        lines: vec![ScheduleLine {
+            target: Target::Category(food),
+            amount: m("-40.00"),
+            memo: String::new(),
+            tag: Some(paris),
+        }],
+        recurrence: rec,
+        end: End::Never,
+        remind_days: 3,
+        mode: EntryMode::Remind,
+        average_of: None,
+    };
+    b.write(|tx| schedule::create(tx, &f)).unwrap();
+
+    let id = b.write(|tx| spending::insert(tx, "Travel")).unwrap().id;
+    let set = |b: &mut Book, accounts: Option<Vec<_>>, cats: Vec<_>, tags: Vec<_>, by| {
+        let c = b
+            .write(|tx| {
+                spending::update(
+                    tx,
+                    id,
+                    "Travel",
+                    accounts.as_deref(),
+                    &cats,
+                    &tags,
+                    &DEF,
+                    by,
+                )
+            })
+            .unwrap();
+        assert_eq!(c.rows_by, by);
+        spending_card(b.conn(), today, &c).unwrap()
+    };
+    let rows = |c: &kansha_core::reports::ExpenseCard| -> Vec<(String, Money)> {
+        c.rows.iter().map(|r| (r.label.clone(), r.ytd)).collect()
+    };
+    let own = Some(vec![checking]);
+
+    // Every spending category, every tag group, "(No tag)" last.
+    let c = set(&mut b, own.clone(), vec![], vec![], SpendingRowsBy::Tag);
+    assert_eq!(c.rows_by, SpendingRowsBy::Tag);
+    assert_eq!(
+        rows(&c),
+        [
+            ("Paris".into(), m("40.00")),
+            ("Trip".into(), m("36.00")),
+            ("Trip, Work".into(), m("20.00")),
+            ("(No tag)".into(), m("12.00")),
+        ]
+    );
+    assert!(c.rows.iter().all(|r| r.category.is_none()));
+    assert_eq!(c.total.ytd, m("108.00"), "rows add up to Total");
+    assert_eq!(c.total.scheduled, m("40.00"));
+    assert_eq!(c.rows[0].scheduled, m("40.00"));
+    assert_eq!(c.rows[1].mtd, Money::ZERO);
+    assert_eq!(c.rows[3].mtd, m("7.00"));
+    assert!(c.chosen > 0);
+
+    // Checked tags limit the rows; no "(No tag)".
+    let c = set(&mut b, own.clone(), vec![], vec![trip], SpendingRowsBy::Tag);
+    assert_eq!(
+        rows(&c),
+        [
+            ("Trip".into(), m("36.00")),
+            ("Trip, Work".into(), m("20.00"))
+        ]
+    );
+    assert_eq!(c.total.ytd, m("56.00"));
+
+    // Checked categories limit what counts.
+    let c = set(&mut b, own.clone(), vec![gas], vec![], SpendingRowsBy::Tag);
+    assert_eq!(
+        rows(&c),
+        [("Trip".into(), m("6.00")), ("(No tag)".into(), m("7.00"))]
+    );
+
+    // Every open account.
+    let c = set(&mut b, None, vec![gas], vec![trip], SpendingRowsBy::Tag);
+    assert_eq!(rows(&c), [("Trip".into(), m("106.00"))]);
+
+    // No account: nothing to show, nothing chosen.
+    let c = set(&mut b, Some(vec![]), vec![], vec![], SpendingRowsBy::Tag);
+    assert!(c.rows.is_empty());
+    assert_eq!(c.chosen, 0);
+
+    // Rows by Category is as before.
+    let c = set(
+        &mut b,
+        own.clone(),
+        vec![gas, food],
+        vec![],
+        SpendingRowsBy::Category,
+    );
+    assert_eq!(c.rows_by, SpendingRowsBy::Category);
+    assert_eq!(
+        rows(&c),
+        [("Food".into(), m("65.00")), ("Gas".into(), m("13.00"))]
+    );
+    assert_eq!(c.rows[0].category, Some(food));
+
+    // Last Year only, with nothing then: no rows.
+    let c = b
+        .write(|tx| {
+            spending::update(
+                tx,
+                id,
+                "Travel",
+                Some(&[checking]),
+                &[],
+                &[],
+                &[C::LastYear],
+                SpendingRowsBy::Tag,
+            )
+        })
+        .unwrap();
+    assert!(spending_card(b.conn(), today, &c).unwrap().rows.is_empty());
+}
+
+/// Merging or deleting a tag keeps a Rows by Tag card's choice (#68).
+#[test]
+fn rows_by_survives_tag_merge_and_delete() {
+    use kansha_core::persistence::{spending, tags};
+    use kansha_core::spending::SpendingRowsBy;
+
+    let mut b = book();
+    let trip = b.tag("Trip").unwrap();
+    let travel = b.tag("Travel").unwrap();
+    let id = b.write(|tx| spending::insert(tx, "Travel")).unwrap().id;
+    b.write(|tx| {
+        spending::update(
+            tx,
+            id,
+            "Travel",
+            None,
+            &[],
+            &[trip],
+            &DEF,
+            SpendingRowsBy::Tag,
+        )
+    })
+    .unwrap();
+    b.write(|tx| tags::merge(tx, trip, travel)).unwrap();
+    let c = spending::get(b.conn(), id).unwrap();
+    assert_eq!((c.tags, c.rows_by), (vec![travel], SpendingRowsBy::Tag));
 }

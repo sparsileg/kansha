@@ -143,7 +143,8 @@ vi.mock("../lib/api", async (orig) => {
         categories: number[],
         tags: number[],
         columns: string[],
-      ) => sc.update(id, name, accounts, categories, tags, columns),
+        rowsBy: string,
+      ) => sc.update(id, name, accounts, categories, tags, columns, rowsBy),
       spendingCardDelete: (id: number) => sc.remove(id),
       attention: () => {
         attentionCall();
@@ -221,6 +222,7 @@ import type {
   Insight,
   SpendingCard,
   SpendingColumn,
+  SpendingRowsBy,
 } from "../lib/types/bindings";
 
 const ALL = CARDS.map((c) => c.id);
@@ -706,6 +708,7 @@ describe("Insights: spending cards (CARD-060)", () => {
     avg_trend: null,
   });
   const extras = {
+    rows_by: "category",
     columns: ["year", "month", "monthly_avg"],
     year_months: 9,
     avg_months: 0,
@@ -719,6 +722,7 @@ describe("Insights: spending cards (CARD-060)", () => {
     categories: [],
     tags: [],
     columns: ["year", "month", "monthly_avg"],
+    rows_by: "category",
   });
   const auto = (): Insight => ({ id: 3, name: "Car", cards: ["spending:4"] });
   const shown = (insights: Insight[] = [auto()]) => {
@@ -807,9 +811,10 @@ describe("Insights: spending cards (CARD-060)", () => {
         categories: number[],
         tags: number[],
         columns: SpendingColumn[],
+        rows_by: SpendingRowsBy,
       ) => {
         listsState.spendingCards = [
-          { id, name, accounts, categories, tags, columns },
+          { id, name, accounts, categories, tags, columns, rows_by },
         ];
         return ok(listsState.spendingCards[0]);
       },
@@ -895,6 +900,7 @@ describe("Insights: spending cards (CARD-060)", () => {
       [7],
       [3],
       ["three_year_avg"],
+      "category",
     );
     expect(await screen.findByRole("article", { name: "Auto" })).toBeTruthy();
     await waitFor(() => expect(autoCall.mock.calls.length).toBeGreaterThan(1));
@@ -988,9 +994,60 @@ describe("Insights: spending cards (CARD-060)", () => {
       [7],
       [],
       ["year", "month", "monthly_avg"],
+      "category",
       3,
     );
     expect(await screen.findByRole("article", { name: "Home" })).toBeTruthy();
+  });
+
+  it("Rows by Tag (CARD-080): chosen in Customize, headed Tag", async () => {
+    sc.update.mockImplementation(() => ok(carCard()));
+    autoCall.mockReturnValue({
+      rows: [
+        row(null, "Trip", "36.00", "0.00", "6.00"),
+        row(null, "(No tag)", "12.00", "7.00", "2.00"),
+      ],
+      total: row(null, "Total", "48.00", "7.00", "8.00"),
+      chosen: 3,
+      ...extras,
+      rows_by: "tag",
+    });
+    shown();
+    render(Insights);
+    const card = await screen.findByRole("article", { name: "Car costs" });
+    await within(card).findByText("36.00");
+    const rows = within(card)
+      .getAllByRole("row")
+      .map((r) => r.querySelector("th,td")?.textContent?.trim());
+    expect(rows).toEqual(["Tag", "Trip", "(No tag)", "Total"]);
+
+    await fireEvent.click(
+      within(card).getByRole("button", { name: "Car costs options" }),
+    );
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Customize…" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Customize spending card",
+    });
+    const by = within(dialog).getByRole("combobox", {
+      name: "Rows by",
+    }) as HTMLSelectElement;
+    expect(by.value).toBe("category");
+    by.value = "tag";
+    await fireEvent.change(by);
+    await fireEvent.click(within(dialog).getByRole("tab", { name: "Tags" }));
+    expect(within(dialog).getByText(/a row for every tag group/)).toBeTruthy();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await waitFor(() =>
+      expect(sc.update).toHaveBeenCalledWith(
+        4,
+        "Car costs",
+        [1],
+        [],
+        [],
+        ["year", "month", "monthly_avg"],
+        "tag",
+      ),
+    );
   });
 
   it("Cancel on New spending card… makes nothing", async () => {

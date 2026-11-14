@@ -229,6 +229,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::insights::spending_card_data,
             commands::reports::net_worth,
             commands::pdf::report_save_pdf,
+            commands::popup::popup_colors,
         ])
 }
 

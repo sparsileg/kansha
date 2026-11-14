@@ -21,7 +21,7 @@
   import { scheduleState } from "../state/schedule.svelte";
   import type { Account, ScheduleFields, ScheduleId } from "../types/bindings";
   import Modal from "./Modal.svelte";
-  import TagPicker from "./TagPicker.svelte";
+  import TagPicker, { tagsSettled } from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
 
   let {
@@ -87,6 +87,15 @@
   }
 
   async function save() {
+    if (busy) return;
+    // A tag typed in New tag… and left by clicking Save is still being
+    // made (#67).
+    busy = true;
+    try {
+      await tagsSettled();
+    } finally {
+      busy = false;
+    }
     const built = buildFields(d, listsState.today, past);
     if (!built.ok) {
       error = built.error;

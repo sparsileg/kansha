@@ -18,6 +18,7 @@ vi.mock("../api", async (orig) => {
       registerQuery: vi.fn(),
       registerSummary: vi.fn(),
       accountBar: vi.fn(),
+      tagCreate: vi.fn(),
     },
   };
 });
@@ -148,6 +149,56 @@ describe("EntryEditor keyboard entry (REG-030)", () => {
     await screen.findByText(/Saved 09\/24\/2026/);
     expect(field("Payment").value).toBe("");
     expect(document.activeElement).toBe(field("Date"));
+  });
+
+  it("New tag… typed, then Save: the new tag is made first and saved (#67)", async () => {
+    listsState.tags = [{ id: 3, name: "Old", hidden: false }] as never;
+    vi.spyOn(listsState, "loadAll").mockResolvedValue(undefined as never);
+    // The tag is made slowly: Save must wait for it.
+    c.tagCreate.mockImplementation(
+      () => new Promise((r) => setTimeout(() => r({ status: "ok", data: { id: 9, name: "X", hidden: false } }), 20)) as never,
+    );
+    render(EntryEditor, { account: 1 });
+    await fireEvent.input(field("Payment"), { target: { value: "9" } });
+    await pick("Category", "food");
+    const tag = screen.getByLabelText("Tag") as HTMLSelectElement;
+    tag.value = "3";
+    await fireEvent.change(tag);
+    tag.value = "__new__";
+    await fireEvent.change(tag);
+    const box = await screen.findByLabelText("New tag name");
+    await fireEvent.input(box, { target: { value: "X" } });
+    // Clicking Save: the box loses focus, then the form submits.
+    await fireEvent.blur(box);
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
+    expect(c.tagCreate).toHaveBeenCalledTimes(1);
+    expect(c.entryCreate.mock.calls[0][0].tags).toEqual([9]);
+  });
+
+  it("New from Reconcile: Date empty, saved cleared (RCN-080)", async () => {
+    render(EntryEditor, { account: 1 });
+    registerState.newEntry = { account: 1 };
+    await waitFor(() => expect(field("Date").value).toBe(""));
+    expect(registerState.newEntry).toBeNull();
+    await fireEvent.input(field("Payment"), { target: { value: "9" } });
+    await pick("Category", "food");
+    await fireEvent.submit(field("Date").closest("form")!);
+    expect(await screen.findByText(/Enter a valid date/)).toBeTruthy();
+    expect(c.entryCreate).not.toHaveBeenCalled();
+    await fireEvent.input(field("Date"), { target: { value: "01/28/2026" } });
+    await fireEvent.submit(field("Date").closest("form")!);
+    await waitFor(() => expect(c.entryCreate).toHaveBeenCalledTimes(1));
+    expect(c.entryCreate.mock.calls[0][0]).toMatchObject({ date: "2026-01-28", cleared: "cleared" });
+  });
+
+  it("New from Reconcile for another account is left alone", async () => {
+    render(EntryEditor, { account: 1 });
+    registerState.newEntry = { account: 2 };
+    await Promise.resolve();
+    expect(field("Date").value).toBe("09/24/2026");
+    expect(registerState.newEntry).toEqual({ account: 2 });
+    registerState.newEntry = null;
   });
 
   it("shows an error when the command rejects with a bare string", async () => {

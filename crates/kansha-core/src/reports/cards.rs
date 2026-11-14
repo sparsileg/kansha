@@ -15,7 +15,7 @@ use super::net_worth::shown_balances;
 use super::range::{day_before, month_end, periods};
 use super::{DatePreset, DateRange, ReportKind, ReportSettings, ResolvedRange};
 use crate::accounts::{Account, AccountGroup, AccountId, AccountStatus, AccountType};
-use crate::categories::{CategoryId, CategoryKind};
+use crate::categories::{CategoryId, CategoryKind, TagId};
 use crate::date::{Clock, Date, Timestamp};
 use crate::error::{Error, Result};
 use crate::integrity::IntegrityStatus;
@@ -24,7 +24,7 @@ use crate::money::{Money, mul_div};
 use crate::persistence::{accounts, audit, reports as repo};
 use crate::schedule::{self, OccurrenceView};
 use crate::settings;
-use crate::spending::{SpendingCard, SpendingColumn};
+use crate::spending::{SpendingCard, SpendingColumn, SpendingRowsBy};
 use crate::text_enum::text_enum;
 
 /// Uncleared transactions older than this many days are flagged.
@@ -394,9 +394,10 @@ pub fn net_worth_trend(conn: &Connection, today: Date, years: i64, fitted: bool)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct ExpenseRow {
-    /// `None` on the Total row.
+    /// `None` on the Total row and on a tag group's row (CARD-080).
     pub category: Option<CategoryId>,
-    /// "Car:BlueForester:Gas", or "Total".
+    /// "Car:BlueForester:Gas", a tag group "Trip, Work", "(No tag)", or
+    /// "Total".
     pub label: String,
     /// January 1 through the end of this month, scheduled included.
     pub ytd: Money,
@@ -436,10 +437,13 @@ pub enum AvgTrend {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct ExpenseCard {
-    /// The chosen categories with transactions this year (scheduled
-    /// this month included), by name;
-    /// none when no category or no account is chosen.
+    /// The chosen categories (or tag groups, CARD-080) with
+    /// transactions in a shown column (scheduled this month included),
+    /// by name, "(No tag)" last; none when no category or no account is
+    /// chosen.
     pub rows: Vec<ExpenseRow>,
+    /// What the rows are.
+    pub rows_by: SpendingRowsBy,
     pub total: ExpenseRow,
     /// How many categories are chosen (0 when no account is), so an
     /// empty card can tell "choose some" from "no spending this year".
@@ -494,6 +498,37 @@ impl Tally {
     }
 }
 
+/// What a spending card row adds up: a category, or a tag group
+/// (CARD-080) by its lower-case key, `true` for "(No tag)" so it sorts
+/// last.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum RowKey {
+    Category(CategoryId),
+    Tags(bool, String),
+}
+
+/// A line's row on a card: its category, or its tag group (TAG-030), the
+/// group's label kept in `labels`.
+fn row_key(
+    by: SpendingRowsBy,
+    category: CategoryId,
+    tags: &[TagId],
+    lk: &Lookups,
+    labels: &mut BTreeMap<RowKey, String>,
+) -> RowKey {
+    match by {
+        SpendingRowsBy::Category => RowKey::Category(category),
+        SpendingRowsBy::Tag => match lk.tag_group(tags) {
+            Some((key, label)) => {
+                let k = RowKey::Tags(false, key);
+                labels.entry(k.clone()).or_insert(label);
+                k
+            }
+            None => RowKey::Tags(true, String::new()),
+        },
+    }
+}
+
 /// The months a three-year average covers (CARD-070), ending last
 /// December: 36, or those since the book's first transaction, with the
 /// 1st of the month it starts in when fewer than 36.
@@ -522,7 +557,10 @@ fn average_months(today: Date, first: Option<Date>) -> Result<(u32, Option<Date>
 /// is due later this month counts now. Last Year, Last Month, and the
 /// three-year average (CARD-070) are transactions in those whole
 /// periods, and only the columns shown are worked out and decide which
-/// categories are listed.
+/// categories are listed. Rows by Tag (CARD-080): the same lines, one
+/// row per tag group (TAG-030), so a line counts once; with no tag
+/// checked, untagged lines make "(No tag)", last, and the rows add up
+/// to Total.
 pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Result<ExpenseCard> {
     let lk = Lookups::load(conn)?;
     let accounts = card.accounts.clone().unwrap_or_else(|| {
@@ -536,7 +574,9 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
         lk.category(*c)
             .is_some_and(|x| x.fields.kind == CategoryKind::Expense)
     };
-    let mut chosen: Vec<CategoryId> = if card.categories.is_empty() && !card.tags.is_empty() {
+    let by = card.rows_by;
+    let every = card.categories.is_empty() && (by == SpendingRowsBy::Tag || !card.tags.is_empty());
+    let mut chosen: Vec<CategoryId> = if every {
         lk.categories
             .iter()
             .map(|c| c.id)
@@ -608,8 +648,9 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
         })
     };
 
-    let mut tally: BTreeMap<CategoryId, Tally> = BTreeMap::new();
-    let mut listed: BTreeSet<CategoryId> = BTreeSet::new();
+    let mut tally: BTreeMap<RowKey, Tally> = BTreeMap::new();
+    let mut listed: BTreeSet<RowKey> = BTreeSet::new();
+    let mut labels: BTreeMap<RowKey, String> = BTreeMap::new();
     if !chosen.is_empty() {
         for (c, tag, amount) in
             schedule::scheduled_by_category(conn, month_from, month_to, today, &accounts)?
@@ -622,12 +663,13 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
             let spent = amount
                 .checked_neg()
                 .ok_or(Error::Overflow("insight cards"))?;
-            let t = tally.entry(c).or_insert(Tally::ZERO);
+            let key = row_key(by, c, tag.as_slice(), &lk, &mut labels);
+            let t = tally.entry(key.clone()).or_insert(Tally::ZERO);
             t.ytd = add(t.ytd, spent)?;
             t.mtd = add(t.mtd, spent)?;
             t.scheduled = add(t.scheduled, spent)?;
             if this_year || this_month {
-                listed.insert(c);
+                listed.insert(key);
             }
         }
         // Only as far back as a shown column needs.
@@ -659,34 +701,35 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
                 .amount
                 .checked_neg()
                 .ok_or(Error::Overflow("insight cards"))?;
-            let t = tally.entry(c).or_insert(Tally::ZERO);
+            let key = row_key(by, c, &l.tags, &lk, &mut labels);
+            let t = tally.entry(key.clone()).or_insert(Tally::ZERO);
             let d = l.date;
+            let mut shown = false;
             if d >= year_from {
                 t.ytd = add(t.ytd, spent)?;
-                if this_year {
-                    listed.insert(c);
-                }
+                shown |= this_year;
             }
             if d >= month_from {
                 t.mtd = add(t.mtd, spent)?;
-                if this_month {
-                    listed.insert(c);
-                }
+                shown |= this_month;
             }
             if past_month && d >= last_month_from && d < month_from {
                 t.last_month = add(t.last_month, spent)?;
-                listed.insert(c);
+                shown = true;
             }
             if past_year && d >= last_year_from && d < year_from {
                 t.last_year = add(t.last_year, spent)?;
                 if d <= same_period_to {
                     t.same_period = add(t.same_period, spent)?;
                 }
-                listed.insert(c);
+                shown = true;
             }
             if past_three && d >= three_from && d < year_from {
                 t.three_year = add(t.three_year, spent)?;
-                listed.insert(c);
+                shown = true;
+            }
+            if shown {
+                listed.insert(key);
             }
         }
     }
@@ -696,17 +739,34 @@ pub fn spending_card(conn: &Connection, today: Date, card: &SpendingCard) -> Res
     let count = u32::try_from(chosen.len()).unwrap_or(u32::MAX);
     let mut rows = Vec::new();
     let mut total = Tally::ZERO;
-    for c in chosen {
-        // Nothing in a shown column: left out (one netting to zero stays).
-        if !listed.contains(&c) {
-            continue;
+    // Nothing in a shown column: left out (one netting to zero stays).
+    match by {
+        SpendingRowsBy::Category => {
+            for c in chosen {
+                let key = RowKey::Category(c);
+                if !listed.contains(&key) {
+                    continue;
+                }
+                let t = tally.get(&key).copied().unwrap_or(Tally::ZERO);
+                total = total.plus(t)?;
+                rows.push(row(Some(c), lk.category_path(c), t)?);
+            }
         }
-        let t = tally.get(&c).copied().unwrap_or(Tally::ZERO);
-        total = total.plus(t)?;
-        rows.push(row(Some(c), lk.category_path(c), t)?);
+        SpendingRowsBy::Tag => {
+            // Tag groups by name, "(No tag)" last: the key order.
+            for key in listed {
+                let t = tally.get(&key).copied().unwrap_or(Tally::ZERO);
+                let label = labels
+                    .remove(&key)
+                    .unwrap_or_else(|| "(No tag)".to_string());
+                total = total.plus(t)?;
+                rows.push(row(None, label, t)?);
+            }
+        }
     }
     Ok(ExpenseCard {
         rows,
+        rows_by: by,
         total: row(None, "Total".into(), total)?,
         chosen: count,
         columns: card.columns.clone(),

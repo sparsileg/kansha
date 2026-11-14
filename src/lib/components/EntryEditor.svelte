@@ -35,7 +35,7 @@
   import { scheduleState } from "../state/schedule.svelte";
   import type { AccountId, Entry, Payee } from "../types/bindings";
   import { SPLIT_ICON } from "../shell/icons";
-  import TagPicker from "./TagPicker.svelte";
+  import TagPicker, { tagsSettled } from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
 
   /** `null` = the new-entry row; otherwise edit this transaction in place. */
@@ -82,6 +82,25 @@
     registerState.prefill = null;
     untrack(() => void applyPrefill(p));
   });
+
+  // New from Reconcile (RCN-080): Date empty for the statement's date,
+  // and cleared, so the entry comes back checked.
+  $effect(() => {
+    const n = registerState.newEntry;
+    if (txn !== null || !n || n.account !== account) return;
+    registerState.newEntry = null;
+    untrack(() => void startFromReconcile());
+  });
+
+  async function startFromReconcile() {
+    d = { ...newDraft(listsState.today), date: "", cleared: "cleared" };
+    occ = null;
+    error = null;
+    status = "From Reconcile: enter the statement's date; it saves cleared.";
+    await tick();
+    formEl?.scrollIntoView?.({ block: "nearest" });
+    dateInput?.focus();
+  }
 
   async function applyPrefill(p: NonNullable<typeof registerState.prefill>) {
     const name = p.entry.payee ? (listsState.payee(p.entry.payee)?.name ?? "") : "";
@@ -415,6 +434,14 @@
   async function save(e?: Event) {
     e?.preventDefault();
     if (busy) return; // Enter again (on a select) while saving
+    // A tag typed in New tag… and left by clicking Save is still being
+    // made (#67).
+    busy = true;
+    try {
+      await tagsSettled();
+    } finally {
+      busy = false;
+    }
     error = null;
     if (txn === null && isBlank(d)) return; // Enter on an empty new row
     // Enter on an untouched edit writes nothing; it just moves on.

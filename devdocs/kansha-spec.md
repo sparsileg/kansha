@@ -2,7 +2,7 @@
 
 |                      |                                                                                                                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Document version** | 0.7.126 (draft)                                                                                                                                                  |
+| **Document version** | 0.7.128 (draft)                                                                                                                                                  |
 | **Target release**   | Kansha 1.0.0                                                                                                                                                     |
 | **Last updated**     | 2026-11-06                                                                                                                                                       |
 | **Owner**            | Stan                                                                                                                                                             |
@@ -400,7 +400,13 @@ splits into principal and interest and drive the payment reminder
 #### 6.3 Tags
 
 - **TAG-010** [1.0][S] Transactions and individual split lines may
-  carry zero or more tags.
+  carry zero or more tags. A one-line entry keeps its tag on the
+  transaction itself; one found on its category line shows in the
+  entry row's Tag box, and saving moves it there, so the box, the
+  register, and what is saved agree (#70, 0.7.127). The Tag box's New
+  tag… makes the tag on Enter, Tab, or leaving the box with a name
+  typed (a name in use, any case, picks that tag); Esc, or an empty
+  box, goes back to the list. Save waits for the tag (#67, 0.7.127).
 - **TAG-020** [1.0][S] Tags can be created, renamed, merged, and
   hidden.
 - **TAG-030** [1.0][S] Reports can filter and group by tag. Group
@@ -801,6 +807,18 @@ common patterns.
   against brokerage statements. The Investments screen's shares as of
   a date (POS-040) is checked against the statement by eye, and lot
   true-up (MIG-115) sets a holding's lots to the broker's list.
+- **RCN-080** [1.0][S] Add and fix from Reconcile (#69, 0.7.127).
+  **New** in the actions opens the account's register with the entry
+  row ready, Date empty for the statement's date; the entry saves
+  cleared, so it comes back checked. A double click on a row in
+  either list, or Enter on its checkbox, opens the register on that
+  transaction, selected and in its edit; a single click still checks
+  or unchecks (it waits a moment for a second click), Space still
+  checks, and a double click leaves the check as it was. While the
+  account has a reconciliation in progress its register shows **Back
+  to Reconcile**; it and Back (UI-025) resume the session, its lists
+  read again, so the cleared balance and difference count what was
+  added or changed.
 
 ### 10. Investments
 
@@ -1717,6 +1735,19 @@ entries in Appendix A and migration 0014 use those IDs.
   heading's scheduled note shows only with Year, Month, or Monthly Avg.
   Only the periods shown are read.
 
+- **CARD-080** [1.0][S] Spending card rows by tag (#68, 0.7.127).
+  Customize gains **Rows by**: Category (as before; every existing
+  card) or Tag. By Tag the card has one row per tag group as TAG-030
+  has it ("Trip, Work"), by name, headed Tag, with the same columns,
+  scheduled rule, Total row, and row limit: a line counts once, by
+  its own tags and the transaction's (a scheduled line by its tag).
+  Categories: none checked counts every spending category; checked
+  ones only those. Tags: none checked lists every tag group and, last,
+  "(No tag)" for untagged lines, so the rows add up to Total; checked
+  ones count only lines with one of them, and "(No tag)" is not
+  listed. No categories under the tag rows. Merging or deleting a tag
+  changes the card's tags as CARD-060 has it.
+
 #### 12.4 Insights
 
 - **INS-010** [1.0][S] Insights are views made of cards the user
@@ -2563,9 +2594,12 @@ Decided 2026-10-12 (D-150 … D-180, Part V).
   respects font-size setting; adequate contrast in all themes. The
   focused field or button takes the theme's focus background and text
   colors, not only an outline; a text field selects its contents on
-  focus so typing replaces them. Applies app-wide. Known gap in
-  1.0.0: an open dropdown list ignores the theme on Linux (#18,
-  deferred past 1.0.0, 0.7.121).
+  focus so typing replaces them. Applies app-wide. An open dropdown
+  list takes the theme's option colors, its selected row the theme's
+  selection colors, and the app's font size (#18, 0.7.128): on Linux
+  WebKitGTK draws it as a GTK popup that ignores the page's CSS, so
+  the app styles that popup through GTK whenever the theme, font, or
+  size changes.
 - **NFR-090** [1.0][S] Dates are calendar dates without time zones
   (financial dates never shift due to time zone conversion).
 
@@ -3406,8 +3440,11 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
   on the investment register (INV-080, #65) and Price worked out
   again in the investment entry form (INV-030, #66), oversights found
   checking an IRA against the broker, go in as 0.92.0 (Stan,
-  2026-11-06). Fixes to how releases are
-  built and downloaded also go in at once (Stan, 2026-11-04).
+  2026-11-06). Exception: spending card rows by tag (CARD-080, #68)
+  and adding and fixing from Reconcile (RCN-080, #69) go in with the
+  fixes #67 and #70 as 0.93.0 (Stan, 2026-11-14). Fixes to how
+  releases are built and downloaded also go in at once (Stan,
+  2026-11-04).
 - Database schema has its own version number; migrations run
   automatically at startup after an automatic backup (BAK-020), and
   are forward-only.
@@ -3504,9 +3541,6 @@ LOAN, BUD, CLI, NFR, and TEST, as audited on 2026-11-01 (#51).
 **Proven on 2026-11-02:** NFR-010 and TEST-140: CI is back on and
 the suite passes on Ubuntu and Windows (#52).
 
-**Known gap in 1.0.0:** NFR-080: open dropdown lists ignore the theme
-on Linux (#18, deferred past 1.0.0, 0.7.121).
-
 [Later] items are out of scope; RPT-120 is withdrawn (0.7.121), and
 RPT-200 is built as additions to RPT-205 (0.7.122). The prototype's own record is
 `devdocs/phase-notes/prototype-review.md`.
@@ -3544,6 +3578,8 @@ created, decisions made, known gaps.
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7.128 | 2026-11-14 | NFR-080 (#18): open dropdown lists follow the theme on Linux. Checked in WebKitGTK 2.52: the open list is a GTK popup (a window holding a tree view) in the system's GTK colors and font size; the page's CSS and GTK's dark preference do not reach it. The app now loads a GTK style sheet with the theme's option colors, selection colors, and font size whenever the theme, font, or size changes (the font size applies to every GTK list so the popup is sized for it). §23: the known gap removed. No schema change. **API change:** new command `popup_colors`, new type `PopupColors`. |
+| 0.7.127 | 2026-11-14 | TAG-010 (#67): New tag… in a tag dropdown makes the tag on Enter, Tab, or leaving the box with a name typed (clicking Save no longer drops it and saves the old tag); a name in use, any case, picks that tag; Esc or an empty box goes back; Save waits for the tag. TAG-010 (#70): a one-line entry's tag held on its category line shows in the Tag box; saving keeps the tag on the transaction only, so "—" clears it and the register agrees. CARD-080 (new, #68): Rows by Category or Tag on a spending card; by Tag one row per tag group (TAG-030), "(No tag)" last when no tag is checked, rows adding up to Total. RCN-080 (new, #69): Reconcile's New opens the register's entry row, Date empty, saved cleared so it comes back checked; double click or Enter opens a listed transaction in its edit, single click still checks; the register's Back to Reconcile and Back resume the session with fresh lists. §21: the freeze lifted for #68 and #69, released as 0.93.0. **Schema change:** 0026 (`spending_card.rows_by`). **API change:** `spending_card_create` and `spending_card_update` take `rows_by`; `SpendingCard.rows_by`, `ExpenseCard.rows_by`, new type `SpendingRowsBy`. |
 | 0.7.126 | 2026-11-06 | INV-080 (new, #65): Export CSV… on an investment account's gear menu writes its transactions in a date range (the reports' choices, Year to date first) to the Downloads folder: the register's columns, shares and prices as stored, Cash the running balance. INV-030 (#66): in the entry form, changing Shares or the Amount of a Buy, Sell, or reinvestment works Price per share out again from them (less or plus the commission), six decimals, half-even. RPT-050: CSV text fields are quoted (numbers, percents, dates not), so Calc set to split on spaces keeps "Vanguard Short Term Bond" in one cell; reports and the register export alike. §21: the freeze lifted for both, released as 0.92.0. No schema change. **API change:** new commands `inv_export_csv`, `inv_trade_price`. |
 | 0.7.125 | 2026-11-04 | §21: installer names carry no version, so the astryx.tools downloads page links to the latest release and shows its version (it was fixed at 0.90.0); fixes to building and downloading releases are exempt from the freeze. v0.91.0 also given the fixed-name copies. Guide: install by the fixed names. No schema change. No API change. |
 | 0.7.124 | 2026-11-04 | REG-085 (new, #64): Move… on the register's context menu moves a transaction to another open checking, savings, cash, or credit card account, unmarked; reconciled, void, and moves to a transfer's other side are refused; undoable. REG-080 lists Move…. §21: the freeze lifted for REG-085, released as 0.91.0. No schema change. **API change:** new command `txn_move`. |

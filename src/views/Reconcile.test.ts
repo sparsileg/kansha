@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 
 vi.mock("../lib/api", async (orig) => {
   const real = await orig<typeof import("../lib/api")>();
   return { ...real, commands: {} };
 });
+
+const jump = vi.hoisted(() => ({ reconcileNew: vi.fn(), reconcileEdit: vi.fn() }));
+vi.mock("../lib/reconcile/jump", () => jump);
 
 import Reconcile from "./Reconcile.svelte";
 import { dateFormatState } from "../lib/state/dateformat.svelte";
@@ -33,6 +36,10 @@ const session = (difference: string, over: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  jump.reconcileNew.mockReset();
+  jump.reconcileEdit.mockReset();
+  vi.spyOn(reconcileState, "refresh").mockResolvedValue();
   listsState.today = "2026-02-10";
   listsState.accounts = [
     { id: 1, name: "Checking", status: "open", account_type: "checking" },
@@ -155,22 +162,85 @@ describe("Reconcile view", () => {
   });
 
   it("a click anywhere on a row toggles it", async () => {
+    vi.useFakeTimers();
+    try {
+      reconcileState.session = session("500.00");
+      const check = vi.spyOn(reconcileState, "check").mockResolvedValue(true as never);
+      render(Reconcile);
+      const unchecked = screen.getByRole("checkbox", { name: /Check Costco/, checked: false });
+      (within(unchecked.closest("tr")!).getByText("500.00") as HTMLElement).click();
+      // It waits to see whether a second click makes a double click.
+      expect(check).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(300);
+      expect(check).toHaveBeenCalledWith([11], true);
+      check.mockClear();
+      const checked = screen.getAllByRole("checkbox", { name: /Check Costco/, checked: true })[0];
+      (within(checked.closest("tr")!).getByText("Costco") as HTMLElement).click();
+      vi.advanceTimersByTime(300);
+      expect(check).toHaveBeenCalledWith([10], false);
+      check.mockClear();
+      // The checkbox itself toggles once, at once, not twice.
+      unchecked.click();
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(check).toHaveBeenCalledWith([11], true);
+      vi.advanceTimersByTime(300);
+      expect(check).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a double click opens the row in the register and checks nothing (RCN-080)", async () => {
+    vi.useFakeTimers();
+    try {
+      reconcileState.session = session("500.00");
+      const check = vi.spyOn(reconcileState, "check").mockResolvedValue(true as never);
+      render(Reconcile);
+      for (const [name, id] of [[/Check Costco/, 11]] as const) {
+        const row = screen.getByRole("checkbox", { name, checked: false }).closest("tr")!;
+        const cell = within(row).getByText("500.00");
+        await fireEvent.click(cell, { detail: 1 });
+        await fireEvent.click(cell, { detail: 2 });
+        await fireEvent.dblClick(cell);
+        vi.advanceTimersByTime(300);
+        expect(jump.reconcileEdit).toHaveBeenCalledWith(id);
+      }
+      // Either list: the checked payment too.
+      const paid = screen.getAllByRole("checkbox", { name: /Check Costco/, checked: true })[0];
+      await fireEvent.dblClick(within(paid.closest("tr")!).getByText("Costco"));
+      expect(jump.reconcileEdit).toHaveBeenLastCalledWith(10);
+      vi.advanceTimersByTime(300);
+      expect(check).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Enter on a row's checkbox opens it; Space is left to check", async () => {
     reconcileState.session = session("500.00");
-    const check = vi.spyOn(reconcileState, "check").mockResolvedValue(true as never);
     render(Reconcile);
-    const unchecked = screen.getByRole("checkbox", { name: /Check Costco/, checked: false });
-    (within(unchecked.closest("tr")!).getByText("500.00") as HTMLElement).click();
-    expect(check).toHaveBeenCalledWith([11], true);
-    check.mockClear();
-    const checked = screen.getAllByRole("checkbox", { name: /Check Costco/, checked: true })[0];
-    (within(checked.closest("tr")!).getByText("Costco") as HTMLElement).click();
-    expect(check).toHaveBeenCalledWith([10], false);
-    check.mockClear();
-    // The checkbox itself toggles once, not twice.
-    unchecked.click();
-    expect(check).toHaveBeenCalledTimes(1);
-    expect(check).toHaveBeenCalledWith([11], true);
-    check.mockRestore();
+    const box = screen.getByRole("checkbox", { name: /Check Costco/, checked: false });
+    await fireEvent.keyDown(box, { key: " " });
+    expect(jump.reconcileEdit).not.toHaveBeenCalled();
+    await fireEvent.keyDown(box, { key: "Enter" });
+    expect(jump.reconcileEdit).toHaveBeenCalledWith(11);
+  });
+
+  it("New opens the register to enter a transaction", async () => {
+    reconcileState.session = session("500.00");
+    render(Reconcile);
+    await fireEvent.click(screen.getByRole("button", { name: "New" }));
+    expect(jump.reconcileNew).toHaveBeenCalledTimes(1);
+  });
+
+  it("shown again with a session, it reads the session again", () => {
+    const refresh = vi.mocked(reconcileState.refresh);
+    render(Reconcile);
+    expect(refresh).not.toHaveBeenCalled();
+    cleanup();
+    reconcileState.session = session("500.00");
+    render(Reconcile);
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("warns when reconciled transactions changed since the last statement", () => {

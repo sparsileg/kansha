@@ -39,6 +39,7 @@
   import RestoreModal from "./lib/components/backup/RestoreModal.svelte";
   import VerifyBackupModal from "./lib/components/backup/VerifyBackupModal.svelte";
   import { guardWindowClose } from "./lib/shell/nav";
+  import { syncPopupColors } from "./lib/shell/popupColors";
   import { startBook } from "./lib/shell/startup";
   import { bookState } from "./lib/state/book.svelte";
   import StartScreen from "./views/StartScreen.svelte";
@@ -68,7 +69,11 @@
   import Search from "./views/Search.svelte";
 
   // The theme and base font size go on <html> (src/css/themes, base.css).
-  $effect(() => applyTheme(document.documentElement, themeState.theme, themeState.fontSize, themeState.font));
+  $effect(() => {
+    applyTheme(document.documentElement, themeState.theme, themeState.fontSize, themeState.font);
+    // Open dropdown lists follow the theme too (NFR-080, #18).
+    void syncPopupColors(document.documentElement, themeState.fontSize);
+  });
   // Every text field selects its contents on focus, so typing replaces it.
   onMount(() => selectOnFocus(document));
   onMount(() => installUndoKey(document, () => void undoLast()));

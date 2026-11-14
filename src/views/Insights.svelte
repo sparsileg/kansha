@@ -28,7 +28,7 @@
   import { statusState } from "../lib/state/status.svelte";
   import { viewState } from "../lib/state/view.svelte";
   import { openPanel } from "../lib/shell/panels";
-  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight, SpendingCard, SpendingCardId, SpendingColumn, TagId } from "../lib/types/bindings";
+  import type { AccountId, Attention, CardData, CategoryId, Chart, ExpenseCard, Insight, SpendingCard, SpendingCardId, SpendingColumn, SpendingRowsBy, TagId } from "../lib/types/bindings";
 
   import { bookSettings } from "../lib/state/booksettings.svelte";
 
@@ -136,16 +136,16 @@
   const showsScheduled = (id: SpendingCardId) =>
     listsState.spendingCards.find((s) => s.id === id)?.columns.some((c) => c === "year" || c === "month" || c === "monthly_avg") ?? false;
 
-  async function saveCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) {
+  async function saveCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], rowsBy: SpendingRowsBy) {
     if (customizing === null) return;
-    await call(commands.spendingCardUpdate(customizing.id, name, accounts, categories, tags, columns));
+    await call(commands.spendingCardUpdate(customizing.id, name, accounts, categories, tags, columns, rowsBy));
     await listsState.loadInsights();
     customizing = null;
   }
 
-  async function makeCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) {
+  async function makeCard(name: string, accounts: AccountId[], categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], rowsBy: SpendingRowsBy) {
     if (selected === null) return;
-    await call(commands.spendingCardCreate(name, accounts, categories, tags, columns, selected.id));
+    await call(commands.spendingCardCreate(name, accounts, categories, tags, columns, rowsBy, selected.id));
     await listsState.loadInsights();
     making = false;
   }
@@ -296,6 +296,7 @@
       categories={customizing.categories}
       tags={customizing.tags}
       columns={customizing.columns}
+      rowsBy={customizing.rows_by}
       onsave={saveCard}
       onclose={() => (customizing = null)}
     />

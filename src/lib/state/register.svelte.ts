@@ -58,6 +58,10 @@ class RegisterState {
   /** A scheduled occurrence to enter: the new-entry row takes the entry as
    * its draft, then clears this (REC-110). */
   prefill = $state<{ entry: Entry; schedule: ScheduleId; due: string } | null>(null);
+  /** New from Reconcile (RCN-080): the new-entry row of this account
+   * takes it, empties Date, and saves the entry cleared; then clears
+   * this. */
+  newEntry = $state<{ account: AccountId } | null>(null);
   error = $state<string | null>(null);
 
   #seq = 0;

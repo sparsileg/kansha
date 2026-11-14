@@ -34,6 +34,7 @@ const card = (n: number): ExpenseCard => {
       ...PAST,
     },
     chosen: n,
+    rows_by: "category",
     columns: ["year", "month", "monthly_avg"],
     year_months: 10,
     avg_months: 36,

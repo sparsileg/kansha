@@ -1,6 +1,7 @@
 //! Spending cards (CARD-060): named Insights cards, each listing its
 //! chosen spending categories over its chosen accounts and tags, in its
-//! chosen columns (CARD-070). An insight shows one by the card ID
+//! chosen columns (CARD-070), a row per category or per tag group
+//! (CARD-080). An insight shows one by the card ID
 //! `spending:<id>`. Stored by
 //! [`crate::persistence::spending`]; figured by
 //! [`crate::reports::spending_card`].
@@ -39,6 +40,16 @@ text_enum! {
     }
 }
 
+text_enum! {
+    /// What a spending card's rows are (CARD-080).
+    pub enum SpendingRowsBy {
+        /// One row per chosen spending category.
+        Category = "category",
+        /// One row per tag group (TAG-030), "(No tag)" last.
+        Tag = "tag",
+    }
+}
+
 /// One spending card.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -56,4 +67,6 @@ pub struct SpendingCard {
     pub tags: Vec<TagId>,
     /// The columns shown, in display order; never empty.
     pub columns: Vec<SpendingColumn>,
+    /// One row per category or per tag group (CARD-080).
+    pub rows_by: SpendingRowsBy,
 }

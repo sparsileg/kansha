@@ -683,12 +683,12 @@ export const commands = {
 	/**  Every spending card, by name (CARD-060). */
 	spendingCardList: () => typedError<SpendingCard[], IpcError>(__TAURI_INVOKE("spending_card_list")),
 	/**  A new spending card with its choices, put last on `insight`. */
-	spendingCardCreate: (name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], insight: InsightId) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_create", { name, accounts, categories, tags, columns, insight })),
+	spendingCardCreate: (name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], rowsBy: SpendingRowsBy, insight: InsightId) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_create", { name, accounts, categories, tags, columns, rowsBy, insight })),
 	/**
 	 *  Rename a spending card and set its accounts (`None` = every open
-	 *  one), spending categories, tags, and columns.
+	 *  one), spending categories, tags, columns, and rows (CARD-080).
 	 */
-	spendingCardUpdate: (id: SpendingCardId, name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[]) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_update", { id, name, accounts, categories, tags, columns })),
+	spendingCardUpdate: (id: SpendingCardId, name: string, accounts: AccountId[] | null, categories: CategoryId[], tags: TagId[], columns: SpendingColumn[], rowsBy: SpendingRowsBy) => typedError<SpendingCard, IpcError>(__TAURI_INVOKE("spending_card_update", { id, name, accounts, categories, tags, columns, rowsBy })),
 	/**  Delete a spending card; it leaves every insight showing it. */
 	spendingCardDelete: (id: SpendingCardId) => typedError<null, IpcError>(__TAURI_INVOKE("spending_card_delete", { id })),
 	/**  What a spending card shows today (CARD-060). */
@@ -703,6 +703,11 @@ export const commands = {
 	 *  in the PDF viewer; returns the file's path.
 	 */
 	reportSavePdf: (title: string, orientation: PageOrientation) => typedError<string, IpcError>(__TAURI_INVOKE("report_save_pdf", { title, orientation })),
+	/**
+	 *  Give open dropdown lists the theme's colors (Linux; a no-op
+	 *  elsewhere).
+	 */
+	popupColors: (colors: PopupColors) => typedError<null, IpcError>(__TAURI_INVOKE("popup_colors", { colors })),
 };
 
 /* Types */
@@ -1695,11 +1700,14 @@ export type ErrorKind =
 /**  What a spending card shows (CARD-060). */
 export type ExpenseCard = {
 	/**
-	 *  The chosen categories with transactions this year (scheduled
-	 *  this month included), by name;
-	 *  none when no category or no account is chosen.
+	 *  The chosen categories (or tag groups, CARD-080) with
+	 *  transactions in a shown column (scheduled this month included),
+	 *  by name, "(No tag)" last; none when no category or no account is
+	 *  chosen.
 	 */
 	rows: ExpenseRow[],
+	/**  What the rows are. */
+	rows_by: SpendingRowsBy,
 	total: ExpenseRow,
 	/**
 	 *  How many categories are chosen (0 when no account is), so an
@@ -1729,9 +1737,12 @@ export type ExpenseCard = {
  *  period, expenses positive. A column not shown stays zero.
  */
 export type ExpenseRow = {
-	/**  `None` on the Total row. */
+	/**  `None` on the Total row and on a tag group's row (CARD-080). */
 	category: CategoryId | null,
-	/**  "Car:BlueForester:Gas", or "Total". */
+	/**
+	 *  "Car:BlueForester:Gas", a tag group "Trip, Work", "(No tag)", or
+	 *  "Total".
+	 */
 	label: string,
 	/**  January 1 through the end of this month, scheduled included. */
 	ytd: string,
@@ -2719,6 +2730,18 @@ export type PeriodChoice = {
 	label: string,
 };
 
+/**
+ *  The theme's colors for an open dropdown list, as CSS colors
+ *  (`#rrggbb` or `rgb()`/`rgba()`), and the app's font size in pixels.
+ */
+export type PopupColors = {
+	bg: string,
+	fg: string,
+	sel_bg: string,
+	sel_fg: string,
+	font_px: number,
+};
+
 export type Portfolio = {
 	as_of: string,
 	/**  In the order asked for. */
@@ -3690,6 +3713,8 @@ export type SpendingCard = {
 	tags: TagId[],
 	/**  The columns shown, in display order; never empty. */
 	columns: SpendingColumn[],
+	/**  One row per category or per tag group (CARD-080). */
+	rows_by: SpendingRowsBy,
 };
 
 /**  Row ID of a spending card. */
@@ -3697,6 +3722,13 @@ export type SpendingCardId = number;
 
 /**  A column a spending card can show, in display order. */
 export type SpendingColumn = "last_year" | "year" | "last_month" | "month" | "monthly_avg" | "three_year_avg";
+
+/**  What a spending card's rows are (CARD-080). */
+export type SpendingRowsBy = 
+/**  One row per chosen spending category. */
+"category" | 
+/**  One row per tag group (TAG-030), "(No tag)" last. */
+"tag";
 
 /**  A split ratio: `new` shares for every `old` (2:1 is new 2, old 1). */
 export type SplitRatio = {
