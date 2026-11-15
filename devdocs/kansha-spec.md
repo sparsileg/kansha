@@ -2,9 +2,9 @@
 
 |                      |                                                                                                                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Document version** | 0.7.128 (draft)                                                                                                                                                  |
+| **Document version** | 0.7.129 (draft)                                                                                                                                                  |
 | **Target release**   | Kansha 1.0.0                                                                                                                                                     |
-| **Last updated**     | 2026-11-06                                                                                                                                                       |
+| **Last updated**     | 2026-11-15                                                                                                                                                       |
 | **Owner**            | Stan                                                                                                                                                             |
 | **Status**           | Draft. Every [1.0] area is built and in daily use on Stan's book since 2026-10-01; §23 lists what is not built. 0.90.0 is the release preview before 1.0.0 (§21) |
 
@@ -521,7 +521,8 @@ splits into principal and interest and drive the payment reminder
   distinguished and a line separates today from future entries. In
   every register (banking and investment) future rows are italic
   and their alternate rows use their own tint; their text is not
-  dimmed. Reconciled rows have gray text (a setting; default on).
+  dimmed. The today line has no label, so it covers no amount
+  (0.7.129). Reconciled rows have gray text (a setting; default on).
 - **REG-080** [1.0][S] Right-click/context menu: Edit, Split (opens
   the edit with its split lines, the category so far as line 1), Mark
   cleared or unmarked, Go to other side of transfer, Move… (REG-085),
@@ -737,7 +738,10 @@ common patterns.
 
 - **CAL-010** [1.0][S] Month calendar view showing upcoming scheduled
   occurrences on their due dates. It keeps the month it last showed
-  until the book closes; Today goes back to this month (0.7.113).
+  until the book closes; Today goes back to this month (0.7.113). An
+  overdue item reads OVERDUE before its payee, in white on a solid
+  dark red band (0.7.129): a band, not a text color, so red-green
+  colorblind eyes see it too; 4.5:1 or better in every theme.
 - **CAL-020** [1.0][S] Toggle to also show completed (entered)
   transactions: entered and skipped occurrences, and every register
   transaction on its date, scheduled or not (investment accounts and
@@ -813,8 +817,12 @@ common patterns.
   cleared, so it comes back checked. A double click on a row in
   either list, or Enter on its checkbox, opens the register on that
   transaction, selected and in its edit; a single click still checks
-  or unchecks (it waits a moment for a second click), Space still
-  checks, and a double click leaves the check as it was. While the
+  or unchecks, Space still checks, and a double click leaves the
+  check as it was. A click shows its check at once and saves it a
+  moment later, once no second click came; checks save in the order
+  made, a failed one shows the saved state again. A check reads no
+  balances again (it moves none); an open register of the account
+  reads its marks when next shown (0.7.129). While the
   account has a reconciliation in progress its register shows **Back
   to Reconcile**; it and Back (UI-025) resume the session, its lists
   read again, so the cleared balance and difference count what was
@@ -3442,7 +3450,10 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
   checking an IRA against the broker, go in as 0.92.0 (Stan,
   2026-11-06). Exception: spending card rows by tag (CARD-080, #68)
   and adding and fixing from Reconcile (RCN-080, #69) go in with the
-  fixes #67 and #70 as 0.93.0 (Stan, 2026-11-14). Fixes to how
+  fixes #67 and #70 as 0.93.0 (Stan, 2026-11-14). Exception: no
+  label on the register's today line (REG-070), overdue Calendar
+  items on a red band (CAL-010), and Reconcile checks without the
+  lag (RCN-080) go in as 0.94.0 (Stan, 2026-11-15). Fixes to how
   releases are built and downloaded also go in at once (Stan,
   2026-11-04).
 - Database schema has its own version number; migrations run
@@ -3578,6 +3589,7 @@ created, decisions made, known gaps.
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7.129 | 2026-11-15 | REG-070: the today line has no "Today" label (it covered the last amount). CAL-010: an overdue item is white on a solid dark red band, OVERDUE kept; new theme colors `--alert-bg`, `--alert-fg`, 4.5:1 or better in every theme. RCN-080: a click on a row shows its check at once and saves after the double-click wait; checks save in order and none is dropped while one saves; a check no longer reads the account bar or the register again (the register reads its marks when next shown). §21: the freeze lifted for these, released as 0.94.0. No schema change. No API change. |
 | 0.7.128 | 2026-11-14 | NFR-080 (#18): open dropdown lists follow the theme on Linux. Checked in WebKitGTK 2.52: the open list is a GTK popup (a window holding a tree view) in the system's GTK colors and font size; the page's CSS and GTK's dark preference do not reach it. The app now loads a GTK style sheet with the theme's option colors, selection colors, and font size whenever the theme, font, or size changes (the font size applies to every GTK list so the popup is sized for it). §23: the known gap removed. No schema change. **API change:** new command `popup_colors`, new type `PopupColors`. |
 | 0.7.127 | 2026-11-14 | TAG-010 (#67): New tag… in a tag dropdown makes the tag on Enter, Tab, or leaving the box with a name typed (clicking Save no longer drops it and saves the old tag); a name in use, any case, picks that tag; Esc or an empty box goes back; Save waits for the tag. TAG-010 (#70): a one-line entry's tag held on its category line shows in the Tag box; saving keeps the tag on the transaction only, so "—" clears it and the register agrees. CARD-080 (new, #68): Rows by Category or Tag on a spending card; by Tag one row per tag group (TAG-030), "(No tag)" last when no tag is checked, rows adding up to Total. RCN-080 (new, #69): Reconcile's New opens the register's entry row, Date empty, saved cleared so it comes back checked; double click or Enter opens a listed transaction in its edit, single click still checks; the register's Back to Reconcile and Back resume the session with fresh lists. §21: the freeze lifted for #68 and #69, released as 0.93.0. **Schema change:** 0026 (`spending_card.rows_by`). **API change:** `spending_card_create` and `spending_card_update` take `rows_by`; `SpendingCard.rows_by`, `ExpenseCard.rows_by`, new type `SpendingRowsBy`. |
 | 0.7.126 | 2026-11-06 | INV-080 (new, #65): Export CSV… on an investment account's gear menu writes its transactions in a date range (the reports' choices, Year to date first) to the Downloads folder: the register's columns, shares and prices as stored, Cash the running balance. INV-030 (#66): in the entry form, changing Shares or the Amount of a Buy, Sell, or reinvestment works Price per share out again from them (less or plus the commission), six decimals, half-even. RPT-050: CSV text fields are quoted (numbers, percents, dates not), so Calc set to split on spaces keeps "Vanguard Short Term Bond" in one cell; reports and the register export alike. §21: the freeze lifted for both, released as 0.92.0. No schema change. **API change:** new commands `inv_export_csv`, `inv_trade_price`. |

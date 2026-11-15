@@ -105,6 +105,19 @@ describe("fonts", () => {
   });
 });
 
+describe("overdue alert (Calendar)", () => {
+  it("every theme keeps its text at 4.5:1 or better on its band", () => {
+    const low = Object.entries(THEME_FILES)
+      .map(([file, raw]) => {
+        const css = noComments(raw);
+        const v = (n: string) => css.match(new RegExp(`${n}:\\s*([^;]+);`))?.[1].trim() ?? "";
+        return { file, ratio: contrast(v("--alert-fg"), v("--alert-bg")) };
+      })
+      .filter((p) => !(p.ratio >= 4.5));
+    expect(low).toEqual([]);
+  });
+});
+
 describe("Matrix theme", () => {
   const css = noComments(THEME_FILES["css/themes/matrix.css"]);
   const value = (name: string) => css.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim() ?? "";

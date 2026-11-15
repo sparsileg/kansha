@@ -36,26 +36,47 @@
 
   // ---- Rows: click checks, double click or Enter opens (RCN-080) --------
 
-  /** How long a click waits for a second one before it checks. */
+  /** How long a click waits for a second one before it saves its check.
+   * The check shows at once; a double click takes it back. */
   const DOUBLE_CLICK_MS = 250;
-  let pendingClick: ReturnType<typeof setTimeout> | undefined;
-  onDestroy(() => clearTimeout(pendingClick));
+  let pending: { timer: ReturnType<typeof setTimeout>; item: Item; checked: boolean } | undefined;
+
+  /** Save the waiting click's check now. */
+  function flush() {
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    const { item, checked } = pending;
+    pending = undefined;
+    void reconcileState.check([item.txn_id], checked);
+  }
+  onDestroy(flush);
 
   function rowClick(e: MouseEvent, i: Item) {
     if (e.target instanceof HTMLInputElement || reconcileState.busy) return;
-    clearTimeout(pendingClick);
-    pendingClick = undefined;
     // The second click of a double click checks nothing.
     if (e.detail > 1) return;
-    pendingClick = setTimeout(() => {
-      pendingClick = undefined;
-      void reconcileState.check([i.txn_id], !i.checked);
-    }, DOUBLE_CLICK_MS);
+    flush();
+    const checked = !i.checked;
+    reconcileState.mark([i.txn_id], checked);
+    pending = {
+      item: i,
+      checked,
+      timer: setTimeout(() => {
+        pending = undefined;
+        void reconcileState.check([i.txn_id], checked);
+      }, DOUBLE_CLICK_MS),
+    };
   }
 
   function rowOpen(i: Item) {
-    clearTimeout(pendingClick);
-    pendingClick = undefined;
+    if (pending?.item.txn_id === i.txn_id) {
+      // The first click of this double click: take its check back.
+      clearTimeout(pending.timer);
+      reconcileState.mark([i.txn_id], !pending.checked);
+      pending = undefined;
+    } else {
+      flush();
+    }
     void reconcileEdit(i.txn_id);
   }
 

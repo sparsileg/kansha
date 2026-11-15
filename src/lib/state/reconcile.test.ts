@@ -83,6 +83,49 @@ describe("reconcileState", () => {
     expect(reconcileState.session?.difference).toBe("0.00");
   });
 
+  it("a check shows at once, saves in order, and reads no balances (RCN-080)", async () => {
+    const item = (id: number) =>
+      ({ txn_id: id, date: "2026-01-05", check_num: "", payee_name: "P", memo: "", amount: "-1.00", checked: false });
+    const withItems = (difference: string) => ({ ...(session(difference) as object), payments: [item(10), item(11)] });
+    c.reconcileOpen.mockImplementation(() => ok(rec));
+    c.reconcileSession.mockImplementation(() => ok(withItems("500.00") as never));
+    await reconcileState.select(1);
+    registerState.accountId = 1 as never;
+    registerState.stale = false;
+    c.accountBar.mockClear();
+    const saved: number[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    c.reconcileCheck.mockImplementation(async (_id, txns) => {
+      if (txns[0] === 10) await gate;
+      saved.push(txns[0]);
+      return { status: "ok", data: withItems(`${saved.length}.00`) } as never;
+    });
+    const first = reconcileState.check([10], true);
+    const second = reconcileState.check([11], true);
+    // Both marked before the engine answers.
+    expect(reconcileState.session?.payments.map((i) => i.checked)).toEqual([true, true]);
+    expect(registerState.stale).toBe(true);
+    release();
+    await Promise.all([first, second]);
+    expect(saved).toEqual([10, 11]);
+    // Only the last answer replaces the session.
+    expect(reconcileState.session?.difference).toBe("2.00");
+    expect(c.accountBar).not.toHaveBeenCalled();
+    expect(c.registerQuery).not.toHaveBeenCalled();
+  });
+
+  it("a refused check reads the session again and says why", async () => {
+    c.reconcileOpen.mockImplementation(() => ok(rec));
+    c.reconcileSession.mockImplementation(() => ok(session("5.00")));
+    await reconcileState.select(1);
+    c.reconcileSession.mockClear();
+    c.reconcileCheck.mockImplementation(() => fail("invalid", "transaction 10 is void"));
+    await reconcileState.check([10], true);
+    expect(c.reconcileSession).toHaveBeenCalledWith(5);
+    expect(reconcileState.error).toBe("transaction 10 is void");
+  });
+
   it("shows an engine refusal and keeps the session", async () => {
     c.reconcileOpen.mockImplementation(() => ok(rec));
     c.reconcileSession.mockImplementation(() => ok(session("5.00")));

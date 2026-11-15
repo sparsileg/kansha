@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import ContextMenu from "../lib/components/ContextMenu.svelte";
   import GearButton from "../lib/components/GearButton.svelte";
   import RegisterGrid from "../lib/components/RegisterGrid.svelte";
@@ -14,6 +15,11 @@
       ? undefined
       : listsState.account(registerState.accountId),
   );
+
+  // Checks made in Reconcile while the register was hidden (RCN-080).
+  onMount(() => {
+    if (registerState.stale) void registerState.reload();
+  });
 
   let menu = $state<{ x: number; y: number } | null>(null);
   /** Export CSV… open (INV-080); investment accounts only. */

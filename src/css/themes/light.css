@@ -28,6 +28,11 @@
        axis; each 7:1 or better on white. */
     --bad:  #a83200;
     --good: #005a9c;
+    /* An overdue reminder in the Calendar: white on a dark red, which
+       red-green colorblind eyes see as dark, so white keeps its
+       contrast (black on it would not). */
+    --alert-bg: #b00000;
+    --alert-fg: #ffffff;
 
     /* ── Focus & selection ──────────────────────────────────────────── */
     /* The field being typed in: yellow, apart from the blue of a

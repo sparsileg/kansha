@@ -26,6 +26,11 @@
     /* ── Status: problem / OK ───────────────────────────────────────── */
     --bad:  #ffaa00;
     --good: #00ffff;
+    /* An overdue reminder in the Calendar: white on a dark red, which
+       red-green colorblind eyes see as dark, so white keeps its
+       contrast (black on it would not). */
+    --alert-bg: #d32f2f;
+    --alert-fg: #ffffff;
 
     /* ── Focus & selection ──────────────────────────────────────────── */
     --focus-bg:     #003c00;

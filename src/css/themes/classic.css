@@ -31,6 +31,11 @@
        rows; each backed by a sign, word, or symbol. */
     --bad:  #a83200;
     --good: #005a9c;
+    /* An overdue reminder in the Calendar: white on a dark red, which
+       red-green colorblind eyes see as dark, so white keeps its
+       contrast (black on it would not). */
+    --alert-bg: #b00000;
+    --alert-fg: #ffffff;
 
     /* ── Focus & selection ──────────────────────────────────────────── */
     --focus-bg:     #fff6b0;

@@ -169,7 +169,10 @@ describe("Reconcile view", () => {
       render(Reconcile);
       const unchecked = screen.getByRole("checkbox", { name: /Check Costco/, checked: false });
       (within(unchecked.closest("tr")!).getByText("500.00") as HTMLElement).click();
-      // It waits to see whether a second click makes a double click.
+      // It shows at once, and waits to see whether a second click makes
+      // a double click before it saves.
+      await vi.advanceTimersByTimeAsync(0);
+      expect((unchecked as HTMLInputElement).checked).toBe(true);
       expect(check).not.toHaveBeenCalled();
       vi.advanceTimersByTime(300);
       expect(check).toHaveBeenCalledWith([11], true);
@@ -179,10 +182,11 @@ describe("Reconcile view", () => {
       vi.advanceTimersByTime(300);
       expect(check).toHaveBeenCalledWith([10], false);
       check.mockClear();
-      // The checkbox itself toggles once, at once, not twice.
+      // The checkbox itself toggles once, at once, not twice (11 shows
+      // checked from the first click: this unchecks it).
       unchecked.click();
       expect(check).toHaveBeenCalledTimes(1);
-      expect(check).toHaveBeenCalledWith([11], true);
+      expect(check).toHaveBeenCalledWith([11], false);
       vi.advanceTimersByTime(300);
       expect(check).toHaveBeenCalledTimes(1);
     } finally {
@@ -204,6 +208,8 @@ describe("Reconcile view", () => {
         await fireEvent.dblClick(cell);
         vi.advanceTimersByTime(300);
         expect(jump.reconcileEdit).toHaveBeenCalledWith(id);
+        // The first click's mark is taken back.
+        expect(screen.getByRole("checkbox", { name, checked: false })).toBeTruthy();
       }
       // Either list: the checked payment too.
       const paid = screen.getAllByRole("checkbox", { name: /Check Costco/, checked: true })[0];

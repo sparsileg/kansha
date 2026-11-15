@@ -63,6 +63,9 @@ class RegisterState {
    * this. */
   newEntry = $state<{ account: AccountId } | null>(null);
   error = $state<string | null>(null);
+  /** Reconcile changed check marks in this account while the register
+   * was not showing: read it again when shown (RCN-080). */
+  stale = false;
 
   #seq = 0;
 
@@ -162,6 +165,7 @@ class RegisterState {
     const query = this.query();
     if (query === null) return;
     const seq = ++this.#seq;
+    this.stale = false;
     this.loading = true;
     try {
       const [page, summary] = await Promise.all([

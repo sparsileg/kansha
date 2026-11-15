@@ -28,6 +28,11 @@
        eye, each 7:1 or better on the dark background. */
     --bad:  #ff9f5a;
     --good: #7cc0ff;
+    /* An overdue reminder in the Calendar: white on a dark red, which
+       red-green colorblind eyes see as dark, so white keeps its
+       contrast (black on it would not). */
+    --alert-bg: #d32f2f;
+    --alert-fg: #ffffff;
 
     /* ── Focus & selection ──────────────────────────────────────────── */
     /* White on deep blue: 10:1. The yellow ring marks it at a glance. */

@@ -369,7 +369,7 @@
     <div class="spacer-row" style="height: {range.from * rowH}px"></div>
     {#each visible as r, k (r.txn_id)}
       {@const i = range.from + k}
-      {#if todayLineBefore(i)}<div class="today" aria-label="Today"><span>Today</span></div>{/if}
+      {#if todayLineBefore(i)}<div class="today" aria-label="Today"></div>{/if}
       {#if registerState.editing === r.txn_id}
         <EntryEditor txn={r.txn_id} {account} split={registerState.editSplit} ondone={(saved) => afterEdit(r.txn_id, saved)} />
       {:else}
@@ -551,13 +551,6 @@
     right: 0;
     top: -1px;
     border-top: 2px solid var(--today-line);
-  }
-  .today span {
-    position: absolute;
-    right: 0;
-    top: -0.9em;
-    font-size: var(--fs-small);
-    color: var(--today-line);
   }
   .empty {
     padding: 1rem;

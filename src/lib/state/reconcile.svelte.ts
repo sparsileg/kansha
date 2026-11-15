@@ -30,6 +30,9 @@ class ReconcileState {
   inProgress = $state<AccountId[]>([]);
   error = $state<string | null>(null);
   busy = $state(false);
+  /** Checks being saved, one after another. */
+  #checks: Promise<void> = Promise.resolve();
+  #queued = 0;
 
   /** Work on this account: load its session or, if none, its opening check
    * and history. */
@@ -72,12 +75,42 @@ class ReconcileState {
     }, true);
   }
 
-  async check(txns: TxnId[], checked: boolean): Promise<void> {
+  /** Show items checked or not at once (RCN-080), before the engine
+   * saves it; `check` saves it. */
+  mark(txns: TxnId[], checked: boolean): void {
     const s = this.session;
     if (!s) return;
-    await this.change(async () => {
-      this.session = await call(commands.reconcileCheck(s.reconciliation.id, txns, checked));
-    }, false);
+    const ids = new Set(txns);
+    for (const i of [...s.payments, ...s.deposits]) if (ids.has(i.txn_id)) i.checked = checked;
+  }
+
+  /** Check or uncheck items: marked at once, saved in the order asked.
+   * Checking moves no balance, so the account bar is not read again,
+   * and an open register of the account reads them when next shown. */
+  check(txns: TxnId[], checked: boolean): Promise<void> {
+    const s = this.session;
+    if (!s) return Promise.resolve();
+    const id = s.reconciliation.id;
+    this.mark(txns, checked);
+    if (registerState.accountId === this.accountId) registerState.stale = true;
+    this.#queued++;
+    const run = this.#checks.then(async () => {
+      try {
+        const next = await call(commands.reconcileCheck(id, txns, checked));
+        // A check still waiting brings the session; this one would undo
+        // its mark until then.
+        if (this.#queued === 1 && this.session?.reconciliation.id === id) this.session = next;
+        this.error = null;
+      } catch (e) {
+        // Back to what is saved, then say why.
+        if (this.#queued === 1) await this.refresh();
+        this.error = e instanceof Error ? e.message : String(e);
+      } finally {
+        this.#queued--;
+      }
+    });
+    this.#checks = run;
+    return run;
   }
 
   async update(statementDate: string, statementBalance: string): Promise<boolean> {

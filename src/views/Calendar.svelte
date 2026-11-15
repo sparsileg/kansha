@@ -293,8 +293,17 @@
   .chip:hover {
     text-decoration: underline;
   }
+  /* Overdue: a solid band, not only a text color (Stan is red-green
+     colorblind); the word OVERDUE says it too. A negative amount
+     inside keeps the band's text color. */
   .chip.overdue {
-    color: var(--bad);
+    background: var(--alert-bg);
+    color: var(--alert-fg);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+  }
+  .chip.overdue :global(.bal) {
+    color: inherit;
   }
   .chip .od {
     font-size: var(--fs-small);
