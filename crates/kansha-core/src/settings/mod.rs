@@ -119,6 +119,9 @@ pub struct Settings {
     /// The account bar shows cents; off, its balances, section totals,
     /// and net worth are rounded to whole dollars (ACCT-240).
     pub account_bar_cents: bool,
+    /// Play a short sound when a transaction is saved in a register or
+    /// entered from a reminder (SET-090).
+    pub entry_sound: bool,
 }
 
 impl Default for Settings {
@@ -155,6 +158,7 @@ impl Default for Settings {
             confirm_save_change: false,
             warn_uncategorized: true,
             account_bar_cents: true,
+            entry_sound: false,
         }
     }
 }
@@ -249,6 +253,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         confirm_save_change: get(conn, "confirm_save_change", d.confirm_save_change)?,
         warn_uncategorized: get(conn, "warn_uncategorized", d.warn_uncategorized)?,
         account_bar_cents: get(conn, "account_bar_cents", d.account_bar_cents)?,
+        entry_sound: get(conn, "entry_sound", d.entry_sound)?,
     })
 }
 
@@ -341,6 +346,7 @@ pub fn save(tx: &Tx<'_>, s: &Settings) -> Result<()> {
         ("confirm_save_change", s.confirm_save_change),
         ("warn_uncategorized", s.warn_uncategorized),
         ("account_bar_cents", s.account_bar_cents),
+        ("entry_sound", s.entry_sound),
         ("trend_fitted", s.trend_fitted),
     ] {
         repo::set(tx, key, &v.to_string())?;

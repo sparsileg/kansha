@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirm_save_change: false,
   warn_uncategorized: true,
   account_bar_cents: true,
+  entry_sound: false,
 };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

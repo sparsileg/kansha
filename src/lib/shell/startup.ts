@@ -11,11 +11,13 @@ import { listsState } from "../state/lists.svelte";
 import { scheduleState } from "../state/schedule.svelte";
 import { statusState } from "../state/status.svelte";
 import { viewState } from "../state/view.svelte";
+import { soundWarmUp } from "../sound";
 import { openStartup } from "./nav";
 import { startTimedBackups } from "./timedbackup";
 
 export async function startBook(): Promise<void> {
   await bookSettings.load();
+  soundWarmUp();
   investViewState.applyStored();
   // Forget memorized payees not used for a while, if the setting says so.
   await call(commands.payeesForgetStale()).catch(() => 0);

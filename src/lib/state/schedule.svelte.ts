@@ -16,6 +16,7 @@ import { dialogState } from "./dialogs.svelte";
 import { listsState } from "./lists.svelte";
 import { viewState } from "./view.svelte";
 import { registerState } from "./register.svelte";
+import { entryDing } from "../sound";
 
 class ScheduleState {
   rows = $state<ScheduleRow[]>([]);
@@ -69,6 +70,7 @@ class ScheduleState {
   async enterOccurrence(v: OccurrenceView): Promise<void> {
     if (v.estimated) return this.openInRegister(v);
     await call(commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, false));
+    entryDing();
     await this.changed();
   }
 
@@ -111,6 +113,7 @@ class ScheduleState {
     const entered = await call(
       commands.scheduleEnter(v.schedule, v.nominal, { date: null, amount: null, entry: null }, null, true),
     );
+    entryDing();
     await this.changed();
     const account = this.investmentAccount(f);
     dialogState.due = false;

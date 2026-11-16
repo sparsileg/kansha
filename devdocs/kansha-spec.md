@@ -2,9 +2,9 @@
 
 |                      |                                                                                                                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Document version** | 0.7.129 (draft)                                                                                                                                                  |
+| **Document version** | 0.7.130 (draft)                                                                                                                                                  |
 | **Target release**   | Kansha 1.0.0                                                                                                                                                     |
-| **Last updated**     | 2026-11-15                                                                                                                                                       |
+| **Last updated**     | 2026-11-16                                                                                                                                                       |
 | **Owner**            | Stan                                                                                                                                                             |
 | **Status**           | Draft. Every [1.0] area is built and in daily use on Stan's book since 2026-10-01; §23 lists what is not built. 0.90.0 is the release preview before 1.0.0 (§21) |
 
@@ -2383,7 +2383,7 @@ platform has one.
   balances (ACCT-240). Data: integrity check at
   startup, Due soon look-ahead days. Investments: stale price days,
   lot method, price download. Register: REG-036, REG-070, REG-100 …
-  REG-120.
+  REG-120, SET-090.
   Notifications: REG-130 … REG-160. Backups: SET-050.
 - **SET-070** [1.0][S] Settings are stored in the book's database
   (`setting` table; portable with the data and restored with it),
@@ -2401,6 +2401,15 @@ platform has one.
   GTK's window size without the decoration shadow), so a window
   opened and closed keeps its size, and it is cut to the screen's
   free area before it is saved (0.7.56).
+- **SET-090** [1.0][S] "Play a sound when a transaction is entered"
+  (Register; default off, stored in the book). On, a short ding plays
+  when a transaction is saved in a register (bank or investment, new
+  or edited) or entered from a reminder. Deleting, voiding, marking
+  cleared, and reminders entered at startup are silent. The sound is
+  made by the app (no sound file); with no sound device nothing plays
+  and the save is not affected. With the setting on, the sound output
+  is started when the book opens and when the setting is saved, so the
+  first ding is not late (0.7.130).
 
 #### 14.3 Command line and file entry (CLI)
 
@@ -3453,7 +3462,9 @@ dates = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]
   fixes #67 and #70 as 0.93.0 (Stan, 2026-11-14). Exception: no
   label on the register's today line (REG-070), overdue Calendar
   items on a red band (CAL-010), and Reconcile checks without the
-  lag (RCN-080) go in as 0.94.0 (Stan, 2026-11-15). Fixes to how
+  lag (RCN-080) go in as 0.94.0 (Stan, 2026-11-15). Exception: the
+  entry sound setting (SET-090) goes in as 0.95.0 (Stan,
+  2026-11-16). Fixes to how
   releases are built and downloaded also go in at once (Stan,
   2026-11-04).
 - Database schema has its own version number; migrations run
@@ -3589,6 +3600,7 @@ created, decisions made, known gaps.
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7.130 | 2026-11-16 | SET-090: setting "Play a sound when a transaction is entered" (Register, default off): a short ding when a transaction is saved in a register, new or edited, or entered from a reminder; the sound output starts when the book opens, so the first ding is not late. SET-080 Register list gains it. §21: the freeze lifted for it, released as 0.95.0. No schema change. **API change:** `Settings.entry_sound`. |
 | 0.7.129 | 2026-11-15 | REG-070: the today line has no "Today" label (it covered the last amount). CAL-010: an overdue item is white on a solid dark red band, OVERDUE kept; new theme colors `--alert-bg`, `--alert-fg`, 4.5:1 or better in every theme. RCN-080: a click on a row shows its check at once and saves after the double-click wait; checks save in order and none is dropped while one saves; a check no longer reads the account bar or the register again (the register reads its marks when next shown). §21: the freeze lifted for these, released as 0.94.0. No schema change. No API change. |
 | 0.7.128 | 2026-11-14 | NFR-080 (#18): open dropdown lists follow the theme on Linux. Checked in WebKitGTK 2.52: the open list is a GTK popup (a window holding a tree view) in the system's GTK colors and font size; the page's CSS and GTK's dark preference do not reach it. The app now loads a GTK style sheet with the theme's option colors, selection colors, and font size whenever the theme, font, or size changes (the font size applies to every GTK list so the popup is sized for it). §23: the known gap removed. No schema change. **API change:** new command `popup_colors`, new type `PopupColors`. |
 | 0.7.127 | 2026-11-14 | TAG-010 (#67): New tag… in a tag dropdown makes the tag on Enter, Tab, or leaving the box with a name typed (clicking Save no longer drops it and saves the old tag); a name in use, any case, picks that tag; Esc or an empty box goes back; Save waits for the tag. TAG-010 (#70): a one-line entry's tag held on its category line shows in the Tag box; saving keeps the tag on the transaction only, so "—" clears it and the register agrees. CARD-080 (new, #68): Rows by Category or Tag on a spending card; by Tag one row per tag group (TAG-030), "(No tag)" last when no tag is checked, rows adding up to Total. RCN-080 (new, #69): Reconcile's New opens the register's entry row, Date empty, saved cleared so it comes back checked; double click or Enter opens a listed transaction in its edit, single click still checks; the register's Back to Reconcile and Back resume the session with fresh lists. §21: the freeze lifted for #68 and #69, released as 0.93.0. **Schema change:** 0026 (`spending_card.rows_by`). **API change:** `spending_card_create` and `spending_card_update` take `rows_by`; `SpendingCard.rows_by`, `ExpenseCard.rows_by`, new type `SpendingRowsBy`. |

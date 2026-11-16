@@ -15,6 +15,7 @@
   import { investState } from "../../state/invest.svelte";
   import { listsState } from "../../state/lists.svelte";
   import type { Account, LotView, TxnId } from "../../types/bindings";
+  import { entryDing } from "../../sound";
 
   let {
     account,
@@ -148,6 +149,7 @@
         );
         if (r === DECLINED) return;
       }
+      entryDing();
       await investState.refresh();
       onentered?.(created);
       if (!next) {

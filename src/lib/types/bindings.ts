@@ -3692,6 +3692,11 @@ export type Settings = {
 	 *  and net worth are rounded to whole dollars (ACCT-240).
 	 */
 	account_bar_cents: boolean,
+	/**
+	 *  Play a short sound when a transaction is saved in a register or
+	 *  entered from a reminder (SET-090).
+	 */
+	entry_sound: boolean,
 };
 
 /**  One spending card. */

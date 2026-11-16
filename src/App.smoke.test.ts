@@ -52,6 +52,7 @@ vi.mock("./lib/api", async (orig) => {
     warn_out_of_date: true,
     warn_check_reuse: true,
     confirm_save_change: false,
+    entry_sound: false,
   };
   const acct = {
     id: 1,

@@ -7,6 +7,7 @@
   import { call, commands } from "../api";
   import { LOT_METHODS } from "../invest/form";
   import { startupChoices } from "../shell/nav";
+  import { soundWarmUp } from "../sound";
   import { bookSettings } from "../state/booksettings.svelte";
   import { dialogState } from "../state/dialogs.svelte";
   import { listsState } from "../state/lists.svelte";
@@ -68,6 +69,7 @@
     }
     // Rust rounds the account bar's figures; fetch them again.
     if (centsChanged) void listsState.loadBalances();
+    soundWarmUp();
     dialogState.settings = false;
   }
 
@@ -176,6 +178,10 @@
         <label>
           <span>Remove memorized payees not used in last (months, 0 = never)</span>
           <input type="number" min="0" max="120" bind:value={s.purge_payees_months} />
+        </label>
+        <label>
+          <span>Play a sound when a transaction is entered</span>
+          <input type="checkbox" bind:checked={s.entry_sound} />
         </label>
       {:else if category === "notifications"}
         <label>

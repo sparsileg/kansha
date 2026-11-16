@@ -37,6 +37,7 @@
   import { SPLIT_ICON } from "../shell/icons";
   import TagPicker, { tagsSettled } from "./TagPicker.svelte";
   import TargetCombo from "./TargetCombo.svelte";
+  import { entryDing } from "../sound";
 
   /** `null` = the new-entry row; otherwise edit this transaction in place. */
   let {
@@ -494,6 +495,7 @@
         );
         if (done === DECLINED) return;
       }
+      entryDing();
       if (name) await listsState.loadPayees();
       registerState.selected = savedId;
       registerState.reveal = savedId;

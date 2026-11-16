@@ -775,6 +775,17 @@ fn set_settings(f: &mut Fixture, edit: impl FnOnce(&mut kansha_core::settings::S
 }
 
 #[test]
+fn entry_sound_is_off_by_default_and_saves() {
+    let mut f = fixture();
+    let load = |f: &Fixture| kansha_core::settings::load(f.book.conn()).unwrap();
+    assert!(!load(&f).entry_sound);
+    set_settings(&mut f, |s| s.entry_sound = true);
+    assert!(load(&f).entry_sound);
+    set_settings(&mut f, |s| s.entry_sound = false);
+    assert!(!load(&f).entry_sound);
+}
+
+#[test]
 fn auto_memorize_setting_turns_memorizing_off() {
     let mut f = fixture();
     set_settings(&mut f, |s| s.auto_memorize_payees = false);

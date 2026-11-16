@@ -54,6 +54,7 @@ bar balances, and Rows shown on spending cards.
 | Automatically memorize new payees | Remembers new payees as you enter them |
 | Capitalize payees and categories | Capitalizes words as you type |
 | Remove memorized payees not used in last (months, 0 = never) | Clears out old payees |
+| Play a sound when a transaction is entered | A short ding when you save a transaction (new or edited) or enter one from a reminder; off at first |
 
 ### Notifications
 
